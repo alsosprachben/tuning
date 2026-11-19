@@ -40,19 +40,34 @@ int main(int argc, char *argv[])
     // ...supported: landscape alone (SDL's controller; iPadOS turns it so at
     // launch, and between its two landscapes) -- with sizes logged once the
     // window is up (the scene's, the window's, the view's: a mismatch shows)
-    if (Class vc = NSClassFromString(@"SDL_uikitviewcontroller"))
+    // ...AND HELD in the landscape it opened in (Ben): iPadOS 26's lock
+    // (prefersInterfaceOrientationLocked) preferred only once the scene is
+    // landscape -- asked for again after the window is up, when iOS has turned it
+    if (Class vc = NSClassFromString(@"SDL_uikitviewcontroller")) {
         class_replaceMethod(vc, @selector(supportedInterfaceOrientations),
                             imp_implementationWithBlock(^NSUInteger(id) { return UIInterfaceOrientationMaskLandscape; }),
                             "Q@:");
+        class_replaceMethod(vc, @selector(prefersInterfaceOrientationLocked),
+                            imp_implementationWithBlock(^BOOL(id me) {
+                                UIWindowScene *sc = ((UIViewController *)me).view.window.windowScene;
+                                return sc && UIInterfaceOrientationIsLandscape(sc.effectiveGeometry.interfaceOrientation);
+                            }),
+                            "B@:");
+    }
     [[NSNotificationCenter defaultCenter]
         addObserverForName:UIWindowDidBecomeKeyNotification object:nil queue:[NSOperationQueue mainQueue]
                 usingBlock:^(NSNotification *n) {
                     UIWindow *w = (UIWindow *)n.object;
+                    for (double t : {0.4, 1.2})
+                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(t * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                            [w.rootViewController setNeedsUpdateOfPrefersInterfaceOrientationLocked];
+                        });
                     for (double t : {0.5, 2.5})
                         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(t * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                             UIWindowScene *sc = w.windowScene;
-                            fprintf(stderr, "clavitone: at %.1f s scene %d %.0fx%.0f, window %.0fx%.0f, view %.0fx%.0f, screen %.0fx%.0f\n",
+                            fprintf(stderr, "clavitone: at %.1f s scene %d (locked %d) %.0fx%.0f, window %.0fx%.0f, view %.0fx%.0f, screen %.0fx%.0f\n",
                                     t, (int)sc.effectiveGeometry.interfaceOrientation,
+                                    (int)sc.effectiveGeometry.isInterfaceOrientationLocked,
                                     sc.effectiveGeometry.coordinateSpace.bounds.size.width,
                                     sc.effectiveGeometry.coordinateSpace.bounds.size.height, w.bounds.size.width,
                                     w.bounds.size.height, w.rootViewController.view.bounds.size.width,
