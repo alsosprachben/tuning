@@ -173,6 +173,24 @@ inline void well(App &a, float x, float y, float w, float h, float r, ImU32 floo
 
 // ---- A KEY: a cap standing on the plate. Pressed, it sinks and its shadow
 // goes; lit (on), its LED glows. The label is printed on it.
+// A FIVE-POINTED STAR drawn, not code7's glyph (its pixels made a lumpy
+// star): filled -- a favourite -- or its outline; centred at (cx, cy), the
+// points r out, the notches 0.4 r (a little fuller than the regular 0.38)
+inline void star(App &a, float cx, float cy, float r, ImU32 col, bool filled)
+{
+    ImVec2 pt[10];
+    const ImVec2 c = P(a, cx, cy);
+    const float R = r * a.k, ri = 0.4f * R;
+    for (int i = 0; i < 10; i++) {
+        const float ang = -1.5707963f + i * 0.62831853f, rr = (i & 1) ? ri : R;
+        pt[i] = ImVec2(c.x + rr * std::cos(ang), c.y + rr * std::sin(ang));
+    }
+    if (filled)
+        dl()->AddConcavePolyFilled(pt, 10, col);
+    else
+        dl()->AddPolyline(pt, 10, col, ImDrawFlags_Closed, std::max(1.0f, 1.25f * a.k));
+}
+
 inline void led(App &a, float cx, float cy, float w, float h, bool on, ImU32 col = LCD)
 {
     ImDrawList *d = dl();

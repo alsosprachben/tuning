@@ -198,7 +198,7 @@ inline void draw_library(App &a)
     struct Fam {
         std::string id, label;
     };
-    std::vector<Fam> fams = {{"fav", "\xe2\x98\x85 Favourites"}, {"all", "All"}};
+    std::vector<Fam> fams = {{"fav", "   Favourites"}, {"all", "All"}};   // (the spaces: its star, drawn)
     for (int i = 0; i < 16; i++)
         fams.push_back({std::to_string(i), FAMILY_NAMES[i]});
     fams.push_back({"drums", "Drum kits"});
@@ -214,6 +214,8 @@ inline void draw_library(App &a)
             const bool on = !searching && L.fam == fams[(size_t)i].id;
             look::chip(a, FX, y, fw, fh, on);
             text(a, a.bold, 21, FX + 10, y + (fh - a.lh(21)) / 2, on ? PANEL : SILK, fit(a, a.bold, 21, fams[(size_t)i].label, fw - 20));
+            if (fams[(size_t)i].id == "fav")
+                look::star(a, FX + 10 + text_w(a, a.bold, 21, "  ") / 2, y + fh / 2, a.lh(21) * 0.55f, on ? PANEL : SILK, true);
         });
         if (tap >= 0) {
             L.fam = fams[(size_t)tap].id;
@@ -225,7 +227,12 @@ inline void draw_library(App &a)
         for (size_t i = 0; i < fams.size(); i++) {
             const float x = FX + (i % 2) * (fw + fg), y = FY + (i / 2) * (fh + fg);
             const std::string id = "fam" + fams[i].id;
-            if (button(a, id.c_str(), x, y, fw, fh, fams[i].label, !searching && L.fam == fams[i].id)) {
+            const bool fon = !searching && L.fam == fams[i].id;
+            const bool hit = button(a, id.c_str(), x, y, fw, fh, fams[i].label, fon);
+            if (fams[i].id == "fav")            // (its star where the label's spaces are)
+                look::star(a, x + fw / 2 - text_w(a, a.bold, 14, fams[i].label) / 2 + text_w(a, a.bold, 14, "  ") / 2,
+                           y + fh / 2 - 1, a.lh(14) * 0.55f, fon ? IM_COL32(0x26, 0x18, 0x02, 255) : SILK, true);
+            if (hit) {
                 L.fam = fams[i].id;
                 L.q.clear();
                 L.scroll = 0;
@@ -367,8 +374,7 @@ inline void draw_library(App &a)
                 }
             }
             text(a, a.font, 14, x + name_x, y + (th - h14) / 2, isc ? LCD_BG : SILK, fit(a, a.font, 14, p.name, tw - name_x - star - 4));
-            text(a, a.font, 21, x + tw - star + (star - text_w(a, a.font, 21, "\xe2\x98\x85")) / 2, y + (th - h21) / 2,
-                 fav ? (isc ? LCD_BG : LCD) : (isc ? LCD_DIM : SILK_DIM), "\xe2\x98\x85");
+            look::star(a, x + tw - star / 2, y + th / 2, h21 * 0.5f, fav ? (isc ? LCD_BG : LCD) : (isc ? LCD_DIM : SILK_DIM), fav);
         }
     if (list.empty())
         text(a, a.font, 21, MX, TY + 10, SILK_DIM,
