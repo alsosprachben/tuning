@@ -174,7 +174,9 @@ inline float px(const App &a, float size)           // (code7's sizes: whole mul
     // so 3.5, 7, 10.5 ... points on a 2x Retina screen)
     const float fb = std::max(1.0f, ImGui::GetIO().DisplayFramebufferScale.x);
     const float p = size * a.ts * a.k * fb;
-    return std::max(7.0f, 7.0f * std::floor(p / 7.0f + 0.5f)) / fb;
+    // (down, never up: a size between two -- the iPad's 21 px drawn at half, 10.5 -- takes the
+    //  smaller, so it stays inside the box laid out for it rather than spilling over)
+    return std::max(7.0f, 7.0f * std::floor(p / 7.0f + 0.01f)) / fb;
 }
 inline ImDrawList *dl() { return ImGui::GetWindowDrawList(); }
 inline float App::lh(float size) const { return px(*this, size) / k; }

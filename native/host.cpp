@@ -1139,7 +1139,12 @@ int nv_host::open(int argc, char **argv)
             nv_part_gpu_depth(part, atoi(opt(argc, argv, "gpu-depth", "1").c_str()));
             // (--gpu-span=N: a GPU block's descriptors set up for N samples -- a
             // held moment's partials ringing on; 0, the block's own)
-            nv_part_gpu_span(part, atol(opt(argc, argv, "gpu-span", "0").c_str()));
+            // (live's default 2048, so rubato's holds ring on -- rubato on by
+            //  default; --test's 0, its checks' blocks as they were)
+            bool test_ = false;
+            for (int q = 1; q < argc; q++)
+                test_ = test_ || !strcmp(argv[q], "--test");
+            nv_part_gpu_span(part, atol(opt(argc, argv, "gpu-span", test_ ? "0" : "2048").c_str()));
             fprintf(stderr, "nvlive: the GPU (%s), from %ld busy slots%s\n", cl ? nv_cl_api(cl) : "the C reference", gmin,
                     cl && pipe ? ", pipelined" : "");
         } else {

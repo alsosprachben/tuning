@@ -407,6 +407,8 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
             if (v != gval[i])
                 set_global(i, v);
         }
+    if ((x = session.get("rubato")) && x->is(sess::J::BOOL))
+        rub_wish = x->d() != 0.0;               // (borrowed time: on unless the session turned it off)
     if ((x = session.get("stand_in_ms")) && x->is(sess::J::NUM) && x->d() != gval[NV_G_STAND_IN])
         set_global(NV_G_STAND_IN, x->d());      // (a held note's stand-in after, ms: 0 none)
     if ((x = session.get("messenger_firmware")) && x->is(sess::J::STR)        // THE MESSENGER's CHART (live's)
@@ -649,6 +651,7 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
         j.o[KEYS[i]] = sess::real(gval[i]);
     j.o["mod_rate"] = sess::real(gval[9]);
     j.o["stand_in_ms"] = sess::real(gval[NV_G_STAND_IN]);
+    j.o["rubato"] = sess::boolean(rub_wish.load());
     j.o["std_map"] = sess::integer(default_map);
     {                                           // the rig's Eastern tuning (live.preset_from's: "" off)
         std::lock_guard<std::mutex> lk(bmu);

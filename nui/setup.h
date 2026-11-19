@@ -289,6 +289,15 @@ inline void draw_setup(App &a)
         snprintf(b, sizeof b, "%.1f ms", rate > 0 ? 1000 * f / rate : 0.0);
         return std::string(b);
     };
+    {                                   // (the switch: on by default, kept in the session)
+        const bool want = flag(&U.s, "rubato_want");
+        const int h = flow_buttons(a, "surub", CX + 12, y, CW - 24, {"BORROW TIME WHEN LATE"}, {want});
+        if (h == 0) {
+            call(a, std::string("{\"call\":\"rubato_set\",\"on\":") + (want ? "false" : "true") + "}");
+            U.s.o["rubato_want"] = sess::boolean(!want);   // (shown at once; the push confirms)
+        }
+        y += 8;
+    }
     std::string note;
     if (flag(&U.s, "rubato_on")) {
         const std::pair<std::string, std::string> rows[5] = {{"Callbacks that waited", jnum(rv(0))},
@@ -304,7 +313,7 @@ inline void draw_setup(App &a)
         y += 8;
         note = "When a block is late, the sound already playing is held on and the time is borrowed; it is given back where no note falls.";
     } else
-        note = "Rubato is off: start nvlive with --rubato to let a late block borrow time instead of dropping out.";
+        note = "Off: a block that is late drops out, a click.";
     for (const auto &l : wrap(a, a.font, 14, note, CW - 24)) {
         text(a, a.font, 14, CX + 12, y, SILK_DIM, l);
         y += LH;

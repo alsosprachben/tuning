@@ -889,6 +889,7 @@ J setup_of(nv_host *h)
         rb.a.push_back(sess::integer((long)v));
     o.o["rubato"] = rb;
     o.o["rubato_on"] = sess::boolean(h->rub_on);
+    o.o["rubato_want"] = sess::boolean(h->rub_wish.load());
     o.o["rate"] = sess::integer(nv_host_rate(h));
     o.o["block"] = sess::integer(nv_host_block(h));
     return o;
@@ -1284,6 +1285,8 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         } else {
             nv_host_synth_forget(h, row, layer, knob);
         }
+    } else if (call == "rubato_set") {         // on: rubato (borrowed time) wanted -- the live loop switches between callbacks
+        h->rub_wish = arg_i(q, "on", 1) != 0;
     } else if (call == "global_set") {
         const int i = (int)arg_i(q, "i", -1);
         if (i < 0 || i >= nv_host_global_count()) {

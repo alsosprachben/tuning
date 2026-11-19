@@ -561,8 +561,9 @@ const HELP = {
   },
   'su:rubato': {
     title: 'Borrowed time',
-    intro: 'With rubato on (nvlive --rubato), when a block of sound is late, the sound already playing is held on and the time is borrowed instead of dropping out. It is given back where no note falls.',
+    intro: 'With rubato on (the default), when a block of sound is late, the sound already playing is held on and the time is borrowed instead of dropping out. It is given back where no note falls.',
     terms: [
+      ['BORROW TIME WHEN LATE', 'On: rubato, as above. Off: a late block drops out as a click. Kept in the session.'],
       ['Callbacks that waited', 'How many times time was borrowed.'],
       ['Time held, ever', 'All the time borrowed since the start.'],
       ['Owed now', 'Time borrowed and not yet given back.'],

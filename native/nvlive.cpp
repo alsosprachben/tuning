@@ -780,30 +780,49 @@ int nv_host::run(int argc, char **argv)
         }
         std::vector<float> buf(2 * BLK);
         long long n0 = 0;
-        // --rubato[=FRAMES] (Linux live, opt-in): this thread is the device,
-        // FRAMES at a time through the rubato callback (nv_host_pull: the
-        // blocks on the render thread, held past a deadline -- the partials
-        // ringing on with --gpu-span -- time bent and given back), written to
-        // ALSA, whose blocking write is the clock. Without it, as always
+        // RUBATO (Linux live): this thread is the device, FRAMES at a time
+        // through the rubato callback (nv_host_pull: the blocks on the render
+        // thread, held past a deadline -- the partials ringing on with
+        // --gpu-span -- time bent and given back), written to ALSA, whose
+        // blocking write is the clock; off, a block at a time as before.
+        // ON BY DEFAULT (Ben, 2026-11-18): the Setup card's switch (rub_wish,
+        // the session's "rubato") turns it on and off between callbacks --
+        // on, the render thread starts at the block the plain loop reached;
+        // off, the plain loop goes on from the render thread's next block (what
+        // it had made ahead and not handed out, a few ms, skipped). --no-rubato
+        // starts it off; --rubato=FRAMES sets its callback
         const std::string rubo = opt(argc, argv, "rubato", "");
-        bool rub_flag = false;
         for (int q = 1; q < argc; q++)
-            rub_flag = rub_flag || !strcmp(argv[q], "--rubato");
-        if (!rubo.empty() || rub_flag) {
-            const int P = rubo.empty() ? 256 : std::max(16, atoi(rubo.c_str()));
-            rub_rt_prio = nort ? -1 : atoi(opt(argc, argv, "rt-prio", std::to_string(rt::PRIO).c_str()).c_str());
-            nv_host_set_rubato(this, 1, 0.75);
-            fprintf(stderr, "nvlive: rubato, %d frames a callback (%.2f ms)\n", P, 1000.0 * P / SR);
-            std::vector<float> l(P), r(P), out(2 * P);
-            {                                       // (--stall=N:MS: late blocks made to order, as --test's)
-                const std::string st = opt(argc, argv, "stall", "");
-                if (!st.empty()) {
-                    rub_stall_every = atol(st.c_str());
-                    const size_t c2 = st.find(':');
-                    rub_stall_ms = c2 == std::string::npos ? 10.0 : atof(st.c_str() + c2 + 1);
-                }
+            if (!strcmp(argv[q], "--no-rubato"))
+                rub_wish = false;
+        const int P = rubo.empty() ? 256 : std::max(16, atoi(rubo.c_str()));
+        rub_rt_prio = nort ? -1 : atoi(opt(argc, argv, "rt-prio", std::to_string(rt::PRIO).c_str()).c_str());
+        {                                           // (--stall=N:MS: late blocks made to order, as --test's)
+            const std::string st = opt(argc, argv, "stall", "");
+            if (!st.empty()) {
+                rub_stall_every = atol(st.c_str());
+                const size_t c2 = st.find(':');
+                rub_stall_ms = c2 == std::string::npos ? 10.0 : atof(st.c_str() + c2 + 1);
             }
-            while (!g_stop) {
+        }
+        std::vector<float> l(P), r(P), out(2 * P);
+        bool rubbing = false;
+        while (!g_stop) {
+            const bool want = rub_wish.load(std::memory_order_relaxed);
+            if (want != rubbing) {
+                if (want) {
+                    play_n0 = n0;
+                    pull_pos = -1;
+                    nv_host_set_rubato(this, 1, 0.75);
+                    fprintf(stderr, "nvlive: rubato on, %d frames a callback (%.2f ms)\n", P, 1000.0 * P / SR);
+                } else {
+                    nv_host_set_rubato(this, 0, 0.75);
+                    n0 = play_n0;
+                    fprintf(stderr, "nvlive: rubato off\n");
+                }
+                rubbing = want;
+            }
+            if (rubbing) {
                 // (the guard watches this thread: its pull is bounded by its deadline)
                 rt::busy_since = rt::now_ns();
                 nv_host_pull(this, l.data(), r.data(), P);
@@ -820,15 +839,8 @@ int nv_host::run(int argc, char **argv)
                     std::lock_guard<std::mutex> lk(pmu);
                     snap.underruns = underruns;
                 }
+                continue;
             }
-            nv_host_set_rubato(this, 0, 0.75);
-            long long rs[8];
-            nv_host_rubato_stats(this, rs);
-            fprintf(stderr, "nvlive: rubato: %lld held, %lld frames borrowed, %lld returned in %lld; %lld frames rung on\n",
-                    rs[0], rs[1], rs[6], rs[5], rs[7]);
-            return;
-        }
-        while (!g_stop) {
             render_block(n0, buf.data());
             long w = A.writei(A.pcm, buf.data(), (unsigned long)BLK);
             if (w < 0) {
@@ -848,6 +860,13 @@ int nv_host::run(int argc, char **argv)
                 snap.underruns = underruns;
             }
             n0 += BLK;
+        }
+        if (rubbing) {
+            nv_host_set_rubato(this, 0, 0.75);
+            long long rs[8];
+            nv_host_rubato_stats(this, rs);
+            fprintf(stderr, "nvlive: rubato: %lld held, %lld frames borrowed, %lld returned in %lld; %lld frames rung on\n",
+                    rs[0], rs[1], rs[6], rs[5], rs[7]);
         }
     };
     player = std::thread(audio);

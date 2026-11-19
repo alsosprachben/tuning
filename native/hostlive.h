@@ -1648,6 +1648,9 @@ struct nv_host {
     // thread into a ring -- the logical timeline -- the callback (the
     // physical) waiting for them only to a deadline, holding past it
     bool rub_on = false;
+    // (rubato wished for: on by default, the Setup card's switch, the session's
+    // "rubato"; nvlive's live loop turns it on and off between callbacks)
+    std::atomic<bool> rub_wish{true};
     double rub_frac = 0.75;                 // (of a callback's length: how long it waits)
     std::thread rub_thread;
     std::atomic<bool> rub_stop{false};
