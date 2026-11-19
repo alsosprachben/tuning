@@ -3835,19 +3835,50 @@ int nv_host::drive_state(size_t row, double *out)
 
 // A MESSENGER's CHART read on every part (livetui's M, live's cc_map
 // "messenger": nvlive's for all its parts at once, --messenger's)
-// AN INPUT OPENED (MidiIns::opened, the reader's thread): a MESSENGER's --
-// its name its USB port's, "Moog Messenger" -- turns its knobs' reading on
+// AN INPUT OPENED (MidiIns::opened, the reader's thread): a MESSENGER --
+// its name its own USB port's, "Moog Messenger" -- turns its knobs' reading on
 // (its chart over GM's, so SUB WAVE is the sub wave and not CC71's timbre),
-// unless the player switched the reading this run
-void nv_host::input_opened(const std::string &name)
+// unless the player switched the reading this run. Behind a USB MIDI
+// interface its name is the interface's ("USB Midi"): then it is ASKED who
+// it is -- MIDI's Device Inquiry out of the same device (its output, a
+// handle of its own) -- and its Identity Reply, back through the input,
+// says (input_identity)
+void nv_host::input_opened(const std::string &path, const std::string &name)
 {
+    if (msgr_reads || msgr_reads_set)
+        return;
     std::string l = name;
     for (char &c : l)
         c = (char)tolower((unsigned char)c);
-    if (l.find("messenger") == std::string::npos || msgr_reads || msgr_reads_set)
+    if (l.find("messenger") != std::string::npos) {
+        messenger_reading(true);
+        fprintf(stderr, "nvlive: %s is a Messenger: its knobs read as its own (Setup: READ ITS KNOBS)\n", name.c_str());
+        return;
+    }
+    int f = midi_open(path, O_WRONLY | O_NONBLOCK);
+    if (f < 0)
+        return;                             // (no output beside it: nothing to ask)
+    static const uint8_t rq[6] = {0xF0, 0x7E, 0x7F, 0x06, 0x01, 0xF7};
+    if (::write(f, rq, sizeof rq) != (ssize_t)sizeof rq)
+        fprintf(stderr, "nvlive: %s: its identity not asked (%s)\n", name.c_str(), strerror(errno));
+    midi_close(f);
+}
+
+// ...AN IDENTITY REPLY through an input (MidiIns::identity: F0 7E dev 06 02
+// maker family model version): a Messenger's -- Moog (04), family 49, model
+// 153 (probe_messenger's) -- turns its knobs' reading on, as its name would
+void nv_host::input_identity(const std::string &name, const std::vector<uint8_t> &x)
+{
+    size_t j = 4;
+    const int mk = x.size() > j ? x[j] : -1;
+    j += mk == 0 ? 3 : 1;
+    if (x.size() < j + 4)
+        return;
+    const int fam = x[j] | x[j + 1] << 7, mod = x[j + 2] | x[j + 3] << 7;
+    if (!(mk == 0x04 && fam == 49 && mod == 153) || msgr_reads || msgr_reads_set)
         return;
     messenger_reading(true);
-    fprintf(stderr, "nvlive: %s is a Messenger: its knobs read as its own (Setup: READ ITS KNOBS)\n", name.c_str());
+    fprintf(stderr, "nvlive: %s answered as a Messenger: its knobs read as its own (Setup: READ ITS KNOBS)\n", name.c_str());
 }
 
 void nv_host::messenger_reading(bool on)
