@@ -42,6 +42,7 @@
 #include "piano.h"
 #include "drums.h"
 #include "effects.h"
+#include "amp.h"
 #include "matrix.h"
 #include "tuning.h"
 #include "control.h"
@@ -54,7 +55,7 @@
 namespace nui {
 
 static const char *CARDS[][2] = {{"parts", "PARTS"}, {"library", "LIBRARY"}, {"synth", "SYNTH"}, {"stops", "STOPS"},
-                                 {"piano", "PIANO"}, {"drums", "DRUMS"}, {"effects", "EFFECTS"}, {"matrix", "MATRIX"},
+                                 {"piano", "PIANO"}, {"drums", "DRUMS"}, {"amp", "AMP"}, {"effects", "EFFECTS"}, {"matrix", "MATRIX"},
                                  {"tuning", "TUNING"}, {"control", "CONTROL"}, {"scenes", "SCENES"},
                                  {"files", "FILES"}, {"setup", "SETUP"}};
 
@@ -151,7 +152,7 @@ static void draw(App &a)
     files_card(a, a.card == "files");
     setup_card(a, a.card == "setup");
     // (on the iPad, a card not yet laid out for it says so)
-    static const std::set<std::string> TAB_READY = {"parts", "library", "synth", "stops", "piano", "drums", "effects", "matrix", "tuning", "control", "scenes", "files", "setup"};
+    static const std::set<std::string> TAB_READY = {"parts", "library", "synth", "stops", "piano", "drums", "amp", "effects", "matrix", "tuning", "control", "scenes", "files", "setup"};
     if (a.tab && !TAB_READY.count(a.card)) {
         text(a, a.font, 21, 24, 226, SILK_DIM, "This card's iPad layout is still to come; the laptop's has it.");
     } else if (a.card == "parts") {
@@ -166,6 +167,8 @@ static void draw(App &a)
         draw_piano(a);
     } else if (a.card == "drums") {
         draw_drums(a);
+    } else if (a.card == "amp") {
+        draw_amp(a);
     } else if (a.card == "effects") {
         draw_effects(a);
     } else if (a.card == "matrix") {

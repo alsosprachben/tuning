@@ -1233,7 +1233,7 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         int n = nv_host_parts(h, nullptr, 0);
         std::vector<nv_host_partinfo> ps((size_t)std::max(0, n));
         n = nv_host_parts(h, ps.data(), n);
-        if (row < 0 || row >= n || (cc != 10 && cc != 91 && cc != 93 && cc != 94)) {
+        if (row < 0 || row >= n || (cc != 10 && cc != 80 && cc != 91 && cc != 93 && cc != 94)) {     // (80: the Leslie's half-moon)
             ok = false;
             r.o["error"] = sess::str("no part " + std::to_string(row) + " or cc " + std::to_string(cc));
         } else {
@@ -1314,6 +1314,19 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         } else {
             nv_host_set_global(h, i, arg_d(q, "v", 0.0));
         }
+    } else if (call == "amp") {                // (the AMP card: a part's valve, its Leslie's speed; its cabinet in the parts push)
+        double ao[5] = {};
+        const int kind = nv_host_amp(h, row, ao);
+        J o = sess::obj();
+        o.o["row"] = sess::integer(row);
+        o.o["kind"] = sess::integer(kind < 0 ? 0 : kind);
+        J dv = sess::arr();
+        for (int k = 0; k < 3; k++)
+            dv.a.push_back(num(ao[k]));
+        o.o["drive"] = dv;
+        o.o["speed"] = sess::integer((long)ao[3]);
+        o.o["leslie"] = sess::boolean(ao[4] != 0.0);
+        r.o["amp"] = o;
     } else if (call == "stops") {
         r.o["stops"] = stops_of(h, row);
         r.o["organs"] = organs_of(h);
@@ -1679,8 +1692,8 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         nv_host_set_cabinet(h, row, (int)arg_i(q, "choice", -1));
     } else if (call == "rotary_set") {         // (a part's rotary heard: mode -1 its own way, 0 room, 1 mics; spread degrees, <0 the default)
         nv_host_set_rotary(h, row, (int)arg_i(q, "mode", -1), arg_d(q, "spread", -1.0));
-    } else if (call == "drive_set") {          // (an organ's drive, 0..3; <0 the voice's again)
-        nv_host_set_drive(h, row, std::min(3.0, arg_d(q, "v", -1.0)));
+    } else if (call == "drive_set") {          // (a valve's drive, 0..40 -- an organ's to 3, a guitar's past 14; <0 the voice's again)
+        nv_host_set_drive(h, row, std::min(40.0, arg_d(q, "v", -1.0)));
         if (w)
             w->stops_sent.clear();
     } else if (call == "quit") {               // (nvlive only: its hook)

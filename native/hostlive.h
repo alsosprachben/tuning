@@ -117,6 +117,7 @@ void nv_part_patch_touch(void *h, int pi, int fixed);
 void nv_part_drive(void *h, int pi, double v);
 void nv_part_drive_later(void *h, int pi, double v);
 int nv_part_drive_get(void *h, int pi, double *out);
+int nv_part_amp_get(void *h, int pi, double *out);
 int nv_part_patch_touch_sensitive(void *h, int pi);
 void nv_part_switches(void *h, int ch, int *out);
 int nv_part_pedal(void *h, int ch);
@@ -1498,6 +1499,7 @@ struct nv_host {
     std::chrono::steady_clock::time_point rotary_read{};
     void part_drive(size_t row, double v);          // (an organ's drive knob, live.set_drive: <0 the voice's)
     int drive_state(size_t row, double *out);       // (nv_part_drive_get's: 1 an organ's, 0 not, -1 unread)
+    int amp_state(size_t row, double *out);         // (nv_part_amp_get's: 1 an organ, 2 amplified, 0 neither, -1 unread)
     void messenger_reading(bool on);                // (livetui's M: every part reads a Messenger's chart)
     // THE ON-SCREEN CONTROLS (live's screen_controls; the session's "controls"):
     // the panel's, one sent past the routes (every channel, or its own)

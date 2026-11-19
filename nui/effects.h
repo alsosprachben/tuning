@@ -413,10 +413,6 @@ inline void draw_effects(App &a)
                     if (picked != v)
                         sys_send(a, 2, k, picked, "eq" + std::to_string(k));
                 }
-                // ...and under it THE PART's CABINET (cabinet_box): the speaker its voice plays through
-                const float cy = by + (IP ? 150 : 170);
-                rect(a, bx + 12, cy - 12, BW - 24, 1, SILK_DIM, 0);
-                cabinet_box(a, bx + 12, cy, BW - 24, by + BH - cy - 8);
                 continue;
             }
             const Box &b = boxes[(size_t)bi];

@@ -162,6 +162,7 @@ async function select(row) {
   if (s.stops && s.stops.row === S.row) setStops(s.stops);
   if (card === 'piano') { const r = await Wire.call('piano'); if (r.piano) setPiano(r.piano); }
   if (card === 'effects') drawEffects();
+  if (card === 'amp') ampPoll(true);
   if (card === 'control') drawControl();
   if (card === 'matrix') { const r = await Wire.call('matrix'); if (r.matrix) setMatrix(r.matrix); }
   if (card === 'drums') { DR.sel = null; const r = await Wire.call('drums'); if (r.drums) setDrums(r.drums); }
@@ -187,7 +188,7 @@ async function soloPart(row) {
 // ---------------------------------------------------------------- THE CARD KEYS
 const CARDS = [
   ['parts', 'Parts', true], ['library', 'Library', true], ['synth', 'Synth', true],
-  ['stops', 'Stops', true], ['piano', 'Piano', true], ['drums', 'Drums', true], ['effects', 'Effects', true],
+  ['stops', 'Stops', true], ['piano', 'Piano', true], ['drums', 'Drums', true], ['amp', 'Amp', true], ['effects', 'Effects', true],
   ['matrix', 'Matrix', true], ['tuning', 'Tuning', true], ['control', 'Control', true], ['scenes', 'Scenes', true], ['files', 'Files', true], ['setup', 'Setup', true],
 ];
 const LATER = {
@@ -219,6 +220,7 @@ function showCard(id) {
   if (id === 'library') drawTiles(true);
   if (id === 'synth') drawSynth();
   if (id === 'stops') drawStops();
+  if (id === 'amp') ampPoll(true);
   Wire.call('piano', { open: id === 'piano' ? 1 : 0 }).then(r => { if (r.piano) setPiano(r.piano); });
   Wire.call('drums', { open: id === 'drums' ? 1 : 0, sets: DR.sets ? 0 : 1 }).then(r => { if (r.drums) setDrums(r.drums); });
   Wire.call('setup', { open: id === 'setup' ? 1 : 0 }).then(r => { if (r.setup) setSetup(r.setup); });
@@ -591,48 +593,114 @@ function drawSynth() {
   lay.hidden = sy.layers < 2;
   lay.querySelectorAll('button').forEach((b, j) => b.classList.toggle('on', j === S.layer));
 }
-// THE CABINET a part plays through (live.set_cabinet): the voice's own or one
-// it offers (patch_map.CAB_CHOICES), stepped through with the arrows, and what
-// the speaker is and how we know it (about.json's cabinets). One box's markup
-// wherever it shows (the Effects card, the Stops card's organ); the parts push
-// carries the part's [chosen, now, offered].
-const CAB = { hold: null };
-function cabMarkup(cls) {
-  return `<section class="${cls} cab-box"><h3 data-help="cabinet">Cabinet</h3><div class="cab-row">` +
-    `<button class="hb cab-step" data-d="-1" data-kit="1">◀</button><span class="cab-now"></span>` +
-    `<button class="hb cab-step" data-d="1" data-kit="1">▶</button></div><p class="pn-note cab-about"></p></section>`;
+// ---------------------------------------------------------------- AMP: the part's valve, speaker and Leslie
+// What the voice plays through, as it is modelled: its VALVE (tubeamp's
+// triode: its drive, the voice's own or the knob's), its SPEAKER (the voice's
+// own or one it offers -- patch_map.CAB_CHOICES, each what it is and how we
+// know it) and an organ's LESLIE (the half-moon's speed: CC80; how the rotors
+// are heard). "amp" asked four times a second while the card is up; the
+// cabinet and the rotary come in the parts push.
+const AMP = { st: null, knob: null, sig: '', hold: {}, timer: null };
+function ampHeld(k, v) { const h = AMP.hold[k]; return h && h.until > performance.now() ? h.v : v; }
+function ampHold(k, v, ms = 800) { AMP.hold[k] = { v, until: performance.now() + ms }; }
+async function ampPoll(now) {
+  if (AMP.timer) clearTimeout(AMP.timer);
+  AMP.timer = null;
+  if (card !== 'amp') return;
+  const r = await Wire.call('amp', { row: S.row });
+  if (r.amp && r.amp.row === S.row) { AMP.st = r.amp; drawAmp(); }
+  AMP.timer = setTimeout(() => ampPoll(false), 250);
 }
-function drawCab() {
-  const p = cur(), a = S.about;
-  const boxes = document.querySelectorAll('.cab-box');
-  if (!boxes.length) return;
-  const cv = p && !p.drums && p.cabinet ? p.cabinet : [-1, 0, []];
-  const offer = cv[2] || [];
-  let now = cv[0] > 0 ? cv[0] : cv[1];
-  if (CAB.hold && CAB.hold.until > performance.now()) now = CAB.hold.c;
-  const cabs = a && a.cabinets ? a.cabinets : [];
-  const ownIx = a && a.cab_own && p ? a.cab_own[p.program + '.' + p.variation] : undefined;
-  const lab = c => (cabs[c] ? cabs[c][0] : '?');
-  boxes.forEach(el => {
-    el.querySelectorAll('.cab-step').forEach(b => { b.disabled = !offer.length; });
-    el.querySelector('.cab-now').textContent = !offer.length ? '—' : now ? lab(now) : `OWN · ${ownIx !== undefined ? lab(ownIx) : ''}`;
-    el.querySelector('.cab-about').textContent = !offer.length ? 'This voice has no speaker of its own: nothing to choose.'
-      : (cabs[now || ownIx || 0] || ['', ''])[1];
+function drawAmp() {
+  const el = $('amp'), p = cur(), st = AMP.st, a = S.about || {};
+  if (card !== 'amp' || !el) return;
+  $('ampWho').textContent = p ? `part ${pad(S.row + 1, 2)} · ${p.name}` : '';
+  const kind = st && p && st.row === S.row ? st.kind : 0;
+  const cabs = a.cabinets || [], lab = c => (cabs[c] ? cabs[c][0] : '?'), about = c => (cabs[c] ? cabs[c][1] : '');
+  const cv = p && p.cabinet ? p.cabinet : [-1, 0, []], offer = cv[2] || [];
+  const own = a.cab_own && p ? a.cab_own[p.program + '.' + p.variation] : undefined;
+  const organ = kind === 1, les = !!(st && st.leslie);
+  const sig = [S.row, kind, organ, les, offer.join()].join('|');
+  if (sig !== AMP.sig) {
+    AMP.sig = sig; AMP.knob = null;
+    el.classList.toggle('no-les', !organ);
+    if (!kind || !p || p.drums) {
+      el.className = 'amp no-les';
+      el.innerHTML = `<p class="amp-empty">${p && p.drums ? 'A drum set has no amplifier: its drums are heard as they are.'
+        : 'This voice plays through no amplifier or speaker of its own: an acoustic instrument is heard as it is. The Rhodes and Wurlitzer, the organs, the electric guitars and basses have one.'}</p>`;
+      return;
+    }
+    el.innerHTML = `<section><h3 data-help="drive">Valve</h3><div class="amp-knob"></div>` +
+      `<button class="hb amp-back" data-kit="1"></button><p class="pn-note amp-vnote"></p></section>` +
+      `<section><h3 data-help="cabinet">Speaker</h3><div class="amp-cabs">` +
+      [0, ...offer].map(c => `<button class="hb amp-cab" data-kit="1" data-c="${c}"></button>`).join('') +
+      `</div><p class="amp-now"></p><p class="pn-note amp-about"></p></section>` +
+      (organ ? `<section><h3 data-help="rotary">Leslie</h3><div class="amp-les"></div></section>` : '');
+    const send = Wire.throttled(v => Wire.call('drive_set', { row: S.row, v }));
+    const back = () => { ampHold('drive', -1, 600); Wire.call('drive_set', { row: S.row, v: -1 }); };
+    AMP.knob = Kit.knob(el.querySelector('.amp-knob'), { label: 'Drive', value: 0, size: 'big',
+      fmt: v => (v * AMP.top).toFixed(2),
+      onChange: v => { const d = Math.round(v * AMP.top * 100) / 100; ampHold('drive', d, 600); send(d); },
+      onReset: back });
+    Kit.press(el.querySelector('.amp-back'), back);
+    el.querySelectorAll('.amp-cab').forEach(b => Kit.press(b, () => {
+      const c = +b.dataset.c; ampHold('cab', c); drawAmp();
+      Wire.call('cabinet_set', { row: S.row, choice: c ? c : -1 });
+    }));
+  }
+  if (!kind || !p || p.drums) return;
+  // THE VALVE
+  const [dnow, dvoice, dmine] = st.drive;
+  AMP.top = Math.max(3, Math.ceil(dvoice * 2));         // (its range: twice the voice's own, at least 3)
+  const held = ampHeld('drive', null);
+  const v = held === null ? dnow : held < 0 ? dvoice : held, mine = held === null ? dmine >= 0 : held >= 0;
+  AMP.knob.set(v / AMP.top, v.toFixed(2), mine);
+  const bk = el.querySelector('.amp-back');
+  bk.textContent = mine ? `BACK TO THE VOICE'S ${dvoice.toFixed(2)}` : `AS THE VOICE (${dvoice.toFixed(2)})`;
+  bk.disabled = !mine;
+  el.querySelector('.amp-vnote').textContent = (dvoice > 0 || dnow > 0
+    ? 'A triode stage before the speaker: clean at 0, the edge of breakup at 1, a clip past it. Its distortion is mostly the notes mixing: a chord thickens where one note barely would.'
+    : 'No valve of its own: turned up, it gains one, a triode stage before the speaker, the edge of breakup at 1.') + (organ ? ' The mod wheel is the swell.' : '');
+  // THE SPEAKER
+  const now = ampHeld('cab', cv[0] > 0 ? cv[0] : cv[1]);
+  el.querySelectorAll('.amp-cab').forEach(b => {
+    const c = +b.dataset.c;
+    b.textContent = c ? lab(c) : `OWN · ${own !== undefined ? lab(own) : ''}`;
+    b.classList.toggle('on', c === now);
   });
+  el.querySelector('.amp-now').textContent = now ? lab(now) : `OWN · ${own !== undefined ? lab(own) : ''}`;
+  el.querySelector('.amp-about').textContent = about(now || own || 0);
+  // THE LESLIE
+  if (!organ) return;
+  const lb = el.querySelector('.amp-les');
+  if (!les) {
+    if (lb.dataset.mode !== 'none') { lb.dataset.mode = 'none'; lb.innerHTML = '<p class="pn-note">No Leslie on it now: choose LESLIE under Speaker for the horn and drum turning.</p>'; }
+    return;
+  }
+  if (lb.dataset.mode !== 'les') {
+    lb.dataset.mode = 'les';
+    lb.innerHTML = '<h4>SPEED</h4><div class="amp-row">' + ['STOP', 'SLOW', 'FAST'].map((n, s) => `<button class="hb amp-sp" data-kit="1" data-s="${s}">${n}</button>`).join('') +
+      '</div><p class="pn-note">The rotors spin up and down between speeds as a real Leslie\'s do; a flick of the pitch wheel steps them too.</p>' +
+      '<h4>HEARD</h4><div class="amp-row two"><button class="hb amp-rot" data-kit="1" data-m="0">IN THE ROOM</button><button class="hb amp-rot" data-kit="1" data-m="1">TWO MICS</button></div>' +
+      '<div class="amp-spread"></div><p class="pn-note amp-rnote">The cabinet heard where it stands: its horn and drum turning toward you and away.</p>';
+    lb.querySelectorAll('.amp-sp').forEach(b => Kit.press(b, () => {
+      const s = +b.dataset.s; ampHold('speed', s); drawAmp();
+      Wire.call('part_cc', { row: S.row, cc: 80, v: [0, 64, 127][s] });
+    }));
+    const rot = (m, sd) => { ampHold('rot', [m, sd], 600); Wire.call('rotary_set', { row: S.row, mode: m, spread: sd }); drawAmp(); };
+    lb.querySelectorAll('.amp-rot').forEach(b => Kit.press(b, () => rot(+b.dataset.m, (p.rotary || [-1, -1])[1])));
+    AMP.spread = Kit.knob(lb.querySelector('.amp-spread'), { label: 'Spread', value: 0.75,
+      fmt: v => Math.round(v * 180) + '°', onChange: v => rot(1, Math.round(v * 180)), onReset: () => rot(1, -1) });
+  }
+  const sp = ampHeld('speed', st.speed);
+  lb.querySelectorAll('.amp-sp').forEach(b => b.classList.toggle('on', +b.dataset.s === sp));
+  const [rm, rs] = ampHeld('rot', p.rotary || [-1, -1]);
+  lb.querySelectorAll('.amp-rot').forEach(b => b.classList.toggle('on', (+b.dataset.m === 1) === (rm === 1)));
+  lb.querySelector('.amp-spread').hidden = rm !== 1;
+  lb.querySelector('.amp-rnote').hidden = rm === 1;
+  const sd = rs >= 0 ? rs : 96 * 180 / 127;
+  AMP.spread.set(sd / 180, Math.round(sd) + '°', rs >= 0);
 }
-document.addEventListener('pointerdown', e => {
-  const b = e.target.closest && e.target.closest('.cab-step');
-  if (!b || b.disabled) return;
-  const p = cur();
-  if (!p || !p.cabinet) return;
-  const ring = [0, ...(p.cabinet[2] || [])];
-  const cnow = CAB.hold && CAB.hold.until > performance.now() ? CAB.hold.c : (p.cabinet[0] > 0 ? p.cabinet[0] : p.cabinet[1]);
-  const at = Math.max(0, ring.indexOf(cnow));
-  const c = ring[(at + (+b.dataset.d) + ring.length) % ring.length];
-  CAB.hold = { c, until: performance.now() + 800 };
-  drawCab();
-  Wire.call('cabinet_set', { row: S.row, choice: c ? c : -1 });
-});
 
 // A TONEWHEEL ORGAN's DRIVE (the wheel is its swell): the valve before the
 // rotors, 0 to 3; double-tap or the button for the voice's own again
@@ -644,7 +712,7 @@ function drawDrive(st) {
     const el = $('organDrive');
     el.innerHTML = '<section class="og-box"><h3 data-help="drive">Drive</h3><div class="og-knob"></div>' +
       '<p class="pn-note">The valve before the rotors: clean at 0, a growl as it turns up. The mod wheel is the swell.</p>' +
-      '<button class="hb" data-kit="1">AS THE VOICE</button></section>' + cabMarkup('og-box');
+      '<button class="hb" data-kit="1">AS THE VOICE</button></section>';
     const send = Wire.throttled(v => Wire.call('drive_set', { row: S.row, v }));
     const back = () => { fxMine('drive', -1); Wire.call('drive_set', { row: S.row, v: -1 }); };
     OG.knob = Kit.knob(el.querySelector('.og-knob'), { label: 'Drive', value: 0, size: 'big',
@@ -652,7 +720,6 @@ function drawDrive(st) {
       onChange: v => { const d = Math.round(v * DRIVE_MAX * 100) / 100; fxMine('drive', d); send(d); },
       onReset: back });
     OG.back = el.querySelector('.og-box button');
-    drawCab();
     Kit.press(OG.back, back);
   }
   const held = fxVal('drive', null);
@@ -1080,8 +1147,7 @@ function drawSys() {
     el.innerHTML = boxes.map(b => `<div class="fx-box" data-box="${b.id}"><h3 data-help="fx:${b.id}">${b.name} <small>${b.cc}</small></h3>` +
       `<div class="fx-st">${b.types.map((n, i) => `<button class="fxs" data-kit="1" data-lo="${b.lo}" data-v="${i}" data-box="${b.id}">${n}</button>`).join('')}</div>` +
       `<p class="pn-note fx-room"></p><div class="fx-knobs sm"></div></div>`).join('') +
-      `<div class="fx-box" data-box="eq"><h3 data-help="fx:eq">EQ <small>the whole mix</small></h3><div class="fx-knobs sm"></div>` +
-      cabMarkup('fx-cab') + `</div>`;
+      `<div class="fx-box" data-box="eq"><h3 data-help="fx:eq">EQ <small>the whole mix</small></h3><div class="fx-knobs sm"></div></div>`;
     for (const b of boxes) {
       const kb = el.querySelector(`[data-box="${b.id}"] .fx-knobs`);
       for (const [nm, lo, , a, z] of b.knobs)
@@ -1101,7 +1167,6 @@ function drawSys() {
   }
   el.querySelector('[data-box="rev"] .fx-room').textContent = y.rev[0] < 0 ? `No GS reverb set: the room is the panel's, ${y.room}.` : '';
   for (let k = 0; k < 4; k++) FX.ctl['eq' + k].set(fxVal('eq' + k, y.eq[k]));
-  drawCab();                            // (the part's cabinet, under the EQ)
 }
 Kit.press($('fxSys'), b => {
   sysSend(1, +b.dataset.lo, +b.dataset.v, b.dataset.box + 'type');
@@ -1773,7 +1838,8 @@ function setParts(ps) {
     const want = S.patches.find(p => p.pick === S.picking);
     if (!want || isCur(want, cur())) S.picking = null;
   }
-  drawDisplay(); drawStrips(); drawTiles(false); drawAbout(); drawCab();
+  drawDisplay(); drawStrips(); drawTiles(false); drawAbout();
+  if (card === 'amp') drawAmp();
   if (!KB.drag) drawKeyboard();
   if (ps.length !== before) select(S.row);
 }

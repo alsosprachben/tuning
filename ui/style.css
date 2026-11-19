@@ -57,7 +57,7 @@ a.hb { text-decoration: none; text-align: center; display: inline-block; }
 .jogbox small { font: 14px var(--f-lcd); color: var(--lcd); letter-spacing: .06em; }
 
 /* ---- the card keys */
-.keys { display: grid; grid-template-columns: repeat(13, 1fr) 48px; gap: 6px; }
+.keys { display: grid; grid-template-columns: repeat(14, 1fr) 48px; gap: 6px; }
 .ck { font: 700 12px/1 var(--f-ui); letter-spacing: .1em; text-transform: uppercase; color: var(--silk-dim); padding: 15px 4px;
   border-radius: 7px; background: #2b2f34; border: 1px solid var(--edge); touch-action: manipulation; }
 .ck.on { background: var(--silk); color: var(--panel); }
@@ -463,14 +463,20 @@ a.hb { text-decoration: none; text-align: center; display: inline-block; }
 .og-box h3 { margin: 0; grid-column: 1 / span 2; font: 700 11px var(--f-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--silk); }
 .og-box .og-knob { grid-row: 2 / span 2; }
 .og-box .pn-note { margin: 0; }
-/* the cabinet a part plays through (Effects, under the EQ; Stops, beside the drive) */
-.og-panel { gap: 10px; }
-.cab-box .cab-row { display: flex; align-items: center; gap: 10px; }
-.cab-box .cab-now { flex: 1; text-align: center; font: 21px var(--f-lcd); color: var(--lcd); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.og-box.cab-box { grid-template-columns: 300px; }
-.og-box.cab-box h3 { grid-column: 1; }
-.fx-cab { border-top: 1px solid var(--edge); margin-top: 8px; padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
-.fx-cab h3 { margin: 0; }
+/* THE AMP card: the valve, the speaker, an organ's Leslie */
+.amp { flex: 1; min-height: 0; display: grid; grid-template-columns: 400px 1fr 400px; gap: 12px; }
+.amp.no-les { grid-template-columns: 400px 1fr; }
+.amp section { background: #1f2225; border: 1px solid var(--edge); border-radius: 10px; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; }
+.amp h3 { margin: 0; font: 700 11px var(--f-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--silk); }
+.amp h4 { margin: 6px 0 0; font: 700 10px var(--f-ui); letter-spacing: .14em; color: var(--silk-dim, #8a9099); }
+.amp .amp-knob { align-self: center; }
+.amp .amp-cabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.amp .amp-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
+.amp .amp-row.two { grid-template-columns: 1fr 1fr; }
+.amp .amp-now { font: 700 13px var(--f-ui); color: var(--silk); margin: 4px 0 0; }
+.amp .pn-note { margin: 0; }
+.amp-empty { font-size: 18px; color: var(--silk-dim, #8a9099); }
+.amp .hb.on { background: var(--lcd); border-color: var(--lcd); color: var(--lcd-bg); box-shadow: 0 0 10px rgba(240, 180, 60, .35); }   /* (the speaker, speed, way heard in use: lit as the cards' choices are) */
 
 /* THE HELP: a ? beside a card's name or a region's title, and its sheet */
 .qh { display: inline-grid; place-items: center; width: 22px; height: 22px; margin-left: 8px; padding: 0; vertical-align: middle;

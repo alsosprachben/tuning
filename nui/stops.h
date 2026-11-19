@@ -218,9 +218,9 @@ inline void draw_stops(App &a)
 
     // A TONEWHEEL ORGAN's DRIVE (the wheel is its swell): the valve before the rotors, 0 to 3
     const float RH = IP ? 140 : 170, RG = IP ? 8 : 14;    // (the rotary's tray under it)
-    const float CH = IP ? 104 : 140;                       // (...and the cabinet's between them)
+    const float CH = 0;                                    // (the cabinet: the AMP card's)
     if (has_drive) {
-        const float dx = X1 - DW, dy = JY0, dw = DW, dh = JY1 - JY0 - RH - RG - CH - RG;
+        const float dx = X1 - DW, dy = JY0, dw = DW, dh = JY1 - JY0 - RH - RG - CH;
         look::tray(a, dx, dy, dw, dh, 10);
         heading(a, dx + 14, dy + 12, "DRIVE", "drive");
         const double now = drive->a[0].d(), voice = drive->a[1].d(), mine = drive->a[2].d();
@@ -256,11 +256,7 @@ inline void draw_stops(App &a)
         // THE ROTARY HEARD: the cabinet in the room (an organ's way: its
         // direction turning) or two mics round it (a recording's: wide), and
         // the mics' spread -- the part's, kept across its program changes
-        // THE CABINET (cabinet_box): its own speaker, a Leslie, or another the voice offers
-        const float cyy = dy + dh + RG;
-        look::tray(a, dx, cyy, dw, CH, 10);
-        cabinet_box(a, dx + 14, cyy + 12, dw - 28, CH - 20);
-        const float ry = cyy + CH + RG;
+        const float ry = dy + dh + RG;
         look::tray(a, dx, ry, dw, RH, 10);
         heading(a, dx + 14, ry + 12, "ROTARY", "rotary");
         const J *pr = part(a, a.row);

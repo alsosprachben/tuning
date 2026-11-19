@@ -3778,6 +3778,34 @@ void nv_host::part_drive(size_t row, double v)
 }
 
 // ...and what it is, read between two blocks (nv_part_drive_get's out)
+// ...THE AMP CARD's: nv_part_amp_get's five, read between two blocks
+int nv_host::amp_state(size_t row, double *out)
+{
+    const int pi = part_pi(*this, row);
+    if (pi < 0)
+        return 0;
+    struct Got {
+        double o[5];
+        int r = 0;
+        std::atomic<bool> done{false};
+    };
+    auto got = std::make_shared<Got>();
+    auto take = [this, got, pi](long long) {
+        got->r = nv_part_amp_get(part, pi, got->o);
+        got->done = true;
+    };
+    if (scene_inline)
+        take(0);
+    else
+        post(take);
+    for (int i = 0; i < 200 && !got->done && !g_stop; i++)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    if (!got->done)
+        return -1;
+    memcpy(out, got->o, sizeof got->o);
+    return got->r;
+}
+
 int nv_host::drive_state(size_t row, double *out)
 {
     const int pi = part_pi(*this, row);

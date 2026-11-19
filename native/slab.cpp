@@ -13936,6 +13936,29 @@ int nv_part_drive_get(void *h, int pi, double *out)
     return (p.leslie || p.wheel_swell) && !p.drums ? 1 : 0;
 }
 
+// A PART's AMP (the AMP card's): out [its valve's drive now, the voice's,
+// the knob's (<0 none), the half-moon (0 stop, 1 chorale, 2 tremolo), a
+// Leslie on it (1) or not]; 1 a tonewheel organ, 2 another amplified voice
+// (one offering a cabinet: NoteClass.cab_mask), 0 neither
+int nv_part_amp_get(void *h, int pi, double *out)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (pi < 0 || pi >= (int)P->patches.size())
+        return 0;
+    const nv::slab::Part::Patch &p = P->patches[pi];
+    out[0] = p.amp;
+    out[1] = p.amp0;
+    out[2] = p.drive;
+    out[3] = P->half_moon;
+    out[4] = p.leslie ? 1.0 : 0.0;
+    if (p.drums)
+        return 0;
+    if (p.leslie || p.wheel_swell)
+        return 1;
+    const NoteClass *k = nv_tcache_class(p.cache, p.program);
+    return k && k->cab_mask ? 2 : 0;
+}
+
 // A PATCH's FIXED TOUCH (live's part.fixed_touch: -1 its own way, 1 on, 0
 // off) -- kept across its program changes, as the part's switch is -- and
 // whether its patch has touch of its own (live's patch.touch_sensitive)
