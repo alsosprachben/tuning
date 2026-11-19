@@ -57,6 +57,8 @@ targets:
     info:
       path: Info.plist
       properties:
+        UILaunchScreen: {}               # (a launch screen: without one iOS runs the app at 1024x768, an old iPad's, scaled)
+        UIApplicationSupportsIndirectInputEvents: true
         UIBackgroundModes: [audio]
         UIFileSharingEnabled: true
         LSSupportsOpeningDocumentsInPlace: true
