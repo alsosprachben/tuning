@@ -353,21 +353,43 @@ struct Alsa {
     void *pcm = nullptr;
     macio::Audio au;
     unsigned frames = 128;                      // (the block: the ring's least, the device buffer's)
+    // "null" (--device=null, ALSA's null PCM): nothing heard, the writes kept
+    // to the clock as a device would (the tests' silent output)
+    bool null_dev = false;
+    unsigned null_rate = 48000;
+    long long null_frames = 0;
+    std::chrono::steady_clock::time_point null_t0;
     bool load() { return true; }
-    int open(void **p, const char *, int, int)
+    int open(void **p, const char *name, int, int)
     {
+        null_dev = name && !strcmp(name, "null");
         *p = &au;
         return 0;
     }
     int set_params(void *, int, int, unsigned, unsigned rate, int, unsigned latency_us)
     {
+        if (null_dev) {
+            null_rate = rate;
+            null_frames = 0;
+            null_t0 = std::chrono::steady_clock::now();
+            return 0;
+        }
         return au.set_params(rate, latency_us, frames);
     }
-    long writei(void *, const void *buf, unsigned long n) { return au.writei((const float *)buf, n); }
+    long writei(void *, const void *buf, unsigned long n)
+    {
+        if (null_dev) {
+            null_frames += (long long)n;
+            std::this_thread::sleep_until(null_t0 + std::chrono::nanoseconds(null_frames * 1000000000LL / null_rate));
+            return (long)n;
+        }
+        return au.writei((const float *)buf, n);
+    }
     int recover(void *, int, int) { return 0; }
     int close(void *)
     {
-        au.close();
+        if (!null_dev)
+            au.close();
         return 0;
     }
     const char *strerror(int e) { return ::strerror(-e); }
