@@ -4757,10 +4757,12 @@ def build_nvlive():
         if shutil.which('node') and (not os.path.exists(hjson) or os.path.getmtime(hjs) > os.path.getmtime(hjson)):
             subprocess.run(['node', os.path.join(HERE, 'examples', 'help_json.js'), os.path.join(HERE, 'ui')], check=True)
         nui_libs = [os.path.join(sdl, 'lib', 'libSDL3.a')]
-        if sys.platform == 'darwin':        # (its frameworks, as its sdl3.pc's Libs.private names them)
+        if sys.platform == 'darwin':        # (its frameworks, as its sdl3.pc names them -- and CoreGraphics, which it leaves to Cocoa)
             pc = os.path.join(sdl, 'lib', 'pkgconfig', 'sdl3.pc')
-            priv = next((l.split(':', 1)[1].split() for l in open(pc) if l.startswith('Libs.private:')), [])
-            nui_libs += priv
+            for l in open(pc):
+                if l.startswith(('Libs:', 'Libs.private:')):
+                    nui_libs += [w for w in l.split(':', 1)[1].split() if not w.startswith(('-L', '-lSDL3'))]
+            nui_libs += ['-Wl,-framework,CoreGraphics']
     newest = max([os.path.getmtime(x) for x in (src, hdr, hint, hlive, uis, so)] + [os.path.getmtime(o) for o in nui_objs])
     if not os.path.exists(exe) or newest > os.path.getmtime(exe):
         tmp = '%s.%d.tmp' % (exe, os.getpid())
