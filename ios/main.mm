@@ -15,7 +15,7 @@
 #include <string>
 #include <vector>
 
-extern "C" int nvlive_main(int argc, char **argv);
+int nvlive_main(int argc, char **argv);         // (nvlive.cpp's main, renamed: C++ linkage)
 
 static void audio_session()
 {
