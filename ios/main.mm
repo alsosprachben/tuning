@@ -35,10 +35,7 @@ int main(int argc, char *argv[])
     (void)argc;
     (void)argv;
     // LANDSCAPE ONLY: SDL lets a resizable window turn every way unless told
-    // (its hint, over the Info.plist's iPad orientations) -- and iPadOS 26,
-    // its every app's window resizable, keeps an orientation only for a view
-    // controller that prefers it locked (prefersInterfaceOrientationLocked,
-    // new in 26: SDL's controller is given it here, before its window is made)
+    // (its hint, over the Info.plist's iPad orientations)
     SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
     // ...supported: landscape alone (SDL's controller; iPadOS turns it so at
     // launch, and between its two landscapes) -- with sizes logged once the
@@ -61,19 +58,6 @@ int main(int argc, char *argv[])
                                     w.bounds.size.height, w.rootViewController.view.bounds.size.width,
                                     w.rootViewController.view.bounds.size.height, sc.screen.bounds.size.width,
                                     sc.screen.bounds.size.height);
-                        });
-                }];
-                    UIViewController *rc = w.rootViewController;
-                    [rc setNeedsUpdateOfSupportedInterfaceOrientations];
-                    // (the lock once the turn is made: asked again after it)
-                    for (double t : {0.3, 1.0, 2.5})
-                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(t * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
-                            [rc setNeedsUpdateOfPrefersInterfaceOrientationLocked];
-                            fprintf(stderr, "clavitone: at %.1f s orientation %d, locked %d, %.0fx%.0f\n", t,
-                                    (int)sc.effectiveGeometry.interfaceOrientation,
-                                    (int)sc.effectiveGeometry.isInterfaceOrientationLocked,
-                                    sc.effectiveGeometry.coordinateSpace.bounds.size.width,
-                                    sc.effectiveGeometry.coordinateSpace.bounds.size.height);
                         });
                 }];
     audio_session();
