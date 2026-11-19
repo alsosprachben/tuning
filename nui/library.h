@@ -22,7 +22,7 @@ static const char *FAMILY_NAMES[16] = {"Piano", "Chromatic Perc.", "Organ", "Gui
 struct Patch {
     int pick = 0, program = 0, variation = 0;
     bool drums = false;
-    std::string name, search;           // (search: its number, name and family, lower case)
+    std::string name, desc, search;     // (desc: its few words, about.json's; search: its number, name, words and family, lower case)
 };
 
 struct LibUi {
@@ -66,6 +66,8 @@ inline void lib_load(App &a)
 {
     LibUi &L = g_lib;
     L.loaded = true;
+    sess::load(a.ui_dir + "/about.json", L.about);
+    const J *descs = L.about.get("desc");
     J r = call(a, "{\"call\":\"patches\"}");
     if (const J *ps = r.get("patches"); ps && ps->is(J::ARR))
         for (const J &x : ps->a) {
@@ -75,9 +77,12 @@ inline void lib_load(App &a)
             p.variation = (int)num(&x, "variation");
             p.drums = flag(&x, "drums");
             p.name = str(&x, "name");
+            if (const J *d = descs && !p.drums ? descs->get(std::to_string(p.program) + "." + std::to_string(p.variation)) : nullptr;
+                d && d->is(J::STR))
+                p.desc = d->s;
             char b[16];
             snprintf(b, sizeof b, "%03d ", p.program);
-            p.search = lower(b + p.name + " " + fam_label(p));
+            p.search = lower(b + p.name + " " + p.desc + " " + fam_label(p));
             L.patches.push_back(p);
         }
     J f = call(a, "{\"call\":\"favourites\"}");
@@ -86,7 +91,6 @@ inline void lib_load(App &a)
             if (x.is(J::STR))
                 L.favs.insert(x.s);
     L.favs_kept = flag(&f, "kept");
-    sess::load(a.ui_dir + "/about.json", L.about);
 }
 
 inline bool is_cur(const Patch &p, const J *q)
@@ -373,7 +377,15 @@ inline void draw_library(App &a)
                     name_x = std::max(name_x, 10 + text_w(a, a.font, 21, pn) + text_w(a, a.font, 14, vs) + 8);
                 }
             }
-            text(a, a.font, 14, x + name_x, y + (th - h14) / 2, isc ? LCD_BG : SILK, fit(a, a.font, 14, p.name, tw - name_x - star - 4));
+            // (the name; under it, the patch's few words -- "Hammond", "Moog: two saws, ladder")
+            const float nw = tw - name_x - star - 4;
+            if (p.desc.empty())
+                text(a, a.font, 14, x + name_x, y + (th - h14) / 2, isc ? LCD_BG : SILK, fit(a, a.font, 14, p.name, nw));
+            else {
+                const float y0 = y + (th - 2 * h14 - 3) / 2;
+                text(a, a.font, 14, x + name_x, y0, isc ? LCD_BG : SILK, fit(a, a.font, 14, p.name, nw));
+                text(a, a.font, 14, x + name_x, y0 + h14 + 3, isc ? LCD_BG : SILK_DIM, fit(a, a.font, 14, p.desc, nw));
+            }
             look::star(a, x + tw - star / 2, y + th / 2, h21 * 0.5f, fav ? (isc ? LCD_BG : LCD) : (isc ? LCD_DIM : SILK_DIM), fav);
         }
     if (list.empty())

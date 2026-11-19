@@ -36,7 +36,7 @@ import gsdelay as GSDL
 import blockrender as B
 import gsdisplay as GSD
 import patch_map as PMAP
-from variation_desc import VARIATION_DESC, CAPITAL_DESC
+from variation_desc import VARIATION_DESC, CAPITAL_DESC, MODELLED
 
 locale.setlocale(locale.LC_ALL, "")
 
@@ -71,15 +71,6 @@ Sitar,Banjo,Shamisen,Koto,Kalimba,Bag pipe,Fiddle,Shanai,Tinkle Bell,Agogo,
 Steel Drums,Woodblock,Taiko Drum,Melodic Tom,Synth Drum,Reverse Cymbal,
 Guitar Fret Noise,Breath Noise,Seashore,Bird Tweet,Telephone Ring,Helicopter,
 Applause,Gunshot""".replace("\n", "").split(",")
-
-# ...AND WHAT A VOICE IS MODELLED ON, where that is one instrument a word can
-# name (examples/gm_coverage.py has the measurements): shown in parentheses
-# after the GM name -- "Electric Piano 1 (Rhodes)". Display only; GM itself
-# stays the GM names (voice_ab.py makes file names of them).
-MODELLED = {0: "Steinway", 2: "CP-70", 4: "Rhodes", 5: "Wurlitzer", 7: "Clavinet",
-            16: "Hammond", 17: "Hammond", 18: "Hammond", 19: "Gr\u00f6nlund",
-            26: "Ibanez", 27: "Stratocaster", 28: "Ibanez", 29: "Ibanez", 30: "Ibanez",
-            80: "Moog", 81: "Moog", 107: "\u0110\u00e0n Tranh"}
 
 
 def gm_label(p, v=0):

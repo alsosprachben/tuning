@@ -2189,14 +2189,20 @@ def about_json(path):
     import percussion_map as PM
     perc = {str(k): [r, note] for k, (r, note) in PERC_RATED.items()}
     kits = {str(k): {str(n): [r, note] for n, (r, note) in ks.items()} for k, ks in KIT_RATED.items() if k < 128}
-    doc = {"levels": [LEVEL[k] for k in range(5)], "programs": progs, "stops": stop_notes, "perc": perc,
+    # ...and each patch's few words, the pickers' (variation_desc: what a
+    # variation changes; what a capital is modelled on -- "Hammond")
+    import variation_desc as VD
+    desc = {"%d.0" % p: VD.patch_desc(p) for p in range(128) if VD.patch_desc(p)}
+    desc.update({"%d.%d" % k: d for k, d in VD.VARIATION_DESC.items()})
+    doc = {"levels": [LEVEL[k] for k in range(5)], "programs": progs, "desc": desc, "stops": stop_notes, "perc": perc,
            "kits": kits, "kit_only": sorted(k for k in getattr(PM, "KIT_ONLY", ()) if k < 128),
            "efx": {k: [r, note] for k, (r, note) in EFX_RATED.items()},
            "effects": {k: [r, note] for k, r, note in EFFECTS_RATED}}
     with open(path, "w") as f:
         json.dump(doc, f, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
         f.write("\n")
-    print("%s: %d programs and variations, %d organs' stops, %d drum sets" % (path, len(progs), len(stop_notes), len(kits)))
+    print("%s: %d programs and variations, %d descriptions, %d organs' stops, %d drum sets"
+          % (path, len(progs), len(desc), len(stop_notes), len(kits)))
 
 
 def main(argv):

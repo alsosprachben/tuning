@@ -405,7 +405,7 @@ function shown() {
   const words = $('q').value.toLowerCase().split(/\s+/).filter(Boolean);
   if (words.length) {
     return S.patches.filter(p => {
-      const t = `${pad(p.program, 3)} ${p.name} ${famLabel(p)}`.toLowerCase();
+      const t = `${pad(p.program, 3)} ${p.name} ${patchDesc(p)} ${famLabel(p)}`.toLowerCase();
       return words.every(w => t.includes(w));
     });
   }
@@ -424,7 +424,7 @@ function drawTiles(force) {
     tilesSig = sig;
     $('tiles').innerHTML = list.length ? list.map(p =>
       `<button class="tile" data-kit="1" data-pick="${p.pick}"><span class="pn">${p.drums ? '<i>KIT </i>' + p.program : pad(p.program, 3) + (p.variation ? '<i>.' + p.variation + '</i>' : '')}</span>` +
-      `<span class="nm">${esc(p.name)}</span><span class="star${S.favs.has(favKey(p)) ? ' on' : ''}" data-fav="${favKey(p)}">★</span></button>`).join('')
+      `<span class="nm">${esc(p.name)}${patchDesc(p) ? `<small>${esc(patchDesc(p))}</small>` : ''}</span><span class="star${S.favs.has(favKey(p)) ? ' on' : ''}" data-fav="${favKey(p)}">★</span></button>`).join('')
       : `<p class="empty">${S.fam === 'fav' && !searching ? 'No favourites yet: tap a patch\'s star to keep it here.' : 'Nothing matches.'}</p>`;
   }
   const byPick = new Map(S.patches.map(p => [String(p.pick), p]));
@@ -1686,11 +1686,15 @@ Kit.press($('flAsk'), b => flRender(b.dataset.ask === 'whole' ? 'best' : 'heard'
 // ---------------------------------------------------------------- THE NOTES
 // What each program and stop is, and what it was fitted to (about.json:
 // examples/gm_coverage.py --about, the coverage page's own words)
-fetch('about.json').then(r => (r.ok ? r.json() : null)).then(a => { S.about = a; drawAbout(); }).catch(() => {});
+fetch('about.json').then(r => (r.ok ? r.json() : null)).then(a => { S.about = a; drawAbout(); drawTiles(true); }).catch(() => {});
 function aboutHtml(title, rn) {
   if (!rn) return '';
   const [r, note] = rn, lv = S.about.levels[r] || '';
   return `<div class="ab-head"><b>${esc(title)}</b><span class="ab-r r${r}">${r} · ${esc(lv)}</span></div><p>${esc(note)}</p>`;
+}
+// a patch's few words, the pickers' (about.json's desc: "Hammond", "Moog: two saws, ladder")
+function patchDesc(p) {
+  return (S.about && S.about.desc && !p.drums && S.about.desc[p.program + '.' + p.variation]) || '';
 }
 function patchAbout(p) {
   if (!S.about || !p || p.drums) return null;

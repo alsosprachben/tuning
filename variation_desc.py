@@ -387,3 +387,21 @@ VARIATION_DESC.update({
     (4, 256 + 8): "wide and softer Rhodes",
     (39, 256 + 8): "Moog: FM triangles + sub",
 })
+
+# AND WHAT A VOICE IS MODELLED ON, where that is one instrument a word can
+# name (examples/gm_coverage.py has the measurements): the pickers show it
+# after the GM name -- "Electric Piano 1 (Rhodes)". Display only; GM itself
+# stays the GM names (voice_ab.py makes file names of them).
+MODELLED = {0: "Steinway", 2: "CP-70", 4: "Rhodes", 5: "Wurlitzer", 7: "Clavinet",
+            16: "Hammond", 17: "Hammond", 18: "Hammond", 19: "Gr\u00f6nlund",
+            26: "Ibanez", 27: "Stratocaster", 28: "Ibanez", 29: "Ibanez", 30: "Ibanez",
+            80: "Moog", 81: "Moog", 107: "\u0110\u00e0n Tranh"}
+
+
+def patch_desc(program, variation=0):
+    """A patch's few words for the pickers (the TUI's, and ui/about.json's
+    "desc" for the touch and native ones): a variation's own, else for a
+    capital what it is modelled on."""
+    if variation:
+        return VARIATION_DESC.get((program, variation))
+    return CAPITAL_DESC.get(program) or MODELLED.get(program)
