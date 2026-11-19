@@ -10,6 +10,9 @@
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
 #import <objc/runtime.h>
+#include <mach/mach.h>
+#include <os/proc.h>
+#include <thread>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -18,6 +21,37 @@
 #include <vector>
 
 int nvlive_main(int argc, char **argv);         // (nvlive.cpp's main, renamed: C++ linkage)
+
+// THE AUDIO ROUTE as iOS has it: its rate, its buffer, its latency, each
+// output (a USB adapter's own rate shows here) -- at the start, and at each change
+static void audio_route(const char *why)
+{
+    AVAudioSession *s = [AVAudioSession sharedInstance];
+    fprintf(stderr, "clavitone: audio %s: %.0f Hz, buffer %.2f ms, output latency %.2f ms\n", why, s.sampleRate,
+            s.IOBufferDuration * 1000.0, s.outputLatency * 1000.0);
+    for (AVAudioSessionPortDescription *p in s.currentRoute.outputs)
+        fprintf(stderr, "clavitone:   out %s (%s)\n", p.portName.UTF8String, p.portType.UTF8String);
+}
+
+// MEMORY as iOS counts it (Part C's measure): the footprint (task_vm_info's
+// phys_footprint -- what iOS kills by), the most it has been, and what the
+// system says is left to this process before its limit -- every 5 s
+static void memory_watch()
+{
+    std::thread([] {
+        unsigned long long peak = 0;
+        for (;;) {
+            task_vm_info_data_t vi{};
+            mach_msg_type_number_t n = TASK_VM_INFO_COUNT;
+            if (task_info(mach_task_self(), TASK_VM_INFO, (task_info_t)&vi, &n) == KERN_SUCCESS) {
+                peak = std::max(peak, (unsigned long long)vi.phys_footprint);
+                fprintf(stderr, "clavitone: memory %.0f MB (peak %.0f MB), %.0f MB left before iOS's limit\n",
+                        vi.phys_footprint / 1048576.0, peak / 1048576.0, os_proc_available_memory() / 1048576.0);
+            }
+            std::this_thread::sleep_for(std::chrono::seconds(5));
+        }
+    }).detach();
+}
 
 static void audio_session()
 {
@@ -28,6 +62,14 @@ static void audio_session()
     [s setPreferredIOBufferDuration:256.0 / 48000.0 error:&e];      // (rubato's callback: 256 frames)
     if (![s setActive:YES error:&e])
         NSLog(@"clavitone: the audio session would not start: %@", e);
+    [[NSNotificationCenter defaultCenter] addObserverForName:AVAudioSessionRouteChangeNotification object:nil
+                                                       queue:nil
+                                                  usingBlock:^(NSNotification *n) {
+                                                      const int why = [n.userInfo[AVAudioSessionRouteChangeReasonKey] intValue];
+                                                      char b[48];
+                                                      snprintf(b, sizeof b, "route changed (reason %d)", why);
+                                                      audio_route(b);
+                                                  }];
 }
 
 int main(int argc, char *argv[])
@@ -87,6 +129,9 @@ int main(int argc, char *argv[])
         if (FILE *f = freopen(lg.c_str(), "w", stderr))
             setvbuf(f, nullptr, _IOLBF, 0);
     }
+    audio_route("at the start");
+    memory_watch();
+    setenv("NV_PATCH_SIZES", "1", 1);               // (each patch built: its size, in the log)
     const std::string nvx = d + "/live.nvx";
     if (access(nvx.c_str(), R_OK) != 0) {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Clavitone",
