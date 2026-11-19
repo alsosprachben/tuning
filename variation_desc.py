@@ -295,7 +295,7 @@ CAPITAL_DESC.update({
     14: "tubular bells: brass tubes",
     15: "hammered dulcimer",
     16: "Hammond: 16 5-1/3 8, its own speaker",
-    17: "Hammond: 888 8, perc 3rd, own speaker",
+    17: "Hammond: 888 8, perc 3rd, Leslie slow",
     18: "Hammond: 16 5-1/3 8 1, Leslie fast",
     19: "Grönlund organ: principal 8'",
     20: "harmonium: French free reeds",

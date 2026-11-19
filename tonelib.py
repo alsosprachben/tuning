@@ -6366,17 +6366,16 @@ class PercussiveOrganProperties(TonewheelProperties):
     """
     wheel_swell = True          # the expression pedal on the wheel (Synth.wheel_swell)
     default_stops = 0b100000001111   # 888 8, and the B3's third-harmonic percussion (bit 11)
-    # NO LESLIE, as GM 16 (DrawbarOrganProperties): its own speaker, its valve clean
-    leslie = False
+    # ITS LESLIE ON CHORALE, as GeneralUser GS plays it (Ben, 2026-11-19: its
+    # 17 is "Organ Slow Cycle" samples, its 18 "Organ Fast Cycle", its 16 a
+    # dry organ) -- GM 16 alone through its own speaker
+    leslie = True
     leslie_fast = False
-    cabinet = "hammond"
-    amp_drive = 0.5
     # HELD at its level (the mean of C4-G5's first second at velocity 100)
     # through the Leslie's measurement (leslie.py: the cabinet's response, the
     # two-rotor crossover, the horn; and GM 18's drive) and the wheels' (the key
-    # click, their purity, their leakage) -- then through its own speaker and
-    # valve, 4.4 dB louder there, taken back out (examples/organ_level_hold.py)
-    initial_gain = TonewheelProperties.initial_gain * 10 ** ((0.152 - 4.439) / 20.0)
+    # click, their purity, their leakage)
+    initial_gain = TonewheelProperties.initial_gain * 10 ** (0.152 / 20.0)
 
 
 class RockOrganProperties(TonewheelProperties):
