@@ -483,7 +483,13 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
                 a.safe_h = r.h - 2 * m;
             }
         }
-        gfx_begin(win, 0.106f, 0.114f, 0.125f);
+        if (!gfx_begin(win, 0.106f, 0.114f, 0.125f)) {
+            // (nothing to draw into -- in the background: no frame, and a rest,
+            //  not a spin; drawn again when it comes back)
+            SDL_Delay(100);
+            settle = std::max(settle, 1);
+            continue;
+        }
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
         draw(a);

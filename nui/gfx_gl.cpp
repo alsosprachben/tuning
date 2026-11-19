@@ -64,10 +64,11 @@ bool gfx_init(SDL_Window *win)
     return ImGui_ImplSDL3_InitForOpenGL(win, glc) && ImGui_ImplOpenGL3_Init("#version 330");
 }
 
-void gfx_begin(SDL_Window *, float r, float g, float b)
+bool gfx_begin(SDL_Window *, float r, float g, float b)
 {
     ImGui_ImplOpenGL3_NewFrame();
     gl.ClearColor(r, g, b, 1.0f);
+    return true;
 }
 
 void gfx_end(SDL_Window *win, const char *shot)

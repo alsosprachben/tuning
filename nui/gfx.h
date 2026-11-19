@@ -16,7 +16,9 @@ SDL_Window *gfx_window(const char *title, int w, int h, SDL_WindowFlags flags);
 bool gfx_init(SDL_Window *win);
 // a frame: begun (the renderer's NewFrame, its target cleared to rgb), then
 // ended -- shot non-NULL: its pixels into that PPM -- and presented
-void gfx_begin(SDL_Window *win, float r, float g, float b);
+// (false: nothing to draw into -- an iPad's app in the background, its
+//  window not on screen -- the frame skipped, gfx_end not called)
+bool gfx_begin(SDL_Window *win, float r, float g, float b);
 void gfx_end(SDL_Window *win, const char *shot);
 void gfx_shutdown(SDL_Window *win);
 

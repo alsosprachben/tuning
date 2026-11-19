@@ -13,6 +13,10 @@
 #include <cstdio>
 #include <vector>
 
+#include <objc/objc.h>
+extern "C" void *objc_autoreleasePoolPush(void);
+extern "C" void objc_autoreleasePoolPop(void *);
+
 #include "imgui.h"
 #include "backends/imgui_impl_metal.h"
 #include "backends/imgui_impl_sdl3.h"
@@ -29,6 +33,10 @@ MTLRenderPassDescriptor *rpd = nil;
 id<CAMetalDrawable> drawable = nil;
 id<MTLCommandBuffer> cmd = nil;
 id<MTLRenderCommandEncoder> enc = nil;
+// (each frame's autorelease pool: its drawable, its command buffer, ImGui's
+//  buffers let go at its end -- the loop is ours, not UIKit's, and drains
+//  none of its own: an iPad's app in the background spun to 80 MB a second)
+void *pool = nullptr;
 }  // namespace
 
 SDL_Window *gfx_window(const char *title, int w, int h, SDL_WindowFlags flags)
@@ -62,12 +70,20 @@ bool gfx_init(SDL_Window *win)
     return ImGui_ImplSDL3_InitForMetal(win) && ImGui_ImplMetal_Init(dev);
 }
 
-void gfx_begin(SDL_Window *win, float r, float g, float b)
+bool gfx_begin(SDL_Window *win, float r, float g, float b)
 {
     int w, h;
     SDL_GetWindowSizeInPixels(win, &w, &h);
+    if (w <= 0 || h <= 0 || (SDL_GetWindowFlags(win) & (SDL_WINDOW_HIDDEN | SDL_WINDOW_MINIMIZED)))
+        return false;                       // (not on screen: nothing to draw)
+    pool = objc_autoreleasePoolPush();
     layer.drawableSize = CGSizeMake(w, h);
     drawable = [layer nextDrawable];
+    if (!drawable) {                        // (none given: the background's -- the frame skipped)
+        objc_autoreleasePoolPop(pool);
+        pool = nullptr;
+        return false;
+    }
     cmd = [queue commandBuffer];
     rpd.colorAttachments[0].clearColor = MTLClearColorMake(r, g, b, 1.0);
     rpd.colorAttachments[0].texture = drawable.texture;
@@ -75,6 +91,7 @@ void gfx_begin(SDL_Window *win, float r, float g, float b)
     rpd.colorAttachments[0].storeAction = MTLStoreActionStore;
     enc = [cmd renderCommandEncoderWithDescriptor:rpd];
     ImGui_ImplMetal_NewFrame(rpd);
+    return true;
 }
 
 void gfx_end(SDL_Window *, const char *shot)
@@ -115,6 +132,10 @@ void gfx_end(SDL_Window *, const char *shot)
     drawable = nil;
     cmd = nil;
     enc = nil;
+    if (pool) {
+        objc_autoreleasePoolPop(pool);
+        pool = nullptr;
+    }
 }
 
 void gfx_shutdown(SDL_Window *)
