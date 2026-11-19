@@ -2908,8 +2908,9 @@ def gm2_bank(program, lsb):
 
 
 def bank_select(v):
-    """(CC0, CC32) that select the variation key v (map_bank's inverse)."""
-    return v & 0x7F, v >> 7
+    """(CC0, CC32) that select the variation key v (map_bank's inverse) --
+    its cabinet choice (cab_key) aside: CC83's (cab_of)."""
+    return v & 0x7F, (v & CAB_MASK) >> 7
 
 
 # ...THE MAPS' OWN TONES that are settings or layers of ours (the synth ones

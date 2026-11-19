@@ -78,6 +78,7 @@ int nv_tcache_build_var(void *h, int program, int note, int bucket, int nb, int 
 int nv_drum_axis_ud(int pitch, int pan, const int *ud, int uset);
 int nv_tcache_build_var_ud(void *h, int program, int note, int bucket, int nb, int axis, int pitch, int pan,
                            const int *ud);
+void nv_live_var_cabs(int n, const int *rows);
 void nv_live_vars(int nent, const int *nls, const int *ls, const double *trim, const int *gs, const int *gm2,
                   int nslot, const OrganSpec *const *so, const int *soff, const OrganSpec *const *sog,
                   long long kn);
@@ -1106,6 +1107,7 @@ struct nv_host {
         int rot_mode = -1;                      // its rotary heard (live's part.rotary: -1 its own way, 0 room, 1 mics)
         double rot_sep = -1.0;                  // ...the mics' angle apart, radians (<0 the default)
         double drive = -1.0;                    // an organ's drive knob (live's Part.drive: <0 the voice's)
+        int cab = -1;                           // its cabinet, chosen (live's Part.cab: a CAB_CHOICES index, -1 none)
         bool is(int prog, bool dr, int v) const
         {
             return want >= 0 ? want == prog && want_dr == dr && want_var == v
@@ -1114,8 +1116,13 @@ struct nv_host {
     };
     void ask(size_t i, int prog, bool dr, int v)
     {
-        if (!pats[i].is(prog, dr, v))
-            pats[i].drive = -1.0;               // (a new program: its drive the voice's, as the slab's swap has it)
+        {                                       // (a new program: its drive the voice's, as the slab's swap has it --
+            const PartAt &q = pats[i];          //  a cabinet switch is the same voice, live's set_patch)
+            const bool w = q.want >= 0;
+            if ((w ? q.want : q.program) != prog || (w ? q.want_dr : q.drums) != dr
+                || ((w ? q.want_var : q.var) & 4095) != (v & 4095))
+                pats[i].drive = -1.0;
+        }
         pats[i].want = prog;
         pats[i].want_dr = dr;
         pats[i].want_var = v;
@@ -1187,6 +1194,17 @@ struct nv_host {
     std::mutex cmu;
     std::map<int, int> bmsb;
     std::map<int, int> blsb;
+    std::map<int, int> hcab;                // each channel's cabinet (CC83, tonelib.CABINET_CC), latched as the bank
+    std::map<long long, int> vcab_m;        // the cabinet table: (program, variation, choice) -> its entry
+    // VARIATION v THROUGH CABINET c (live.with_cab): the variant's key where the
+    // voice offers it (the export's cabinet table), else v alone
+    int with_cab(int p, int v, int c) const
+    {
+        v &= 4095;
+        if (c <= 0)
+            return v;
+        return vcab_m.count(((long long)(p & 127) * 4096 + v) * 64 + c) ? v | (c << 12) : v;
+    }
     bool rxbank;
     int chdr[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0};    // each channel drums (live's ch_drums)
     const char * tmap_;
@@ -1281,10 +1299,14 @@ struct nv_host {
     // a patch's key holds it past bit 22, so a room's patches and another's
     // are told apart (a file's built ahead in each)
     int key_room = 0;
+    // (a variation's CABINET -- patch_map.cab_key's choice over its bit 12 --
+    // in bits 22-25 of its own, past the variation's 14; the room over them)
+    static const int KEY_CAB_SHIFT = 22, KEY_ROOM_SHIFT = 26;
     int ckey(int prog, bool dr, int var) const
     {
-        const int k = dr && prog >= 128 ? 256 * (4096 + prog) + 128 : 256 * var + (dr ? 128 : 0) + (prog & 127);
-        return k + (key_room << 22);
+        const int k = dr && prog >= 128 ? 256 * (4096 + prog) + 128
+                                        : 256 * (var & 4095) + (dr ? 128 : 0) + (prog & 127) + ((var >> 12) << KEY_CAB_SHIFT);
+        return k + (key_room << KEY_ROOM_SHIFT);
     }
     int room_key_of(const std::string &name) const;
     // a file's notes scanned (fileplay, --test --file-octaves): only their
@@ -1455,6 +1477,7 @@ struct nv_host {
         int rot_mode = -1;                  // (its rotary heard: -1 its own way, 0 room, 1 mics)
         double rot_sep = -1.0;              // (...the mics' angle apart, radians: <0 the default)
         double drive = -1.0;                // (an organ's drive knob: <0 the voice's)
+        int cab = -1;                       // (its cabinet, chosen: a CAB_CHOICES index, -1 none)
         std::vector<std::string> drawn;     // (an organ's stops by name: a session's or preset's; none the voice's)
     };
     std::vector<PartSpec> add_req;
@@ -1471,6 +1494,7 @@ struct nv_host {
     void pick_row(size_t row, int sp);
     void part_touch(size_t row, int fixed);         // (livetui.toggle_touch: 1 fixed, 0 velocity)
     void part_rotary(size_t row, int mode, double sep);     // (live.set_rotary: -1 its own way, 0 room, 1 mics)
+    void set_cabinet(size_t row, int choice);               // (live.set_cabinet: a CAB_CHOICES index, -1 none)
     void rotary_refresh();                          // (the host's copies from the parts': a CC82 may have moved them)
     std::chrono::steady_clock::time_point rotary_read{};
     void part_drive(size_t row, double v);          // (an organ's drive knob, live.set_drive: <0 the voice's)

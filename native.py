@@ -567,6 +567,7 @@ def _load():
             ('nv_midi_banked', I, [ctypes.c_void_p]), ('nv_midi_note_bsel', I, [ctypes.c_void_p, I]),
             ('nv_midi_chprog_bsel', I, [ctypes.c_void_p, I]),
             ('nv_song_vars', None, [ctypes.c_void_p, I] + [ctypes.c_void_p] * 5),
+            ('nv_song_var_cabs', None, [ctypes.c_void_p, I, ctypes.c_void_p]),
             ('nv_song_slot_organs', None, [ctypes.c_void_p, I, ctypes.c_void_p]),
             ('nv_strings', I, [ctypes.POINTER(VoiceInit), P, D, C, C, C, ctypes.c_void_p, ctypes.c_void_p, I]),
             ('nv_strings_og', I, [ctypes.POINTER(VoiceInit), P, ctypes.c_void_p, D, C, C, C, ctypes.c_void_p,
@@ -5610,7 +5611,10 @@ def song_vars(song_p, gs):
         _SONG_VARS[key] = (len(nls), (I_ * len(nls))(*nls), (I_ * max(1, len(ls)))(*ls), (D_ * len(tr))(*tr),
                            (I_ * (5 * 128 * 128))(*[e for m in vgs for row in m for e in row]),
                            (I_ * (128 * 128))(*[e for row in vgm2 for e in row]))
+        _cr = [x for row in VAR_CABS for x in row]
+        _SONG_VARS[('cabs', key)] = (len(VAR_CABS), (I_ * max(1, len(_cr)))(*_cr))
     lib().nv_song_vars(song_p, *_SONG_VARS[key])
+    lib().nv_song_var_cabs(song_p, *_SONG_VARS[('cabs', key)])     # (the cabinet variants: VAR_CABS)
     # ...and each one-tone variation's organ, its slot's (nvrender's ent_organ)
     if 'organs' not in _SONG_VARS:
         slots, entries = variation_tables()[:2]
@@ -5664,6 +5668,9 @@ def sfx_strokes(cls):
     import percussion_map as PM
     keys = range(128) if so[1] is None else (so[1],)
     return any(PM.rasp_strokes(k, 0.0, 1.0, kit=so[0]) is not None for k in keys)
+
+
+VAR_CABS = []       # (program, variation, its entry, cabinet choice, the variant's entry): variation_tables'
 
 
 def variation_tables():
@@ -5724,6 +5731,21 @@ def variation_tables():
             layer_slots = [(len(slots) - 1, 0, 0, 127)]
         ent[(p, v)] = len(entries)
         entries.append((p, v, layer_slots))
+    # ...AND THE CABINET VARIANTS (patch_map.cab_variation_keys): a part's or a
+    # file's (CC83) cabinet choice on an amplified voice, each an entry of its
+    # own past GS's -- VAR_CABS keys them by (program, variation, its entry,
+    # choice), the native lookups' (the cabinet table, VCAB)
+    del VAR_CABS[:]
+    for (p, k) in P.cab_variation_keys():
+        vp = P.VariationProgram(p, k)
+        cl = [B.property_class_for_note(vp, kk) for kk in range(128)]
+        if not all(ok(c) for c in cl if c is not None):
+            cl = [None] * 128
+        slots.append((p, k, -1, cl))
+        ent[(p, k)] = len(entries)
+        entries.append((p, k, [(len(slots) - 1, 0, 0, 127)]))
+        bv, ch = P.cab_of(k)
+        VAR_CABS.append((p, bv, ent.get((p, bv), 0) if bv else 0, ch, ent[(p, k)]))
     gs = [[[0] * 128 for _ in range(128)] for _ in range(5)]
     for m in range(5):
         for p in range(128):

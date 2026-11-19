@@ -460,6 +460,10 @@ def main(argv):
         # breath, -2 one that breathes
         for _p, _v, _ls in ventries[1:]:
             vb += struct.pack("<i", vpcls[(_p, _v)])
+        # ...and THE CABINET TABLE (native.VAR_CABS): each cabinet variant's
+        # program, variation, that variation's entry (0 the capital), the
+        # choice (patch_map.CAB_CHOICES) and its own entry -- last, its count first
+        vb += struct.pack("<i", len(N.VAR_CABS)) + b"".join(struct.pack("<5i", *x) for x in N.VAR_CABS)
         f.write(b"VARS" + struct.pack("<i", len(vb)) + vb)
         # DRON: the drone classes (native.DRONES, registered as the bagpipes'
         # classes were made), K's drone region

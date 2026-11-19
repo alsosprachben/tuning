@@ -79,6 +79,18 @@ void nv_host::session_apply()
 
 // ---- SCENES AND PRESETS (live's) ----
 
+// THE CABINET CHOICES by name (patch_map.CAB_CHOICES -- the same order: an
+// index is CC83's value), 0 "own", and a session's name's index (-1 none)
+static const char *const CAB_NAMES[] = {"own", "direct", "leslie", "hammond", "guitar12", "guitar412", "jc120",
+                                        "bass410", "rhodes", "wurlitzer"};
+static int cab_index(const std::string &s)
+{
+    for (int i = 0; i < (int)(sizeof CAB_NAMES / sizeof CAB_NAMES[0]); i++)
+        if (s == CAB_NAMES[i])
+            return i;
+    return -1;
+}
+
 static std::string beside(const std::string &path, const char *name)
 {
     size_t k = path.rfind('/');
@@ -529,6 +541,10 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
                 sp.rot_mode = ro && ro->is(sess::J::STR) ? (ro->s == "mics" ? 1 : ro->s == "room" ? 0 : -1) : -1;
                 const sess::J *rs = pd.get("rotary_spread");    // (...degrees; absent, the default)
                 sp.rot_sep = rs && rs->is(sess::J::NUM) ? std::max(0.0, std::min(180.0, rs->d())) * M_PI / 180.0 : -1.0;
+                const sess::J *cb = pd.get("cabinet");  // (its cabinet, chosen: live's Part.cab by name; absent, none)
+                sp.cab = cb && cb->is(sess::J::STR) ? cab_index(cb->s) : -1;
+                if (!sp.drums)
+                    sp.var = with_cab(sp.program, sp.var, std::max(0, sp.cab));
                 const sess::J *dr = pd.get("drive");    // (an organ's drive knob: live's Part.drive; absent, the voice's)
                 sp.drive = dr && dr->is(sess::J::NUM) ? std::max(0.0, dr->d()) : -1.0;
                 const sess::J *cm = pd.get("cc_map");   // (a Messenger read on it: nvlive reads one on every part)
@@ -573,12 +589,18 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
                 part_set(0, sp.channel, sp.lo, sp.hi, sp.tr, sp.level, sp.muted);
                 part_touch(0, sp.fixed);
                 part_rotary(0, sp.rot_mode, sp.rot_sep);
+                {                               // (its cabinet: the pick below takes it -- at the start, its own rebuild)
+                    std::lock_guard<std::mutex> lk(parts_mu);
+                    pats[0].cab = sp.cab;
+                }
+                if (at_start && sp.cab >= 0 && !sp.drums)
+                    set_cabinet(0, sp.cab);
                 if (at_start)                   // (else after the pick's swap, below: a new program clears it)
                     part_drive(0, sp.drive);
                 if (!at_start) {
                     int code = (sp.drums ? 128 : 0) + sp.program;
                     for (size_t j = 0; j < E.vpv.size() && sp.var && !sp.drums; j++)
-                        if (E.vpv[j][0] == sp.program && E.vpv[j][1] == sp.var)
+                        if (E.vpv[j][0] == sp.program && E.vpv[j][1] == (sp.var & 4095))
                             code = 256 + (int)j;
                     pick_row(0, code);
                     if (sp.drive >= 0.0) {      // (its drive knob, behind the swap that brings its program in)
@@ -817,6 +839,10 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
             pd.o["fixed_touch"] = sess::boolean(pa.fixed != 0);
         else
             pd.o.erase("fixed_touch");
+        if (pa.cab >= 0 && pa.cab < (int)(sizeof CAB_NAMES / sizeof CAB_NAMES[0]))     // (its cabinet, chosen: live's likewise, by name)
+            pd.o["cabinet"] = sess::str(CAB_NAMES[pa.cab]);
+        else
+            pd.o.erase("cabinet");
         if (pa.rot_mode >= 0)                   // (its rotary heard, live's likewise: only when set)
             pd.o["rotary"] = sess::str(pa.rot_mode ? "mics" : "room");
         else
@@ -970,7 +996,7 @@ int nv_host_parts(nv_host *h, nv_host_partinfo *out, int cap)
         nv_host_partinfo &o = out[i];
         o.row = i;
         o.program = r.program;
-        o.variation = r.var;
+        o.variation = r.var & 4095;     // (its GS variation: a cabinet choice rides over bit 12, nv_host_cabinet's)
         o.drums = r.drums;
         o.channel = r.channel;
         o.lo = r.lo;
@@ -1390,6 +1416,38 @@ int nv_host_rotary(nv_host *h, int row, double *out)
     out[1] = h->pats[i].rot_sep < 0.0 ? -1.0 : h->pats[i].rot_sep * 180.0 / M_PI;
     return 1;
 }
+// A PART's CABINET (live.set_cabinet): *chosen its choice (-1 none: the
+// voice's own), *now the one it plays through (0 its own), offer[] the
+// choices its voice offers (patch_map.cab_choices) -- how many; -1 no such row
+int nv_host_cabinet(nv_host *h, int row, int *chosen, int *now, int *offer, int cap)
+{
+    size_t i;
+    if (!row_index(h, row, i))
+        return -1;
+    std::lock_guard<std::mutex> lk(h->parts_mu);
+    if (i >= h->pats.size())
+        return -1;
+    const nv_host::PartAt &pa = h->pats[i];
+    const int v = pa.want >= 0 ? pa.want_var : pa.var, p = pa.want >= 0 ? pa.want : pa.program;
+    const bool dr = pa.want >= 0 ? pa.want_dr : pa.drums;
+    *chosen = pa.cab;
+    *now = dr ? 0 : v >> 12;
+    int n = 0;
+    for (int c = 1; !dr && c < 64; c++)
+        if (h->with_cab(p, v, c) >> 12 == c) {
+            if (n < cap)
+                offer[n] = c;
+            n++;
+        }
+    return n;
+}
+void nv_host_set_cabinet(nv_host *h, int row, int choice)
+{
+    size_t i;
+    if (row_index(h, row, i))
+        h->set_cabinet(i, choice);
+}
+
 void nv_host_set_rotary(nv_host *h, int row, int mode, double spread_deg)
 {
     size_t i;

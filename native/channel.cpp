@@ -236,6 +236,9 @@ struct Song {
     std::vector<std::vector<std::array<int, 4>>> vls;
     std::vector<double> vtrim;
     std::vector<int> vgs, vgm2;
+    // ...and THE CABINET VARIANTS (nv_song_var_cabs): (program, its variation's
+    // entry, choice) -> the variant's entry; a bsel's choice over bit 16
+    std::map<long long, int> vcab;
     // each channel's keys as the file wrote them (_prep_choir_parts reads
     // the notes before a layered variation or a stroke expands them)
     std::map<long long, std::vector<int>> wkeys;
@@ -251,8 +254,15 @@ struct Song {
         Ev e = notes.back();
         if (e.prog < 0 || e.prog > 127)
             return 1;
-        int en = bsel <= 640 ? vgs[((size_t)((bsel - 1) / 128) * 128 + e.prog) * 128 + (bsel - 1) % 128]
-                             : vgm2[(size_t)e.prog * 128 + (bsel - 641)];
+        const int cab = bsel >> 16;
+        bsel &= 0xFFFF;
+        int en = !bsel ? 0 : bsel <= 640 ? vgs[((size_t)((bsel - 1) / 128) * 128 + e.prog) * 128 + (bsel - 1) % 128]
+                                         : vgm2[(size_t)e.prog * 128 + (bsel - 641)];
+        if (cab) {                          // (its cabinet, the file's CC83: the variant's entry where the voice offers it)
+            auto it = vcab.find(((long long)e.prog * 4096 + std::max(0, en)) * 64 + cab);
+            if (it != vcab.end())
+                en = it->second;
+        }
         if (en <= 0)
             return 1;                       // (a variation not built: the capital, as a Sound Canvas)
         notes.pop_back();
@@ -2992,6 +3002,16 @@ void nv_song_vars(void *s, int nent, const int *nls, const int *ls, const double
 }
 
 int nv_song_note_bank(void *s, int bsel) { return ((nv::Song *)s)->bank(bsel); }
+
+// THE CABINET TABLE (VARS' last, native.VAR_CABS): n rows of (program,
+// variation, its entry, choice, the variant's entry)
+void nv_song_var_cabs(void *s, int n, const int *rows)
+{
+    nv::Song *g = (nv::Song *)s;
+    g->vcab.clear();
+    for (int i = 0; i < n; i++)
+        g->vcab[((long long)rows[5 * i] * 4096 + rows[5 * i + 2]) * 64 + rows[5 * i + 3]] = rows[5 * i + 4];
+}
 
 int nv_song_kidx(void *s, int i) { return ((nv::Song *)s)->notes[i].kidx(); }
 

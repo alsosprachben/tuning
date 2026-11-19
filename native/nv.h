@@ -1510,6 +1510,7 @@ int nv_song_n_notes(void *s);
    its variation's notes (0: no table); a note's class index in K, and its
    tone on its part (_TONE_SEGS) */
 void nv_song_vars(void *s, int nent, const int *nls, const int *ls, const double *trim, const int *gs, const int *gm2);
+void nv_song_var_cabs(void *s, int n, const int *rows);
 int nv_song_note_bank(void *s, int bsel);
 int nv_song_kidx(void *s, int i);
 int nv_song_tone(void *s, int i);

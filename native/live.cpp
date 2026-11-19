@@ -68,6 +68,7 @@ void nv_song_chokes_n(void *s, const unsigned long long *choke, int n);
 void nv_song_kits_n(void *s, const double *f0, const double *seat, int n);
 void nv_song_strokes_k(void *s, const NoteClass *const *K, const int *kind, const double *par);
 void nv_song_vars(void *s, int nent, const int *nls, const int *ls, const double *trim, const int *gs, const int *gm2);
+void nv_song_var_cabs(void *s, int n, const int *rows);
 void nv_song_slot_organs(void *s, int n, const OrganSpec *const *so);
 void nv_song_slot_orgs(void *s, int n, const int *off, const OrganSpec *const *og);
 void nv_log_n(long n, const double *x, double *out);
@@ -155,8 +156,10 @@ static std::vector<uint8_t> one_note(int program, int note, int vel, int ch, int
         // THE BANK FIRST, as a file selects a variation (Patch._raw_template):
         // CC0 = bank, and a map's own tone under CC32 = map (bank_select)
         ev(0, {(uint8_t)(0xB0 | ch), 0, (uint8_t)(bank & 0x7F)});
-        if (bank >> 7)
-            ev(0, {(uint8_t)(0xB0 | ch), 32, (uint8_t)(bank >> 7)});
+        if ((bank & 4095) >> 7)
+            ev(0, {(uint8_t)(0xB0 | ch), 32, (uint8_t)((bank & 4095) >> 7)});
+        if (bank >> 12)                     // (its cabinet, patch_map.cab_key's: CC83, latched as the bank)
+            ev(0, {(uint8_t)(0xB0 | ch), 83, (uint8_t)(bank >> 12)});
     }
     ev(0, {(uint8_t)(0xC0 | ch), (uint8_t)program});
     ev(0, {(uint8_t)(0xB0 | ch), 7, 127});
@@ -264,9 +267,22 @@ static long long g_k_n = 0;             // K's length a cache copies (0: the pro
 static int g_mapk_base = 0, g_mapk_n = 0;
 static std::vector<int> g_mapk_ids;  // (their ids, 128 x map + program: a template selects one by them)
 
+// THE CABINET VARIANTS (the export's VARS, its cabinet table: nv_live_var_cabs):
+// (program, variation, choice) -> the variant's entry -- patch_map.cab_key's
+// choice over bit 12 of a variation key
+static std::map<long long, int> g_var_cab;
+static std::vector<int> g_var_cab_rows;     // (the rows as given: a song's, nv_song_var_cabs)
+static long long cab_k(int p, int v, int c) { return ((long long)p * 4096 + v) * 64 + c; }
+
 // the entry variation key v selects for program p (the reader's bsel, Song::bank's): 0 the capital
 static int var_entry(int p, int v)
 {
+    if (v >> 12) {                          // (a cabinet variant: its own entry, where the voice offers it)
+        auto it = g_var_cab.find(cab_k(p, v & 4095, v >> 12));
+        if (it != g_var_cab.end())
+            return it->second;
+        v &= 4095;
+    }
     if (!v || g_var_gs.empty() || p < 0 || p > 127)
         return 0;
     int msb = v & 0x7F, mp = v >> 7;
@@ -631,6 +647,7 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
     if (ven) {                              // (bank select's tables, before the note takes its variation)
         nv_song_vars(song, (int)g_var_nls.size(), g_var_nls.data(), g_var_ls.data(), g_var_trim.data(),
                      g_var_gs.data(), g_var_gm2.data());
+        nv_song_var_cabs(song, (int)(g_var_cab_rows.size() / 5), g_var_cab_rows.data());
         nv_song_slot_organs(song, (int)g_slot_organ.size(), g_slot_organ.data());
         nv_song_slot_orgs(song, (int)g_slot_organ.size(), g_slot_off.data(), g_slot_og.data());
     }
@@ -2672,6 +2689,16 @@ const NoteClass *nv_tcache_class(void *h, int program)
 
 // A CACHE's VARIATION (live.Patch.variation), before its templates are warmed
 void nv_tcache_set_var(void *h, int v) { ((nv::live::Cache *)h)->var = v; }
+
+// THE CABINET TABLE (VARS' last: native.VAR_CABS): n rows of (program,
+// variation, its entry, choice, the variant's entry)
+void nv_live_var_cabs(int n, const int *rows)
+{
+    g_var_cab.clear();
+    g_var_cab_rows.assign(rows, rows + 5 * (size_t)std::max(0, n));
+    for (int i = 0; i < n; i++)
+        g_var_cab[cab_k(rows[5 * i], rows[5 * i + 1], rows[5 * i + 3])] = rows[5 * i + 4];
+}
 int nv_tcache_var(void *h) { return ((nv::live::Cache *)h)->var; }
 
 // BANK SELECT's tables for live's templates (the export's VARS: as nv_song_vars

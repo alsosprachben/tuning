@@ -299,6 +299,11 @@ int nv_host_drive(nv_host *h, int row, double *out);
    (<0 the default); 0 no such row -- and set */
 int nv_host_rotary(nv_host *h, int row, double *out);
 void nv_host_set_rotary(nv_host *h, int row, int mode, double spread_deg);
+/* a part's cabinet (live.set_cabinet): *chosen its choice (-1 none, its own),
+   *now the one it plays through (0 its own), offer[] the CAB_CHOICES indices
+   its voice offers -- how many; -1 no such row -- and set (-1 none) */
+int nv_host_cabinet(nv_host *h, int row, int *chosen, int *now, int *offer, int cap);
+void nv_host_set_cabinet(nv_host *h, int row, int choice);
 void nv_host_set_drive(nv_host *h, int row, double v);
 
 /* ---- THE CONTROLLER MATRIX (livetui's C): a channel's sources to destinations ----

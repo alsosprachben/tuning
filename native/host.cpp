@@ -206,6 +206,14 @@ bool read_export(const char *path, Export &E)
                     ok = fread(E.vents[e].trim, 8, 2, f) == 2;
                 for (int e = 1; ok && e <= ne; e++)
                     ok = fread(&E.vents[e].pcls, 4, 1, f) == 1;
+                // ...THE CABINET TABLE, last (native.VAR_CABS: program, variation,
+                // its entry, choice, the variant's entry), where the export has one
+                if (ok && ftell(f) < vp + 8 + vl) {
+                    int nc = 0;
+                    ok = fread(&nc, 4, 1, f) == 1;
+                    E.vcab.resize(ok ? 5 * (size_t)nc : 0);
+                    ok = ok && fread(E.vcab.data(), 4, E.vcab.size(), f) == E.vcab.size();
+                }
             } else {
                 fseek(f, vp, SEEK_SET);
             }
@@ -612,6 +620,7 @@ int nv_host::open(int argc, char **argv)
     static const int DRUM_PART[10] = {1, 1, 1, -1, -1, -1, -1, 0, 0, 0};
     // a part's live record: its variation's (VLIV), else its program's (LIVE)
     prec = [&](int prog, int var) -> const int * {
+        var &= 4095;                            // (a cabinet variant's record its variation's: one template serves every speaker)
         for (size_t j = 0; var && j < E.vpv.size() && j < E.vpart.size(); j++)
             if (E.vpv[j][0] == (prog & 127) && E.vpv[j][1] == var)
                 return E.vpart[j].data();
@@ -812,6 +821,9 @@ int nv_host::open(int argc, char **argv)
         }
         nv_live_vars((int)E.vents.size(), nls.data(), ls.data(), vt.data(), E.vgs.data(), E.vgm2.data(),
                      ns, so.data(), soff.data(), sog.data(), (long long)K.size());
+        nv_live_var_cabs((int)(E.vcab.size() / 5), E.vcab.data());
+        for (size_t r = 0; r + 4 < E.vcab.size(); r += 5)
+            vcab_m[((long long)E.vcab[r] * 4096 + E.vcab[r + 1]) * 64 + E.vcab[r + 3]] = E.vcab[r + 4];
     }
     memset(&t, 0, sizeof t);
     t.sr = SR; t.retrigger_fade = E.k[K_RETRIGGER]; t.nyq_om = E.k[K_NYQ_OM];
@@ -1204,6 +1216,8 @@ int nv_host::open(int argc, char **argv)
             bmsb[ch] = b;
         else if (type == 2 && a == 32)
             blsb[ch] = b;
+        else if (type == 2 && a == 83)
+            hcab[ch] = b;
     };
     // ...and a reset's (GM System On, GM 2 On, GS Reset, SC mode): the latches
     // cleared, Rx.BANK SELECT off after GM 1's alone; true where it was one
@@ -1221,6 +1235,7 @@ int nv_host::open(int argc, char **argv)
         rxbank = lvl != 1;
         bmsb.clear();
         blsb.clear();
+        hcab.clear();
         for (int c = 0; c < 16; c++) {
             chdr[c] = c == 9;
             hn_msb[c] = hn_lsb[c] = 127;
@@ -1235,6 +1250,12 @@ int nv_host::open(int argc, char **argv)
     };
     // the entry a variation key selects for a program (live.cpp's var_entry): 0 none
     var_entry_of = [&](int p, int v) -> int {
+        if (v >> 12) {                          // (a cabinet variant: its own entry, where the voice offers it)
+            auto it = vcab_m.find(((long long)(p & 127) * 4096 + (v & 4095)) * 64 + (v >> 12));
+            if (it != vcab_m.end())
+                return it->second;
+            v &= 4095;
+        }
         if (!v || E.vgs.empty() || p < 0 || p > 127)
             return 0;
         int msb = v & 0x7F, mp = v >> 7;
@@ -1706,7 +1727,9 @@ int nv_host::open(int argc, char **argv)
             const PartAt &pa = pats[i];
             if (pa.gone || (pa.channel >= 0 && pa.channel != ch))
                 continue;
-            const int pv = pa.drums ? 0 : var;
+            // (its cabinet: the part's own choice, else the channel's CC83 -- live.with_cab)
+            const auto hc = hcab.find(ch);
+            const int pv = pa.drums ? 0 : with_cab(prog & 127, var, pa.cab >= 0 ? pa.cab : hc != hcab.end() ? hc->second : 0);
             // a drum set in the map, where it has its own (live's kit_in_map:
             // CC32's map, else the standard's -- not GM 2's drum bank)
             const int pp = pa.drums && msb != 120 ? kit_in_map(prog & 127, lsb ? lsb : (int)default_map)
@@ -1881,8 +1904,8 @@ int nv_host::open(int argc, char **argv)
         {
             std::lock_guard<std::mutex> lk(cmu);
             for (int k_ : partial)
-                if ((k_ >> 22) == home)
-                    keys.push_back(k_ & ((1 << 22) - 1));
+                if ((k_ >> KEY_ROOM_SHIFT) == home)
+                    keys.push_back(k_ & ((1 << KEY_ROOM_SHIFT) - 1));
         }
         const Export::RoomData *hr = home > 0 ? &E.rooms[(size_t)home - 1] : nullptr;
         int nb_ = 0;
@@ -1890,11 +1913,11 @@ int nv_host::open(int argc, char **argv)
             room_fields(&E.rooms[(size_t)r - 1]);
             key_room = r;
             for (int k_ : keys) {
-                const int v_ = (k_ >> 8) & 0x3FFF;
+                const int v_ = (k_ >> 8) & 0x3FFF, cb_ = (k_ >> KEY_CAB_SHIFT) & 15;
                 const bool dr_ = (k_ & 128) != 0;
                 const int pr_ = v_ >= 4096 ? v_ - 4096 : k_ & 127;
                 refused.clear();
-                if (build(pr_, dr_ || v_ >= 4096, v_ >= 4096 || dr_ ? 0 : v_))
+                if (build(pr_, dr_ || v_ >= 4096, v_ >= 4096 || dr_ ? 0 : v_ | (cb_ << 12)))
                     nb_++;
                 else if (!refused.empty())
                     note(refused);
@@ -1939,7 +1962,7 @@ int nv_host::open(int argc, char **argv)
         }
         auto old_key = [&](const PartAt &pa) {
             const int k = ckey(pa.posted, pa.drums, pa.drums ? 0 : pa.posted_var);
-            return k - (key_room << 22) + (old_room << 22);
+            return k - (key_room << KEY_ROOM_SHIFT) + (old_room << KEY_ROOM_SHIFT);
         };
         for (size_t i = 0; i < pats.size(); i++) {
             const PartAt &pa = pats[i];
@@ -1989,7 +2012,7 @@ int nv_host::open(int argc, char **argv)
             {
                 std::lock_guard<std::mutex> lk(cmu);
                 for (auto it = caches.begin(); it != caches.end();) {
-                    if ((it->first >> 22) == old_room && old_room != key_room) {
+                    if ((it->first >> KEY_ROOM_SHIFT) == old_room && old_room != key_room) {
                         old_.push_back(it->second);
                         cache_used.erase(it->first);
                         it = caches.erase(it);
@@ -3514,14 +3537,15 @@ void nv_host::pick_row(size_t row, int sp)
         if (row >= pats.size() || pats[row].gone)
             return;
         const PartAt &pa = pats[row];
-        if (sp >= 256) {                        // (a variation: its program under its bank)
-            int p = E.vpv[sp - 256][0], v = E.vpv[sp - 256][1];
+        if (sp >= 256) {                        // (a variation: its program under its bank -- through the part's cabinet)
+            int p = E.vpv[sp - 256][0], v = with_cab(E.vpv[sp - 256][0], E.vpv[sp - 256][1], std::max(0, pa.cab));
             if (!pa.is(p, false, v))
                 ask(row, p, false, v);
         } else {
             const int p = sp >= 128 ? kit_in_map(sp & 127, (int)default_map) : sp;    // (livetui's pick)
-            if (!pa.is(p, sp >= 128, 0))
-                ask(row, p, sp >= 128, 0);
+            const int v = sp >= 128 ? 0 : with_cab(p, 0, std::max(0, pa.cab));
+            if (!pa.is(p, sp >= 128, v))
+                ask(row, p, sp >= 128, v);
         }
     });
 }
@@ -3657,6 +3681,30 @@ void nv_host::part_touch(size_t row, int fixed)
 // A PART's ROTARY HEARD (live.set_rotary): an organ's cabinet in the room or
 // two mics round it, a Rotary type's likewise -- the host's copy now, the
 // patch's between two blocks (the notes struck after it)
+// A PART's CABINET (live.set_cabinet): its patch rebuilt through CAB_CHOICES
+// [choice] (-1 none: the voice's own), as a pick rebuilds one; kept on the
+// part across program changes
+void nv_host::set_cabinet(size_t row, int choice)
+{
+    if (!E.has_prog)
+        return;
+    post([this, row, choice](long long) {
+        if (row >= pats.size() || pats[row].gone)
+            return;
+        {
+            std::lock_guard<std::mutex> lk(parts_mu);
+            pats[row].cab = choice < 0 ? -1 : choice;
+        }
+        const PartAt &pa = pats[row];
+        if (pa.drums)
+            return;
+        const bool w = pa.want >= 0;
+        const int p = w ? pa.want : pa.program, v = with_cab(p, w ? pa.want_var : pa.var, std::max(0, choice));
+        if (!pa.is(p, false, v))
+            ask(row, p, false, v);
+    });
+}
+
 void nv_host::part_rotary(size_t row, int mode, double sep)
 {
     int pi;
@@ -3943,6 +3991,7 @@ void nv_host::part_added(const PartSpec &sp, void *c)
     pa.rot_mode = sp.rot_mode;
     pa.rot_sep = sp.rot_sep;
     pa.drive = sp.drive;
+    pa.cab = sp.cab;
     std::lock_guard<std::mutex> lk(parts_mu);
     pats.push_back(pa);                         // (reserved: the builder may be reading the rest)
 }
@@ -3964,6 +4013,7 @@ static nv_host::PartSpec spec_of(const nv_host::PartAt &pa)
     sp.rot_mode = pa.rot_mode;
     sp.rot_sep = pa.rot_sep;
     sp.drive = pa.drive;
+    sp.cab = pa.cab;
     return sp;
 }
 

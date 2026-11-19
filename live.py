@@ -3563,6 +3563,11 @@ class Patch:
             if _b32:
                 tr.append(mido.Message("control_change", channel=ch, control=32,
                                        value=_b32, time=0))
+            # ...AND ITS CABINET (patch_map.cab_key's choice: CC83, latched as the bank)
+            _cbv = __import__("patch_map").cab_of(self.variation)[1]
+            if _cbv:
+                tr.append(mido.Message("control_change", channel=ch, control=T.CABINET_CC,
+                                       value=_cbv, time=0))
         _prog = self.program
         if self.drums and _prog >= 128:
             # A MAP'S OWN DRUM SET (kit_in_map's 128 x map + program): selected
