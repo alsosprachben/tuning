@@ -11,7 +11,8 @@ sensors -- the engine has its own audio and MIDI. Wayland natively (touch
 and pen through its own protocols), X11 beside it (needs libwayland-dev,
 libxkbcommon-dev, wayland-protocols, libdecor-0-dev, libegl-dev, libxss-dev,
 libxtst-dev, libxi-dev). Installed into
-third_party/sdl3-linux/ (include/, lib/libSDL3.a)."""
+third_party/sdl3-linux/ (include/, lib/libSDL3.a). On macOS the same, its
+Cocoa window and OpenGL (Metal beside it), into third_party/sdl3-macos/."""
 import hashlib
 import os
 import shutil
@@ -78,13 +79,35 @@ def build_sdl3_linux():
     return prefix
 
 
+def build_sdl3_macos():
+    """SDL3 for macOS (Part C's first step: the native UI in a Mac window
+    before iOS): static, Cocoa, OpenGL and Metal, the same subsystems off."""
+    src = fetch("SDL3")
+    prefix = os.path.join(TP, "sdl3-macos")
+    if os.path.exists(os.path.join(prefix, "lib", "libSDL3.a")):
+        print("  SDL3 built: %s" % prefix)
+        return prefix
+    bld = os.path.join(TP, "build-sdl3-macos")
+    off = ["AUDIO", "JOYSTICK", "HAPTIC", "HIDAPI", "CAMERA", "SENSOR", "POWER", "TESTS", "EXAMPLES",
+           "SHARED", "VULKAN", "DIALOG", "TRAY", "GPU"]
+    cfg = ["cmake", "-S", src, "-B", bld, "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_INSTALL_PREFIX=" + prefix,
+           "-DSDL_STATIC=ON", "-DSDL_OPENGL=ON", "-DSDL_METAL=ON", "-DCMAKE_OSX_ARCHITECTURES=arm64",
+           "-DCMAKE_POSITION_INDEPENDENT_CODE=ON"] + ["-DSDL_%s=OFF" % o for o in off]
+    subprocess.check_call(cfg, stdout=subprocess.DEVNULL)
+    subprocess.check_call(["cmake", "--build", bld, "-j", str(min(8, os.cpu_count() or 2))], stdout=subprocess.DEVNULL)
+    subprocess.check_call(["cmake", "--install", bld], stdout=subprocess.DEVNULL)
+    shutil.rmtree(bld, ignore_errors=True)
+    print("  SDL3 built: %s" % prefix)
+    return prefix
+
+
 def main(argv):
     what = argv[1] if len(argv) > 1 else "all"
     if what in ("fetch", "all"):
         for n in PINS:
             fetch(n)
     if what in ("build", "all"):
-        build_sdl3_linux()
+        build_sdl3_macos() if sys.platform == "darwin" else build_sdl3_linux()
     return 0
 
 

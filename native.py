@@ -4741,7 +4741,7 @@ def build_nvlive():
     # (examples/third_party.py): SDL3 static, Dear ImGui's sources, ours
     nui_objs, nui_flags, nui_libs = [], [], []
     tp = os.path.join(HERE, 'third_party')
-    sdl = os.path.join(tp, 'sdl3-linux')
+    sdl = os.path.join(tp, 'sdl3-macos' if sys.platform == 'darwin' else 'sdl3-linux')
     imgui = os.path.join(tp, 'imgui-1.93.0')
     if os.path.exists(os.path.join(sdl, 'lib', 'libSDL3.a')) and os.path.isdir(imgui):
         inc = ['-I' + os.path.join(sdl, 'include'), '-I' + imgui, '-I' + os.path.join(HERE, 'nui')]
@@ -4756,6 +4756,10 @@ def build_nvlive():
         if shutil.which('node') and (not os.path.exists(hjson) or os.path.getmtime(hjs) > os.path.getmtime(hjson)):
             subprocess.run(['node', os.path.join(HERE, 'examples', 'help_json.js'), os.path.join(HERE, 'ui')], check=True)
         nui_libs = [os.path.join(sdl, 'lib', 'libSDL3.a')]
+        if sys.platform == 'darwin':        # (its frameworks, as its sdl3.pc's Libs.private names them)
+            pc = os.path.join(sdl, 'lib', 'pkgconfig', 'sdl3.pc')
+            priv = next((l.split(':', 1)[1].split() for l in open(pc) if l.startswith('Libs.private:')), [])
+            nui_libs += priv
     newest = max([os.path.getmtime(x) for x in (src, hdr, hint, hlive, uis, so)] + [os.path.getmtime(o) for o in nui_objs])
     if not os.path.exists(exe) or newest > os.path.getmtime(exe):
         tmp = '%s.%d.tmp' % (exe, os.getpid())
