@@ -1019,10 +1019,22 @@ int nv_host::run(int argc, char **argv)
             // the session saved every 2 s beside the window, which runs on this thread to its close
             nv_ui_quit = []() { g_stop = true; };
             app_saver = std::thread([&]() {
+                long last_over = 0, last_shed = 0;
                 for (int n = 0; !g_stop; n++) {
                     std::this_thread::sleep_for(std::chrono::milliseconds(100));
                     if (n % 20 == 19)
                         session_save(routes_now());
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+                    // (iOS ends an app without its last words: the block counts every 10 s, as they move)
+                    if (n % 100 == 99) {
+                        const long sh = nv_part_partials_shed(part);
+                        if (over != last_over || sh != last_shed)
+                            fprintf(stderr, "nvlive: %ld blocks, %ld over %.2f ms (worst %.2f), %ld underruns, %ld partials shed\n",
+                                    blocks, over, budget, worst, underruns, sh);
+                        last_over = over;
+                        last_shed = sh;
+                    }
+#endif
                 }
             });
             std::string d = nv_self_exe();

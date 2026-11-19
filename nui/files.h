@@ -1,3 +1,6 @@
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
 // THE FILES CARD (ui/app.js's): a MIDI file on this machine -- found in its
 // folders, checked (what it reads as, the file check's findings, a mode
 // worth trying, the MT-32's or the mux's report), played live (the parts
@@ -63,6 +66,12 @@ inline std::string mmss(double s)
 extern "C" int nui_pick_available(void);
 extern "C" void nui_pick_midi(void);
 extern "C" int nui_pick_take(char *path, int cap);
+// (Best Quality's file export, missing: where it goes -- iOS's Documents, beside the sound data)
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+static const char *FL_NO_EXPORT = "Best quality needs the file render's data: file-export.nvx in Clavitone's Documents.";
+#else
+static const char *FL_NO_EXPORT = "Best quality needs nvlive started with --file-export.";
+#endif
 inline void fl_take(const J &r)
 {
     FilesUi &F = g_fl;
@@ -380,7 +389,7 @@ inline void draw_files(App &a)
             const std::string msg = str(rd, "msg"), last = str(rd, "last");
             st = rendering ? str(rd, "name") + ": " + str(rd, "stage") + "\xe2\x80\xa6 " + mmss(num(rd, "secs")) + (last.empty() ? "" : " \xc2\xb7 " + last)
                  : !msg.empty() ? str(rd, "name") + ": " + msg + (msg == "rendered" ? " in " + mmss(num(rd, "secs")) : "") + "."
-                 : !fx_ok ? "Best quality needs nvlive started with --file-export." : "";
+                 : !fx_ok ? FL_NO_EXPORT : "";
         }
         for (const auto &l : wrap(a, a.font, 14, st, PW - 24)) {
             text(a, a.font, 14, PX + 8, py, SILK_DIM, l);

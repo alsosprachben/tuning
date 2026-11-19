@@ -229,6 +229,10 @@ int main(int argc, char *argv[])
     std::vector<std::string> a = {"nvlive", nvx, "--app", "--session=" + d + "/session.json"};
     if (budget_mb > 0)
         a.push_back("--patch-budget-mb=" + std::to_string(budget_mb));
+    // (the GPU from the first partial: an iPad's CPU is far weaker beside its
+    //  GPU than a laptop's, where 100 busy slots was the threshold -- Mars
+    //  had the governor shedding partials)
+    a.push_back("--gpu-min=1");
     std::vector<char *> av;
     for (auto &s : a)
         av.push_back(&s[0]);
