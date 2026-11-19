@@ -1047,8 +1047,23 @@ int nv_host::open(int argc, char **argv)
                         continue;
                     }
                     std::string pa, nm;
-                    if (find_messenger(pa, nm) && msgr_connect(pa, nm))
+                    bool found = find_messenger(pa, nm), asked = false;
+                    if (!found) {               // (...else one found by its answer: behind a USB MIDI interface)
+                        std::lock_guard<std::mutex> lk(msgr_id_mu);
+                        if (!msgr_id_path.empty() && midi_exists(msgr_id_path)) {
+                            pa = msgr_id_path;
+                            nm = msgr_id_name;
+                            found = asked = true;
+                        }
+                    }
+                    if (found && msgr_connect(pa, nm)) {
+                        if (asked) {
+                            std::lock_guard<std::mutex> lk(o.mu);
+                            o.ident = "it answered as a Messenger";
+                        }
+                        fprintf(stderr, "nvlive: Messenger on %s: its Moog parts set\n", nm.c_str());
                         post([this, mb](long long) { nv_part_messenger(part, MsgrOut::send, msgr, mb); });
+                    }
                 }
             }).detach();
     }
@@ -3866,8 +3881,10 @@ void nv_host::input_opened(const std::string &path, const std::string &name)
 
 // ...AN IDENTITY REPLY through an input (MidiIns::identity: F0 7E dev 06 02
 // maker family model version): a Messenger's -- Moog (04), family 49, model
-// 153 (probe_messenger's) -- turns its knobs' reading on, as its name would
-void nv_host::input_identity(const std::string &name, const std::vector<uint8_t> &x)
+// 153 (probe_messenger's) -- turns its knobs' reading on, as its name would,
+// and is the device its Moog parts' patches go out of (the Messenger
+// watcher's, when no device's name says Messenger)
+void nv_host::input_identity(const std::string &path, const std::string &name, const std::vector<uint8_t> &x)
 {
     size_t j = 4;
     const int mk = x.size() > j ? x[j] : -1;
@@ -3875,7 +3892,14 @@ void nv_host::input_identity(const std::string &name, const std::vector<uint8_t>
     if (x.size() < j + 4)
         return;
     const int fam = x[j] | x[j + 1] << 7, mod = x[j + 2] | x[j + 3] << 7;
-    if (!(mk == 0x04 && fam == 49 && mod == 153) || msgr_reads || msgr_reads_set)
+    if (!(mk == 0x04 && fam == 49 && mod == 153))
+        return;
+    {
+        std::lock_guard<std::mutex> lk(msgr_id_mu);
+        msgr_id_path = path;
+        msgr_id_name = name;
+    }
+    if (msgr_reads || msgr_reads_set)
         return;
     messenger_reading(true);
     fprintf(stderr, "nvlive: %s answered as a Messenger: its knobs read as its own (Setup: READ ITS KNOBS)\n", name.c_str());

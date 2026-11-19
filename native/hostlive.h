@@ -928,7 +928,7 @@ struct MidiIns {
     // name or by its answer (nv_host::input_opened, input_identity); on the
     // reader's thread
     std::function<void(const std::string &, const std::string &)> opened;
-    std::function<void(const std::string &, const std::vector<uint8_t> &)> identity;
+    std::function<void(const std::string &, const std::string &, const std::vector<uint8_t> &)> identity;
     void set(const std::vector<std::pair<std::string, std::string>> &w)
     {
         std::lock_guard<std::mutex> lk(mu);
@@ -1031,7 +1031,7 @@ inline void midi_reader_ins(MidiIns *ins, std::function<void(Midi &&)> push)
                 it->second.mp.feed(buf, (long)n, [&](Midi &&m) {
                     if (m.type == 6 && ins->identity && m.x.size() >= 5 && m.x[0] == 0x7E && m.x[2] == 0x06
                         && m.x[3] == 0x02)
-                        ins->identity(it->second.name, m.x);    // (an Identity Reply: who it is)
+                        ins->identity(it->first, it->second.name, m.x);    // (an Identity Reply: who it is)
                     push(std::move(m));           // (the host's lock-free queue: enqueue)
                 });
                 ++it;
@@ -1538,7 +1538,10 @@ struct nv_host {
     bool msgr_reads = false, msgr_pre107 = false;
     bool msgr_reads_set = false;            // (the player switched the reading this run: a Messenger's input no longer turns it on)
     void input_opened(const std::string &path, const std::string &name);
-    void input_identity(const std::string &name, const std::vector<uint8_t> &x);
+    void input_identity(const std::string &path, const std::string &name, const std::vector<uint8_t> &x);
+    // (a Messenger found by its answer: its device, the Messenger watcher's to set when no name says one)
+    std::mutex msgr_id_mu;
+    std::string msgr_id_path, msgr_id_name;
     MsgrOut *msgr = nullptr;                    // the Messenger's output (found by itself: msgr_auto)
     bool msgr_auto = false;
     bool msgr_connect(const std::string &path, const std::string &name);
