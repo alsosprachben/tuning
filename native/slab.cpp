@@ -3073,6 +3073,33 @@ struct Part {
         rotor_horn.up = L[12]; rotor_horn.down = L[13]; rotor_horn.ratio = 1.0;
         rotor_drum.up = L[14]; rotor_drum.down = L[15]; rotor_drum.ratio = L[5];
         rotor_horn.rate = rotor_horn.target = rotor_drum.rate = rotor_drum.target = L[3];
+        for (const Patch &p : patches)          // (the first organ's own speed, already turning: live.set_parts)
+            if (p.leslie) {
+                rotor_own(p, true);
+                break;
+            }
+    }
+
+    // A NEW ORGAN's ROTORS AT ITS OWN SPEED (live._rotor_own): the half-moon
+    // where the patch has it (leslie_fast: 2 tremolo, 1 chorale), already
+    // turning at it when no organ had them (jump), else spinning to it
+    void rotor_own(const Patch &p, bool jump)
+    {
+        const NoteClass *k = p.drums ? nullptr : nv_tcache_class(p.cache, p.program);
+        if (!k || !k->leslie || S.les.size() < 5)
+            return;
+        const double ladder[3] = {0.0, S.les[3], S.les[4]};
+        half_moon = k->leslie >= 2 ? 2 : 1;
+        rotor_horn.target = rotor_drum.target = ladder[half_moon];
+        if (jump)
+            rotor_horn.rate = rotor_drum.rate = ladder[half_moon];
+    }
+    bool any_leslie() const
+    {
+        for (const Patch &p : patches)
+            if (p.leslie)
+                return true;
+        return false;
     }
 
     bool leslie_on(int ch) const
@@ -7330,6 +7357,7 @@ struct Part {
         // and the worker takes the new voice's bank
         if (w.bank && reg_on && w.pi == 0)
             reg_forget(w.bank, n0);
+        const bool had_les = any_leslie(), new_prog = w.program != p.program;
         if (w.program != p.program || w.cache != p.cache) {
             p.syn.clear();                      // A NEW PROGRAM IS A NEW PATCH: its knobs its own (Part.set_patch)
             p.mb.reset();
@@ -7362,6 +7390,8 @@ struct Part {
         if (!p.drums)
             organ_start(p, nv_tcache_organ(p.cache, p.program));
             moog_sync_build(p);
+        if (p.leslie && new_prog)
+            rotor_own(p, !had_les);             // (a new organ's rotors at its own speed: live._swap_patch)
         if (keep_reg)
             p.drawn = kept;
         if (w.pi == 0) {
@@ -14000,10 +14030,13 @@ void nv_part_drone_patch(void *h, int pi, void *cache, int nbuckets, int speed)
 void nv_part_program(void *h, int program)
 {
     nv::slab::Part *P = (nv::slab::Part *)h;
+    const bool had = P->any_leslie(), changed = P->patches[0].program != program;
     P->patches[0].program = program;
     P->program = program;
     nv::slab::Part::organ_start(P->patches[0], nv_tcache_organ(P->patches[0].cache, program));
     P->moog_sync_build(P->patches[0]);
+    if (P->patches[0].leslie && changed)
+        P->rotor_own(P->patches[0], !had);
 }
 
 // The part a DRUM PART (live.Patch(program, True)): program its drum set,
@@ -14040,7 +14073,10 @@ int nv_part_add_patch(void *h, void *cache, long long pid, double level_db, int 
         nv::slab::Part::organ_start(p, nv_tcache_organ(cache, program));
         P->moog_sync_build(p);
     }
+    const bool had = P->any_leslie();
     P->patches.push_back(std::move(p));
+    if (P->patches.back().leslie && !had)
+        P->rotor_own(P->patches.back(), true);     // (live.set_parts: the first organ's own speed)
     P->choke_p = &P->patches[P->cur].choke;          // (the vector may have moved)
     return (int)P->patches.size() - 1;
 }

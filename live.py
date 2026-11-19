@@ -3261,6 +3261,9 @@ class Patch:
         # a change of speed is a change of PARTIALS and cannot be retuned --
         # it needs a different template. Hence a speed axis on the cache.
         self.leslie = (not drums) and getattr(pc, "leslie", False)
+        # ...and the speed its rotors start at (leslie_fast: 2 tremolo, 1
+        # chorale -- the half-moon's place; 0 none): Rock Organ's fast
+        self.leslie_speed = (2 if getattr(pc, "leslie_fast", True) else 1) if self.leslie else 0
         # WHAT THE TONE BRINGS OF ITS OWN (Live._tone_fx): its insertion effect
         # (patch_map's insertion_efx: EP Phase, JC Chorus Gt, Bit Hit), the
         # trumpet's plunger, the didgeridoo's mouth -- each on an effect
@@ -4866,6 +4869,10 @@ class Live:
         # is per channel, because each controller has its own wheel and each
         # springs back on its own.
         self.half_moon = 1      # index into (STOP, CHORALE, TREMOLO)
+        for _p in self.parts:   # (the first organ's own speed, already turning: _rotor_own)
+            if _p.patch.leslie:
+                self._rotor_own(_p.patch, True)
+                break
         self.pw_armed = {}      # channel -> is the wheel back near centre
         self.drive_step = {}    # part id -> quantised mod-wheel drive step
         self.amp_dirty = set()  # pids whose distortion partials are stale
@@ -4953,6 +4960,7 @@ class Live:
         are released; notes on parts that survive keep sounding."""
         keep = {p.pid for p in parts}
         was = [(p.program, p.drums) for p in self.parts]
+        was_patches = [p.patch for p in self.parts]
         # The swap is one assignment and safe here; letting go of the notes the
         # departing parts hold is NOT -- it pops from `live` while the callback
         # may be walking it -- so that part is asked for rather than done. The
@@ -4971,6 +4979,12 @@ class Live:
         for i, p in enumerate(self.parts):
             if i >= len(was) or was[i] != (p.program, p.drums):
                 self.messenger_sync(p)
+        # ...AND A NEW ORGAN's ROTORS AT ITS OWN SPEED (_rotor_own)
+        had = any(getattr(q, "leslie", False) for q in was_patches)
+        for i, p in enumerate(self.parts):
+            if (i >= len(was) or was[i] != (p.program, p.drums)) and p.patch.leslie:
+                self._rotor_own(p.patch, not had)
+                break
 
         def go(n0):
             for k in [k for k in list(self.slab.live) if k[0] not in keep]:
@@ -10213,6 +10227,19 @@ class Live:
         if _cp != T.GM_DEFAULT_PAN:
             self.slab.repan(got, _cp, T.GM_DEFAULT_PAN, self.rate, itd=True)
 
+    def _rotor_own(self, patch, jump):
+        """A NEW ORGAN's ROTORS AT ITS OWN SPEED: the half-moon set where the
+        patch has it (leslie_fast: Rock Organ's on tremolo, Drawbar Organ's
+        on chorale), as a player sets the switch on sitting down -- already
+        turning at it when no organ had them (jump), else spinning to it."""
+        import leslie as _LES
+        ladder = (_LES.STOP, _LES.CHORALE, _LES.TREMOLO)
+        self.half_moon = patch.leslie_speed
+        for r in (self.rotor_horn, self.rotor_drum):
+            r.target = ladder[self.half_moon]
+            if jump:
+                r.rate = r.target
+
     def _half_moon(self, ch, pitch):
         """Step the rotor ladder on a wheel flick. See PW_FIRE.
 
@@ -11490,7 +11517,10 @@ class Live:
         if st is not None and getattr(patch, "wind_pc", None) is not getattr(old, "wind_pc", None):
             del self.wind_st[part.pid]
             self.wind_spent.extend(st["rows"].values())
+        had = any(q.patch.leslie for q in self.parts)
         part.set_patch(patch)
+        if patch.leslie and (patch.program, patch.variation) != (old.program, old.variation):
+            self._rotor_own(patch, not had)     # (a new organ's rotors at its own speed)
         if self.patch_want.get(part.pid) == patch.key:
             del self.patch_want[part.pid]       # (what it asked for last: arrived)
         # ...AND OTHER STRINGS, ITS OWN FREE ONES (_reg_forget)
@@ -15312,7 +15342,13 @@ def _selftest(only=""):
                 return True
         return False
 
-    check("the rotor starts on chorale", lv.rotor_horn.target == _LES.CHORALE)
+    # ROCK ORGAN's ROTORS START AT ITS OWN SPEED (leslie_fast: _rotor_own),
+    # already turning -- they used to start on chorale whatever the voice
+    check("the rotor starts at the voice's own speed (Rock Organ: tremolo)",
+          lv.rotor_horn.target == _LES.TREMOLO and lv.rotor_horn.rate == _LES.TREMOLO and lv.half_moon == 2)
+    flick(-1.0)
+    flick(0.0)
+    check("a flick down steps to chorale", lv.rotor_horn.target == _LES.CHORALE)
     flick(1.0)
     check("a flick up steps to tremolo", lv.rotor_horn.target == _LES.TREMOLO)
     # HELD, not sprung back with the wheel: that is the whole point of reading
