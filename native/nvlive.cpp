@@ -817,6 +817,17 @@ int nv_host::run(int argc, char **argv)
             }
         }
         std::vector<float> l(P), r(P), out(2 * P);
+        // ITS WAIT, as long as the device has queued: this loop's callback is
+        // ours, its write blocking on a buffer of --latency-ms (ALSA's, or
+        // macio's ring on macOS and iOS) -- full as each pull starts, so the
+        // music may run that late before anything is heard late. Four fifths of
+        // it (and never under the 0.75 of a callback the library's own callers
+        // take): a block a little over 4 ms on an iPad held at 0.75 of 5.33,
+        // once a second under a full organ, where the queue had 10 ms -- the
+        // holds Ben heard, rubato off clean
+        const double rub_wait = std::max(0.75, 0.8 * (double)lat * 1e-6 * SR / P);
+        fprintf(stderr, "nvlive: rubato waits %.2f ms (the device's %.1f ms queued)\n", 1000.0 * rub_wait * P / SR,
+                lat / 1000.0);
         bool rubbing = false;
         while (!g_stop) {
             const bool want = rub_wish.load(std::memory_order_relaxed);
@@ -824,10 +835,10 @@ int nv_host::run(int argc, char **argv)
                 if (want) {
                     play_n0 = n0;
                     pull_pos = -1;
-                    nv_host_set_rubato(this, 1, 0.75);
+                    nv_host_set_rubato(this, 1, rub_wait);
                     fprintf(stderr, "nvlive: rubato on, %d frames a callback (%.2f ms)\n", P, 1000.0 * P / SR);
                 } else {
-                    nv_host_set_rubato(this, 0, 0.75);
+                    nv_host_set_rubato(this, 0, rub_wait);
                     n0 = play_n0;
                     fprintf(stderr, "nvlive: rubato off\n");
                 }
@@ -873,7 +884,7 @@ int nv_host::run(int argc, char **argv)
             n0 += BLK;
         }
         if (rubbing) {
-            nv_host_set_rubato(this, 0, 0.75);
+            nv_host_set_rubato(this, 0, rub_wait);
             long long rs[8];
             nv_host_rubato_stats(this, rs);
             fprintf(stderr, "nvlive: rubato: %lld held, %lld frames borrowed, %lld returned in %lld; %lld frames rung on\n",

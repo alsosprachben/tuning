@@ -138,7 +138,16 @@ int main(int argc, char *argv[])
                                  "No sound data yet: put live.nvx in Clavitone's Documents (Finder, or devicectl).", nullptr);
         return 1;
     }
+    // THE PATCHES' BUDGET from what iOS leaves this process (Part C): half of
+    // it at the start -- the engine and its export mapped beside them, a
+    // render's room -- 1.5 GB of an 11-inch iPad's 3 GB; a patch over it is
+    // built from the middle octaves out, its other notes as they are played
+    const long long left = (long long)os_proc_available_memory();
+    const long budget_mb = left > 0 ? (long)(left / 2 / 1048576) : 0;
+    fprintf(stderr, "clavitone: %.0f MB left by iOS: the patches' budget %ld MB\n", left / 1048576.0, budget_mb);
     std::vector<std::string> a = {"nvlive", nvx, "--app", "--session=" + d + "/session.json"};
+    if (budget_mb > 0)
+        a.push_back("--patch-budget-mb=" + std::to_string(budget_mb));
     std::vector<char *> av;
     for (auto &s : a)
         av.push_back(&s[0]);
