@@ -3003,6 +3003,10 @@ CAB_ABOUT = {
     "rhodes": "Rhodes suitcase, four 12\" speakers: voiced from its design",
     "wurlitzer": "Wurlitzer 200's two lid speakers: voiced from their design",
 }
+# ...and each one's label on the cards' selector
+CAB_LABELS = {None: "OWN", "direct": "DIRECT", "leslie": "LESLIE", "hammond": "HAMMOND", "guitar12": "1x12",
+              "guitar412": "4x12", "jc120": "JC-120", "bass410": "BASS 4x10", "rhodes": "SUITCASE",
+              "wurlitzer": "WURLI LID"}
 _CAB_CLASSES = {}
 
 

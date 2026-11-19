@@ -13931,7 +13931,9 @@ int nv_part_drive_get(void *h, int pi, double *out)
     out[0] = p.amp;
     out[1] = p.amp0;
     out[2] = p.drive;
-    return p.leslie && !p.drums ? 1 : 0;
+    // (an organ's: a tonewheel -- its Leslie, or the wheel its swell, which is
+    // the tonewheels' alone -- whatever cabinet it plays through)
+    return (p.leslie || p.wheel_swell) && !p.drums ? 1 : 0;
 }
 
 // A PATCH's FIXED TOUCH (live's part.fixed_touch: -1 its own way, 1 on, 0

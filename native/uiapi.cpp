@@ -217,6 +217,17 @@ J parts_of(nv_host *h)
             ra.a.push_back(num(rv[1]));
             o.o["rotary"] = ra;
         }
+        {                                   // its cabinet: [chosen (-1 none), now (0 its own), [the choices offered]]
+            int ch = -1, now = 0, off[64];
+            const int n = nv_host_cabinet(h, p.row, &ch, &now, off, 64);
+            J ca = sess::arr(), oa = sess::arr();
+            ca.a.push_back(sess::integer(ch));
+            ca.a.push_back(sess::integer(now));
+            for (int k = 0; k < std::min(n, 64); k++)
+                oa.a.push_back(sess::integer(off[k]));
+            ca.a.push_back(oa);
+            o.o["cabinet"] = ca;
+        }
         o.o["name"] = sess::str(p.name);
         // its channel's pan and sends, as a sequencer set them (an every-channel
         // part reads the first channel's: a change goes to all of them)
@@ -1664,6 +1675,8 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         r.o["files"] = files_state();
     } else if (call == "panic") {
         nv_host_panic(h);
+    } else if (call == "cabinet_set") {        // (a part's cabinet: a CAB_CHOICES index, -1 none -- its own)
+        nv_host_set_cabinet(h, row, (int)arg_i(q, "choice", -1));
     } else if (call == "rotary_set") {         // (a part's rotary heard: mode -1 its own way, 0 room, 1 mics; spread degrees, <0 the default)
         nv_host_set_rotary(h, row, (int)arg_i(q, "mode", -1), arg_d(q, "spread", -1.0));
     } else if (call == "drive_set") {          // (an organ's drive, 0..3; <0 the voice's again)

@@ -591,6 +591,49 @@ function drawSynth() {
   lay.hidden = sy.layers < 2;
   lay.querySelectorAll('button').forEach((b, j) => b.classList.toggle('on', j === S.layer));
 }
+// THE CABINET a part plays through (live.set_cabinet): the voice's own or one
+// it offers (patch_map.CAB_CHOICES), stepped through with the arrows, and what
+// the speaker is and how we know it (about.json's cabinets). One box's markup
+// wherever it shows (the Effects card, the Stops card's organ); the parts push
+// carries the part's [chosen, now, offered].
+const CAB = { hold: null };
+function cabMarkup(cls) {
+  return `<section class="${cls} cab-box"><h3 data-help="cabinet">Cabinet</h3><div class="cab-row">` +
+    `<button class="hb cab-step" data-d="-1" data-kit="1">◀</button><span class="cab-now"></span>` +
+    `<button class="hb cab-step" data-d="1" data-kit="1">▶</button></div><p class="pn-note cab-about"></p></section>`;
+}
+function drawCab() {
+  const p = cur(), a = S.about;
+  const boxes = document.querySelectorAll('.cab-box');
+  if (!boxes.length) return;
+  const cv = p && !p.drums && p.cabinet ? p.cabinet : [-1, 0, []];
+  const offer = cv[2] || [];
+  let now = cv[0] > 0 ? cv[0] : cv[1];
+  if (CAB.hold && CAB.hold.until > performance.now()) now = CAB.hold.c;
+  const cabs = a && a.cabinets ? a.cabinets : [];
+  const ownIx = a && a.cab_own && p ? a.cab_own[p.program + '.' + p.variation] : undefined;
+  const lab = c => (cabs[c] ? cabs[c][0] : '?');
+  boxes.forEach(el => {
+    el.querySelectorAll('.cab-step').forEach(b => { b.disabled = !offer.length; });
+    el.querySelector('.cab-now').textContent = !offer.length ? '—' : now ? lab(now) : `OWN · ${ownIx !== undefined ? lab(ownIx) : ''}`;
+    el.querySelector('.cab-about').textContent = !offer.length ? 'This voice has no speaker of its own: nothing to choose.'
+      : (cabs[now || ownIx || 0] || ['', ''])[1];
+  });
+}
+document.addEventListener('pointerdown', e => {
+  const b = e.target.closest && e.target.closest('.cab-step');
+  if (!b || b.disabled) return;
+  const p = cur();
+  if (!p || !p.cabinet) return;
+  const ring = [0, ...(p.cabinet[2] || [])];
+  const cnow = CAB.hold && CAB.hold.until > performance.now() ? CAB.hold.c : (p.cabinet[0] > 0 ? p.cabinet[0] : p.cabinet[1]);
+  const at = Math.max(0, ring.indexOf(cnow));
+  const c = ring[(at + (+b.dataset.d) + ring.length) % ring.length];
+  CAB.hold = { c, until: performance.now() + 800 };
+  drawCab();
+  Wire.call('cabinet_set', { row: S.row, choice: c ? c : -1 });
+});
+
 // A TONEWHEEL ORGAN's DRIVE (the wheel is its swell): the valve before the
 // rotors, 0 to 3; double-tap or the button for the voice's own again
 const OG = { knob: null, back: null, row: -1 };
@@ -601,14 +644,15 @@ function drawDrive(st) {
     const el = $('organDrive');
     el.innerHTML = '<section class="og-box"><h3 data-help="drive">Drive</h3><div class="og-knob"></div>' +
       '<p class="pn-note">The valve before the rotors: clean at 0, a growl as it turns up. The mod wheel is the swell.</p>' +
-      '<button class="hb" data-kit="1">AS THE VOICE</button></section>';
+      '<button class="hb" data-kit="1">AS THE VOICE</button></section>' + cabMarkup('og-box');
     const send = Wire.throttled(v => Wire.call('drive_set', { row: S.row, v }));
     const back = () => { fxMine('drive', -1); Wire.call('drive_set', { row: S.row, v: -1 }); };
     OG.knob = Kit.knob(el.querySelector('.og-knob'), { label: 'Drive', value: 0, size: 'big',
       fmt: v => (v * DRIVE_MAX).toFixed(2),
       onChange: v => { const d = Math.round(v * DRIVE_MAX * 100) / 100; fxMine('drive', d); send(d); },
       onReset: back });
-    OG.back = el.querySelector('button');
+    OG.back = el.querySelector('.og-box button');
+    drawCab();
     Kit.press(OG.back, back);
   }
   const held = fxVal('drive', null);
@@ -1036,7 +1080,8 @@ function drawSys() {
     el.innerHTML = boxes.map(b => `<div class="fx-box" data-box="${b.id}"><h3 data-help="fx:${b.id}">${b.name} <small>${b.cc}</small></h3>` +
       `<div class="fx-st">${b.types.map((n, i) => `<button class="fxs" data-kit="1" data-lo="${b.lo}" data-v="${i}" data-box="${b.id}">${n}</button>`).join('')}</div>` +
       `<p class="pn-note fx-room"></p><div class="fx-knobs sm"></div></div>`).join('') +
-      `<div class="fx-box" data-box="eq"><h3 data-help="fx:eq">EQ <small>the whole mix</small></h3><div class="fx-knobs sm"></div></div>`;
+      `<div class="fx-box" data-box="eq"><h3 data-help="fx:eq">EQ <small>the whole mix</small></h3><div class="fx-knobs sm"></div>` +
+      cabMarkup('fx-cab') + `</div>`;
     for (const b of boxes) {
       const kb = el.querySelector(`[data-box="${b.id}"] .fx-knobs`);
       for (const [nm, lo, , a, z] of b.knobs)
@@ -1056,6 +1101,7 @@ function drawSys() {
   }
   el.querySelector('[data-box="rev"] .fx-room').textContent = y.rev[0] < 0 ? `No GS reverb set: the room is the panel's, ${y.room}.` : '';
   for (let k = 0; k < 4; k++) FX.ctl['eq' + k].set(fxVal('eq' + k, y.eq[k]));
+  drawCab();                            // (the part's cabinet, under the EQ)
 }
 Kit.press($('fxSys'), b => {
   sysSend(1, +b.dataset.lo, +b.dataset.v, b.dataset.box + 'type');
@@ -1727,7 +1773,7 @@ function setParts(ps) {
     const want = S.patches.find(p => p.pick === S.picking);
     if (!want || isCur(want, cur())) S.picking = null;
   }
-  drawDisplay(); drawStrips(); drawTiles(false); drawAbout();
+  drawDisplay(); drawStrips(); drawTiles(false); drawAbout(); drawCab();
   if (!KB.drag) drawKeyboard();
   if (ps.length !== before) select(S.row);
 }

@@ -458,7 +458,7 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
                 shot_in = 3;
             } else if (st.op == "call") {
                 const J r = call(a, st.arg);
-                fprintf(stderr, "nui: call %s -> %s\n", st.arg.c_str(), sess::dump(r).substr(0, 300).c_str());
+                fprintf(stderr, "nui: call %s -> %s\n", st.arg.c_str(), sess::dump(r).substr(0, 4000).c_str());
             } else if (st.op == "quit")
                 a.quit = true;
             dirty = true;

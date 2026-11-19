@@ -463,6 +463,14 @@ a.hb { text-decoration: none; text-align: center; display: inline-block; }
 .og-box h3 { margin: 0; grid-column: 1 / span 2; font: 700 11px var(--f-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--silk); }
 .og-box .og-knob { grid-row: 2 / span 2; }
 .og-box .pn-note { margin: 0; }
+/* the cabinet a part plays through (Effects, under the EQ; Stops, beside the drive) */
+.og-panel { gap: 10px; }
+.cab-box .cab-row { display: flex; align-items: center; gap: 10px; }
+.cab-box .cab-now { flex: 1; text-align: center; font: 21px var(--f-lcd); color: var(--lcd); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.og-box.cab-box { grid-template-columns: 300px; }
+.og-box.cab-box h3 { grid-column: 1; }
+.fx-cab { border-top: 1px solid var(--edge); margin-top: 8px; padding-top: 8px; display: flex; flex-direction: column; gap: 6px; }
+.fx-cab h3 { margin: 0; }
 
 /* THE HELP: a ? beside a card's name or a region's title, and its sheet */
 .qh { display: inline-grid; place-items: center; width: 22px; height: 22px; margin-left: 8px; padding: 0; vertical-align: middle;

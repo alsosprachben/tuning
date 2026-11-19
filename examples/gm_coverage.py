@@ -2194,7 +2194,20 @@ def about_json(path):
     import variation_desc as VD
     desc = {"%d.0" % p: VD.patch_desc(p) for p in range(128) if VD.patch_desc(p)}
     desc.update({"%d.%d" % k: d for k, d in VD.VARIATION_DESC.items()})
-    doc = {"levels": [LEVEL[k] for k in range(5)], "programs": progs, "desc": desc, "stops": stop_notes, "perc": perc,
+    # ...and THE CABINETS the cards offer (patch_map.CAB_CHOICES, by index):
+    # each one's label and what it is -- with the voice's own named, by program
+    import patch_map as PMC
+    cabs = [[PMC.CAB_LABELS[c], PMC.CAB_ABOUT[c]] for c in PMC.CAB_CHOICES]
+    own = {}
+    for p in range(128):
+        for v in [0] + sorted(vv for (pp, vv) in dict.keys(PMC.VARIATIONS) if pp == p):
+            c0 = PMC.variation_class(p, v) if v else PMC.PROGRAM_CLASS.get(p)
+            c0 = c0 if isinstance(c0, type) or c0 is None else c0(60)
+            if PMC.amplified(c0):
+                nm = "leslie" if getattr(c0, 'leslie', False) else getattr(c0, 'cabinet', None) or "direct"
+                own["%d.%d" % (p, v)] = PMC.CAB_CHOICES.index(nm)
+    doc = {"levels": [LEVEL[k] for k in range(5)], "programs": progs, "desc": desc,
+           "cabinets": cabs, "cab_own": own, "stops": stop_notes, "perc": perc,
            "kits": kits, "kit_only": sorted(k for k in getattr(PM, "KIT_ONLY", ()) if k < 128),
            "efx": {k: [r, note] for k, (r, note) in EFX_RATED.items()},
            "effects": {k: [r, note] for k, r, note in EFFECTS_RATED}}

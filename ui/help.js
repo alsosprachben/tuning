@@ -214,7 +214,7 @@ const HELP = {
   },
   drive: {
     title: 'Drive',
-    intro: 'A tonewheel organ\'s overdrive: the valve amplifier in front of the rotating speaker. The mod wheel is the swell pedal.',
+    intro: 'A tonewheel organ\'s overdrive: the valve amplifier in front of its speaker, or its Leslie. The mod wheel is the swell pedal.',
     terms: [
       ['Drive', '0 is clean; turned up, the organ growls and breaks up. Up to 3.'],
       ['AS THE VOICE (n)', 'The knob is at the voice\'s own drive, n.'],
@@ -229,6 +229,19 @@ const HELP = {
       ['TWO MICS', 'The cabinet as a studio records it: a mic either side, one to each speaker, each hearing the rotors from its own angle. Wide.'],
       ['SPREAD', 'How far apart the two mics stand round the cabinet, in degrees. Double-tap for the default, the Rotary effect\'s own (136\u00b0).'],
       ['CC82', 'A file or a keyboard knob sets it too, on the part\'s channel: 0 the cabinet in the room, 1 to 127 two mics, the value \u00d7 180/127 degrees apart (96 is 136\u00b0, the Rotary effect\'s own scale). A note hears the setting it starts under.'],
+    ],
+  },
+  cabinet: {
+    title: 'Cabinet',
+    intro: 'The speaker the part\'s voice plays through -- what we model there, and how we know it. Every amplified voice has one of its own: the guitars and basses their amps\' cabinets, the Rhodes its suitcase, the Wurlitzer the speakers in its lid, the organs a Leslie or the Hammond\'s own speaker. Choose another, part by part; the part keeps it through program changes, and in the session.',
+    terms: [
+      ['\u25c0 \u25b6', 'Step through the voice\'s own and the ones it can play through. The line under it says what that speaker is and what it was fitted to.'],
+      ['OWN \u00b7 name', 'The voice\'s own speaker, named.'],
+      ['DIRECT', 'No speaker: the amplifier\'s output straight to the desk, as a direct box takes it. Brighter and harder, with nothing rounding the top.'],
+      ['LESLIE', 'A tonewheel organ\'s rotating speaker: its horn and drum turning. Only an organ offers it. Its speed is the half-moon (CC80, or the pitch wheel flicked); how it is heard, ROTARY.'],
+      ['HAMMOND', 'A Hammond\'s own speaker, no rotors: the L-102 spinet\'s, measured.'],
+      ['Level', 'A Leslie coming or going keeps the organ\'s level: the rotors\' path is quieter than a fixed speaker\'s, and that is put back.'],
+      ['CC83', 'A file or a keyboard chooses it too, on the part\'s channel, as a bank select does: sent before a program change, it takes effect at that program change. 0 the voice\'s own, 1 direct, 2 a Leslie, 3 the Hammond\'s speaker, 4 a 1x12 guitar combo, 5 a closed 4x12, 6 a JC-120, 7 a bass 4x10, 8 the Rhodes suitcase, 9 the Wurlitzer\'s lid. One the voice does not offer leaves it its own.'],
     ],
   },
   piano: {
@@ -782,10 +795,10 @@ const HELP_TOC = [
   ['Parts', ['parts']],
   ['Library', ['library']],
   ['Synth', ['synth', 'synth:LFO 1', 'synth:Left hand', 'synth:Oscillators', 'synth:Mixer', 'synth:Filter', 'synth:Envelopes', 'synth:Delay']],
-  ['Stops', ['stops', 'drive']],
+  ['Stops', ['stops', 'drive', 'cabinet', 'rotary']],
   ['Piano', ['piano', 'piano:pedals', 'piano:dampers', 'piano:key']],
   ['Drums', ['drums', 'drums:user']],
-  ['Effects', ['effects', 'fx:ins', 'fx:sends', 'fx:rev', 'fx:cho', 'fx:dly', 'fx:eq']],
+  ['Effects', ['effects', 'fx:ins', 'fx:sends', 'fx:rev', 'fx:cho', 'fx:dly', 'fx:eq', 'cabinet']],
   ['Matrix', ['matrix']],
   ['Tuning', ['tuning', 'tn:shape', 'tn:east']],
   ['Control', ['control', 'ct:strip', 'ct:routes', 'ct:new']],

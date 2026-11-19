@@ -217,9 +217,10 @@ inline void draw_stops(App &a)
     }
 
     // A TONEWHEEL ORGAN's DRIVE (the wheel is its swell): the valve before the rotors, 0 to 3
-    const float RH = IP ? 150 : 200, RG = IP ? 8 : 14;    // (the rotary's tray under it)
+    const float RH = IP ? 140 : 170, RG = IP ? 8 : 14;    // (the rotary's tray under it)
+    const float CH = IP ? 104 : 140;                       // (...and the cabinet's between them)
     if (has_drive) {
-        const float dx = X1 - DW, dy = JY0, dw = DW, dh = JY1 - JY0 - RH - RG;
+        const float dx = X1 - DW, dy = JY0, dw = DW, dh = JY1 - JY0 - RH - RG - CH - RG;
         look::tray(a, dx, dy, dw, dh, 10);
         heading(a, dx + 14, dy + 12, "DRIVE", "drive");
         const double now = drive->a[0].d(), voice = drive->a[1].d(), mine = drive->a[2].d();
@@ -230,7 +231,9 @@ inline void draw_stops(App &a)
         float v01 = (float)(v / 3.0);
         char vt[16];
         snprintf(vt, sizeof vt, "%.2f", v);
-        const int f = knob(a, "drive", dx + dw / 2, dy + (IP ? 70 : 100), IP ? 60 : 96, v01, "DRIVE", vt, false, {}, 0, own);
+        // (the knob at the left, the way back beside it: the tray shares the column with the cabinet's)
+        const float KS = IP ? 56 : 76, kx = dx + 18 + KS / 2, ky = dy + 34 + (dh - 34) / 2 - (IP ? 12 : 14);
+        const int f = knob(a, "drive", kx, ky, KS, v01, "DRIVE", vt, false, {}, 0, own);
         if (f & K_CHANGED) {
             const double d = std::round(v01 * 3.0 * 100) / 100;
             a.hold["drive"] = {d, ImGui::GetTime() + 0.6};
@@ -242,17 +245,22 @@ inline void draw_stops(App &a)
         };
         if (f & K_RESET)
             back();
-        const auto note = wrap(a, a.font, 14, "Clean at 0, a growl as it turns up. The mod wheel is the swell.", dw - 28);
-        for (size_t i = 0; i < note.size(); i++)
-            text(a, a.font, 14, dx + 14, dy + (IP ? 128 : 180) + i * LH, SILK_DIM, note[i]);
+        const float bx_ = dx + KS + 36, bw_ = dw - KS - 46, bh_ = IP ? 44 : 38;
+        const auto note = wrap(a, a.font, 14, "Clean at 0, a growl as it turns up.", bw_);
+        for (size_t i = 0; !IP && i < note.size() && i < 2; i++)     // (the iPad's: no room)
+            text(a, a.font, 14, bx_, ky - KS / 2 - 4 + i * LH, SILK_DIM, note[i]);
         char bt[48];
-        snprintf(bt, sizeof bt, own ? "BACK TO THE VOICE'S %.2f" : "AS THE VOICE (%.2f)", voice);
-        if (button(a, "driveback", dx + 10, dy + dh - (IP ? 54 : 52), dw - 20, IP ? 44 : 38, bt, false, own))
+        snprintf(bt, sizeof bt, own ? "BACK TO %.2f" : "AS THE VOICE (%.2f)", voice);
+        if (button(a, "driveback", bx_, IP ? ky - bh_ / 2 : ky + KS / 2 - bh_ + 6, bw_, bh_, bt, false, own))
             back();
         // THE ROTARY HEARD: the cabinet in the room (an organ's way: its
         // direction turning) or two mics round it (a recording's: wide), and
         // the mics' spread -- the part's, kept across its program changes
-        const float ry = dy + dh + RG;
+        // THE CABINET (cabinet_box): its own speaker, a Leslie, or another the voice offers
+        const float cyy = dy + dh + RG;
+        look::tray(a, dx, cyy, dw, CH, 10);
+        cabinet_box(a, dx + 14, cyy + 12, dw - 28, CH - 20);
+        const float ry = cyy + CH + RG;
         look::tray(a, dx, ry, dw, RH, 10);
         heading(a, dx + 14, ry + 12, "ROTARY", "rotary");
         const J *pr = part(a, a.row);

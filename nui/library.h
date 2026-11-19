@@ -440,4 +440,76 @@ inline void draw_library(App &a)
         L.typing = false;
 }
 
+// THE CABINET a part plays through (the Effects and Stops cards'; live.set_cabinet):
+// the voice's own or one it offers (patch_map.CAB_CHOICES), stepped through
+// with the arrows, and what the speaker is and how we know it (about.json's
+// cabinets) under it. The part's from the parts push: [chosen, now, offered].
+inline void cabinet_box(App &a, float x, float y, float w, float h)
+{
+    LibUi &L = g_lib;
+    if (!L.loaded)
+        lib_load(a);
+    const bool IP = a.tab;
+    const float LH = a.lh(14) + (IP ? 3 : 4);
+    heading(a, x, y, "CABINET", "cabinet");
+    const J *p = part(a, a.row);
+    const J *cv = p ? p->get("cabinet") : nullptr;
+    const J *cabs = L.about.get("cabinets"), *owns = L.about.get("cab_own");
+    std::vector<int> offer;
+    int chosen = -1, now = 0;
+    if (cv && cv->is(J::ARR) && cv->a.size() >= 3 && cv->a[2].is(J::ARR)) {
+        chosen = (int)cv->a[0].d();
+        now = (int)cv->a[1].d();
+        for (const J &o : cv->a[2].a)
+            offer.push_back((int)o.d());
+    }
+    auto label = [&](int c) -> std::string {
+        return cabs && cabs->is(J::ARR) && c >= 0 && c < (int)cabs->a.size() && cabs->a[(size_t)c].is(J::ARR)
+                   ? cabs->a[(size_t)c].a[0].s : "?";
+    };
+    auto about = [&](int c) -> std::string {
+        return cabs && cabs->is(J::ARR) && c >= 0 && c < (int)cabs->a.size() && cabs->a[(size_t)c].is(J::ARR)
+                   ? cabs->a[(size_t)c].a[1].s : "";
+    };
+    if (offer.empty() || !p || flag(p, "drums")) {
+        for (const auto &l : wrap(a, a.font, 14, "This voice has no speaker of its own: nothing to choose.", w))
+            text(a, a.font, 14, x, y + (IP ? 34 : 30), SILK_DIM, l);
+        return;
+    }
+    // (shown at once on a tap; the push confirms)
+    auto ht = a.hold.find("cabinet");
+    if (ht != a.hold.end() && ImGui::GetTime() < ht->second.second)
+        now = (int)ht->second.first;
+    else if (chosen > 0)
+        now = chosen;
+    // (the voice's own: which speaker that is, by program and variation)
+    int own = 0;
+    if (owns) {
+        const J *o = owns->get(std::to_string((int)num(p, "program")) + "." + std::to_string((int)num(p, "variation")));
+        own = o ? (int)o->d() : 0;
+    }
+    std::vector<int> ring = {0};
+    ring.insert(ring.end(), offer.begin(), offer.end());
+    int at = 0;
+    for (size_t i = 0; i < ring.size(); i++)
+        if (ring[i] == now)
+            at = (int)i;
+    auto pick = [&](int c) {
+        a.hold["cabinet"] = {(double)c, ImGui::GetTime() + 0.8};
+        call(a, "{\"call\":\"cabinet_set\",\"row\":" + std::to_string(a.row) + ",\"choice\":" + std::to_string(c ? c : -1) + "}");
+    };
+    const float bh = IP ? 44 : 38, by = y + (IP ? 30 : 28), aw = IP ? 44 : 40;
+    if (button(a, "cabprev", x, by, aw, bh, "\xe2\x97\x80"))
+        pick(ring[(size_t)((at + (int)ring.size() - 1) % (int)ring.size())]);
+    if (button(a, "cabnext", x + w - aw, by, aw, bh, "\xe2\x96\xb6"))
+        pick(ring[(size_t)((at + 1) % (int)ring.size())]);
+    const int shown = now ? now : own;
+    const std::string lb = now ? label(now) : "OWN \xc2\xb7 " + label(own);
+    look::lcd_text_c(a, IP ? 21 : 21, x + w / 2, by + (bh - a.lh(21)) / 2, LCD, fit(a, a.lcd ? a.lcd : a.font, 21, lb, w - 2 * aw - 16));
+    const auto lines = wrap(a, a.font, 14, about(shown), w);
+    const int ml = std::max(1, (int)((y + h - (by + bh + 8)) / LH));
+    for (size_t i = 0; i < lines.size() && (int)i < ml; i++)
+        text(a, a.font, 14, x, by + bh + 8 + i * LH, SILK_DIM, lines[i]);
+}
+
 }  // namespace nui
