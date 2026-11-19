@@ -4747,10 +4747,17 @@ def build_nvlive():
     if os.path.exists(os.path.join(sdl, 'lib', 'libSDL3.a')) and os.path.isdir(imgui):
         inc = ['-I' + os.path.join(sdl, 'include'), '-I' + imgui, '-I' + os.path.join(HERE, 'nui')]
         ucx = ['g++', '-std=c++17', '-O2'] + inc
-        nui_objs = _build_objects([('nui_' + os.path.basename(f)[:-4], ucx, f) for f in (
+        # (its graphics, gfx.h: Metal on Apple's -- Objective-C++, ARC -- OpenGL elsewhere)
+        apple = sys.platform == 'darwin'
+        umm = ['clang++', '-std=c++17', '-O2', '-x', 'objective-c++', '-fobjc-arc'] + inc
+        nui_objs = _build_objects([('nui_' + os.path.basename(f).rsplit('.', 1)[0], ucx, f) for f in (
             os.path.join(imgui, 'imgui.cpp'), os.path.join(imgui, 'imgui_draw.cpp'), os.path.join(imgui, 'imgui_tables.cpp'),
             os.path.join(imgui, 'imgui_widgets.cpp'), os.path.join(imgui, 'backends', 'imgui_impl_sdl3.cpp'),
-            os.path.join(imgui, 'backends', 'imgui_impl_opengl3.cpp'), os.path.join(HERE, 'nui', 'nui.cpp'))])
+            os.path.join(HERE, 'nui', 'nui.cpp'))]
+                                  + ([('nui_imgui_impl_metal', umm, os.path.join(imgui, 'backends', 'imgui_impl_metal.mm')),
+                                      ('nui_gfx_metal', umm, os.path.join(HERE, 'nui', 'gfx_metal.mm'))] if apple else
+                                     [('nui_imgui_impl_opengl3', ucx, os.path.join(imgui, 'backends', 'imgui_impl_opengl3.cpp')),
+                                      ('nui_gfx_gl', ucx, os.path.join(HERE, 'nui', 'gfx_gl.cpp'))]))
         nui_flags = ['-DNV_NATIVE_UI']
         # (its help: ui/help.js's topics as ui/help.json, made again when help.js is newer and node is here)
         hjs, hjson = os.path.join(HERE, 'ui', 'help.js'), os.path.join(HERE, 'ui', 'help.json')

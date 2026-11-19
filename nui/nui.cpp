@@ -13,7 +13,6 @@
 // and up there, in the 1920x1080 design's units), "shot PATH" (the frame as
 // a PPM), "quit" -- with SDL_VIDEODRIVER=offscreen, headless.
 #include <SDL3/SDL.h>
-#include <SDL3/SDL_opengl.h>
 
 #include <algorithm>
 #include <chrono>
@@ -26,8 +25,9 @@
 #include <vector>
 
 #include "imgui.h"
-#include "backends/imgui_impl_opengl3.h"
 #include "backends/imgui_impl_sdl3.h"
+
+#include "gfx.h"
 
 #include "app.h"
 #include "bdf.h"
@@ -55,25 +55,6 @@ static const char *CARDS[][2] = {{"parts", "PARTS"}, {"library", "LIBRARY"}, {"s
                                  {"tuning", "TUNING"}, {"control", "CONTROL"}, {"scenes", "SCENES"},
                                  {"files", "FILES"}, {"setup", "SETUP"}};
 
-// THE FEW GL CALLS OF OUR OWN, looked up at run time as ImGui's backend does
-// (no link to a GL library: the system's, whatever SDL opened)
-struct Gl {
-    void (*Viewport)(GLint, GLint, GLsizei, GLsizei) = nullptr;
-    void (*ClearColor)(GLfloat, GLfloat, GLfloat, GLfloat) = nullptr;
-    void (*Clear)(GLbitfield) = nullptr;
-    void (*PixelStorei)(GLenum, GLint) = nullptr;
-    void (*ReadPixels)(GLint, GLint, GLsizei, GLsizei, GLenum, GLenum, void *) = nullptr;
-    bool load()
-    {
-        Viewport = (decltype(Viewport))SDL_GL_GetProcAddress("glViewport");
-        ClearColor = (decltype(ClearColor))SDL_GL_GetProcAddress("glClearColor");
-        Clear = (decltype(Clear))SDL_GL_GetProcAddress("glClear");
-        PixelStorei = (decltype(PixelStorei))SDL_GL_GetProcAddress("glPixelStorei");
-        ReadPixels = (decltype(ReadPixels))SDL_GL_GetProcAddress("glReadPixels");
-        return Viewport && ClearColor && Clear && PixelStorei && ReadPixels;
-    }
-};
-static Gl gl;
 
 static void draw(App &a)
 {
@@ -316,19 +297,6 @@ static std::vector<Step> load_script(const char *path)
     }
     return out;
 }
-static void shot(const char *path, int w, int h)
-{
-    std::vector<unsigned char> px((size_t)w * h * 3);
-    gl.PixelStorei(GL_PACK_ALIGNMENT, 1);
-    gl.ReadPixels(0, 0, w, h, GL_RGB, GL_UNSIGNED_BYTE, px.data());
-    if (FILE *f = fopen(path, "wb")) {
-        fprintf(f, "P6\n%d %d\n255\n", w, h);
-        for (int y = h - 1; y >= 0; y--)
-            fwrite(&px[(size_t)y * w * 3], 1, (size_t)w * 3, f);
-        fclose(f);
-    }
-}
-
 }  // namespace nui
 
 // THE WINDOW, on the calling thread until it closes: 0, or why it could not open
@@ -340,40 +308,28 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
         fprintf(stderr, "nvlive: --app: no window (%s)\n", SDL_GetError());
         return 1;
     }
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
-#ifdef __APPLE__
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS, SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG);     // (macOS's core 3.3: only so)
-#endif
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 3);
-    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
     // (the window's size: NUI_SIZE=WxH, for the layouts of other screens -- the iPad mini's 1133x744)
     int ww = 1920, wh = 1080;
     if (const char *sz = getenv("NUI_SIZE"))
         sscanf(sz, "%dx%d", &ww, &wh);
-    SDL_Window *win = SDL_CreateWindow("Clavitone", ww, wh,
-                                       SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY |
-                                           (windowed ? 0 : SDL_WINDOW_FULLSCREEN));
+    // (its graphics: OpenGL on Linux, Metal on macOS and iOS -- gfx.h)
+    SDL_Window *win = gfx_window("Clavitone", ww, wh,
+                                 SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | (windowed ? 0 : SDL_WINDOW_FULLSCREEN));
     if (!win) {
-        fprintf(stderr, "nvlive: --app: no window (%s)\n", SDL_GetError());
         SDL_Quit();
         return 1;
     }
-    SDL_GLContext glc = SDL_GL_CreateContext(win);
-    if (!glc || !(SDL_GL_MakeCurrent(win, glc), gl.load())) {
-        fprintf(stderr, "nvlive: --app: no OpenGL 3.3 (%s)\n", SDL_GetError());
-        SDL_DestroyWindow(win);
-        SDL_Quit();
-        return 1;
-    }
-    SDL_GL_SetSwapInterval(1);
     IMGUI_CHECKVERSION();
     ImGui::CreateContext();
     ImGuiIO &io = ImGui::GetIO();
     io.IniFilename = nullptr;
     io.ConfigFlags |= ImGuiConfigFlags_NoMouseCursorChange;
-    ImGui_ImplSDL3_InitForOpenGL(win, glc);
-    ImGui_ImplOpenGL3_Init("#version 330");
+    if (!gfx_init(win)) {
+        fprintf(stderr, "nvlive: --app: its renderer would not start\n");
+        SDL_DestroyWindow(win);
+        SDL_Quit();
+        return 1;
+    }
 
     // THE FONT: code7, its wide glyphs merged in; small caps for the bold
     static Bdf c7, c7w, c7sc;
@@ -492,28 +448,19 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
         if (settle <= 0)
             continue;
         settle--;
-        ImGui_ImplOpenGL3_NewFrame();
+        gfx_begin(win, 0.106f, 0.114f, 0.125f);
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
         draw(a);
         ImGui::Render();
-        int w, hh;
-        SDL_GetWindowSizeInPixels(win, &w, &hh);
-        gl.Viewport(0, 0, w, hh);
-        gl.ClearColor(0.106f, 0.114f, 0.125f, 1.0f);
-        gl.Clear(GL_COLOR_BUFFER_BIT);
-        ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
-        if (!shot_path.empty() && --shot_in <= 0) {
-            shot(shot_path.c_str(), w, hh);
+        const bool shoot = !shot_path.empty() && --shot_in <= 0;
+        gfx_end(win, shoot ? shot_path.c_str() : nullptr);
+        if (shoot)
             shot_path.clear();
-        }
-        SDL_GL_SwapWindow(win);
     }
     nv_ui_watch_free(a.w);
-    ImGui_ImplOpenGL3_Shutdown();
-    ImGui_ImplSDL3_Shutdown();
+    gfx_shutdown(win);
     ImGui::DestroyContext();
-    SDL_GL_DestroyContext(glc);
     SDL_DestroyWindow(win);
     SDL_Quit();
     return 0;
