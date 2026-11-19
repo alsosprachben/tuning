@@ -8,6 +8,8 @@
 // engine, CoreMIDI in, RemoteIO out (macio.h), the native UI drawn on Metal.
 #import <AVFoundation/AVFoundation.h>
 #import <Foundation/Foundation.h>
+#import <UIKit/UIKit.h>
+#import <objc/runtime.h>
 
 #include <SDL3/SDL.h>
 #include <SDL3/SDL_main.h>
@@ -33,8 +35,18 @@ int main(int argc, char *argv[])
     (void)argc;
     (void)argv;
     // LANDSCAPE ONLY: SDL lets a resizable window turn every way unless told
-    // (its hint, over the Info.plist's iPad orientations)
+    // (its hint, over the Info.plist's iPad orientations) -- and iPadOS 26,
+    // its every app's window resizable, keeps an orientation only for a view
+    // controller that prefers it locked (prefersInterfaceOrientationLocked,
+    // new in 26: SDL's controller is given it here, before its window is made)
     SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+    if (Class vc = NSClassFromString(@"SDL_uikitviewcontroller")) {
+        class_replaceMethod(vc, @selector(prefersInterfaceOrientationLocked),
+                            imp_implementationWithBlock(^BOOL(id) { return YES; }), "B@:");
+        class_replaceMethod(vc, @selector(supportedInterfaceOrientations),
+                            imp_implementationWithBlock(^NSUInteger(id) { return UIInterfaceOrientationMaskLandscape; }),
+                            "Q@:");
+    }
     audio_session();
     NSString *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
     const std::string d = docs.UTF8String;

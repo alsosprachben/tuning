@@ -1,0 +1,5 @@
+.go
+.done
+.build.log
+build/
+*.xcodeproj/

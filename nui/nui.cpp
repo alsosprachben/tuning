@@ -13,6 +13,9 @@
 // and up there, in the 1920x1080 design's units), "shot PATH" (the frame as
 // a PPM), "quit" -- with SDL_VIDEODRIVER=offscreen, headless.
 #include <SDL3/SDL.h>
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
 
 #include <algorithm>
 #include <chrono>
@@ -59,17 +62,20 @@ static const char *CARDS[][2] = {{"parts", "PARTS"}, {"library", "LIBRARY"}, {"s
 static void draw(App &a)
 {
     const ImGuiIO &io = ImGui::GetIO();
+    // (the rect the layout fits: the safe area where the window has one, else the whole)
+    const float sx = a.safe_w > 0 ? a.safe_x : 0.0f, sy = a.safe_w > 0 ? a.safe_y : 0.0f;
+    const ImVec2 ds = a.safe_w > 0 ? ImVec2(a.safe_w, a.safe_h) : io.DisplaySize;
     // THE LAYOUT: the iPad's where the screen is its shape (narrower than 16:10.5) or NUI_LAYOUT=ipad says so
     {
         const char *lay = getenv("NUI_LAYOUT");
-        a.tab = lay ? !strcmp(lay, "ipad") : io.DisplaySize.x / std::max(1.0f, io.DisplaySize.y) < 1.65f;
+        a.tab = lay ? !strcmp(lay, "ipad") : ds.x / std::max(1.0f, ds.y) < 1.65f;
         a.W = a.tab ? 1133.0f : 1920.0f;
         // (the iPad's as tall as the screen's shape: 744 on an iPad mini's
         //  1133x744, 787 on an 11-inch iPad's 1180x820 -- the cards' feet follow, card_y1)
-        a.H = a.tab ? std::max(744.0f, std::floor(1133.0f * io.DisplaySize.y / std::max(1.0f, io.DisplaySize.x))) : 1080.0f;
+        a.H = a.tab ? std::max(744.0f, std::floor(1133.0f * ds.y / std::max(1.0f, ds.x))) : 1080.0f;
         a.ts = a.tab ? 0.5f : 1.0f;
     }
-    a.k = std::min(io.DisplaySize.x / a.W, io.DisplaySize.y / a.H);
+    a.k = std::min(ds.x / a.W, ds.y / a.H);
     if (getenv("NUI_DEBUG_SCALE")) {        // (once: the sizes as this screen has them)
         static bool said = false;
         if (!said) {
@@ -79,7 +85,7 @@ static void draw(App &a)
         }
     }
     a.K.k = a.k;
-    a.org = ImVec2(std::floor((io.DisplaySize.x - a.W * a.k) / 2), std::floor((io.DisplaySize.y - a.H * a.k) / 2));
+    a.org = ImVec2(std::floor(sx + (ds.x - a.W * a.k) / 2), std::floor(sy + (ds.y - a.H * a.k) / 2));
     ImGui::SetNextWindowPos(ImVec2(0, 0));
     ImGui::SetNextWindowSize(io.DisplaySize);
     ImGui::PushStyleVar(ImGuiStyleVar_WindowPadding, ImVec2(0, 0));
@@ -268,6 +274,12 @@ struct Step {
     float x = 0, y = 0, x1 = 0, y1 = 0;
     int ms = 0;
 };
+// (a path from "~/": under HOME -- iOS's app container, where a test's script and shots go)
+static std::string home_path(const std::string &p)
+{
+    const char *h = getenv("HOME");
+    return p.rfind("~/", 0) == 0 && h ? std::string(h) + p.substr(1) : p;
+}
 static std::vector<Step> load_script(const char *path)
 {
     std::vector<Step> out;
@@ -366,7 +378,7 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
         a.parts = *ps;
 
     const char *sp = getenv("NUI_SCRIPT");
-    std::vector<Step> script = sp ? load_script(sp) : std::vector<Step>();
+    std::vector<Step> script = sp ? load_script(home_path(sp).c_str()) : std::vector<Step>();
     size_t si = 0;
     auto t_wait = std::chrono::steady_clock::now();
     int settle = 3;                         // (frames to draw after a change: ImGui's own state settles)
@@ -427,7 +439,7 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
                 a.K.fingers += st.ms - script_fingers;
                 script_fingers = st.ms;
             } else if (st.op == "shot") {
-                shot_path = st.arg;
+                shot_path = home_path(st.arg);
                 shot_in = 3;
             } else if (st.op == "call") {
                 const J r = call(a, st.arg);
@@ -450,6 +462,20 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
         if (settle <= 0)
             continue;
         settle--;
+        {                               // (the safe area: the screen's corners and home indicator kept clear)
+            SDL_Rect r;
+            if (SDL_GetWindowSafeArea(win, &r) && r.w > 0 && r.h > 0) {
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+                const float m = 12.0f;  // (an iPad's rounded corners: clear of their curve)
+#else
+                const float m = 0.0f;
+#endif
+                a.safe_x = r.x + m;
+                a.safe_y = r.y + m;
+                a.safe_w = r.w - 2 * m;
+                a.safe_h = r.h - 2 * m;
+            }
+        }
         gfx_begin(win, 0.106f, 0.114f, 0.125f);
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();

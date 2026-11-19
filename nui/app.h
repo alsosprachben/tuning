@@ -37,6 +37,10 @@ static const ImU32 PANEL = IM_COL32(0x23, 0x26, 0x2a, 255), PANEL_HI = IM_COL32(
 struct App {
     nv_host *h = nullptr;
     nv_ui_watch *w = nullptr;
+    // THE SCREEN's USABLE RECT, in points (the window's safe area -- clear of
+    // a screen's rounded corners and its home indicator, with a margin on
+    // iOS): the layout fits here; w 0 the whole window
+    float safe_x = 0, safe_y = 0, safe_w = 0, safe_h = 0;
     ImFont *font = nullptr, *bold = nullptr, *lcd = nullptr;     // (lcd: code7 dotted, the display's)
     std::string ui_dir;                 // (ui/: the fonts, about.json)
     float k = 1.0f;                     // design units to pixels
