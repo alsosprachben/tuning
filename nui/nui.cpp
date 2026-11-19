@@ -87,6 +87,14 @@ static void draw(App &a)
         a.ts = a.tab ? 0.5f : 1.0f;
     }
     a.k = std::min(io.DisplaySize.x / a.W, io.DisplaySize.y / a.H);
+    if (getenv("NUI_DEBUG_SCALE")) {        // (once: the sizes as this screen has them)
+        static bool said = false;
+        if (!said) {
+            said = true;
+            fprintf(stderr, "nui: display %.1fx%.1f, framebuffer scale %.2f, k %.3f, px(14) %.2f px(21) %.2f\n",
+                    io.DisplaySize.x, io.DisplaySize.y, io.DisplayFramebufferScale.x, a.k, px(a, 14), px(a, 21));
+        }
+    }
     a.K.k = a.k;
     a.org = ImVec2(std::floor((io.DisplaySize.x - a.W * a.k) / 2), std::floor((io.DisplaySize.y - a.H * a.k) / 2));
     ImGui::SetNextWindowPos(ImVec2(0, 0));
