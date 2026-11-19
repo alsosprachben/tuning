@@ -239,7 +239,8 @@ def main(argv):
                           + (["--room-at=" + opt["room-at"]] if opt.get("room-at") else [])
                           + (["--eastern-at=" + opt["eastern-at"]] if opt.get("eastern-at") else [])
                           + (["--metronome=" + opt["metronome"]] if opt.get("metronome") else [])
-                          + (["--fixed-touch=" + opt["fixed-touch"]] if opt.get("fixed-touch") else []),
+                          + (["--fixed-touch=" + opt["fixed-touch"]] if opt.get("fixed-touch") else [])
+                          + (["--rotary=" + opt["rotary"]] if opt.get("rotary") else []),
                           stderr=subprocess.DEVNULL)
     raw = open(out, "rb").read()          # float32 stereo after a 44-byte header
     nv = np.frombuffer(raw[44:], np.float32).reshape(-1, 2)
@@ -262,6 +263,9 @@ def main(argv):
     ampsync.sync(lv)                            # (the valve in step, as nvlive --test answers it)
     if opt.get("fixed-touch"):                  # --fixed-touch=0|1: the part's switch (live's part.fixed_touch)
         lv.parts[0].fixed_touch = opt["fixed-touch"] == "1"
+    if opt.get("rotary"):                       # --rotary=room|mics[:DEG]: the part's rotary heard (live.set_rotary)
+        _rm, _, _rd = opt["rotary"].partition(":")
+        lv.set_rotary(lv.parts[0], _rm, float(_rd) * 3.141592653589793 / 180.0 if _rd else None)
     if opt.get("metronome"):                    # --metronome=BPM[:RING]: live's, from its first block (nvlive --metronome)
         _mb, _, _mr = opt["metronome"].partition(":")
         lv.set_metronome(float(_mb), int(_mr or 0), L.Live.build_metro_part(live_tuner))

@@ -217,8 +217,9 @@ inline void draw_stops(App &a)
     }
 
     // A TONEWHEEL ORGAN's DRIVE (the wheel is its swell): the valve before the rotors, 0 to 3
+    const float RH = IP ? 150 : 200, RG = IP ? 8 : 14;    // (the rotary's tray under it)
     if (has_drive) {
-        const float dx = X1 - DW, dy = JY0, dw = DW, dh = JY1 - JY0;
+        const float dx = X1 - DW, dy = JY0, dw = DW, dh = JY1 - JY0 - RH - RG;
         look::tray(a, dx, dy, dw, dh, 10);
         heading(a, dx + 14, dy + 12, "DRIVE", "drive");
         const double now = drive->a[0].d(), voice = drive->a[1].d(), mine = drive->a[2].d();
@@ -229,7 +230,7 @@ inline void draw_stops(App &a)
         float v01 = (float)(v / 3.0);
         char vt[16];
         snprintf(vt, sizeof vt, "%.2f", v);
-        const int f = knob(a, "drive", dx + dw / 2, dy + (IP ? 80 : 110), IP ? 72 : 110, v01, "DRIVE", vt, false, {}, 0, own);
+        const int f = knob(a, "drive", dx + dw / 2, dy + (IP ? 70 : 100), IP ? 60 : 96, v01, "DRIVE", vt, false, {}, 0, own);
         if (f & K_CHANGED) {
             const double d = std::round(v01 * 3.0 * 100) / 100;
             a.hold["drive"] = {d, ImGui::GetTime() + 0.6};
@@ -241,13 +242,56 @@ inline void draw_stops(App &a)
         };
         if (f & K_RESET)
             back();
-        const auto note = wrap(a, a.font, 14, "The valve before the rotors: clean at 0, a growl as it turns up. The mod wheel is the swell.", dw - 28);
+        const auto note = wrap(a, a.font, 14, "Clean at 0, a growl as it turns up. The mod wheel is the swell.", dw - 28);
         for (size_t i = 0; i < note.size(); i++)
-            text(a, a.font, 14, dx + 14, dy + (IP ? 150 : 220) + i * LH, SILK_DIM, note[i]);
+            text(a, a.font, 14, dx + 14, dy + (IP ? 128 : 180) + i * LH, SILK_DIM, note[i]);
         char bt[48];
         snprintf(bt, sizeof bt, own ? "BACK TO THE VOICE'S %.2f" : "AS THE VOICE (%.2f)", voice);
         if (button(a, "driveback", dx + 10, dy + dh - (IP ? 54 : 52), dw - 20, IP ? 44 : 38, bt, false, own))
             back();
+        // THE ROTARY HEARD: the cabinet in the room (an organ's way: its
+        // direction turning) or two mics round it (a recording's: wide), and
+        // the mics' spread -- the part's, kept across its program changes
+        const float ry = dy + dh + RG;
+        look::tray(a, dx, ry, dw, RH, 10);
+        heading(a, dx + 14, ry + 12, "ROTARY", "rotary");
+        const J *pr = part(a, a.row);
+        const J *rv = pr ? pr->get("rotary") : nullptr;
+        int mode = rv && rv->is(J::ARR) && rv->a.size() >= 2 ? (int)rv->a[0].d() : -1;
+        double spread = rv && rv->is(J::ARR) && rv->a.size() >= 2 ? rv->a[1].d() : -1.0;
+        auto ht = a.hold.find("rotary");
+        if (ht != a.hold.end() && ImGui::GetTime() < ht->second.second) {      // (shown at once; the push confirms)
+            mode = (int)std::floor(ht->second.first / 1000.0);
+            spread = std::fmod(ht->second.first, 1000.0) - 1.0;
+        }
+        const bool mics = mode == 1;
+        const double sp = spread >= 0.0 ? spread : 96.0 * 180.0 / 127.0;     // (a Rotary type's Separate 96)
+        auto set = [&](int m, double sd) {
+            a.hold["rotary"] = {m * 1000.0 + (sd < 0 ? 0.0 : sd + 1.0), ImGui::GetTime() + 0.6};
+            call(a, "{\"call\":\"rotary_set\",\"row\":" + std::to_string(a.row) + ",\"mode\":" + std::to_string(m)
+                        + ",\"spread\":" + jnum(sd) + "}");
+        };
+        const float bw = (dw - 34) / 2, by = ry + (IP ? 36 : 44), bh = IP ? 44 : 38;
+        if (button(a, "rotroom", dx + 12, by, bw, bh, "IN THE ROOM", !mics))
+            set(0, spread);
+        if (button(a, "rotmics", dx + 22 + bw, by, bw, bh, "TWO MICS", mics))
+            set(1, spread);
+        if (mics) {
+            float v01 = (float)(sp / 180.0);
+            char vt[16];
+            snprintf(vt, sizeof vt, "%.0f\xc2\xb0", sp);
+            const int f = knob(a, "rotspread", dx + dw / 2, by + bh + (IP ? 34 : 58), IP ? 40 : 60, v01, "SPREAD", vt, false, {},
+                               0, spread >= 0.0);
+            if (f & K_CHANGED)
+                set(1, std::round(v01 * 180.0));
+            if (f & K_RESET)
+                set(1, -1.0);
+        } else {
+            const auto rn = wrap(a, a.font, 14, "The cabinet heard where it stands: its horn and drum turning toward you and away.",
+                                 dw - 28);
+            for (size_t i = 0; i < rn.size(); i++)
+                text(a, a.font, 14, dx + 14, by + bh + (IP ? 10 : 16) + i * LH, SILK_DIM, rn[i]);
+        }
     }
 
     // WHAT IT IS: the stop last touched, else the organ's patch and a hint

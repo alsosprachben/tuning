@@ -221,6 +221,15 @@ const HELP = {
       ['BACK TO THE VOICE\'S n', 'You have turned it; tap to put the voice\'s own back. Double-tapping the knob does the same.'],
     ],
   },
+  rotary: {
+    title: 'Rotary',
+    intro: 'How the rotating speaker is heard. Organs stand their cabinet in the room; the Rotary insertion effect records it with two mics. Either can be switched, part by part, and the part keeps it through program changes.',
+    terms: [
+      ['IN THE ROOM', 'The cabinet heard where it stands: its horn and drum turning toward you and away, the room around it.'],
+      ['TWO MICS', 'The cabinet as a studio records it: a mic either side, one to each speaker, each hearing the rotors from its own angle. Wide.'],
+      ['SPREAD', 'How far apart the two mics stand round the cabinet, in degrees. Double-tap for the default, the Rotary effect\'s own (136\u00b0).'],
+    ],
+  },
   piano: {
     title: 'Piano',
     intro: 'The selected part\'s pedals. They show what the keyboard, a file or this screen last sent, and act on the part\'s channel.',

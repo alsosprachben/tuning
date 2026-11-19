@@ -209,6 +209,14 @@ J parts_of(nv_host *h)
         o.o["muted"] = sess::boolean(p.muted != 0);
         o.o["solo"] = sess::integer(p.solo);
         o.o["touch_fixed"] = sess::boolean(p.touch_fixed != 0);
+        {                                   // its rotary heard: [mode -1 own way / 0 room / 1 mics, spread degrees (<0 default)]
+            double rv[2] = {-1.0, -1.0};
+            nv_host_rotary(h, p.row, rv);
+            J ra = sess::arr();
+            ra.a.push_back(sess::integer((long)rv[0]));
+            ra.a.push_back(num(rv[1]));
+            o.o["rotary"] = ra;
+        }
         o.o["name"] = sess::str(p.name);
         // its channel's pan and sends, as a sequencer set them (an every-channel
         // part reads the first channel's: a change goes to all of them)
@@ -1656,6 +1664,8 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         r.o["files"] = files_state();
     } else if (call == "panic") {
         nv_host_panic(h);
+    } else if (call == "rotary_set") {         // (a part's rotary heard: mode -1 its own way, 0 room, 1 mics; spread degrees, <0 the default)
+        nv_host_set_rotary(h, row, (int)arg_i(q, "mode", -1), arg_d(q, "spread", -1.0));
     } else if (call == "drive_set") {          // (an organ's drive, 0..3; <0 the voice's again)
         nv_host_set_drive(h, row, std::min(3.0, arg_d(q, "v", -1.0)));
         if (w)

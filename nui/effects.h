@@ -293,7 +293,10 @@ inline void draw_effects(App &a)
     } else {
         rect(a, IX + 12, ky0 - 8, IW - 24, 1, IM_COL32(0x33, 0x36, 0x3a, 255), 0);
         const auto &ps = pit->second;
-        const int cols = 7, rows = std::max(1, ((int)ps.size() + cols - 1) / cols);
+        // (a Rotary type: one more cell, the part's ROOM / MICS -- how it is heard)
+        const bool rotary = type && type->name.find("Rotary") != std::string::npos;
+        const int cells = (int)ps.size() + (rotary ? 1 : 0);
+        const int cols = 7, rows = std::max(1, (cells + cols - 1) / cols);
         const float cw = PW / cols, ch = std::min(IP ? 120.0f : 110.0f, kh / rows);
         const J *pv_ = x->get("p");
         for (size_t i = 0; i < ps.size(); i++) {
@@ -309,6 +312,28 @@ inline void draw_effects(App &a)
                 efx_send(a, "p", q.n, picked, "p" + std::to_string(q.n));
             if (f & K_RESET)
                 efx_send(a, "p", q.n, q.fresh, "p" + std::to_string(q.n));
+        }
+        if (rotary) {                   // THE ROTARY HEARD (the part's: the Stops card's switch too)
+            const int i = (int)ps.size();
+            const float cx = IX + 12 + (i % cols + 0.5f) * cw, cy = ky0 + (i / cols) * ch;
+            const J *rv = p ? p->get("rotary") : nullptr;
+            int mode = rv && rv->is(J::ARR) && rv->a.size() >= 2 ? (int)rv->a[0].d() : -1;
+            const double spread = rv && rv->is(J::ARR) && rv->a.size() >= 2 ? rv->a[1].d() : -1.0;
+            auto ht = a.hold.find("rotary");
+            if (ht != a.hold.end() && ImGui::GetTime() < ht->second.second)
+                mode = (int)std::floor(ht->second.first / 1000.0);
+            const bool room = mode == 0;    // (a Rotary type's own way: two mics)
+            const float bw = std::min(cw - 8, IP ? 110.0f : 88.0f), bh = IP ? 40 : 32;
+            text_c(a, a.font, 14, cx, cy - 2, SILK_DIM, "HEARD");
+            auto set = [&](int m) {
+                a.hold["rotary"] = {m * 1000.0 + (spread < 0 ? 0.0 : spread + 1.0), ImGui::GetTime() + 0.6};
+                call(a, "{\"call\":\"rotary_set\",\"row\":" + std::to_string(a.row) + ",\"mode\":" + std::to_string(m)
+                            + ",\"spread\":" + jnum(spread) + "}");
+            };
+            if (button(a, "fxrroom", cx - bw / 2, cy + 16, bw, bh, "ROOM", room))
+                set(0);
+            if (button(a, "fxrmics", cx - bw / 2, cy + 20 + bh, bw, bh, "MICS", !room))
+                set(1);
         }
         const float sx = IX + IW - 12 - SW_;
         rect(a, sx, ky0 - 4, 1, kh, IM_COL32(0x33, 0x36, 0x3a, 255), 0);

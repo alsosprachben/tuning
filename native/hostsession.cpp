@@ -525,6 +525,10 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
             {                                   // its fixed touch (live's part.fixed_touch; absent, the patch's way)
                 const sess::J *ft = pd.get("fixed_touch");
                 sp.fixed = ft && (ft->is(sess::J::BOOL) || ft->is(sess::J::NUM)) ? (ft->d() != 0.0 ? 1 : 0) : -1;
+                const sess::J *ro = pd.get("rotary");   // (its rotary heard: live's Part.rotary, "room" or "mics")
+                sp.rot_mode = ro && ro->is(sess::J::STR) ? (ro->s == "mics" ? 1 : ro->s == "room" ? 0 : -1) : -1;
+                const sess::J *rs = pd.get("rotary_spread");    // (...degrees; absent, the default)
+                sp.rot_sep = rs && rs->is(sess::J::NUM) ? std::max(0.0, std::min(180.0, rs->d())) * M_PI / 180.0 : -1.0;
                 const sess::J *dr = pd.get("drive");    // (an organ's drive knob: live's Part.drive; absent, the voice's)
                 sp.drive = dr && dr->is(sess::J::NUM) ? std::max(0.0, dr->d()) : -1.0;
                 const sess::J *cm = pd.get("cc_map");   // (a Messenger read on it: nvlive reads one on every part)
@@ -568,6 +572,7 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
             if (k == 0) {                       // (at the start its program is the part's already)
                 part_set(0, sp.channel, sp.lo, sp.hi, sp.tr, sp.level, sp.muted);
                 part_touch(0, sp.fixed);
+                part_rotary(0, sp.rot_mode, sp.rot_sep);
                 if (at_start)                   // (else after the pick's swap, below: a new program clears it)
                     part_drive(0, sp.drive);
                 if (!at_start) {
@@ -810,6 +815,14 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
             pd.o["fixed_touch"] = sess::boolean(pa.fixed != 0);
         else
             pd.o.erase("fixed_touch");
+        if (pa.rot_mode >= 0)                   // (its rotary heard, live's likewise: only when set)
+            pd.o["rotary"] = sess::str(pa.rot_mode ? "mics" : "room");
+        else
+            pd.o.erase("rotary");
+        if (pa.rot_sep >= 0.0)
+            pd.o["rotary_spread"] = sess::real(std::round(pa.rot_sep * 180.0 / M_PI * 1000.0) / 1000.0);
+        else
+            pd.o.erase("rotary_spread");
         if (pa.drive >= 0.0)                    // (an organ's drive knob, live's likewise)
             pd.o["drive"] = sess::real(pa.drive);
         else
@@ -1360,6 +1373,27 @@ void nv_host_set_messenger_pre107(nv_host *h, int on)
     const double v = on ? 1.0 : 0.0;
     h->post([h, v](long long) { nv_part_set(h->part, 9, v); });
 }
+// A PART's ROTARY HEARD: out[0] the mode (-1 its own way, 0 room, 1 mics),
+// [1] the mics' spread in degrees (<0 the default); 0 no such row
+int nv_host_rotary(nv_host *h, int row, double *out)
+{
+    size_t i;
+    if (!row_index(h, row, i))
+        return 0;
+    std::lock_guard<std::mutex> lk(h->parts_mu);
+    if (i >= h->pats.size())
+        return 0;
+    out[0] = h->pats[i].rot_mode;
+    out[1] = h->pats[i].rot_sep < 0.0 ? -1.0 : h->pats[i].rot_sep * 180.0 / M_PI;
+    return 1;
+}
+void nv_host_set_rotary(nv_host *h, int row, int mode, double spread_deg)
+{
+    size_t i;
+    if (row_index(h, row, i))
+        h->part_rotary(i, mode, spread_deg < 0.0 ? -1.0 : std::min(180.0, spread_deg) * M_PI / 180.0);
+}
+
 int nv_host_drive(nv_host *h, int row, double *out)
 {
     size_t i;

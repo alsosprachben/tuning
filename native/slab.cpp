@@ -1191,6 +1191,9 @@ struct Slab {
     // live.Slab.leslie_arm: these slots on the rotors -- their lobe, their
     // place off the cabinet (az), their baseline; their Doppler a unit at
     // FAST_HZ, then at the rotors' rates
+    // (the two mics' angle apart the partials armed next take: 0 the cabinet
+    //  in the room -- set round a call by the part, its rotary switch's)
+    float arm_sep = 0.0f;
     void leslie_arm(const std::vector<long> &slots, const float *az, const float *nf32, const char *flip, long long n,
                     double horn_rate, double drum_rate, const double *nf64 = nullptr, LobePre pre = LobePre())
     {
@@ -1214,7 +1217,7 @@ struct Slab {
         for (long q = 0; q < m; q++) {
             long s = slots[q];
             ls_on[s] = 1;
-            ls_sep[s] = 0.0f;
+            ls_sep[s] = arm_sep;
             ls_ph[s] = az[q];
             ls_horn[s] = horn[q];
             ls_am[s] = fl[q];
@@ -2911,6 +2914,12 @@ struct Part {
         // taken away: its notes let go, its place kept so no index moves)
         bool muted = false, gone = false, hidden = false;     // (hidden: the metronome's, no key reaches it)
         int fixed_touch = -1;                   // FIXED TOUCH (live's part.fixed_touch): -1 the patch's way, 1 on, 0 off
+        // THE ROTARY HEARD (live's part.rotary): -1 its own way (an organ's
+        // cabinet in the room, a Rotary type's two mics), 0 in the room, 1 two
+        // mics -- rot_sep their angle apart (<0: the type's Separate, an
+        // organ's ROT_SEP0); kept across program changes, as the drive is
+        int rot_mode = -1;
+        double rot_sep = -1.0;
         // A REGISTERED ORGAN (live's part.organ): its table, its stops drawn
         // (a rank each), the crescendo's place (part.cres)
         const OrganSpec *organ = nullptr;
@@ -3469,8 +3478,10 @@ struct Part {
                 if (!g.lhorn.empty()) {
                     lp.horn = g.lhorn.data(); lp.fl = g.lfl.data(); lp.sh = g.lsh.data(); lp.nrm = g.lnrm.data();
                 }
+                S.arm_sep = organ_sep(patches[cur]);
                 S.leslie_arm(ss, az.data(), nf32.data(), lfl.data(), n0, rotor_horn.rate, rotor_drum.rate,
                              nf64.data(), lp);
+                S.arm_sep = 0.0f;
             }
         };
         if (!cho) {
@@ -3492,9 +3503,12 @@ struct Part {
             return;
         }
         std::vector<long> cs = S.last_slots;
-        if (p.leslie && !S.les.empty())
+        if (p.leslie && !S.les.empty()) {
+            S.arm_sep = organ_sep(patches[cur]);
             S.leslie_arm(cs, R.f4[24].data(), R.f4[2].data(), R.lflip.empty() ? nullptr : R.lflip.data(), n0,
                          rotor_horn.rate, rotor_drum.rate, nullptr, lobe_of_t(R));
+            S.arm_sep = 0.0f;
+        }
         put(cs, g.sc, true);
         sidestamp();
     }
@@ -3916,7 +3930,9 @@ struct Part {
             if ((long)o.lhorn.size() == n) {
                 lp.horn = o.lhorn.data(); lp.fl = o.lfl.data(); lp.sh = o.lsh.data(); lp.nrm = o.lnrm.data();
             }
+            S.arm_sep = S.ls_sep[o.src];        // (the valve's products heard as their source is)
             S.leslie_arm(slots, az.data(), nullptr, nullptr, n0, rotor_horn.rate, rotor_drum.rate, f.data(), lp);
+            S.arm_sep = 0.0f;
         }
     }
 
@@ -6292,8 +6308,20 @@ struct Part {
         for (long q = 0; q < m; q++)
             lv[q] = (float)(S.ls_horn[slots[q]] ? fc[150] : fc[149]);
         S.channel_gain_each(slots, lv);
+        // (the part's rotary switch: in the room, none; two mics at its own
+        //  spread, else the type's Separate)
+        const Patch &rp = patches[cur];
+        const float sep = rp.rot_mode == 0 ? 0.0f : (float)(rp.rot_mode == 1 && rp.rot_sep >= 0.0 ? rp.rot_sep : fc[152]);
         for (long q = 0; q < m; q++)
-            S.ls_sep[slots[q]] = (float)fc[152];
+            S.ls_sep[slots[q]] = sep;
+    }
+
+    // AN ORGAN's ROTARY HEARD: two mics (its switch) at its spread, else the
+    // cabinet in the room (0) -- live's _organ_sep
+    static constexpr double ROT_SEP0 = M_PI * 96.0 / 127.0;     // (a Rotary type's Separate default, 96)
+    static float organ_sep(const Patch &p)
+    {
+        return p.rot_mode == 1 ? (float)(p.rot_sep >= 0.0 ? p.rot_sep : ROT_SEP0) : 0.0f;
     }
 
     // live._efx_rotary_sync: the rotors at the Rotary type's speeds -- slow or
@@ -8500,9 +8528,12 @@ struct Part {
             if (sr != 1.0)
                 retune(std::vector<long>(S.last_slots), n0, sr);
         }
-        if (patches[cur].leslie && !S.les.empty())    // onto the rotors, at their rates now
+        if (patches[cur].leslie && !S.les.empty()) {  // onto the rotors, at their rates now
+            S.arm_sep = organ_sep(patches[cur]);
             S.leslie_arm(S.last_slots, R.f4[24].data(), R.f4[2].data(), R.lflip.empty() ? nullptr : R.lflip.data(),
                          n0, rotor_horn.rate, rotor_drum.rate, nullptr, lobe_of_t(R));
+            S.arm_sep = 0.0f;
+        }
         if (patches[cur].scanner)                     // the scanner's selector, last (_scan_stamp)
             scan_stamp(R, ch, note, ri, n0, scale, std::vector<long>(S.last_slots));
     }
@@ -13823,6 +13854,18 @@ void nv_part_drive_later(void *h, int pi, double v)
     q.pi = pi;
     q.value = v;
     P->posts.push_back(std::move(q));
+}
+
+// A PART's ROTARY HEARD (live's part.rotary): mode -1 its own way, 0 the
+// cabinet in the room, 1 two mics, sep their angle apart in radians (<0 the
+// default); the notes struck after it hear it so (the audio thread's)
+void nv_part_rotary(void *h, int pi, int mode, double sep)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (pi < 0 || pi >= (int)P->patches.size())
+        return;
+    P->patches[pi].rot_mode = mode < 0 ? -1 : mode != 0;
+    P->patches[pi].rot_sep = sep;
 }
 
 // ...and what it is: out[0] the drive in use, [1] the voice's, [2] the

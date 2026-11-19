@@ -1127,6 +1127,9 @@ class Slab:
         self.ls_norm = np.ones(capacity, np.float32)     # so the mean is 1
         self.ls_ph = np.zeros(capacity, np.float32)
         self.ls_sep = np.zeros(capacity, np.float32)   # a Rotary type's two mics, their angle apart
+        # (the angle apart the partials armed next take: 0 the cabinet in the
+        #  room -- set round a call by the part, its rotary switch's)
+        self.arm_sep = 0.0
         self.ls_horn = np.zeros(capacity, bool)
         self.ls_aL = np.zeros(capacity, np.float32)
         self.ls_aR = np.zeros(capacity, np.float32)
@@ -1234,7 +1237,7 @@ class Slab:
         idx = np.fromiter(slots, np.int64, len(slots))
         horn, fl, sh, nrm = self.leslie_params(nf, flip)
         self.ls_on[idx] = True
-        self.ls_sep[idx] = 0.0
+        self.ls_sep[idx] = self.arm_sep
         self.ls_ph[idx] = np.asarray(az, np.float32)
         self.ls_horn[idx] = horn
         self.ls_am[idx] = fl
@@ -4175,6 +4178,12 @@ class Part:
         # AN ORGAN's DRIVE, the panel's knob (Live.set_drive): its valve stage's
         # drive over the voice's own (amp_drive), None the voice's
         self.drive = None
+        # THE ROTARY HEARD (Live.set_rotary): None its own way -- an organ's
+        # cabinet in the room, a Rotary type's two mics -- "room" or "mics";
+        # rotary_sep the mics' angle apart in radians (None: the type's
+        # Separate, an organ's ROT_SEP0). Kept across program changes
+        self.rotary = None
+        self.rotary_sep = None
         self.cc_map = "gm"      # "messenger": its channel's CCs are a Messenger's chart
         # THE STANDARD ITS PATCH WAS PICKED IN (livetui.patch_tree): "gm", "sc1"-
         # "sc4" (a Sound Canvas level, its map), "mt32". Where the picker opens
@@ -4283,6 +4292,10 @@ class Part:
             d["std"] = self.std
         if self.fixed_touch is not None:
             d["fixed_touch"] = bool(self.fixed_touch)
+        if self.rotary is not None:
+            d["rotary"] = self.rotary
+        if self.rotary_sep is not None:
+            d["rotary_spread"] = round(math.degrees(self.rotary_sep), 3)
         if self.pan is not None:
             d["pan"] = int(self.pan)
         return d
@@ -4324,6 +4337,9 @@ class Part:
         p.cc_map = d.get("cc_map", "gm")
         p.std = d.get("std", "gm")
         p.fixed_touch = None if d.get("fixed_touch") is None else bool(d["fixed_touch"])
+        p.rotary = d.get("rotary") if d.get("rotary") in ("room", "mics") else None
+        p.rotary_sep = (math.radians(max(0.0, min(180.0, float(d["rotary_spread"]))))
+                        if d.get("rotary_spread") is not None else None)
         p.pan = None if d.get("pan") is None else max(0, min(127, int(d["pan"])))
         if d.get("drawn"):
             p.drawn = {T.rank_rename(r, patch.rank_names) for r in d["drawn"]}
@@ -6640,7 +6656,7 @@ class Live:
             if _efx.get('pos3d'):
                 self._efx_place3d(_efx, slots, _cp, n0)
             if _efx.get('rotary'):
-                self._efx_rotary_arm(_efx, slots, note, n0)
+                self._efx_rotary_arm(_efx, slots, note, n0, part)
             if self._filter_for(_ec):
                 self.slab.filter_arm(slots, _ec)
         if _tfx is not None and _ec != _tfx and self.tone_fx[_tfx]['flt'] is not None:
@@ -8300,7 +8316,7 @@ class Live:
         if b and b != 1.0:
             self.slab.retune(sB, n0, om_scale=b)
         if exB.get('rotary'):
-            self._efx_rotary_arm(exB, sB, note, n0)
+            self._efx_rotary_arm(exB, sB, note, n0, part)
         if self._filter_for(vch):
             self.slab.filter_arm(sB, vch)
         self._tap_tables()
@@ -8317,7 +8333,27 @@ class Live:
         ang = math.radians(((az + 360.0 * turn * t + 180.0) % 360.0) - 180.0)
         self.slab.repan(slots, pan_at(ang), pan_table()[max(0, min(127, int(cpan)))], self.rate, itd=True)
 
-    def _efx_rotary_arm(self, ex, slots, note, n0):
+    # A Rotary type's Separate default (96): an organ's two mics' angle apart
+    ROT_SEP0 = math.pi * 96 / 127.0
+
+    def _organ_sep(self, part):
+        """AN ORGAN's ROTARY HEARD: its two mics' angle apart (the part's
+        switch on "mics"; its spread, else ROT_SEP0), else 0 -- the cabinet
+        in the room, as an organ's is by default."""
+        if part.rotary != "mics":
+            return 0.0
+        return float(part.rotary_sep if part.rotary_sep is not None else self.ROT_SEP0)
+
+    def set_rotary(self, part, mode, spread=None):
+        """A PART's ROTARY HEARD (the Stops and Effects cards' switch): mode
+        None its own way, "room" the cabinet in the room, "mics" two mics round
+        it at spread (radians; None the default). The notes struck after it
+        hear it so; kept on the part (and so in a preset)."""
+        part.rotary = mode if mode in ("room", "mics") else None
+        part.rotary_sep = None if spread is None else max(0.0, min(math.pi, float(spread)))
+        self.dirty = True
+
+    def _efx_rotary_arm(self, ex, slots, note, n0, part=None):
         """A ROTARY type's part on live's rotors (Slab.leslie_arm, the organ's
         own): each partial leaving at its own angle -- scattered, as a
         uniform start would lock them in phase -- the drum and horn at their
@@ -8333,7 +8369,14 @@ class Live:
         self.slab.leslie_arm(sl, az, self.slab.a["nf"][idx], n0, self.rotor_horn.rate, self.rotor_drum.rate)
         lv = np.where(self.slab.ls_horn[idx], rt['levels'][1], rt['levels'][0]).astype(np.float32)
         self.slab.channel_gain(sl, lv)
-        self.slab.ls_sep[idx] = float(rt.get('separate', 0.0))
+        # (the part's switch: in the room, none; two mics at its own spread,
+        #  else the type's Separate)
+        sep = float(rt.get('separate', 0.0))
+        if part is not None and part.rotary == "room":
+            sep = 0.0
+        elif part is not None and part.rotary == "mics" and part.rotary_sep is not None:
+            sep = float(part.rotary_sep)
+        self.slab.ls_sep[idx] = sep
 
     def _efx_rotary_sync(self):
         """The rotors at the Rotary type's speeds -- slow or fast as its Speed
@@ -11769,8 +11812,10 @@ class Live:
         if slots and self.slab.ls_on[src]:
             # The amplifier is UPSTREAM of the rotor, so its products swing and
             # Doppler like anything else that came out of the cabinet.
+            self.slab.arm_sep = float(self.slab.ls_sep[src])     # (heard as their source is)
             self.slab.leslie_arm(slots, float(self.slab.ls_ph[src]), f, n0,
                                  self.rotor_horn.rate, self.rotor_drum.rate)
+            self.slab.arm_sep = 0.0
 
     def _amp_pump(self, n0):
         self._amp_released()
@@ -11943,9 +11988,11 @@ class Live:
         if _sr != 1.0:
             self.slab.retune(self.slab.last_slots, n0, om_scale=_sr)
         if part.patch.leslie:
+            self.slab.arm_sep = self._organ_sep(part)
             self.slab.leslie_arm(self.slab.last_slots, cols["az"], cols["nf"],
                                  n0, self.rotor_horn.rate, self.rotor_drum.rate,
                                  flip=cols.get("lflip"))
+            self.slab.arm_sep = 0.0
         # THE SCANNER'S SELECTOR (scanner.py), last: its copy is stamped,
         # tuned and put on the rotor as the rank was
         if part.patch.scanner_voice:
@@ -12066,8 +12113,10 @@ class Live:
             if sr_ratio != 1.0:
                 sl.retune(list(ss), n0, om_scale=sr_ratio)
             if part.patch.leslie:
+                sl.arm_sep = self._organ_sep(part)
                 sl.leslie_arm(list(ss), side["az"], side["nf"], n0, self.rotor_horn.rate,
                               self.rotor_drum.rate, flip=side.get("lflip"))
+                sl.arm_sep = 0.0
         if not cho:
             put(dry_slots, sc, True)
             sidestamp()
@@ -12081,8 +12130,10 @@ class Live:
         if sr_ratio != 1.0:
             sl.retune(cs, n0, om_scale=sr_ratio)
         if part.patch.leslie:
+            sl.arm_sep = self._organ_sep(part)
             sl.leslie_arm(cs, cols["az"], cols["nf"], n0, self.rotor_horn.rate,
                           self.rotor_drum.rate, flip=cols.get("lflip"))
+            sl.arm_sep = 0.0
         put(cs, sc, True)
         sidestamp()
 

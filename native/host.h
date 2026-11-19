@@ -294,6 +294,11 @@ void nv_host_set_messenger_pre107(nv_host *h, int on);
 /* A TONEWHEEL ORGAN's DRIVE: out [now, the voice's, set (-1 the voice's)];
    1 an organ, 0 not, -1 unread; set v < 0: the voice's */
 int nv_host_drive(nv_host *h, int row, double *out);
+/* a part's rotary heard (an organ's cabinet, a Rotary type): out[0] -1 its own
+   way, 0 the cabinet in the room, 1 two mics; out[1] their spread in degrees
+   (<0 the default); 0 no such row -- and set */
+int nv_host_rotary(nv_host *h, int row, double *out);
+void nv_host_set_rotary(nv_host *h, int row, int mode, double spread_deg);
 void nv_host_set_drive(nv_host *h, int row, double v);
 
 /* ---- THE CONTROLLER MATRIX (livetui's C): a channel's sources to destinations ----

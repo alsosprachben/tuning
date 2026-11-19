@@ -68,6 +68,7 @@ int nv_tcache_add(void *h, int program, int note, int bucket, int speed, long lo
 int nv_tcache_slots(void *h, int *nb, int *sp);
 int nv_tcache_has(void *h, int note, int bucket, int speed);
 void nv_part_late(void *h, int on);
+void nv_part_rotary(void *h, int pi, int mode, double sep);
 void nv_part_stand_in(void *h, double ms);
 int nv_part_asks(void *h, void **cache, int *prog, int *drums, int *note, int *bucket, int *axis, int cap);
 void nv_part_late_counts(void *h, long *out);
@@ -1079,6 +1080,8 @@ struct nv_host {
         bool solo = false;                      // (live.Live.solo: soloed, not saved)
         long long pid = 1;
         int fixed = -1;                         // its fixed touch (live's part.fixed_touch: -1 the patch's way)
+        int rot_mode = -1;                      // its rotary heard (live's part.rotary: -1 its own way, 0 room, 1 mics)
+        double rot_sep = -1.0;                  // ...the mics' angle apart, radians (<0 the default)
         double drive = -1.0;                    // an organ's drive knob (live's Part.drive: <0 the voice's)
         bool is(int prog, bool dr, int v) const
         {
@@ -1426,6 +1429,8 @@ struct nv_host {
         bool metro = false;                 // (the metronome's own drum part: no row, no key)
         std::map<int, double> syn[2];       // (its knobs, layers A and B: a session's or preset's)
         int fixed = -1;                     // (its fixed touch)
+        int rot_mode = -1;                  // (its rotary heard: -1 its own way, 0 room, 1 mics)
+        double rot_sep = -1.0;              // (...the mics' angle apart, radians: <0 the default)
         double drive = -1.0;                // (an organ's drive knob: <0 the voice's)
         std::vector<std::string> drawn;     // (an organ's stops by name: a session's or preset's; none the voice's)
     };
@@ -1442,6 +1447,7 @@ struct nv_host {
     bool part_delete(size_t row, std::string &why);
     void pick_row(size_t row, int sp);
     void part_touch(size_t row, int fixed);         // (livetui.toggle_touch: 1 fixed, 0 velocity)
+    void part_rotary(size_t row, int mode, double sep);     // (live.set_rotary: -1 its own way, 0 room, 1 mics)
     void part_drive(size_t row, double v);          // (an organ's drive knob, live.set_drive: <0 the voice's)
     int drive_state(size_t row, double *out);       // (nv_part_drive_get's: 1 an organ's, 0 not, -1 unread)
     void messenger_reading(bool on);                // (livetui's M: every part reads a Messenger's chart)

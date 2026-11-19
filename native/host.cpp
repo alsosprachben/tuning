@@ -3654,6 +3654,25 @@ void nv_host::part_touch(size_t row, int fixed)
     post([this, pi, fixed](long long) { nv_part_patch_touch(part, pi, fixed); });
 }
 
+// A PART's ROTARY HEARD (live.set_rotary): an organ's cabinet in the room or
+// two mics round it, a Rotary type's likewise -- the host's copy now, the
+// patch's between two blocks (the notes struck after it)
+void nv_host::part_rotary(size_t row, int mode, double sep)
+{
+    int pi;
+    mode = mode < 0 ? -1 : mode != 0;
+    sep = sep < 0.0 ? -1.0 : std::min(M_PI, sep);
+    {
+        std::lock_guard<std::mutex> lk(parts_mu);
+        if (row >= pats.size() || pats[row].gone)
+            return;
+        pats[row].rot_mode = mode;
+        pats[row].rot_sep = sep;
+        pi = pats[row].pi;
+    }
+    post([this, pi, mode, sep](long long) { nv_part_rotary(part, pi, mode, sep); });
+}
+
 // AN ORGAN's DRIVE KNOB (live.set_drive): the host's copy now (a session's),
 // the patch's between two blocks
 void nv_host::part_drive(size_t row, double v)
@@ -3854,6 +3873,7 @@ void nv_host::part_added(const PartSpec &sp, void *c)
                                sp.lo, sp.hi, sp.tr);
     nv_part_patch_level(part, pi, sp.level, sp.muted || solo_n.load() > 0);    // (a solo elsewhere: silent)
     nv_part_patch_touch(part, pi, sp.fixed);
+    nv_part_rotary(part, pi, sp.rot_mode, sp.rot_sep);
     if (sp.drive >= 0.0)
         nv_part_drive(part, pi, sp.drive);
     attach_drone(pi, sp.program, sp.drums, sp.var);
@@ -3877,6 +3897,8 @@ void nv_host::part_added(const PartSpec &sp, void *c)
     pa.muted = sp.muted;
     pa.pid = pid;
     pa.fixed = sp.fixed;
+    pa.rot_mode = sp.rot_mode;
+    pa.rot_sep = sp.rot_sep;
     pa.drive = sp.drive;
     std::lock_guard<std::mutex> lk(parts_mu);
     pats.push_back(pa);                         // (reserved: the builder may be reading the rest)
@@ -3896,6 +3918,8 @@ static nv_host::PartSpec spec_of(const nv_host::PartAt &pa)
     sp.level = pa.level;
     sp.muted = pa.muted;
     sp.fixed = pa.fixed;
+    sp.rot_mode = pa.rot_mode;
+    sp.rot_sep = pa.rot_sep;
     sp.drive = pa.drive;
     return sp;
 }

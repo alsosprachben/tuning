@@ -118,6 +118,17 @@ int nv_host::run(int argc, char **argv)
         if (!ft.empty())
             part_touch(0, atoi(ft.c_str()) ? 1 : 0);
     }
+    // --rotary=room|mics[:DEG] (live.set_rotary on the first part): its rotary
+    // heard -- the cabinet in the room, or two mics DEG apart (none: the default)
+    {
+        std::string ro = opt(argc, argv, "rotary", "");
+        if (!ro.empty()) {
+            const size_t c = ro.find(':');
+            const std::string m = ro.substr(0, c);
+            part_rotary(0, m == "mics" ? 1 : m == "room" ? 0 : -1,
+                        c == std::string::npos ? -1.0 : atof(ro.c_str() + c + 1) * M_PI / 180.0);
+        }
+    }
     // --metronome=BPM[:RING] (live's): its part built now, before the first
     // block -- so it strikes from beat one there, as live's set before its first callback
     {
