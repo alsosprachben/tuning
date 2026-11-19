@@ -26,10 +26,6 @@ targets:
       - path: ../ui                 # (as ui/ in the bundle: its fonts, help.json, about.json -- nvlive's exe dir + /ui)
         type: folder
         buildPhase: resources
-      - path: ../gpukernel.metal    # (the GPU's kernel, compiled at run time on Metal -- beside the executable, relocate.h)
-        buildPhase: resources
-      - path: ../voicedesc.h
-        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.clavitone.app
@@ -45,6 +41,17 @@ targets:
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Clavitone
+    # THE GPU's KERNEL, as text beside the executable (relocate.h): compiled
+    # on the device at run time, as on the Mac -- copied, not built (Xcode
+    # would compile a .metal source, and needs a toolchain we do not use)
+    postCompileScripts:
+      - name: The GPU kernel's source
+        script: |
+          cp "$SRCROOT/../gpukernel.metal" "$SRCROOT/../voicedesc.h" "$TARGET_BUILD_DIR/$UNLOCALIZED_RESOURCES_FOLDER_PATH/"
+        outputFiles:
+          - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/gpukernel.metal
+          - $(TARGET_BUILD_DIR)/$(UNLOCALIZED_RESOURCES_FOLDER_PATH)/voicedesc.h
+        basedOnDependencyAnalysis: false
     info:
       path: Info.plist
       properties:
