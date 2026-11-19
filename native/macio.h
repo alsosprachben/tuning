@@ -24,8 +24,11 @@
 #ifndef NV_MACIO_H
 #define NV_MACIO_H
 
+#include <TargetConditionals.h>
 #include <AudioToolbox/AudioToolbox.h>
-#include <CoreAudio/CoreAudio.h>
+#if !TARGET_OS_IPHONE
+#include <CoreAudio/CoreAudio.h>                // (macOS's: iOS has CoreAudioTypes alone, through AudioToolbox)
+#endif
 #include <CoreFoundation/CoreFoundation.h>
 #include <CoreMIDI/CoreMIDI.h>
 #include <algorithm>
@@ -421,7 +424,11 @@ struct Audio {
     {
         AudioComponentDescription d{};
         d.componentType = kAudioUnitType_Output;
+#if TARGET_OS_IPHONE
+        d.componentSubType = kAudioUnitSubType_RemoteIO;        // (iOS: the session's output; its buffer the session's)
+#else
         d.componentSubType = kAudioUnitSubType_DefaultOutput;
+#endif
         d.componentManufacturer = kAudioUnitManufacturer_Apple;
         AudioComponent comp = AudioComponentFindNext(nullptr, &d);
         if (!comp || AudioComponentInstanceNew(comp, &unit) != noErr)
@@ -439,7 +446,11 @@ struct Audio {
             return -EINVAL;
         // the device's own buffer at a block, where it allows
         UInt32 fr = frames;
+#if !TARGET_OS_IPHONE
         AudioUnitSetProperty(unit, kAudioDevicePropertyBufferFrameSize, kAudioUnitScope_Global, 0, &fr, sizeof fr);
+#else
+        (void)fr;
+#endif
         AURenderCallbackStruct cb{render, this};
         if (AudioUnitSetProperty(unit, kAudioUnitProperty_SetRenderCallback, kAudioUnitScope_Input, 0, &cb, sizeof cb)
             != noErr)
