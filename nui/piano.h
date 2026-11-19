@@ -124,7 +124,7 @@ inline void draw_piano(App &a)
             piano_take(a, *p);
     }
     pedal_flush(a);
-    const bool IP = a.tab;              // (the iPad's: its card from y 210 to 734)
+    const bool IP = a.tab;              // (the iPad's: its card from y 210 to card_y1 + 6)
     const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, HY = IP ? 224 : 356, LH = a.lh(14) + (IP ? 3 : 4);
     const float TX = heading(a, X0, HY, "PIANO", "piano");
     if (!N.pn.is(J::OBJ))
@@ -134,7 +134,7 @@ inline void draw_piano(App &a)
     const std::string info = ch < 0 ? "pedals on every channel" : "pedals on channel " + std::to_string(ch + 1);
     text(a, a.font, 14, X1 - text_w(a, a.font, 14, info), HY + 1, SILK_DIM, info);
 
-    const float aboutH = IP ? 76 : 140, Y0 = IP ? 260 : 394, Y1 = (IP ? 728 : 1056) - aboutH - (IP ? 8 : 10);
+    const float aboutH = IP ? 76 : 140, Y0 = IP ? 260 : 394, Y1 = (card_y1(a)) - aboutH - (IP ? 8 : 10);
     const float c1 = IP ? 300 : 430, c3 = IP ? 280 : 400, gap = IP ? 6 : 8, c2 = X1 - X0 - c1 - c3 - 2 * gap;
     auto col = [&](float x, float w, const char *title, const char *key) {
         look::tray(a, x, Y0, w, Y1 - Y0, 9);
@@ -285,7 +285,7 @@ inline void draw_piano(App &a)
     }
 
     // WHAT IT IS: the part's patch
-    const float ay = (IP ? 728 : 1056) - aboutH, aw = X1 - X0;
+    const float ay = (card_y1(a)) - aboutH, aw = X1 - X0;
     look::tray(a, X0, ay, aw, aboutH, 8);
     const J *p = part(a, a.row);
     const J *e = nullptr;

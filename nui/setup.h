@@ -48,10 +48,10 @@ inline void draw_setup(App &a)
         U.open = false;
         setup_card(a, true);
     }
-    // (the iPad's: its card from y 210 to 734, two pages -- the input; the sound)
+    // (the iPad's: its card from y 210 to card_y1 + 6, two pages -- the input; the sound)
     const bool IP = a.tab;
     static int page = 0;
-    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 266 : 394, Y1 = IP ? 728 : 1056, HY = IP ? 224 : 356;
+    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 266 : 394, Y1 = card_y1(a), HY = IP ? 224 : 356;
     const float LH = a.lh(14) + (IP ? 3 : 4);
     const float TX = heading(a, X0, HY, "SETUP", "setup");
     if (IP)

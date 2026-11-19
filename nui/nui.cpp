@@ -64,7 +64,9 @@ static void draw(App &a)
         const char *lay = getenv("NUI_LAYOUT");
         a.tab = lay ? !strcmp(lay, "ipad") : io.DisplaySize.x / std::max(1.0f, io.DisplaySize.y) < 1.65f;
         a.W = a.tab ? 1133.0f : 1920.0f;
-        a.H = a.tab ? 744.0f : 1080.0f;
+        // (the iPad's as tall as the screen's shape: 744 on an iPad mini's
+        //  1133x744, 787 on an 11-inch iPad's 1180x820 -- the cards' feet follow, card_y1)
+        a.H = a.tab ? std::max(744.0f, std::floor(1133.0f * io.DisplaySize.y / std::max(1.0f, io.DisplaySize.x))) : 1080.0f;
         a.ts = a.tab ? 0.5f : 1.0f;
     }
     a.k = std::min(io.DisplaySize.x / a.W, io.DisplaySize.y / a.H);
@@ -113,7 +115,7 @@ static void draw(App &a)
                 a.card = CARDS[i][0];
         if (button(a, "help", X + nc * (w + gap), Y, 44, 44, "?", false, true, 21))
             help_open(a, "basics");
-        look::module(a, 10, 210, 1113, 524, 6.0f);
+        look::module(a, 10, 210, 1113, a.H - 220, 6.0f);
     } else {
         draw_display(a);
         draw_keys(a);

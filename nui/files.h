@@ -130,10 +130,10 @@ inline void draw_files(App &a)
         const char *d0 = getenv("NUI_DIR");
         fl_go(a, F.dir.empty() && d0 ? d0 : F.dir);
     }
-    // (the iPad's: its card from y 210 to 734, two pages -- choosing the file; playing and rendering it)
+    // (the iPad's: its card from y 210 to card_y1 + 6, two pages -- choosing the file; playing and rendering it)
     const bool IP = a.tab;
     static int page = 0;
-    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 266 : 394, Y1 = IP ? 728 : 1056, HY = IP ? 224 : 356;
+    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 266 : 394, Y1 = card_y1(a), HY = IP ? 224 : 356;
     const float LH = a.lh(14) + (IP ? 3 : 4), B21 = IP ? 21 : 14, BB = IP ? 44 : 34;
     const float TX = heading(a, X0, HY, "FILES", "files");
     if (IP)

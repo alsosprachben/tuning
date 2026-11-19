@@ -170,11 +170,11 @@ inline void draw_effects(App &a)
     LibUi &L = g_lib;
     if (!L.loaded)
         lib_load(a);
-    // (the iPad's: its card from y 210 to 734, three pages -- the insertion's type, its parameters, the system effects)
+    // (the iPad's: its card from y 210 to card_y1 + 6, three pages -- the insertion's type, its parameters, the system effects)
     const bool IP = a.tab;
     static int page = 0;
     const bool show_type = !IP || page == 0, show_par = !IP || page == 1, show_sys = !IP || page == 2;
-    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 266 : 394, HY = IP ? 224 : 356, Y1 = IP ? 728 : 1056;
+    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 266 : 394, HY = IP ? 224 : 356, Y1 = card_y1(a);
     const float GH = IP ? 44 : 28, GR = GH + 4, LH = a.lh(14) + (IP ? 3 : 4);    // (a choice's height, its row)
     const float TX = heading(a, X0, HY, "EFFECTS", "effects");
     const J *p = part(a, a.row);

@@ -160,10 +160,10 @@ inline void draw_tuning(App &a)
     TuningUi &T = g_tn;
     if (!T.t.is(J::OBJ))
         tn_take(call(a, "{\"call\":\"tuning\",\"open\":1,\"lists\":1}"));
-    // (the iPad's: its card from y 210 to 734, two pages -- the tuners and their shape; the Eastern tuning)
+    // (the iPad's: its card from y 210 to card_y1 + 6, two pages -- the tuners and their shape; the Eastern tuning)
     const bool IP = a.tab;
     static int page = 0;
-    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 266 : 394, Y1 = IP ? 728 : 1056, HY = IP ? 224 : 356;
+    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 266 : 394, Y1 = card_y1(a), HY = IP ? 224 : 356;
     const float LH = a.lh(14) + (IP ? 3 : 4);
     text(a, a.font, 14, heading(a, X0, HY, "TUNING", "tuning"), HY + 1, OWN, "every part");
     if (IP)

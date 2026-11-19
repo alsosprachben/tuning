@@ -57,7 +57,7 @@ inline void draw_strips_tab(App &a, float X0, float X1, float sy, float Y1);
 inline void draw_parts(App &a)
 {
     const int n = nparts(a);
-    const bool T = a.tab;               // (the iPad's layout: its card from y 210 to 734)
+    const bool T = a.tab;               // (the iPad's layout: its card from y 210 to card_y1 + 6)
     const float X0 = T ? 22 : 34, X1 = T ? 1111 : 1886, HY = T ? 224 : 356, BH = T ? 44 : 38, BY = T ? 216 : 346;
     // THE HEAD: the card's name, its message, LAYER, SPLIT, REMOVE
     const float TX = heading(a, X0, HY, "PARTS", "parts");
@@ -152,7 +152,7 @@ inline void draw_parts(App &a)
 
     // THE STRIPS: a part each, side by side
     if (T) {
-        draw_strips_tab(a, X0, X1, ly0 + n * lane + 10, 728);
+        draw_strips_tab(a, X0, X1, ly0 + n * lane + 10, card_y1(a));
         return;
     }
     const float sy = ly0 + n * lane + 14, sh = 1056 - sy;

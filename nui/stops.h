@@ -88,8 +88,8 @@ inline void draw_stops(App &a)
             T.organs = *o;
         T.for_row = a.row;
     }
-    const bool IP = a.tab;              // (the iPad's: its card from y 210 to 734)
-    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, HY = IP ? 224 : 356, Y0_ = IP ? 260 : 394, Y1_ = IP ? 728 : 1056;
+    const bool IP = a.tab;              // (the iPad's: its card from y 210 to card_y1 + 6)
+    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, HY = IP ? 224 : 356, Y0_ = IP ? 260 : 394, Y1_ = card_y1(a);
     const float TX = heading(a, X0, HY, "STOPS", "stops");
     const int prog = (int)num(&T.st, "program", -1);
     const std::string part_name = str(&T.st, "part");

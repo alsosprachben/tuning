@@ -64,7 +64,7 @@ inline void draw_matrix(App &a)
         lib_load(a);
     if ((int)num(&M.m, "row", -1) != a.row)
         mx_take(a, call(a, "{\"call\":\"matrix\"}"));
-    const bool IP = a.tab;              // (the iPad's: its card from y 210 to 734, no notes box: the ? has them)
+    const bool IP = a.tab;              // (the iPad's: its card from y 210 to card_y1 + 6, no notes box: the ? has them)
     const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 262 : 394, HY = IP ? 224 : 356;
     const float TX = heading(a, X0, HY, "MATRIX", "matrix");
     if (!M.m.is(J::OBJ) || M.t.size() < 11)
@@ -80,7 +80,7 @@ inline void draw_matrix(App &a)
     static const char *SRC[6] = {"Mod wheel", "Pitch bend", "Channel aftertouch", "Poly aftertouch", "CC1", "CC2"};
     static const char *DG[11] = {"", "", "", "LFO 1", "LFO 1", "LFO 1", "LFO 1", "LFO 2", "LFO 2", "LFO 2", "LFO 2"};
     static const char *DN[11] = {"Pitch", "Cutoff", "Amplitude", "Rate", "Pitch", "Filter", "Amp", "Rate", "Pitch", "Filter", "Amp"};
-    const float aboutH = IP ? 0 : 100, SW = IP ? 156 : 230, gy = Y0 + (IP ? 30 : 40), YB = (IP ? 728 : 1056) - aboutH - (IP ? 20 : 34);
+    const float aboutH = IP ? 0 : 100, SW = IP ? 156 : 230, gy = Y0 + (IP ? 30 : 40), YB = (card_y1(a)) - aboutH - (IP ? 20 : 34);
     const float cw = (X1 - X0 - SW) / 11, rh = (YB - gy) / 6;
     look::tray(a, X0, Y0, X1 - X0, YB - Y0, 9);
     // the destinations across (the LFOs' groups apart)

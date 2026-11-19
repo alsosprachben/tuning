@@ -199,7 +199,7 @@ inline void draw_synth(App &a)
         syn_refresh(a);
     const J *p = part(a, a.row);
     const int layers = (int)num(&Y.synth, "layers");
-    const bool T = a.tab;               // (the iPad's: its card from y 210 to 734, two pages)
+    const bool T = a.tab;               // (the iPad's: its card from y 210 to card_y1 + 6, two pages)
     const float HX = T ? 22 : 34, HY = T ? 224 : 356, BY = T ? 216 : 346, BH = T ? 44 : 38, HX1 = T ? 1105 : 1886;
     const float TX = heading(a, HX, HY, "SYNTH", "synth");
     if (layers <= 0) {
@@ -267,7 +267,7 @@ inline void draw_synth(App &a)
     float tot = 0;
     for (const Col &c : cols)
         tot += c.weight;
-    const float X0 = T ? 18 : 26, X1 = T ? 1115 : 1894, gap = T ? 6 : 8, top = T ? 266 : 394, bottom = T ? 728 : 1056;
+    const float X0 = T ? 18 : 26, X1 = T ? 1115 : 1894, gap = T ? 6 : 8, top = T ? 266 : 394, bottom = card_y1(a);
     const float avail = X1 - X0 - gap * (cols.size() - 1);
     float cx0 = X0;
     for (const Col &col : cols) {

@@ -88,10 +88,10 @@ inline void draw_control(App &a)
     if (!C.c.is(J::OBJ) || C.kinds.empty())
         ct_take(call(a, "{\"call\":\"control\",\"open\":1,\"kinds\":1}"));
     ct_flush(a);
-    // (the iPad's: its card from y 210 to 734, two pages -- the on-screen controls; the routes)
+    // (the iPad's: its card from y 210 to card_y1 + 6, two pages -- the on-screen controls; the routes)
     const bool IP = a.tab;
     static int page = 0;
-    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 266 : 394, Y1 = IP ? 728 : 1056, HY = IP ? 224 : 356;
+    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 266 : 394, Y1 = card_y1(a), HY = IP ? 224 : 356;
     const float TX = heading(a, X0, HY, "CONTROL", "control");
     if (IP)
         for (int pg = 0; pg < 2; pg++) {

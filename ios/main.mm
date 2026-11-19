@@ -32,6 +32,9 @@ int main(int argc, char *argv[])
 {
     (void)argc;
     (void)argv;
+    // LANDSCAPE ONLY: SDL lets a resizable window turn every way unless told
+    // (its hint, over the Info.plist's iPad orientations)
+    SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
     audio_session();
     NSString *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
     const std::string d = docs.UTF8String;

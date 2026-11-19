@@ -106,8 +106,8 @@ inline void draw_scenes(App &a)
         lib_load(a);
     if (!C.s.is(J::OBJ))
         sc_take(call(a, "{\"call\":\"scenes\",\"open\":1}"));
-    const bool IP = a.tab;              // (the iPad's: its card from y 210 to 734)
-    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 260 : 394, Y1 = IP ? 728 : 1056, HY = IP ? 224 : 356;
+    const bool IP = a.tab;              // (the iPad's: its card from y 210 to card_y1 + 6)
+    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 260 : 394, Y1 = card_y1(a), HY = IP ? 224 : 356;
     const float LH = a.lh(14) + (IP ? 3 : 4);
     heading(a, X0, HY, "SCENES", "scenes");
     if (!C.s.is(J::OBJ))

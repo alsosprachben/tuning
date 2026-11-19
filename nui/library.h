@@ -204,8 +204,8 @@ inline void draw_library(App &a)
     fams.push_back({"drums", "Drum kits"});
     fams.push_back({"mt32", "MT-32"});
     fams.push_back({"cm32p", "CM-64 PCM"});
-    const bool T = a.tab;               // (the iPad's: its card from y 210 to 734)
-    const float FX = T ? 20 : 34, FY = T ? 218 : 356, fw = T ? 196 : 196, fh = 44, fg = 6, Y1 = T ? 728 : 1056;
+    const bool T = a.tab;               // (the iPad's: its card from y 210 to card_y1 + 6)
+    const float FX = T ? 20 : 34, FY = T ? 218 : 356, fw = T ? 196 : 196, fh = 44, fg = 6, Y1 = card_y1(a);
     const bool searching = !L.q.empty();
     float MX;
     if (T) {                            // (the families a column that scrolls, 44-point rows)
