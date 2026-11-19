@@ -1393,7 +1393,11 @@ int nv_host_messenger_line(nv_host *h, char *out, int cap)
     return copy_out(w.empty() ? std::string(h->msgr_auto ? "-" : "") : w, out, cap);
 }
 int nv_host_messenger_reads(nv_host *h) { return h->msgr_reads ? 1 : 0; }
-void nv_host_set_messenger_reads(nv_host *h, int on) { h->messenger_reading(on != 0); }
+void nv_host_set_messenger_reads(nv_host *h, int on)
+{
+    h->msgr_reads_set = true;               // (the player's: kept over a Messenger's input opening)
+    h->messenger_reading(on != 0);
+}
 int nv_host_messenger_pre107(nv_host *h) { return h->msgr_pre107 ? 1 : 0; }
 void nv_host_set_messenger_pre107(nv_host *h, int on)
 {

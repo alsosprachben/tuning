@@ -3835,6 +3835,21 @@ int nv_host::drive_state(size_t row, double *out)
 
 // A MESSENGER's CHART read on every part (livetui's M, live's cc_map
 // "messenger": nvlive's for all its parts at once, --messenger's)
+// AN INPUT OPENED (MidiIns::opened, the reader's thread): a MESSENGER's --
+// its name its USB port's, "Moog Messenger" -- turns its knobs' reading on
+// (its chart over GM's, so SUB WAVE is the sub wave and not CC71's timbre),
+// unless the player switched the reading this run
+void nv_host::input_opened(const std::string &name)
+{
+    std::string l = name;
+    for (char &c : l)
+        c = (char)tolower((unsigned char)c);
+    if (l.find("messenger") == std::string::npos || msgr_reads || msgr_reads_set)
+        return;
+    messenger_reading(true);
+    fprintf(stderr, "nvlive: %s is a Messenger: its knobs read as its own (Setup: READ ITS KNOBS)\n", name.c_str());
+}
+
 void nv_host::messenger_reading(bool on)
 {
     msgr_reads = on;

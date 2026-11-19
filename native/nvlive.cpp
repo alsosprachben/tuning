@@ -640,6 +640,7 @@ int nv_host::run(int argc, char **argv)
     }
     signal(SIGINT, on_signal);
     signal(SIGTERM, on_signal);
+    ins.opened = [this](const std::string &n) { input_opened(n); };     // (a Messenger's input: its knobs read)
     reader = std::thread(midi_reader_ins, &ins, [this](Midi &&m) { input(std::move(m)); });
     // the register's jobs on their own thread, off the audio one (--reg-sync: in step)
     rsync = false; nort = getenv("TUNING_RT") && !strcmp(getenv("TUNING_RT"), "0"); nopanel = !isatty(1);

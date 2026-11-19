@@ -922,6 +922,9 @@ struct MidiIns {
     // ...and those unplugged while wanted (path, name): looked for again,
     // by name, until each is back -- the path may not be its old one
     std::vector<std::pair<std::string, std::string>> lost;
+    // ...and told of each it opens, by name (the host's: a Messenger's input
+    // turns its knobs' reading on -- nv_host::input_opened), on the reader's thread
+    std::function<void(const std::string &)> opened;
     void set(const std::vector<std::pair<std::string, std::string>> &w)
     {
         std::lock_guard<std::mutex> lk(mu);
@@ -1007,6 +1010,8 @@ inline void midi_reader_ins(MidiIns *ins, std::function<void(Midi &&)> push)
                         in.fd = f;
                         in.name = x.second;
                         open.emplace(x.first, std::move(in));
+                        if (ins->opened)
+                            ins->opened(x.second);
                     } else {
                         std::lock_guard<std::mutex> lk(ins->mu);
                         ins->err = x.second + ": " + strerror(errno);
@@ -1524,6 +1529,8 @@ struct nv_host {
     // its knobs read on every part (--messenger), the chart's firmware
     std::string msgr_out;                       // (a log's; a device's is msgr->where())
     bool msgr_reads = false, msgr_pre107 = false;
+    bool msgr_reads_set = false;            // (the player switched the reading this run: a Messenger's input no longer turns it on)
+    void input_opened(const std::string &name);
     MsgrOut *msgr = nullptr;                    // the Messenger's output (found by itself: msgr_auto)
     bool msgr_auto = false;
     bool msgr_connect(const std::string &path, const std::string &name);

@@ -569,7 +569,7 @@ const HELP = {
     intro: 'The Moog Messenger, when one is plugged in.',
     terms: [
       ['On …', 'Which MIDI input it is on.'],
-      ['READ ITS KNOBS', 'On: turning the Messenger\'s own knobs turns the same knobs on the Synth card.'],
+      ['READ ITS KNOBS', 'On: turning the Messenger\'s own knobs turns the same knobs on the Synth card. On by itself when a Messenger is the MIDI input (its name says so); switched off here, it stays off until the next start. Off, its knobs are read as General MIDI\'s: its SUB WAVE knob (CC71) turns a sound controller, not the sub wave.'],
       ['FIRMWARE BEFORE 1.0.7', 'Turn on if its firmware is older than 1.0.7, which sent the cutoff knob differently.'],
     ],
   },
