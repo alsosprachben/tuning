@@ -6283,15 +6283,24 @@ class TonewheelProperties(SynthProperties):
 
 
 class DrawbarOrganProperties(TonewheelProperties):
-    """GM 16. The console itself, no percussion, rotor on chorale."""
+    """GM 16. The console itself, no percussion, through its own speaker."""
     wheel_swell = True          # the expression pedal on the wheel (Synth.wheel_swell)
-    leslie = True
+    # NO LESLIE (Ben, 2026-11-19): only Rock Organ has one by default. The
+    # console plays through a Hammond's own speaker (cabinet.HammondSpinet,
+    # the L-102's, measured) with its valve clean -- half way to the edge of
+    # breakup, "a normal cabinet, with a valve, but not overdriven". The
+    # Leslie stays a choice on the part (the cards' CABINET).
+    leslie = False
     leslie_fast = False
+    cabinet = "hammond"
+    amp_drive = 0.5
     # HELD at its level (the mean of C4-G5's first second at velocity 100)
     # through the Leslie's measurement (leslie.py: the cabinet's response, the
     # two-rotor crossover, the horn; and GM 18's drive) and the wheels' (the key
-    # click, their purity, their leakage)
-    initial_gain = TonewheelProperties.initial_gain * 10 ** (0.937 / 20.0)
+    # click, their purity, their leakage) -- then through its own speaker and
+    # valve in the Leslie's place, 6.6 dB louder there, taken back out
+    # (examples/organ_level_hold.py)
+    initial_gain = TonewheelProperties.initial_gain * 10 ** ((0.937 - 6.618) / 20.0)
 
 
 class TonewheelPercussionProperties(TonewheelProperties):
@@ -6357,13 +6366,17 @@ class PercussiveOrganProperties(TonewheelProperties):
     """
     wheel_swell = True          # the expression pedal on the wheel (Synth.wheel_swell)
     default_stops = 0b100000001111   # 888 8, and the B3's third-harmonic percussion (bit 11)
-    leslie = True
+    # NO LESLIE, as GM 16 (DrawbarOrganProperties): its own speaker, its valve clean
+    leslie = False
     leslie_fast = False
+    cabinet = "hammond"
+    amp_drive = 0.5
     # HELD at its level (the mean of C4-G5's first second at velocity 100)
     # through the Leslie's measurement (leslie.py: the cabinet's response, the
     # two-rotor crossover, the horn; and GM 18's drive) and the wheels' (the key
-    # click, their purity, their leakage)
-    initial_gain = TonewheelProperties.initial_gain * 10 ** (0.152 / 20.0)
+    # click, their purity, their leakage) -- then through its own speaker and
+    # valve, 4.4 dB louder there, taken back out (examples/organ_level_hold.py)
+    initial_gain = TonewheelProperties.initial_gain * 10 ** ((0.152 - 4.439) / 20.0)
 
 
 class RockOrganProperties(TonewheelProperties):

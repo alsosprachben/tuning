@@ -267,9 +267,42 @@ class JazzChorus212(Cabinet):
     bell_order = 2.0
 
 
+class HammondSpinet(Cabinet):
+    """A Hammond's own speaker: the L-102 spinet's, in its console's open back
+    -- what a tonewheel plays through with no Leslie.
+
+    MEASURED 300 Hz-4 kHz from Peter Corbett's L102 takes (Pianobook; each
+    upper drawbar alone through its own speaker, close-miked): each take's
+    level over our wheels' own at its frequency (examples/tonecab_fit.py),
+    1.8 dB rms over sixth octaves, the drawbars agreeing within 2-4 dB:
+
+      870 Hz        a hollow, broad and deep (-6 dB): the cone between its
+                    piston band and its breakup.
+      1.5 kHz       presence, +6: the breakup, a paper cone's.
+      4.1 kHz       a shallow notch, and a gentle fall over 2.5 kHz (1st
+                    order): no tweeter, the cone's own top.
+
+    BELOW 300 Hz, THEORY (Ben, 2026-11-19): the takes' residual climbs to +30
+    dB at 87 Hz there -- the spinet's generator and its swell's loudness
+    compensation, not the cone -- so it is carried down from the cone's
+    physics: a 12" paper cone's free-air resonance near 80 Hz and a 2nd-order
+    roll-off under it, no box peak (an open back has no box), flat between.
+
+    A spinet's speaker, not a tone cabinet's (a PR-40's two 15" and two 12"):
+    no openly licensed recording of one was found (sources.md).
+    """
+    formants = ((1548.0, 600.0, 0.383),)
+    antiformants = ((869.6, 431.9, 0.690), (4082.0, 400.0, 0.276))
+    formant_floor = 0.9365
+    bore_corner_hz = 2500.0
+    bore_order = 1.105
+    bell_cutoff_hz = 80.0
+    bell_order = 2.0
+
+
 CABINETS = {"guitar12": Guitar12(), "guitar412": Guitar412(), "bass410": Bass410(),
             "rhodes": RhodesSuitcase(), "wurlitzer": WurlitzerInternal(),
-            "jc120": JazzChorus212()}
+            "jc120": JazzChorus212(), "hammond": HammondSpinet()}
 
 
 def get(name):

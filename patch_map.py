@@ -2908,7 +2908,8 @@ MAP_TONES = {
     # the honky-tonk's two extra strings further out: 14-30 cents, not 8-20
     (3, 3, 8): ("Honky-tonk 2", ("set", 3, {"string_detune_range": (14.0, 30.0)})),
     # the Leslie's TREMOLO, its fast speed (Leslie names them chorale and tremolo)
-    (3, 16, 8): ("Trem. Organ", ("set", 16, {"leslie_fast": True})),
+    (3, 16, 8): ("Trem. Organ", ("set", 16, {"leslie": True, "leslie_fast": True, "cabinet": None, "amp_drive": 0.0,
+                                         "initial_gain": __import__("tonelib").TonewheelProperties.initial_gain * 10 ** (0.937 / 20.0)})),   # (16's Leslie and level, as they were: 16 itself has none now)
     # the 1970s rock organ: 888 through a driven amp (Jon Lord's)
     (3, 16, 32): ("70's E.Organ", ("set", 16, {"default_stops": 0b111, "amp_drive": 1.5})),
     # 888 and the B3's third-harmonic percussion: Jimmy Smith's setting
