@@ -135,9 +135,10 @@ struct Server {
 
     bool listen_on(int p)
     {
-        lfd = ::socket(AF_INET, SOCK_STREAM | SOCK_CLOEXEC, 0);   // (not handed to the browser it opens: a window left from a crash kept the port)
+        lfd = ::socket(AF_INET, SOCK_STREAM, 0);
         if (lfd < 0)
             return false;
+        ::fcntl(lfd, F_SETFD, FD_CLOEXEC);      // (not handed to the browser it opens: a window left from a crash kept the port)
         int one = 1;
         setsockopt(lfd, SOL_SOCKET, SO_REUSEADDR, &one, sizeof one);
         sockaddr_in a{};
@@ -327,8 +328,9 @@ struct Server {
                 0, std::chrono::duration_cast<std::chrono::milliseconds>(next - std::chrono::steady_clock::now()).count());
             int n = ::poll(pf.data(), pf.size(), std::min(wait, 100));
             if (n > 0 && (pf[0].revents & POLLIN)) {
-                int fd = ::accept4(lfd, nullptr, nullptr, SOCK_CLOEXEC);
+                int fd = ::accept(lfd, nullptr, nullptr);
                 if (fd >= 0) {
+                    ::fcntl(fd, F_SETFD, FD_CLOEXEC);       // (macOS has no accept4: the flag after)
                     Client c;
                     c.fd = fd;
                     cs.push_back(c);
