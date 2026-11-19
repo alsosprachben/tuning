@@ -560,7 +560,7 @@ def program_trim(program, drum=False, gs=False):
     """The linear factor on a note's channel volume for its program -- or for
     its variation (VARIATION_TRIM_DB), where it has one -- and, in a file
     that speaks GS, GS_TRIM_DB's on top."""
-    v = getattr(program, "variation", 0)
+    v = getattr(program, "variation", 0) & CAB_MASK     # (a cabinet variant: its variation's trim)
     if not drum and v and ((int(program) & 0x7F), v) in VARIATION_TRIM_DB:
         db = VARIATION_TRIM_DB[(int(program) & 0x7F, v)]
     else:
@@ -606,7 +606,39 @@ def property_class_for_program(program):
 # player wants it, as a subclass of its capital program. Until then every
 # variation falls back to the capital tone, which is what a Sound Canvas does
 # with one it lacks.
-VARIATIONS = {}
+# (a part's cabinet choice rides a variation key over these bits: cab_key, below)
+CAB_SHIFT = 12
+CAB_MASK = (1 << CAB_SHIFT) - 1
+
+
+class _Variations(dict):
+    """VARIATIONS, which also answers for a variation's CABINET VARIANTS
+    (cab_key: the cabinet choice in the bits over CAB_SHIFT) -- made on
+    demand from the variation (or the capital) they are of, never stored, so
+    everything that walks the variations (the coverage, the export's VARS,
+    the trims) sees only GS's own."""
+
+    def get(self, key, default=None):
+        if isinstance(key, tuple) and len(key) == 2 and int(key[1]) >> CAB_SHIFT:
+            got = cab_variant(key[0], key[1])
+            return default if got is None else got
+        return dict.get(self, key, default)
+
+    def __contains__(self, key):
+        if isinstance(key, tuple) and len(key) == 2 and int(key[1]) >> CAB_SHIFT:
+            return cab_variant(key[0], key[1]) is not None
+        return dict.__contains__(self, key)
+
+    def __getitem__(self, key):
+        if isinstance(key, tuple) and len(key) == 2 and int(key[1]) >> CAB_SHIFT:
+            got = cab_variant(key[0], key[1])
+            if got is None:
+                raise KeyError(key)
+            return got
+        return dict.__getitem__(self, key)
+
+
+VARIATIONS = _Variations()
 # ...each one's level against GeneralUser GS's own tone (dB, as
 # PROGRAM_TRIM_DB); without one, its capital's trim
 VARIATION_TRIM_DB = {}
@@ -2945,3 +2977,117 @@ VARIATION_TRIM_DB.update(VARIATION_TRIM_FIT)
 VARIATION_TRIM_EAR = {(98, 2): -5.3, (48, 1): -0.4, (48, 2): -5.3}
 for _k, _db in VARIATION_TRIM_EAR.items():
     VARIATION_TRIM_DB[_k] = VARIATION_TRIM_DB.get(_k, PROGRAM_TRIM_DB.get(_k[0], 0.0)) + _db
+
+
+# THE CABINET A PART PLAYS THROUGH (Ben, 2026-11-19: "I want people to be
+# able to see what we are physically modeling for them"): an amplified
+# voice's speaker chosen on the part -- the voice's own, none (DIRECT), a
+# Leslie (a tonewheel's), or one of cabinet.CABINETS. A CHOICE is carried in
+# the patch's variation key, over CAB_SHIFT (cab_key), so a part switched
+# is a patch rebuilt as a program change rebuilds it, live and in files --
+# and a file selects it as a bank select does: tonelib.CABINET_CC (83), its
+# value CAB_CHOICES' index, read at the next program change.
+CAB_CHOICES = (None, "direct", "leslie", "hammond", "guitar12", "guitar412", "jc120",
+               "bass410", "rhodes", "wurlitzer")
+# ...what each is, for the cards (what we model and how we know it)
+CAB_ABOUT = {
+    None: "the voice's own",
+    "direct": "no speaker: the amplifier's output straight to the desk",
+    "leslie": "Leslie 122: horn and drum rotors, the cabinet's response measured (hammondman's takes)",
+    "hammond": "Hammond spinet speaker (the L-102's): measured 300 Hz-4 kHz, a 12\" cone's physics under",
+    "guitar12": "open-backed 1x12 guitar combo: voiced from the speaker's design",
+    "guitar412": "closed-back 4x12, Vintage 30s: fitted to measured impulse responses",
+    "jc120": "JC-120 2x12, closed back: voiced from its design, no recording",
+    "bass410": "sealed 4x10 bass cabinet, no tweeter: voiced from its design",
+    "rhodes": "Rhodes suitcase, four 12\" speakers: voiced from its design",
+    "wurlitzer": "Wurlitzer 200's two lid speakers: voiced from their design",
+}
+_CAB_CLASSES = {}
+
+
+def cab_key(variation, choice):
+    """The variation key a part plays with CAB_CHOICES[choice] (0 its own)."""
+    return (int(variation) & CAB_MASK) | (int(choice) << CAB_SHIFT)
+
+
+def cab_of(variation):
+    """(the variation, the cabinet choice) a variation key carries."""
+    return int(variation) & CAB_MASK, int(variation) >> CAB_SHIFT
+
+
+def amplified(cls):
+    """A voice that plays through a speaker of its own -- the ones the cards
+    offer a cabinet for: a cabinet, a Leslie, or a valve stage."""
+    return isinstance(cls, type) and bool(getattr(cls, 'cabinet', None) or getattr(cls, 'leslie', False)
+                                          or (getattr(cls, 'amp_drive', 0.0) or 0.0) > 0.0)
+
+
+def cab_choices(cls):
+    """The CAB_CHOICES indices a voice offers: none for an unamplified one;
+    the Leslie only on a tonewheel (its rotors are fitted to one)."""
+    if not amplified(cls):
+        return ()
+    tw = issubclass(cls, __import__("tonelib").TonewheelProperties)
+    return tuple(i for i, c in enumerate(CAB_CHOICES) if i and (c != "leslie" or tw))
+
+
+def cabinet_class(base, choice):
+    """BASE through CAB_CHOICES[choice]: its speaker swapped, all else its
+    own. A Leslie coming or going keeps the voice's level: the rotors' path
+    is quieter than a fixed speaker's by the voice's leslie_makeup_db
+    (examples/organ_level_hold.py), put back."""
+    k = (base, int(choice))
+    if k in _CAB_CLASSES:
+        return _CAB_CLASSES[k]
+    name = CAB_CHOICES[choice]
+    les0 = bool(getattr(base, 'leslie', False))
+    attrs = {'cab_choice': name}
+    if name == "leslie":
+        attrs.update(leslie=True, cabinet=None)
+    else:
+        attrs.update(leslie=False, cabinet=None if name == "direct" else name)
+    les1 = attrs['leslie']
+    mk = float(getattr(base, 'leslie_makeup_db', 0.0) or 0.0)
+    if les1 != les0 and mk:
+        attrs['initial_gain'] = base.initial_gain * 10.0 ** ((mk if les1 else -mk) / 20.0)
+    got = type("%s_cab_%s" % (base.__name__, name), (base,), attrs)
+    _CAB_CLASSES[k] = got
+    return got
+
+
+def cab_variant(program, variation):
+    """VARIATIONS' answer for a cabinet variant: the variation's (or the
+    capital's) class through the choice -- a routed one note by note --
+    or None where there is no such variation or the voice does not offer
+    that choice."""
+    p = int(program) & 0x7F
+    v, c = cab_of(variation)
+    if c <= 0 or c >= len(CAB_CHOICES):
+        return None
+    base = dict.get(VARIATIONS, (p, v)) if v else PROGRAM_CLASS.get(p, PluckedStringProperties)
+    if base is None or (p, v) in LAYERED:
+        return None
+    if isinstance(base, type):
+        return cabinet_class(base, c) if c in cab_choices(base) else None
+    if c not in cab_choices(base(60)):
+        return None
+    k = (p, int(variation))
+    if k not in _CAB_CLASSES:
+        def pick(note, _b=base, _c=c):
+            return cabinet_class(_b(note), _c)
+        _CAB_CLASSES[k] = pick
+    return _CAB_CLASSES[k]
+
+
+def cab_variation_keys():
+    """Every cabinet variant a voice offers: (program, key) -- the export's
+    VARS carry them (native.variation_tables)."""
+    out = []
+    for p in range(128):
+        for v in [0] + sorted(vv for (pp, vv) in dict.keys(VARIATIONS) if pp == p):
+            if v and (p, v) in LAYERED:
+                continue
+            c0 = (dict.get(VARIATIONS, (p, v)) if v else PROGRAM_CLASS.get(p, PluckedStringProperties))
+            c0 = c0 if isinstance(c0, type) else c0(60)
+            out.extend((p, cab_key(v, c)) for c in cab_choices(c0))
+    return out

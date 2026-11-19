@@ -4112,6 +4112,31 @@ def patch_variation(program, drums, variation):
     return v if ((int(program) & 0x7F), v) in __import__("patch_map").VARIATIONS else 0
 
 
+def _CABM():
+    return __import__("patch_map").CAB_MASK
+
+
+def with_cab(program, drums, variation, choice):
+    """The patch variation key for VARIATION through cabinet CHOICE (a
+    CAB_CHOICES index; 0 the voice's own): the choice where the voice offers
+    it, else the variation alone."""
+    _PM = __import__("patch_map")
+    v = patch_variation(program, drums, int(variation or 0) & _PM.CAB_MASK)
+    if choice and not drums:
+        k = _PM.cab_key(v, choice)
+        if ((int(program) & 0x7F), k) in _PM.VARIATIONS:
+            return k
+    return v
+
+
+def cab_index(name):
+    """A saved cabinet name's CAB_CHOICES index: None absent, 0 "own"."""
+    if name is None:
+        return None
+    ch = __import__("patch_map").CAB_CHOICES
+    return 0 if name == "own" else (ch.index(name) if name in ch else None)
+
+
 def pin_patches(keys):
     """The patches a live rig is holding, which the LRU must not evict."""
     with _PATCH_LOCK:
@@ -4187,6 +4212,10 @@ class Part:
         # Separate, an organ's ROT_SEP0). Kept across program changes
         self.rotary = None
         self.rotary_sep = None
+        # THE CABINET CHOSEN ON THE PART (Live.set_cabinet): a CAB_CHOICES
+        # index (patch_map), None the voice's own -- or, a file's, the
+        # channel's CC83 at its program change. Kept across program changes
+        self.cab = None
         self.cc_map = "gm"      # "messenger": its channel's CCs are a Messenger's chart
         # THE STANDARD ITS PATCH WAS PICKED IN (livetui.patch_tree): "gm", "sc1"-
         # "sc4" (a Sound Canvas level, its map), "mt32". Where the picker opens
@@ -4218,7 +4247,7 @@ class Part:
         # one's -- on a Messenger, recalling a patch sets every knob.
         old = getattr(self, "patch", None)
         if old is not None and (
-                (patch.program, patch.variation) != (old.program, old.variation)):
+                (patch.program, patch.variation & _CABM()) != (old.program, old.variation & _CABM())):
             self.synth = {}
             self.synth_b = {}
             self.drive = None
@@ -4227,7 +4256,7 @@ class Part:
         # patch made anew, the voice the same) KEEPS ITS REGISTRATION -- it
         # used to fall back to the default, a hand registration lost to a room
         if (old is not None and patch.organ and getattr(self, "drawn", None) is not None
-                and (patch.program, patch.variation, patch.drums) == (old.program, old.variation, old.drums)
+                and (patch.program, patch.variation & _CABM(), patch.drums) == (old.program, old.variation & _CABM(), old.drums)
                 and list(patch.rank_names) == list(old.rank_names)):
             return
         # Which stops are out, per part: two organ layers can differ.
@@ -4237,7 +4266,10 @@ class Part:
 
     # a Part delegates its patch identity to its patch
     program = property(lambda self: self.patch.program)
-    variation = property(lambda self: self.patch.variation)
+    # (the GS variation; a cabinet choice rides the patch's key over it --
+    # patch_map.cab_key -- read as `cabinet`)
+    variation = property(lambda self: self.patch.variation & __import__("patch_map").CAB_MASK)
+    cabinet = property(lambda self: self.patch.variation >> __import__("patch_map").CAB_SHIFT)
     drums = property(lambda self: self.patch.drums)
     organ = property(lambda self: self.patch.organ)
     tuner = property(lambda self: self.patch.tuner)
@@ -4281,6 +4313,8 @@ class Part:
                  muted=self.muted, drawn=sorted(self.drawn))
         if self.variation:
             d["bank"] = int(self.variation)       # the GS variation; absent = the capital tone
+        if self.cab is not None:                  # (its cabinet, chosen on the part: by name)
+            d["cabinet"] = __import__("patch_map").CAB_CHOICES[self.cab] or "own"
         if self.synth:
             d["synth"] = dict(self.synth)
         if self.synth_b:
@@ -4306,9 +4340,10 @@ class Part:
     @staticmethod
     def from_dict(d, progress=None, eastern=None):
         _base = d.get("tuner", "hybrid")
+        _cab = cab_index(d.get("cabinet"))
         patch = patch_for(d.get("program", 56), d.get("drums", False),
                           tuner_for(d.get("program", 56), d.get("drums", False), _base, eastern),
-                          progress, d.get("bank", 0))
+                          progress, with_cab(d.get("program", 56), d.get("drums", False), d.get("bank", 0), _cab or 0))
         p = Part(patch, d.get("channel"), d.get("lo", 0), d.get("hi", 127),
                  d.get("transpose", 0), d.get("level_db", 0.0))
         p.base_tuner = _base
@@ -4340,6 +4375,7 @@ class Part:
         p.cc_map = d.get("cc_map", "gm")
         p.std = d.get("std", "gm")
         p.fixed_touch = None if d.get("fixed_touch") is None else bool(d["fixed_touch"])
+        p.cab = _cab
         p.rotary = d.get("rotary") if d.get("rotary") in ("room", "mics") else None
         p.rotary_sep = (math.radians(max(0.0, min(180.0, float(d["rotary_spread"]))))
                         if d.get("rotary_spread") is not None else None)
@@ -4755,6 +4791,9 @@ class Live:
         # Rx.BANK SELECT: off after GM1 System On, on after GS Reset or GM 2 On.
         self.bank_msb = {}
         self.bank_lsb = {}
+        # ...and THE CABINET a file selects (tonelib.CABINET_CC, 83: a
+        # CAB_CHOICES index), latched as the bank is, read at the program change
+        self.cab_cc = {}
         # THE STANDARD (Sound Canvas map) a channel's map 0 plays -- 0 ours, 1
         # SC-55, 2 SC-88, 3 SC-88 Pro, 4 SC-8850 (blockrender.DEFAULT_MAP, the
         # --map option, the panel's standard) -- and a part's own, where a
@@ -6304,6 +6343,8 @@ class Live:
                 self.bank_msb[ch] = msg.value
             elif msg.control == 32:                 # bank select LSB
                 self.bank_lsb[ch] = msg.value
+            elif msg.control == T.CABINET_CC:       # the cabinet (a CAB_CHOICES index), latched as a bank
+                self.cab_cc[ch] = msg.value
             elif msg.control == 10:                 # pan
                 # THE LEVEL IMAGE FOLLOWS THE POT, THE TIME IMAGE DOES NOT --
                 # see Slab.repan. A note keeps the interaural delay it was
@@ -6527,8 +6568,10 @@ class Live:
                 _pd = _dr if (_said and part.channel == ch) else part.drums
                 # a drum set in the map, where it has its own (kit_in_map)
                 _pp = kit_in_map(_prog, _map) if _pd and _msb != T.GM2_DRUM_BANK else _prog
+                # (its cabinet: the part's own choice, else the channel's CC83)
+                _cb = part.cab if part.cab is not None else self.cab_cc.get(ch, 0)
                 want = (_pp, _pd, self._tuner_for(_pp, _pd, part.base_tuner),
-                        patch_variation(_pp, _pd, _var))
+                        with_cab(_pp, _pd, _var, _cb))
                 self._ask_patch(part, want)
             if self.patch_reqs:
                 self.patch_go.set()
@@ -8365,6 +8408,18 @@ class Live:
         if part.rotary != "mics":
             return 0.0
         return float(part.rotary_sep if part.rotary_sep is not None else self.ROT_SEP0)
+
+    def set_cabinet(self, part, choice):
+        """A PART's CABINET (the Effects and Stops cards' selector): a
+        CAB_CHOICES index, None the voice's own. Its patch is rebuilt through
+        it, as a program change rebuilds one; kept on the part across them."""
+        _PM = __import__("patch_map")
+        part.cab = None if choice is None else max(0, min(len(_PM.CAB_CHOICES) - 1, int(choice)))
+        want = (part.program, part.drums, part.tuner, with_cab(part.program, part.drums, part.variation, part.cab or 0))
+        self._ask_patch(part, want)
+        if self.patch_reqs:
+            self.patch_go.set()
+        self.dirty = True
 
     def set_rotary(self, part, mode, spread=None):
         """A PART's ROTARY HEARD (the Stops and Effects cards' switch): mode
@@ -11160,6 +11215,7 @@ class Live:
         self.slab.send = [1.0] * 256           # every channel back to the nominal distance
         self.bank_msb.clear()
         self.bank_lsb.clear()
+        self.cab_cc.clear()
         self.map0.clear()
         self.ch_drums.clear()
         # ...and the device-level state, BEFORE the per-channel loop re-pitches

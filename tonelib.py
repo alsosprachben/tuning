@@ -6301,6 +6301,11 @@ class DrawbarOrganProperties(TonewheelProperties):
     # valve in the Leslie's place, 6.6 dB louder there, taken back out
     # (examples/organ_level_hold.py)
     initial_gain = TonewheelProperties.initial_gain * 10 ** ((0.937 - 6.618) / 20.0)
+    # THE LESLIE's PATH IS QUIETER than a fixed speaker's, by this much (dB,
+    # examples/organ_level_hold.py, the valve as it is): put back where a
+    # part's cabinet choice brings the rotors in or takes them out
+    # (patch_map.cabinet_class), so the switch is heard as a speaker, not a fader
+    leslie_makeup_db = 6.649
 
 
 class TonewheelPercussionProperties(TonewheelProperties):
@@ -6376,6 +6381,7 @@ class PercussiveOrganProperties(TonewheelProperties):
     # two-rotor crossover, the horn; and GM 18's drive) and the wheels' (the key
     # click, their purity, their leakage)
     initial_gain = TonewheelProperties.initial_gain * 10 ** (0.152 / 20.0)
+    leslie_makeup_db = 4.482         # (the rotors' path under a fixed speaker's: as GM 16's)
 
 
 class RockOrganProperties(TonewheelProperties):
@@ -6389,6 +6395,7 @@ class RockOrganProperties(TonewheelProperties):
     # two-rotor crossover, the horn; and GM 18's drive) and the wheels' (the key
     # click, their purity, their leakage)
     initial_gain = TonewheelProperties.initial_gain * 10 ** (1.800 / 20.0)
+    leslie_makeup_db = 6.252         # (the rotors' path under a fixed speaker's: as GM 16's)
     # RE-VOICED after tubeamp's units fix. The distortion had been arriving with
     # the valve stage's own gain still on it -- 8 to 9.5 dB hot against a dry path
     # at unity -- so every drive in this file was set to sound right through an
@@ -23391,6 +23398,13 @@ WHEEL_CC = {'vibrato': 1, 'lfo2': 1, 'crescendo': 4, 'swell': 11, 'drive': 12, '
 # its own way (an organ's in the room, a Rotary type's mics at Separate).
 # A note hears the value at its onset.
 ROTARY_CC = 82
+
+# THE CABINET (patch_map.CAB_CHOICES, Ben 2026-11-19): CC83 beside the
+# rotary heard -- its value a choice's index (0 the voice's own, 1 direct, 2
+# a Leslie, 3 the Hammond's own speaker, ...), latched as a bank select is
+# and read at the channel's next program change; a choice the voice does not
+# offer leaves it its own.
+CABINET_CC = 83
 
 # CC67 for the note being built, set by the renderer exactly as
 # bagpipe_drones and honky_detune are: a per-note fact that reaches the voice

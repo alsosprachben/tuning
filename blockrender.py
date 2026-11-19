@@ -671,6 +671,7 @@ def parse(path):
     def _map_of(ch):
         return _blsb.get(ch, 0) or _map0.get(ch, DEFAULT_MAP)
     _var = {}                # the channel's variation (GS bank), from its last program change
+    _cabsel = {}             # its cabinet (CC83, tonelib.CABINET_CC), latched as a bank: read at the program change
     # THE DRUM INSTRUMENTS' OWN SETTINGS (GS): per channel, [(t, seq, key,
     # param, value)] from the drum NRPNs (18-1F rr) and the drum setup SysEx
     # (41 m p rr), key None with 'reset' where a drum set change or a reset
@@ -866,6 +867,14 @@ def parse(path):
                 _pr = kit_in_map(_pr, _map_of(msg.channel))
             _drums[msg.channel] = _dr
             ch_prog[msg.channel] = _pr
+            # ...THROUGH THE CABINET the channel's CC83 chose (patch_map.cab_key),
+            # where its voice offers that one: the variation's key carries it
+            _cbs = _cabsel.get(msg.channel, 0)
+            if _cbs and not _dr:
+                import patch_map as _PMC
+                _vb = _var_ if _var_ and ((_pr & 0x7F), _var_) in VARIATIONS else 0
+                if ((_pr & 0x7F), _PMC.cab_key(_vb, _cbs)) in VARIATIONS:
+                    _var_ = _PMC.cab_key(_vb, _cbs)
             _var[msg.channel] = 0 if _dr else _var_
             if _dr and msg.channel in dedit:
                 # "When the Drum Set is changed, DRUM SETUP PARAMETER values
@@ -884,6 +893,8 @@ def parse(path):
                 _bmsb[msg.channel] = msg.value
             elif msg.control == 32:
                 _blsb[msg.channel] = msg.value
+            elif msg.control == T.CABINET_CC:
+                _cabsel[msg.channel] = msg.value
             ctrl.setdefault(msg.channel, {})[msg.control] = msg.value
             if msg.channel in _cmx:
                 _cmx_upd(t, msg.channel)
@@ -1034,7 +1045,7 @@ def parse(path):
                 # its whole sound set is addressed through it. Every program
                 # goes to 0, as live's does; this renderer kept them.
                 _rxbank[0] = _lvl != 1
-                _bmsb.clear(); _blsb.clear(); _drums.clear(); ch_prog.clear(); _var.clear()
+                _bmsb.clear(); _blsb.clear(); _drums.clear(); ch_prog.clear(); _var.clear(); _cabsel.clear()
                 _map0.clear()           # "When GS Reset is received ... 00: SELECTED"
                 _rmap.clear()
                 efxev.append((t, ('reset',)))
