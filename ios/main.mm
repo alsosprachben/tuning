@@ -40,13 +40,39 @@ int main(int argc, char *argv[])
     // controller that prefers it locked (prefersInterfaceOrientationLocked,
     // new in 26: SDL's controller is given it here, before its window is made)
     SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+    // ...locked only once landscape: the lock holds the orientation the scene
+    // is in, so the scene is first asked for landscape (its geometry, when its
+    // window appears) and the lock preferred from then on
     if (Class vc = NSClassFromString(@"SDL_uikitviewcontroller")) {
         class_replaceMethod(vc, @selector(prefersInterfaceOrientationLocked),
-                            imp_implementationWithBlock(^BOOL(id) { return YES; }), "B@:");
+                            imp_implementationWithBlock(^BOOL(id me) {
+                                UIWindowScene *sc = ((UIViewController *)me).view.window.windowScene;
+                                return sc && UIInterfaceOrientationIsLandscape(sc.effectiveGeometry.interfaceOrientation);
+                            }),
+                            "B@:");
         class_replaceMethod(vc, @selector(supportedInterfaceOrientations),
                             imp_implementationWithBlock(^NSUInteger(id) { return UIInterfaceOrientationMaskLandscape; }),
                             "Q@:");
     }
+    [[NSNotificationCenter defaultCenter]
+        addObserverForName:UIWindowDidBecomeKeyNotification object:nil queue:[NSOperationQueue mainQueue]
+                usingBlock:^(NSNotification *n) {
+                    UIWindow *w = (UIWindow *)n.object;
+                    UIWindowScene *sc = w.windowScene;
+                    if (!sc)
+                        return;
+                    UIWindowSceneGeometryPreferencesIOS *gp =
+                        [[UIWindowSceneGeometryPreferencesIOS alloc] initWithInterfaceOrientations:UIInterfaceOrientationMaskLandscape];
+                    [sc requestGeometryUpdateWithPreferences:gp
+                                                errorHandler:^(NSError *e) { NSLog(@"clavitone: landscape refused: %@", e); }];
+                    UIViewController *rc = w.rootViewController;
+                    [rc setNeedsUpdateOfSupportedInterfaceOrientations];
+                    // (the lock once the turn is made: asked again after it)
+                    for (double t : {0.3, 1.0, 2.5})
+                        dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(t * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+                            [rc setNeedsUpdateOfPrefersInterfaceOrientationLocked];
+                        });
+                }];
     audio_session();
     NSString *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
     const std::string d = docs.UTF8String;
