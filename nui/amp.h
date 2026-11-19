@@ -10,7 +10,8 @@
 //
 // ...and ahead of the valve, a guitar's, a bass's or a Clavinet's PICKUP
 // (patch_map.PICKUP_FAMILIES): its switch drawn as the instrument's own --
-// a Stratocaster's 5-way blade, a 3-way toggle, the D6's two rockers (Ben:
+// a 5-way blade (the Stratocaster's, the Ibanez's), a Jazz Bass's two volume
+// knobs, the D6's two rockers (Ben:
 // "switch gadgets, like the knobs, more familiar to guitar players") --
 // over the string, its coils where they sit, the ones heard lit.
 #pragma once
@@ -46,7 +47,8 @@ inline void amp_open(App &a, bool on)
 }
 
 // THE PICKUP SWITCH, drawn as its instrument's (the family's "switch"):
-// "blade5" a Stratocaster's blade in its slot, "toggle3" a 3-way toggle in
+// "blade5" a 5-way blade in its slot, "knobs2" a Jazz Bass's two volume
+// knobs, "toggle3" a 3-way toggle (no family's now; kept) in
 // its ring, "rockers" the Clavinet D6's two rocker tabs (A/B, C/D). pos the
 // choices in the switch's order, labels theirs, now the one it is on.
 // Returns the choice tapped, -1 none
@@ -98,8 +100,9 @@ inline int pk_switch(App &a, const std::string &kind, float x, float y, float w,
                        TIP_D, 1.5f * k);
     } else if (kind == "rockers") {
         // THE D6's ROCKERS: A/B and C/D, each tab down on one half -- A C the
-        // centre pickup, B C the bridge, A D both, B D both against each other
-        static const int AB[8] = {0, 0, 0, 0, 0, 1, 0, 1}, CD[8] = {0, 0, 0, 0, 0, 0, 1, 1};
+        // centre pickup, B C the bridge, B D both in phase, A D both against
+        // each other (the DAFx-12 paper's Table 1)
+        static const int AB[8] = {0, 0, 0, 0, 0, 1, 1, 0}, CD[8] = {0, 0, 0, 0, 0, 0, 1, 1};
         const int ab = AB[now & 7], cd = CD[now & 7];
         const float tw = std::min(110.0f, (w - 30) / 2), th = std::min(120.0f, h - 30), gx = x + (w - 2 * tw - 30) / 2;
         static const char *NM[2][2] = {{"A", "B"}, {"C", "D"}};
@@ -117,7 +120,7 @@ inline int pk_switch(App &a, const std::string &kind, float x, float y, float w,
                 text_c(a, a.bold, 21, rx + tw / 2, hy + th / 4 - a.lh(21) / 2 - 1, pressed ? LCD : SILK, NM[r][half]);
                 // (a tap on a half: that rocker down there, the other as it is)
                 const int nab = r ? ab : half, ncd = r ? half : cd;
-                const int c = nab ? (ncd ? 7 : 5) : (ncd ? 6 : 1);
+                const int c = nab ? (ncd ? 6 : 5) : (ncd ? 7 : 1);
                 ImGui::SetCursorScreenPos(Q(rx, hy));
                 ImGui::PushID("rock");
                 ImGui::PushID(r * 2 + half);
@@ -130,6 +133,43 @@ inline int pk_switch(App &a, const std::string &kind, float x, float y, float w,
         for (int i = 0; i < n; i++)
             if (pos[(size_t)i] == now)
                 text_c(a, a.bold, 14, x + w / 2, y + th + 18, LCD, labels[(size_t)i]);
+    } else if (kind == "knobs2") {
+        // A JAZZ BASS's TWO VOLUME KNOBS, neck and bridge, each fully up (10)
+        // or off: a tap turns one up or off -- one always up
+        const bool nk = now == 1 || now == 6 || now == 0, bk = now == 5 || now == 6 || now == 0;
+        const float R = std::min(46.0f, h * 0.3f), cy = y + R + 14;
+        for (int s = 0; s < 2; s++) {
+            const bool up = s ? bk : nk;
+            const float cx = x + w * (s ? 0.7f : 0.3f);
+            const float A0 = -135, A1 = 135, deg = 3.14159265f / 180.0f;
+            auto pt = [&](float rr, float dg) {
+                const float tt = (dg - 90) * deg;
+                return Q(cx + rr * std::cos(tt), cy + rr * std::sin(tt));
+            };
+            d->PathClear();
+            for (int i = 0; i <= 40; i++)
+                d->PathLineTo(pt(R * 0.92f, A0 + (A1 - A0) * i / 40));
+            d->PathStroke(IM_COL32(0x15, 0x17, 0x1a, 255), 0, 4.0f * k);
+            if (up) {
+                for (int i = 0; i <= 40; i++)
+                    d->PathLineTo(pt(R * 0.92f, A0 + (A1 - A0) * i / 40));
+                d->PathStroke(LCD, 0, 4.0f * k);
+            }
+            for (int n = 0; n <= 10; n++)       // (its numbers' ticks, 0 to 10)
+                d->AddLine(pt(R * 1.02f, A0 + (A1 - A0) * n / 10), pt(R * 1.1f, A0 + (A1 - A0) * n / 10), SILK_DIM, 1.2f * k);
+            look::knob_cap(a, cx, cy, R * 0.68f, up ? A1 : A0);
+            text_c(a, a.bold, 14, cx, cy + R + 12, up ? LCD : SILK_DIM, s ? "BRIDGE" : "NECK");
+            text_c(a, a.font, 14, cx, cy + R + 12 + a.lh(14) + 2, up ? LCD : SILK_DIM, up ? "10" : "0");
+            const bool n2 = s ? nk : !nk, b2 = s ? !bk : bk;    // (this knob turned over, the other as it is)
+            const int c = n2 && b2 ? 6 : n2 ? 1 : b2 ? 5 : (s ? 1 : 5);
+            ImGui::SetCursorScreenPos(Q(cx - R - 10, cy - R - 10));
+            ImGui::PushID("jbk");
+            ImGui::PushID(s);
+            if (ImGui::InvisibleButton("z", ImVec2((2 * R + 20) * k, (2 * R + 50) * k)))
+                hit = c;
+            ImGui::PopID();
+            ImGui::PopID();
+        }
     } else {
         // THE TOGGLE: its ring, the lever tilted to the neck (up), straight
         // out (both) or to the bridge (down), its cream tip; the positions named beside

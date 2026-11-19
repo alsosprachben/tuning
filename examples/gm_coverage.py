@@ -2210,7 +2210,7 @@ def about_json(path):
     # switch (the card draws it), its choices in the switch's order (neck to
     # bridge) and each choice's label, what it is, its coils' places --
     # with each voice's family and its own choice (else the nearest), by program
-    pk_order = {"strat": [1, 2, 3, 4, 5], "ibanez": [1, 6, 5], "jbass": [1, 6, 5], "clav": [1, 5, 6, 7]}
+    pk_order = {"strat": [1, 2, 3, 4, 5], "ibanez": [1, 2, 6, 4, 5], "jbass": [1, 6, 5], "clav": [1, 5, 6, 7]}
     pickups = {f: {"name": d["name"], "switch": d["switch"], "order": pk_order[f],
                    "choices": {str(c): [e["label"], e["about"], list(e.get("points", ()))]
                                for c, e in d.items() if isinstance(c, int)}}

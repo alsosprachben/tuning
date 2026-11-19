@@ -3055,18 +3055,33 @@ PICKUP_FAMILIES = {
         5: dict(points=(0.065,), turns=_STRAT_BRIDGE_T, res=_STRAT_RES / _STRAT_BRIDGE_T, label="1 BRIDGE",
                 about="The bridge single coil, 42 mm from the saddles, wound hotter (6.2 k against 5.8 k): bright and thin. Derived."),
     },
+    # (its switch: Ibanez's 5-way for two humbuckers, as DiMarzio's chart of
+    # the "Ibanez 2-Humbucker Universal" wiring numbers it -- 1 neck, 2 the neck
+    # humbucker's coils in parallel, 3 neck and bridge, 4 the two inside coils,
+    # 5 bridge. The RG2820's own sheet not found: its line's switch, not
+    # its own confirmed. The inside coils: the neck's bridge-side (0.23) and
+    # the bridge's neck-side (0.077), in parallel)
     "ibanez": {
-        "name": "Ibanez RG2820", "switch": "toggle3",
-        1: dict(points=(0.23, 0.258), turns=0.69, res=_IB_N_RES, q=1.153, label="NECK",
+        "name": "Ibanez RG2820", "switch": "blade5",
+        1: dict(points=(0.23, 0.258), turns=0.69, res=_IB_N_RES, q=1.153, label="1 NECK",
                 about="The neck humbucker: warm, its two coils' null darkening the top. Fitted to recordings (IDMT, the RG2820)."),
+        2: dict(points=(0.23, 0.258), signs=(0.5, 0.5), turns=0.69, res=2.0 * _IB_N_RES, q=1.153, label="2",
+                about="The neck humbucker's two coils in parallel, not in series: thinner and brighter, nearer a "
+                      "single coil, its hum still cancelled. Derived from the neck's fit (the load's inductance a "
+                      "quarter, its resonance an octave up)."),
         6: dict(points=(0.23, 0.258, 0.049, 0.077), signs=(0.345, 0.345, 0.715, 0.715), turns=1.0,
-                res=(_IB_N_RES ** 2 + _IB_B_RES ** 2) ** 0.5, q=(1.153 + 0.7739) / 2.0, label="BOTH",
+                res=(_IB_N_RES ** 2 + _IB_B_RES ** 2) ** 0.5, q=(1.153 + 0.7739) / 2.0, label="3 BOTH",
                 about="Both humbuckers in parallel: derived from the two fitted."),
-        5: dict(points=(0.049, 0.077), turns=1.43, res=_IB_B_RES, q=0.7739, label="BRIDGE",
+        4: dict(points=(0.23, 0.077), signs=(0.345, 0.715), turns=1.0,
+                res=_SQ2 * (_IB_N_RES ** 2 + _IB_B_RES ** 2) ** 0.5, q=(1.153 + 0.7739) / 2.0, label="4",
+                about="The two inside coils -- the neck's bridge-side, the bridge's neck-side -- in parallel: "
+                      "the in-between quack of a single-coil guitar from a humbucker one. Derived from the two fitted."),
+        5: dict(points=(0.049, 0.077), turns=1.43, res=_IB_B_RES, q=0.7739, label="5 BRIDGE",
                 about="The bridge humbucker, wound hot: the one that drives the amp. Fitted to recordings (IDMT, the RG2820)."),
     },
     "jbass": {
-        "name": "Jazz Bass", "switch": "toggle3",
+        # (no switch: its two volume knobs, each turned fully up or off)
+        "name": "Jazz Bass", "switch": "knobs2",
         1: dict(points=(0.168,), turns=2.0, res=4867.0 / _SQ2, label="NECK",
                 about="The neck coil alone: the thump. Derived from the pair fitted."),
         6: dict(points=(0.098, 0.168), turns=1.0, res=4867.0, label="BOTH",
@@ -3080,9 +3095,11 @@ PICKUP_FAMILIES = {
                 about="The centre pickup alone, above the strings: warm. The one the recordings were played on (fitted)."),
         5: dict(clav="bridge", label="B C \xb7 BRIDGE",
                 about="The bridge pickup alone, under the strings 4 cm from their ends: bright and thin."),
-        6: dict(clav="both", label="A D \xb7 BOTH",
+        # (the letters the DAFx-12 paper's Table 1: A C centre, B C bridge,
+        # A D both in ANTI-phase, B D both in phase)
+        6: dict(clav="both", label="B D \xb7 BOTH",
                 about="Both pickups in phase: full."),
-        7: dict(clav="anti", label="B D \xb7 ANTI",
+        7: dict(clav="anti", label="A D \xb7 ANTI",
                 about="Both pickups against each other: the fundamental cancels -- hollow, the funk sound."),
     },
 }

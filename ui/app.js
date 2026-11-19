@@ -616,8 +616,9 @@ async function ampAsk(open) {
 function pkSwitchSvg(kind, order, labels, lit) {
   const at = Math.max(0, order.indexOf(lit));
   if (kind === 'rockers') {
-    const AB = { 1: 0, 5: 1, 6: 0, 7: 1 }, CD = { 1: 0, 5: 0, 6: 1, 7: 1 }, ab = AB[lit] || 0, cd = CD[lit] || 0;
-    const pick = (r, half) => { const nab = r ? ab : half, ncd = r ? half : cd; return nab ? (ncd ? 7 : 5) : (ncd ? 6 : 1); };
+    // (A C centre, B C bridge, B D both in phase, A D both in anti-phase: the DAFx-12 paper's Table 1)
+    const AB = { 1: 0, 5: 1, 6: 1, 7: 0 }, CD = { 1: 0, 5: 0, 6: 1, 7: 1 }, ab = AB[lit] || 0, cd = CD[lit] || 0;
+    const pick = (r, half) => { const nab = r ? ab : half, ncd = r ? half : cd; return nab ? (ncd ? 6 : 5) : (ncd ? 7 : 1); };
     let s = '<svg viewBox="0 0 260 150" class="pk-svg">';
     [['A', 'B'], ['C', 'D']].forEach((nm, r) => {
       const x = 30 + r * 110, down = r ? cd : ab;
@@ -630,6 +631,24 @@ function pkSwitchSvg(kind, order, labels, lit) {
       });
     });
     return s + `<text x="130" y="144" text-anchor="middle" class="pk-t on">${labels[order.indexOf(lit)] || ''}</text></svg>`;
+  }
+  if (kind === 'knobs2') {
+    // A JAZZ BASS's TWO VOLUME KNOBS, each fully up (10) or off: a tap turns one over -- one always up
+    const nk = [0, 1, 6].includes(lit), bk = [0, 5, 6].includes(lit);
+    let s = '<svg viewBox="0 0 260 150" class="pk-svg">';
+    [nk, bk].forEach((up, i) => {
+      const cx = i ? 182 : 78, cy = 58, R = 42, ang = d => (d - 90) * Math.PI / 180, P = (r, d) => [cx + r * Math.cos(ang(d)), cy + r * Math.sin(ang(d))];
+      const arc = r => { const [x0, y0] = P(r, -135), [x1, y1] = P(r, 135); return `M${x0} ${y0} A${r} ${r} 0 1 1 ${x1} ${y1}`; };
+      const n2 = i ? nk : !nk, b2 = i ? !bk : bk, c = n2 && b2 ? 6 : n2 ? 1 : b2 ? 5 : (i ? 1 : 5);
+      const [px, py] = P(R * 0.5, up ? 135 : -135);
+      s += `<g data-c="${c}" class="pk-hit"><rect x="${cx - 55}" y="0" width="110" height="150" fill="transparent"/>` +
+        `<path d="${arc(R)}" fill="none" stroke="#15171a" stroke-width="4"/>` + (up ? `<path d="${arc(R)}" fill="none" stroke="var(--lcd)" stroke-width="4"/>` : '') +
+        `<circle cx="${cx}" cy="${cy}" r="${R * 0.68}" fill="#3a3f45" stroke="#15171a" stroke-width="2"/>` +
+        `<line x1="${cx}" y1="${cy}" x2="${px}" y2="${py}" stroke="#eeeadc" stroke-width="4" stroke-linecap="round"/>` +
+        `<text x="${cx}" y="124" text-anchor="middle" class="pk-t${up ? ' on' : ''}">${i ? 'BRIDGE' : 'NECK'}</text>` +
+        `<text x="${cx}" y="142" text-anchor="middle" class="pk-t${up ? ' on' : ''}">${up ? '10' : '0'}</text></g>`;
+    });
+    return s + '</svg>';
   }
   if (kind === 'toggle3') {
     const cx = 60, cy = 75, ang = [-1, 0, 1], a = ang[Math.min(at, 2)], ex = cx + 16 * Math.abs(a), ey = cy + a * 46;
