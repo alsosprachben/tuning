@@ -16,11 +16,28 @@
 namespace nui {
 
 struct AmpUi {
-    J st;                               // ("amp": kind, drive [now, voice, mine], speed, leslie)
-    double asked = -1.0;                // (when it was last asked: four times a second while shown)
+    J st;                               // ("amp": kind, drive [now, voice, mine], speed, leslie, wheel)
+    bool open = false;                  // (the engine told the card is up: it pushes "amp" as it changes)
     int for_row = -1;
 };
 static AmpUi g_amp;
+
+// the engine's push: the part's amp as it moved (a wheel, a speed, a drive)
+inline void amp_take(App &a, const J &st)
+{
+    if ((int)num(&st, "row", -1) == a.row)
+        g_amp.st = st;
+}
+// ...the card up or down (nui.cpp: when another card is shown)
+inline void amp_open(App &a, bool on)
+{
+    if (g_amp.open == on)
+        return;
+    g_amp.open = on;
+    J r = call(a, std::string("{\"call\":\"amp\",\"row\":") + std::to_string(a.row) + ",\"open\":" + (on ? "1" : "0") + "}");
+    if (const J *s = r.get("amp"))
+        amp_take(a, *s);
+}
 
 inline void draw_amp(App &a)
 {
@@ -28,13 +45,12 @@ inline void draw_amp(App &a)
     const bool IP = a.tab;
     const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, HY = IP ? 224 : 356, Y0 = IP ? 266 : 394, Y1 = card_y1(a);
     const float LH = a.lh(14) + (IP ? 3 : 4);
-    if (M.for_row != a.row || ImGui::GetTime() - M.asked > 0.25) {
+    amp_open(a, true);                  // (the engine pushes it as it moves: nui.cpp's poll, amp_take)
+    if (M.for_row != a.row) {           // (another part: its amp asked at once)
         J r = call(a, "{\"call\":\"amp\",\"row\":" + std::to_string(a.row) + "}");
         if (const J *s = r.get("amp"))
             M.st = *s;
-        M.asked = ImGui::GetTime();
         M.for_row = a.row;
-        a.animate = true;               // (the speed and the drive move under a file or a keyboard)
     }
     const float TX = heading(a, X0, HY, "AMP", "amp");
     const J *p = part(a, a.row);

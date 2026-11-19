@@ -1455,6 +1455,7 @@ void nv_host_set_rotary(nv_host *h, int row, int mode, double spread_deg)
         h->part_rotary(i, mode, spread_deg < 0.0 ? -1.0 : std::min(180.0, spread_deg) * M_PI / 180.0);
 }
 
+long nv_host_amp_seq(nv_host *h) { return nv_part_amp_seq(h->part); }
 int nv_host_amp(nv_host *h, int row, double *out)
 {
     size_t i;

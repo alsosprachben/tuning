@@ -143,6 +143,8 @@ static void draw(App &a)
         look::module(a, 14, 338, 1892, 728, 10.0f);
     }
     piano_card(a, a.card == "piano");   // (the engine pushes the pedals only while it is open)
+    if (a.card != "amp")
+        amp_open(a, false);             // (...and the amp's only while its card is)
     drums_card(a, a.card == "drums");   // (...and the kit and its hits)
     effects_card(a, a.card == "effects");
     matrix_card(a, a.card == "matrix");
@@ -168,7 +170,7 @@ static void draw(App &a)
     } else if (a.card == "drums") {
         draw_drums(a);
     } else if (a.card == "amp") {
-        draw_amp(a);
+        draw_amp(a);                    // (amp_open: the engine pushes the card's state while it is up)
     } else if (a.card == "effects") {
         draw_effects(a);
     } else if (a.card == "matrix") {
@@ -264,6 +266,10 @@ static bool poll(App &a)
     }
     if (const J *x = m.get("piano")) {
         piano_take(a, *x);
+        changed = true;
+    }
+    if (const J *x = m.get("amp")) {       // (the AMP card's: its valve, its Leslie, as a wheel or a file moves them)
+        amp_take(a, *x);
         changed = true;
     }
     if (const J *x = m.get("stops")) {     // (the part's registration: a file's, a preset's, a new organ)

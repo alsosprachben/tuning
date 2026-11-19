@@ -13399,9 +13399,29 @@ struct Part {
             control(e.ch, e.a, e.b, n0);
     }
 
+    // THE AMP CARD's CHANGES (its push, nv_part_amp_seq): a signature of what
+    // the card shows -- the half-moon, each patch's drive and Leslie, the mod
+    // wheel's drive steps -- read once a block; amp_seq counts its changes, so
+    // the interface asks for the card's state only when it moved
+    double amp_sig = -1.0;
+    std::atomic<long> amp_seq{0};
+    void amp_mark()
+    {
+        double s = half_moon * 1.0e6;
+        for (size_t i = 0; i < patches.size(); i++)
+            s += (patches[i].amp * 31.0 + patches[i].drive * 7.0 + (patches[i].leslie ? 3.0 : 0.0)) * (double)(i + 1);
+        for (const auto &d : drive_step)
+            s += 1000.0 * d.second * (double)(d.first % 97 + 1);
+        if (s != amp_sig) {
+            amp_sig = s;
+            amp_seq.fetch_add(1, std::memory_order_relaxed);
+        }
+    }
+
     void block(long long n0, long long blk)
     {
         cur_blk = blk;
+        amp_mark();
         if (!wind_st.empty() || !wind_spent.empty())    // the organs' chests, before the block's events (live's callback)
             wind_block(n0, blk);
         if (!cutting.empty())
@@ -14427,6 +14447,8 @@ void nv_part_mts_ref(void *h, int note, double hz)
 }
 
 void nv_part_block(void *h, long long n0, long long blk) { ((nv::slab::Part *)h)->block(n0, blk); }
+// ...the AMP card's changes so far (Part::amp_mark's): read from any thread
+long nv_part_amp_seq(void *h) { return h ? ((nv::slab::Part *)h)->amp_seq.load(std::memory_order_relaxed) : 0; }
 
 // the Moog's tables for a check: 0 FT, 1 KN (floats, n of them; how many there are)
 long nv_part_moog_table(void *h, int which, float *out, long n)

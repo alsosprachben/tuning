@@ -162,7 +162,7 @@ async function select(row) {
   if (s.stops && s.stops.row === S.row) setStops(s.stops);
   if (card === 'piano') { const r = await Wire.call('piano'); if (r.piano) setPiano(r.piano); }
   if (card === 'effects') drawEffects();
-  if (card === 'amp') ampPoll(true);
+  if (card === 'amp') ampAsk(true);
   if (card === 'control') drawControl();
   if (card === 'matrix') { const r = await Wire.call('matrix'); if (r.matrix) setMatrix(r.matrix); }
   if (card === 'drums') { DR.sel = null; const r = await Wire.call('drums'); if (r.drums) setDrums(r.drums); }
@@ -220,8 +220,8 @@ function showCard(id) {
   if (id === 'library') drawTiles(true);
   if (id === 'synth') drawSynth();
   if (id === 'stops') drawStops();
-  if (id === 'amp') ampPoll(true);
   Wire.call('piano', { open: id === 'piano' ? 1 : 0 }).then(r => { if (r.piano) setPiano(r.piano); });
+  ampAsk(id === 'amp');
   Wire.call('drums', { open: id === 'drums' ? 1 : 0, sets: DR.sets ? 0 : 1 }).then(r => { if (r.drums) setDrums(r.drums); });
   Wire.call('setup', { open: id === 'setup' ? 1 : 0 }).then(r => { if (r.setup) setSetup(r.setup); });
   Wire.call('files', id === 'files' ? { open: 1, dir: FL.dir || flSavedDir() } : { open: 0 }).then(r => { if (r.list) setFileList(r.list); if (r.files) setFiles(r.files); });
@@ -598,18 +598,15 @@ function drawSynth() {
 // triode: its drive, the voice's own or the knob's), its SPEAKER (the voice's
 // own or one it offers -- patch_map.CAB_CHOICES, each what it is and how we
 // know it) and an organ's LESLIE (the half-moon's speed: CC80; how the rotors
-// are heard). "amp" asked four times a second while the card is up; the
-// cabinet and the rotary come in the parts push.
-const AMP = { st: null, knob: null, sig: '', hold: {}, timer: null };
+// are heard). The engine pushes "amp" as it moves while the card is open
+// (showCard's open); the cabinet and the rotary come in the parts push.
+const AMP = { st: null, knob: null, sig: '', hold: {} };
 function ampHeld(k, v) { const h = AMP.hold[k]; return h && h.until > performance.now() ? h.v : v; }
 function ampHold(k, v, ms = 800) { AMP.hold[k] = { v, until: performance.now() + ms }; }
-async function ampPoll(now) {
-  if (AMP.timer) clearTimeout(AMP.timer);
-  AMP.timer = null;
-  if (card !== 'amp') return;
-  const r = await Wire.call('amp', { row: S.row });
-  if (r.amp && r.amp.row === S.row) { AMP.st = r.amp; drawAmp(); }
-  AMP.timer = setTimeout(() => ampPoll(false), 250);
+function setAmp(st) { if (st && st.row === S.row) { AMP.st = st; if (card === 'amp') drawAmp(); } }
+async function ampAsk(open) {
+  const r = await Wire.call('amp', { row: S.row, open: open ? 1 : 0 });
+  if (r.amp) setAmp(r.amp);
 }
 function drawAmp() {
   const el = $('amp'), p = cur(), st = AMP.st, a = S.about || {};
@@ -1874,6 +1871,7 @@ Wire.connect({
     if (m.build) { S.build = m.build; drawHealth(); }
     if (m.parts) setParts(m.parts);
     if (m.stops) setStops(m.stops);
+    if (m.amp) setAmp(m.amp);             // (the AMP card's: pushed as a wheel, a speed or a drive moves)
     if (m.piano) setPiano(m.piano);
     if (m.drums) setDrums(m.drums);
     if (m.hits) lightPads(m.hits);

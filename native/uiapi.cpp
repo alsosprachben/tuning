@@ -1002,6 +1002,26 @@ J build_of(nv_host *h)
 // A PART's ORGAN (livetui's stop rows): its program, its ranks' names, the
 // panel's rows (each a list of groups, each group's ranks) and what is
 // drawn; program -1 when it is not an organ
+// A PART's AMP (the AMP card's: nv_host_amp): the part a tonewheel organ (1),
+// another amplified voice (2) or neither; its drive [sounding, the voice's,
+// the knob's], the half-moon, a Leslie on it, the mod wheel's scale
+J amp_of(nv_host *h, int row)
+{
+    double ao[6] = {0, 0, 0, 0, 0, 1};
+    const int kind = nv_host_amp(h, row, ao);
+    J o = sess::obj();
+    o.o["row"] = sess::integer(row);
+    o.o["kind"] = sess::integer(kind < 0 ? 0 : kind);
+    J dv = sess::arr();
+    for (int k = 0; k < 3; k++)
+        dv.a.push_back(num(ao[k]));
+    o.o["drive"] = dv;
+    o.o["speed"] = sess::integer((long)ao[3]);
+    o.o["leslie"] = sess::boolean(ao[4] != 0.0);
+    o.o["wheel"] = num(ao[5]);              // (the mod wheel's scale on the drive: what sounds is the drive times it)
+    return o;
+}
+
 J stops_of(nv_host *h, int row)
 {
     J o = sess::obj();
@@ -1129,6 +1149,9 @@ struct nv_ui_watch {
     bool scenes = false;                // (its scenes card is open)
     bool setup = false;                 // (its setup card is open)
     bool files = false;                 // (its files card is open)
+    bool amp = false;                   // (its AMP card is open: the amp pushed when it changes)
+    long amp_seq = -1;                  // (...the engine's amp changes when last read)
+    std::string amp_sent;
     std::string files_sent;
     std::string module_sent;            // (the module mode's state, as last sent)
     std::string setup_sent;
@@ -1315,19 +1338,9 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
             nv_host_set_global(h, i, arg_d(q, "v", 0.0));
         }
     } else if (call == "amp") {                // (the AMP card: a part's valve, its Leslie's speed; its cabinet in the parts push)
-        double ao[6] = {0, 0, 0, 0, 0, 1};
-        const int kind = nv_host_amp(h, row, ao);
-        J o = sess::obj();
-        o.o["row"] = sess::integer(row);
-        o.o["kind"] = sess::integer(kind < 0 ? 0 : kind);
-        J dv = sess::arr();
-        for (int k = 0; k < 3; k++)
-            dv.a.push_back(num(ao[k]));
-        o.o["drive"] = dv;
-        o.o["speed"] = sess::integer((long)ao[3]);
-        o.o["leslie"] = sess::boolean(ao[4] != 0.0);
-        o.o["wheel"] = num(ao[5]);          // (the mod wheel's scale on the drive: what sounds is the drive times it)
-        r.o["amp"] = o;
+        if (w && q.get("open"))             // (open: pushed whenever it changes -- nv_ui_poll)
+            w->amp = arg_i(q, "open", 1) != 0, w->amp_sent.clear();
+        r.o["amp"] = amp_of(h, row);
     } else if (call == "stops") {
         r.o["stops"] = stops_of(h, row);
         r.o["organs"] = organs_of(h);
@@ -1751,6 +1764,22 @@ extern "C" char *nv_ui_poll(nv_host *h, nv_ui_watch *w)
         r.o["meters"] = m;
         any = true;
         w->quiet = !loud;
+    }
+    // THE AMP CARD, open: pushed when the engine's amp state moved (a wheel, a
+    // speed, a drive -- nv_host_amp_seq, read for nothing) or each sixth poll
+    if (w->amp) {
+        const long s = nv_host_amp_seq(h);
+        if (s != w->amp_seq || w->tick % 6 == 0) {
+            w->amp_seq = s;
+            J ao = amp_of(h, w->row);
+            std::string as;
+            put(as, ao);
+            if (as != w->amp_sent) {
+                w->amp_sent = as;
+                r.o["amp"] = ao;
+                any = true;
+            }
+        }
     }
     if (w->tick++ % 6 == 0) {
         std::string ps;

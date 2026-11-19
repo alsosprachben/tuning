@@ -299,6 +299,7 @@ int nv_host_drive(nv_host *h, int row, double *out);
    half-moon (0 stop, 1 slow, 2 fast), a Leslie on it (1/0), the wheel's scale
    (1 untouched); 1 a tonewheel organ, 2 another amplified voice, 0 neither */
 int nv_host_amp(nv_host *h, int row, double *out);
+long nv_host_amp_seq(nv_host *h);           /* (the amp state's changes so far: the AMP card's push) */
 /* a part's rotary heard (an organ's cabinet, a Rotary type): out[0] -1 its own
    way, 0 the cabinet in the room, 1 two mics; out[1] their spread in degrees
    (<0 the default); 0 no such row -- and set */

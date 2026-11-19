@@ -118,6 +118,7 @@ void nv_part_drive(void *h, int pi, double v);
 void nv_part_drive_later(void *h, int pi, double v);
 int nv_part_drive_get(void *h, int pi, double *out);
 int nv_part_amp_get(void *h, int pi, double *out);
+long nv_part_amp_seq(void *h);
 int nv_part_patch_touch_sensitive(void *h, int pi);
 void nv_part_switches(void *h, int ch, int *out);
 int nv_part_pedal(void *h, int ch);
