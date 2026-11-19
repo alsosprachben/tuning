@@ -256,7 +256,7 @@ class NoteClass(ctypes.Structure):
                    ('trem_stereo', I), ('trem_intrinsic', I), ('touch_sensitive', I),
                    ('cab_set', I), ('n_cab_fm', I), ('n_cab_afm', I), ('cab_floor', C), ('cab_fm', C * 3 * 4),
                    ('cab_afm', C * 3 * 4), ('cab_corner', C), ('cab_order', C), ('cab_cut', C), ('cab_bell', C),
-                   ('cab_ref', C), ('cab_mask', I), ('cab_lfast', I), ('cab_mk', C), ('n_click', I), ('click_jacks', I), ('click_db', C), ('click_hz', C * 16),
+                   ('cab_ref', C), ('cab_mask', I), ('cab_lfast', I), ('cab_mk', C), ('pk_mask', I), ('pk_base', I), ('pk_t0', C), ('n_click', I), ('click_jacks', I), ('click_db', C), ('click_hz', C * 16),
                    ('click_amp', C * 16), ('click_dec', C), ('click_s', C), ('pre_pluck', I),
                    ('moog', MoogSpec), ('brass', I), ('bn_slur', I),
                    ('os_floor_db', C), ('os_max_s', C), ('tail_set', I), ('tail_db', C), ('tail_dbs', C),
@@ -3618,6 +3618,16 @@ def note_class(cls):
         k.cab_mask = sum(1 << c for c in _PMK.cab_choices(cls))
         k.cab_lfast = 2 if getattr(cls, 'leslie_fast', True) else 1
         k.cab_mk = float(getattr(cls, 'leslie_makeup_db', 0.0) or 0.0)
+        # ...the pickups it offers, its family's place in cab_terms, its own
+        # pickup's turns (nv_pk_variant's) -- its voice's, a variant's (the
+        # class a pickup or cabinet choice was made from: the engine keeps them)
+        _pv = next(b for b in cls.__mro__ if 'pk_choice' not in b.__dict__ and 'cab_choice' not in b.__dict__)
+        if electric_voice(cls) and _PMK.pk_choices(_pv):
+            k.pk_mask = sum(1 << c for c in _PMK.pk_choices(_pv))
+            k.pk_base = _PMK.pk_base(_pv)
+            _own = _PMK.pk_own(_pv)
+            _fam = _PMK.PICKUP_FAMILIES[_pv.pickup_family]
+            k.pk_t0 = float(_fam[_own].get("turns", 1.0)) if _own else float(_pv.pickup_turns)
         # its key-up's click (release_click_db), a jack a drawn stop on a choired organ
         cdb, cm = getattr(cls, 'release_click_db', None), getattr(cls, 'release_click_modes', ()) or ()
         if clav_voice(cls) and cdb is not None:
@@ -5697,6 +5707,28 @@ def cab_terms():
             t[31], t[32] = float(cb.bell_cutoff_hz or 0.0), float(cb.bell_order)
             t[33] = float(cb._ref)
         out.extend(t)
+    # ...THEN THE PICKUP CHOICES (nv_pk_variant), 8 blocks a family in
+    # patch_map.PICKUP_FAMILIES' order (a voice's NoteClass.pk_base + its
+    # choice): [0] the coils, [1..4] their places, [5..8] their weights (1.0
+    # each where the family wires them alike), [9] the turns, [10] the load's
+    # resonance, [11] its Q (0 the voice's), [12] a Clavinet's rocker
+    # setting (-1 none); a choice the family lacks all zero
+    for fam in P.PICKUP_FAMILIES.values():
+        for c in range(8):
+            t = [0.0] * 36
+            d = fam.get(c)
+            if c and d:
+                if "clav" in d:
+                    t[12] = float(_CLAV_SEL[d["clav"]])
+                else:
+                    pts, sg = tuple(d["points"]), d.get("signs") or (1.0,) * len(d["points"])
+                    t[0] = float(len(pts))
+                    t[1:1 + len(pts)] = [float(q) for q in pts]
+                    t[5:5 + len(pts)] = [float(x) for x in sg]
+                    t[9], t[10] = float(d["turns"]), float(d["res"])
+                    t[11] = float(d.get("q", 0.0))
+                    t[12] = -1.0
+            out.extend(t)
     return out
 
 

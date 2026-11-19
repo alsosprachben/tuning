@@ -233,12 +233,25 @@ const HELP = {
   },
   amp: {
     title: 'Amp',
-    intro: 'What the selected part\'s voice plays through, as it is modelled: its valve amplifier, the speaker it drives, and an organ\'s Leslie. An acoustic voice has none of these: it is heard as it is.',
+    intro: 'What the selected part\'s voice plays through, as it is modelled: a guitar\'s, a bass\'s or a Clavinet\'s pickups, its valve amplifier, the speaker it drives, and an organ\'s Leslie. An acoustic voice has none of these: it is heard as it is.',
     terms: [
+      ['PICKUP', 'Which of the instrument\'s pickups it plays on, on a switch drawn as the instrument\'s own: a Stratocaster\'s 5-way blade, a 3-way switch, a Clavinet\'s two rockers. Under it, the string with its coils where they sit, the ones heard lit.'],
       ['VALVE', 'The amplifier\'s triode stage and its drive: clean at 0, the edge of breakup at 1, a clip past it. DRIVE is the drive set; SOUNDING beside it what plays, the mod wheel\'s scale on it (up to four times the voice\'s own, the knobs\' reach). AS THE VOICE puts the voice\'s back.'],
       ['SPEAKER', 'The cabinet: the voice\'s own, or another it can play through. The line under the buttons says what that speaker is and how we know it -- measured, fitted, or voiced from its design.'],
       ['LESLIE', 'An organ\'s rotating speaker: its speed (STOP, SLOW, FAST -- the half-moon, CC80) and how it is heard (IN THE ROOM, or TWO MICS round it). Shown when the organ plays through one.'],
       ['Kept', 'The part keeps its valve, speaker and how its Leslie is heard through program changes, and in the session.'],
+    ],
+  },
+  pickup: {
+    title: 'Pickup',
+    intro: 'The pickups the part\'s instrument plays on, on the AMP card. A pickup hears the string at the point where it sits: near the bridge it hears the upper harmonics strongly and the fundamental weakly (bright, thin), toward the neck the reverse (round, full). Two coils together add their combs -- and where they hear the string in opposite phase, cancel, which is the in-between positions\' hollow "quack". Choose a position, part by part; the part keeps it through program changes, and in the session.',
+    terms: [
+      ['Stratocaster', 'Its 5-way blade, numbered as a Strat player numbers it: 1 the bridge pickup, 2 bridge and middle, 3 the middle, 4 middle and neck, 5 the neck. The neck pickup is fitted to recordings; position 4 is the fitted Funk Guitar\'s; the middle and bridge pickups are placed and wound as a standard Stratocaster\'s, from the neck\'s fit.'],
+      ['Humbuckers', 'The Ibanez\'s neck and bridge humbuckers, both fitted to recordings, and BOTH -- the two in parallel, derived from them. Overdriven and Distortion Guitar play the bridge; Jazz Guitar the neck.'],
+      ['Jazz Bass', 'Its two single coils, each alone or both, as its two volume knobs turned fully up or off. BOTH is the fitted sound; each alone is derived from it -- the bridge alone the growl, the neck alone the thump.'],
+      ['Clavinet', 'The D6\'s two rocker switches: A/B and C/D. A C the centre pickup alone (mellow, the fitted one), B C the bridge pickup (thin), A D both in phase (full), B D both against each other (hollow: the fundamental cancelled -- the funk sound).'],
+      ['Level', 'A bridge pickup is wound hotter, as a real one is, to make up for the string moving less there; parallel coils load each other, which lifts their resonance. The levels follow from that, as on the instrument.'],
+      ['CC85', 'A file or a keyboard chooses it too, on the part\'s channel, as a bank select does: sent before a program change, it takes effect at that program change. 0 the voice\'s own, 1 neck, 2 neck and middle, 3 middle, 4 middle and bridge, 5 bridge, 6 neck and bridge, 7 the Clavinet\'s both in anti-phase. One the instrument does not have leaves it its own.'],
     ],
   },
   cabinet: {
@@ -805,7 +818,7 @@ const HELP_TOC = [
   ['Library', ['library']],
   ['Synth', ['synth', 'synth:LFO 1', 'synth:Left hand', 'synth:Oscillators', 'synth:Mixer', 'synth:Filter', 'synth:Envelopes', 'synth:Delay']],
   ['Stops', ['stops', 'drive', 'rotary']],
-  ['Amp', ['amp', 'drive', 'cabinet', 'rotary']],
+  ['Amp', ['amp', 'pickup', 'drive', 'cabinet', 'rotary']],
   ['Piano', ['piano', 'piano:pedals', 'piano:dampers', 'piano:key']],
   ['Drums', ['drums', 'drums:user']],
   ['Effects', ['effects', 'fx:ins', 'fx:sends', 'fx:rev', 'fx:cho', 'fx:dly', 'fx:eq']],

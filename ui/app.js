@@ -196,6 +196,7 @@ const LATER = {
 };
 let card = 'parts';
 try { card = localStorage.getItem('clavitone.card') || 'parts'; } catch (_) {}
+try { card = new URLSearchParams(location.search).get('card') || card; } catch (_) {}     // (?card=amp: a card opened by its link -- the checks' screenshots)
 if (card === 'organ') card = 'stops';
 CARDS.forEach(([id, label, ready]) => {
   const b = document.createElement('button');
@@ -608,6 +609,64 @@ async function ampAsk(open) {
   const r = await Wire.call('amp', { row: S.row, open: open ? 1 : 0 });
   if (r.amp) setAmp(r.amp);
 }
+// THE PICKUP SWITCH as its instrument's (about.pickups' "switch"): a
+// Stratocaster's 5-way blade, a 3-way switch in its ring, the Clavinet D6's
+// two rockers -- an SVG, each position a target (data-c); order the choices
+// neck to bridge, labels theirs, lit the one it is on
+function pkSwitchSvg(kind, order, labels, lit) {
+  const at = Math.max(0, order.indexOf(lit));
+  if (kind === 'rockers') {
+    const AB = { 1: 0, 5: 1, 6: 0, 7: 1 }, CD = { 1: 0, 5: 0, 6: 1, 7: 1 }, ab = AB[lit] || 0, cd = CD[lit] || 0;
+    const pick = (r, half) => { const nab = r ? ab : half, ncd = r ? half : cd; return nab ? (ncd ? 7 : 5) : (ncd ? 6 : 1); };
+    let s = '<svg viewBox="0 0 260 150" class="pk-svg">';
+    [['A', 'B'], ['C', 'D']].forEach((nm, r) => {
+      const x = 30 + r * 110, down = r ? cd : ab;
+      s += `<rect x="${x - 4}" y="6" width="98" height="118" rx="8" fill="#0c0d0f"/>`;
+      nm.forEach((n, h) => {
+        const y = 10 + h * 56, pr = h === down;
+        s += `<g data-c="${pick(r, h)}" class="pk-hit"><rect x="${x}" y="${y}" width="90" height="54" rx="6" fill="${pr ? '#1e2023' : '#3c4045'}"/>` +
+          (pr ? '' : `<rect x="${x + 3}" y="${y + 3}" width="84" height="6" rx="3" fill="#585d63"/>`) +
+          `<text x="${x + 45}" y="${y + 35}" text-anchor="middle" class="pk-t big${pr ? ' on' : ''}">${n}</text></g>`;
+      });
+    });
+    return s + `<text x="130" y="144" text-anchor="middle" class="pk-t on">${labels[order.indexOf(lit)] || ''}</text></svg>`;
+  }
+  if (kind === 'toggle3') {
+    const cx = 60, cy = 75, ang = [-1, 0, 1], a = ang[Math.min(at, 2)], ex = cx + 16 * Math.abs(a), ey = cy + a * 46;
+    let s = `<svg viewBox="0 0 260 150" class="pk-svg"><circle cx="${cx}" cy="${cy}" r="25" fill="#6e747a"/><circle cx="${cx}" cy="${cy}" r="22" fill="#b9bec2"/>` +
+      `<circle cx="${cx}" cy="${cy}" r="9" fill="#2b2e32"/>` + (a ? `<line x1="${cx}" y1="${cy}" x2="${ex}" y2="${ey}" stroke="#6e747a" stroke-width="11" stroke-linecap="round"/>` +
+      `<line x1="${cx}" y1="${cy}" x2="${ex}" y2="${ey}" stroke="#b9bec2" stroke-width="7" stroke-linecap="round"/>` : '') +
+      `<circle cx="${ex}" cy="${ey}" r="14" fill="#a9a38f"/><circle cx="${ex - 1}" cy="${ey - 1}" r="12" fill="#eeeadc"/>`;
+    order.slice(0, 3).forEach((c, i) => {
+      const y = cy + ang[i] * 46;
+      s += `<g data-c="${c}" class="pk-hit"><rect x="0" y="${y - 24}" width="260" height="48" fill="transparent"/>` +
+        `<text x="128" y="${y + 5}" class="pk-t${i === at ? ' on' : ''}">${labels[i]}</text></g>`;
+    });
+    return s + '</svg>';
+  }
+  // THE BLADE: the plate, its slot, a detent a position, the white tip where it rests (the neck to the left)
+  const n = order.length, x0 = 30, x1 = 330, X = i => n > 1 ? x0 + (x1 - x0) * i / (n - 1) : (x0 + x1) / 2;
+  let s = '<svg viewBox="0 0 360 120" class="pk-svg"><rect x="4" y="10" width="352" height="50" rx="25" fill="#6e747a"/>' +
+    '<rect x="6" y="12" width="348" height="46" rx="23" fill="#b9bec2"/><rect x="24" y="30" width="312" height="10" rx="5" fill="#0c0d0f"/>';
+  order.forEach((c, i) => {
+    s += `<g data-c="${c}" class="pk-hit"><rect x="${X(i) - 30}" y="0" width="60" height="118" fill="transparent"/>` +
+      `<line x1="${X(i)}" y1="16" x2="${X(i)}" y2="22" stroke="#6e747a" stroke-width="2"/><line x1="${X(i)}" y1="48" x2="${X(i)}" y2="54" stroke="#6e747a" stroke-width="2"/>` +
+      `<text x="${X(i)}" y="84" text-anchor="middle" class="pk-t${i === at ? ' on' : ''}">${labels[i]}</text></g>`;
+  });
+  const tx = X(at);
+  return s + `<rect x="${tx - 15}" y="2" width="30" height="66" rx="9" fill="#a9a38f"/><rect x="${tx - 13}" y="4" width="26" height="60" rx="8" fill="#eeeadc"/>` +
+    [0, 1, 2, 3].map(g => `<line x1="${tx - 9}" x2="${tx + 9}" y1="${12 + g * 15}" y2="${12 + g * 15}" stroke="#a9a38f" stroke-width="1.5"/>`).join('') + '</svg>';
+}
+// ...THE STRING under the coils: the bridge at the right, every coil the family has where it sits, the heard ones lit
+function pkStringSvg(all, lit) {
+  if (!all.length) return '';
+  const qmax = Math.max(...all) * 1.18, bx = 350, X = q => bx - q / qmax * 340;
+  return '<svg viewBox="0 0 360 50" class="pk-svg"><rect x="346" y="6" width="10" height="28" rx="2" fill="#9a9fa3"/>' +
+    '<line x1="0" y1="20" x2="350" y2="20" stroke="#c8c8c0" stroke-width="2"/>' +
+    all.map(q => { const on = lit.some(l => Math.abs(l - q) < 1e-6);
+      return `<rect x="${X(q) - 7}" y="9" width="14" height="22" rx="3" fill="${on ? 'var(--lcd)' : '#2e3135'}" stroke="${on ? 'var(--lcd)' : '#8a918b'}"/>`; }).join('') +
+    '<text x="0" y="46" class="pk-t">← neck</text><text x="356" y="46" text-anchor="end" class="pk-t">bridge</text></svg>';
+}
 function drawAmp() {
   const el = $('amp'), p = cur(), st = AMP.st, a = S.about || {};
   if (card !== 'amp' || !el) return;
@@ -617,22 +676,42 @@ function drawAmp() {
   const cv = p && p.cabinet ? p.cabinet : [-1, 0, []], offer = cv[2] || [];
   const own = a.cab_own && p ? a.cab_own[p.program + '.' + p.variation] : undefined;
   const organ = kind === 1, les = !!(st && st.leslie);
-  const sig = [S.row, kind, organ, les, offer.join()].join('|');
+  // (its pickup: [chosen, now (0 its own), [the choices offered]] -- the parts push's)
+  const pkv = p && p.pickup ? p.pickup : [-1, 0, []], pkOffer = (p && !p.drums && pkv[2]) || [];
+  const hasPk = pkOffer.length > 0;
+  const sig = [S.row, kind, organ, les, offer.join(), pkOffer.join()].join('|');
   if (sig !== AMP.sig) {
-    AMP.sig = sig; AMP.knob = null;
+    AMP.sig = sig; AMP.knob = null; AMP.pkSig = '';
     el.classList.toggle('no-les', !organ);
-    if (!kind || !p || p.drums) {
+    el.classList.toggle('has-pk', hasPk && !!kind);
+    el.classList.toggle('pk-only', hasPk && !kind);
+    if ((!kind && !hasPk) || !p || p.drums) {
       el.className = 'amp no-les';
       el.innerHTML = `<p class="amp-empty">${p && p.drums ? 'A drum set has no amplifier: its drums are heard as they are.'
         : 'This voice plays through no amplifier or speaker of its own: an acoustic instrument is heard as it is. The Rhodes and Wurlitzer, the organs, the electric guitars and basses have one.'}</p>`;
       return;
     }
-    el.innerHTML = `<section><h3 data-help="drive">Valve</h3><div class="amp-knobs"><div class="amp-knob"></div><div class="amp-sound"></div></div>` +
+    const pkSec = hasPk ? `<section><h3 data-help="pickup">Pickup</h3><p class="amp-pkname"></p><div class="amp-pksw"></div>` +
+      `<div class="amp-pkstr"></div><button class="hb amp-pkback" data-kit="1"></button><p class="pn-note amp-pkabout"></p></section>` : '';
+    if (!kind) {
+      el.innerHTML = pkSec;
+    } else el.innerHTML = pkSec + `<section><h3 data-help="drive">Valve</h3><div class="amp-knobs"><div class="amp-knob"></div><div class="amp-sound"></div></div>` +
       `<button class="hb amp-back" data-kit="1"></button><p class="pn-note amp-vnote"></p></section>` +
       `<section><h3 data-help="cabinet">Speaker</h3><div class="amp-cabs">` +
       [0, ...offer].map(c => `<button class="hb amp-cab" data-kit="1" data-c="${c}"></button>`).join('') +
       `</div><p class="amp-now"></p><p class="pn-note amp-about"></p></section>` +
       (organ ? `<section><h3 data-help="rotary">Leslie</h3><div class="amp-les"></div></section>` : '');
+    if (hasPk) {
+      el.querySelector('.amp-pksw').addEventListener('click', e => {
+        const g = e.target.closest('[data-c]');
+        if (!g) return;
+        const c = +g.dataset.c, own = AMP.pkOwn || 0;
+        ampHold('pk', c); drawAmp();
+        Wire.call('pickup_set', { row: S.row, choice: c === own && pkv[0] < 0 ? -1 : c });
+      });
+      Kit.press(el.querySelector('.amp-pkback'), () => { ampHold('pk', AMP.pkOwn || 0); drawAmp(); Wire.call('pickup_set', { row: S.row, choice: -1 }); });
+    }
+    if (kind) {
     const send = Wire.throttled(v => Wire.call('drive_set', { row: S.row, v }));
     const back = () => { ampHold('drive', -1, 600); Wire.call('drive_set', { row: S.row, v: -1 }); };
     AMP.knob = Kit.knob(el.querySelector('.amp-knob'), { label: 'Drive', value: 0, size: 'big',
@@ -647,8 +726,31 @@ function drawAmp() {
       const c = +b.dataset.c; ampHold('cab', c); drawAmp();
       Wire.call('cabinet_set', { row: S.row, choice: c ? c : -1 });
     }));
+    }
   }
-  if (!kind || !p || p.drums) return;
+  if (!p || p.drums) return;
+  // THE PICKUP: the switch, the string, what it is
+  if (hasPk) {
+    const po = (a.pk_own || {})[p.program + '.' + p.variation] || [null, 0], F = (a.pickups || {})[po[0]] || null;
+    const own = AMP.pkOwn = po[1];
+    const ch = c => (F && F.choices[c]) || ['?', '', []];
+    const lit = ampHeld('pk', pkv[0] > 0 ? pkv[0] : pkv[1]) || own;
+    const order = ((F && F.order) || pkOffer).filter(c => pkOffer.includes(c));
+    const sg = [lit, order.join()].join('|');
+    if (sg !== AMP.pkSig) {
+      AMP.pkSig = sg;
+      el.querySelector('.amp-pkname').textContent = F ? F.name : '';
+      el.querySelector('.amp-pksw').innerHTML = pkSwitchSvg(F ? F.switch : 'blade5', order, order.map(c => ch(c)[0]), lit);
+      const all = [...new Set(order.flatMap(c => ch(c)[2]))];
+      el.querySelector('.amp-pkstr').innerHTML = pkStringSvg(all, ch(lit)[2]);
+      const mine = pkv[0] > 0 && pkv[0] !== own;
+      const bk = el.querySelector('.amp-pkback');
+      bk.textContent = mine ? `BACK TO THE VOICE'S ${ch(own)[0]}` : `AS THE VOICE · ${ch(own)[0]}`;
+      bk.disabled = !mine;
+      el.querySelector('.amp-pkabout').textContent = ch(lit)[1] + (kind ? '' : ' No amplifier of its own: it is heard straight from its pickups.');
+    }
+  }
+  if (!kind) return;
   // THE VALVE
   // TWO KNOBS (Ben): the DRIVE set and what SOUNDS (the mod wheel's scale
   // on it, display only); one range, the wheel's whole reach (4x the voice's)

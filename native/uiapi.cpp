@@ -228,6 +228,17 @@ J parts_of(nv_host *h)
             ca.a.push_back(oa);
             o.o["cabinet"] = ca;
         }
+        {                                   // ...its pickup, the same: [chosen, now, [the choices offered]]
+            int ch = -1, now = 0, off[8];
+            const int n = nv_host_pickup(h, p.row, &ch, &now, off, 8);
+            J ca = sess::arr(), oa = sess::arr();
+            ca.a.push_back(sess::integer(ch));
+            ca.a.push_back(sess::integer(now));
+            for (int k = 0; k < std::min(n, 8); k++)
+                oa.a.push_back(sess::integer(off[k]));
+            ca.a.push_back(oa);
+            o.o["pickup"] = ca;
+        }
         o.o["name"] = sess::str(p.name);
         // its channel's pan and sends, as a sequencer set them (an every-channel
         // part reads the first channel's: a change goes to all of them)
@@ -1704,6 +1715,8 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         nv_host_panic(h);
     } else if (call == "cabinet_set") {        // (a part's cabinet: a CAB_CHOICES index, -1 none -- its own)
         nv_host_set_cabinet(h, row, (int)arg_i(q, "choice", -1));
+    } else if (call == "pickup_set") {         // (a part's pickup: a PICKUP_CHOICES index, -1 none -- its own)
+        nv_host_set_pickup(h, row, (int)arg_i(q, "choice", -1));
     } else if (call == "rotary_set") {         // (a part's rotary heard: mode -1 its own way, 0 room, 1 mics; spread degrees, <0 the default)
         nv_host_set_rotary(h, row, (int)arg_i(q, "mode", -1), arg_d(q, "spread", -1.0));
     } else if (call == "drive_set") {          // (a valve's drive, 0..40 -- an organ's to 3, a guitar's past 14; <0 the voice's again)

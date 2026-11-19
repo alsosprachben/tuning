@@ -158,8 +158,10 @@ static std::vector<uint8_t> one_note(int program, int note, int vel, int ch, int
         ev(0, {(uint8_t)(0xB0 | ch), 0, (uint8_t)(bank & 0x7F)});
         if ((bank & 4095) >> 7)
             ev(0, {(uint8_t)(0xB0 | ch), 32, (uint8_t)((bank & 4095) >> 7)});
-        if (bank >> 12)                     // (its cabinet, patch_map.cab_key's: CC83, latched as the bank)
-            ev(0, {(uint8_t)(0xB0 | ch), 83, (uint8_t)(bank >> 12)});
+        if ((bank >> 12) & 15)              // (its cabinet, patch_map.cab_key's: CC83, latched as the bank)
+            ev(0, {(uint8_t)(0xB0 | ch), 83, (uint8_t)((bank >> 12) & 15)});
+        if ((bank >> 16) & 7)               // (its pickup, patch_map.pk_key's: CC85, the same)
+            ev(0, {(uint8_t)(0xB0 | ch), 85, (uint8_t)((bank >> 16) & 7)});
     }
     ev(0, {(uint8_t)(0xC0 | ch), (uint8_t)program});
     ev(0, {(uint8_t)(0xB0 | ch), 7, 127});
@@ -1658,7 +1660,7 @@ struct Cache {
     {
         if (drums || !(var >> 12) || cab_prog == program || program < 0 || program > 127)
             return;
-        const int c = var >> 12, en = var_entry(program, var);
+        const int c = (var >> 12) & 255, en = var_entry(program, var);
         for (int key = 0; key < 128; key++) {
             const int q = en ? var_kidx(en, key) : 128 * program + key;
             cabq[key] = -1;
@@ -1666,7 +1668,7 @@ struct Cache {
                 continue;
             auto it = cabk.find(q);
             if (it == cabk.end()) {
-                const NoteClass *d = nv_cab_variant(K[q], c);
+                const NoteClass *d = nv_variant(K[q], c);       // (its pickup's, then its cabinet's)
                 if (d == K[q] || K.size() >= K.capacity())
                     continue;
                 K.push_back(d);
@@ -2775,6 +2777,58 @@ const NoteClass *nv_cab_variant(const NoteClass *k, int c)
     }
     slot = std::move(d);
     return slot.get();
+}
+
+// A VOICE THROUGH PICKUP CHOICE p (patch_map.pickup_class): its own class
+// copied, its coils -- where they sit, how they are wired, their winding
+// and load -- or a Clavinet's rocker setting changed, all else shared; the
+// note's fret moves them as it moves its own (nv_voice_init). Made once and
+// kept; the voice itself where it does not offer p (pk_mask) or there is no
+// table. Its terms (native.cab_terms, block pk_base + p): [0] the coils, [1..4]
+// their places, [5..8] their weights, [9] the turns, [10] the load's
+// resonance, [11] its Q (<= 0 the voice's), [12] a Clavinet's setting (-1 none)
+static std::map<std::pair<const NoteClass *, int>, std::unique_ptr<NoteClass>> g_pk_made;
+const NoteClass *nv_pk_variant(const NoteClass *k, int p)
+{
+    if (!k || p <= 0 || p >= 8 || !((k->pk_mask >> p) & 1) || k->pk_base <= 0)
+        return k;
+    std::lock_guard<std::mutex> lk(g_cab_mu);
+    const size_t b = 36 * (size_t)(k->pk_base + p);
+    if (b + 36 > g_cab_terms.size())
+        return k;
+    auto &slot = g_pk_made[std::make_pair(k, p)];
+    if (slot)
+        return slot.get();
+    const double *T = g_cab_terms.data() + b;
+    std::unique_ptr<NoteClass> d(new NoteClass(*k));
+    VoiceSnap &s = d->tmpl;
+    // (the template's own fret: its coils' places over its class's -- nv_voice_init's again per note)
+    const double sc = k->tmpl.pk_q0[0] > 0.0 ? k->tmpl.pk_q[0] / k->tmpl.pk_q0[0] : 1.0;
+    if (T[12] >= 0.0) {
+        s.cl_sel = (int)T[12];
+        s.n_pk = s.cl_sel <= 1 ? 1 : 2;
+        for (int i = 0; i < 4; i++)
+            s.pk_sign[i] = i < s.n_pk ? (i == 1 && s.cl_sel == 3 ? -1.0 : 1.0) : 0.0;
+    } else {
+        const int n = std::max(1, std::min(4, (int)T[0]));
+        s.n_pk = n;
+        for (int i = 0; i < 4; i++) {
+            s.pk_q0[i] = i < n ? T[1 + i] : 0.0;
+            s.pk_sign[i] = i < n ? T[5 + i] : 0.0;
+            s.pk_q[i] = i < n ? std::min(T[1 + i] * sc, 0.5) : 0.0;
+        }
+        s.pk_turns = k->tmpl.pk_turns / k->pk_t0 * T[9];
+        s.pk_res_hz = T[10];
+        if (T[11] > 0.0)
+            s.pk_qf = T[11];
+    }
+    slot = std::move(d);
+    return slot.get();
+}
+
+const NoteClass *nv_variant(const NoteClass *k, int code)
+{
+    return nv_cab_variant(nv_pk_variant(k, (code >> 4) & 7), code & 15);
 }
 int nv_tcache_var(void *h) { return ((nv::live::Cache *)h)->var; }
 

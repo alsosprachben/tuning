@@ -3011,13 +3011,166 @@ _CAB_CLASSES = {}
 
 
 def cab_key(variation, choice):
-    """The variation key a part plays with CAB_CHOICES[choice] (0 its own)."""
-    return (int(variation) & CAB_MASK) | (int(choice) << CAB_SHIFT)
+    """The variation key a part plays with CAB_CHOICES[choice] (0 its own) --
+    its pickup choice (bits 16-19, pk_key) kept."""
+    return (int(variation) & ~(0xF << CAB_SHIFT)) | (int(choice) << CAB_SHIFT)
 
 
 def cab_of(variation):
     """(the variation, the cabinet choice) a variation key carries."""
-    return int(variation) & CAB_MASK, int(variation) >> CAB_SHIFT
+    return int(variation) & CAB_MASK, (int(variation) >> CAB_SHIFT) & 0xF
+
+
+# THE PICKUP A PART PLAYS THROUGH (Ben, 2026-11-19: "should we do the same as
+# we did for amps?" -- and its control the instrument's own: the AMP card's
+# switch gadgets): a choice of PICKUP_CHOICES in bits 16-19 of the variation
+# key (pk_key), beside the cabinet's; CC85 a file's, latched as a bank is.
+# What each choice IS depends on the instrument -- PICKUP_FAMILIES, by the
+# voice class's pickup_family: where its coils sit (fractions of the
+# speaking length from the bridge), how they are wired, their resonance.
+# Two coils in PARALLEL (a Strat's positions 2 and 4, the Ibanez's middle, a
+# Jazz Bass's both): their outputs averaged, each by its winding (the coils'
+# weights: pickup_signs), and their inductances combined -- 1/L = 1/L1 + 1/L2,
+# L by the turns squared -- so the load's resonance rises (fitted position
+# 4 is sqrt 2 over a neck coil, as this says). A voice keeps its own winding
+# RELATIVE to its own pickup (its turns over its own choice's): Overdriven's
+# bridge humbucker is voiced 1.07 against Distortion's 1.43, and stays so.
+PK_SHIFT = 16
+PICKUP_CHOICES = (None, "neck", "neck+middle", "middle", "middle+bridge", "bridge", "neck+bridge", "anti")
+_SQ2 = 2.0 ** 0.5
+_STRAT_RES, _STRAT_BRIDGE_T = 5025.0, 1.07
+_L_MB = _STRAT_BRIDGE_T ** 2 / (1.0 + _STRAT_BRIDGE_T ** 2)       # (middle and bridge in parallel: L over a neck coil's)
+_IB_N_RES, _IB_B_RES = 5971.0, 4827.0
+PICKUP_FAMILIES = {
+    "strat": {
+        "name": "Stratocaster", "switch": "blade5",
+        1: dict(points=(0.247,), turns=1.0, res=_STRAT_RES, label="5 NECK",
+                about="The neck single coil, 0.247 of the scale from the bridge: round and full. Fitted to recordings (IDMT)."),
+        2: dict(points=(0.247, 0.157), turns=0.5, res=_STRAT_RES * _SQ2, label="4",
+                about="Neck and middle in parallel: the quack, where their combs cancel. As the fitted Funk Guitar."),
+        3: dict(points=(0.157,), turns=1.0, res=_STRAT_RES, label="3 MIDDLE",
+                about="The middle single coil, 0.157 of the scale: placed as a Stratocaster's, its coil the neck's (derived)."),
+        4: dict(points=(0.157, 0.065), signs=(0.5, 0.5 * _STRAT_BRIDGE_T), turns=1.0, res=_STRAT_RES / _L_MB ** 0.5,
+                label="2", about="Middle and bridge in parallel: the brighter quack. Derived from the two coils."),
+        5: dict(points=(0.065,), turns=_STRAT_BRIDGE_T, res=_STRAT_RES / _STRAT_BRIDGE_T, label="1 BRIDGE",
+                about="The bridge single coil, 42 mm from the saddles, wound hotter (6.2 k against 5.8 k): bright and thin. Derived."),
+    },
+    "ibanez": {
+        "name": "Ibanez RG2820", "switch": "toggle3",
+        1: dict(points=(0.23, 0.258), turns=0.69, res=_IB_N_RES, q=1.153, label="NECK",
+                about="The neck humbucker: warm, its two coils' null darkening the top. Fitted to recordings (IDMT, the RG2820)."),
+        6: dict(points=(0.23, 0.258, 0.049, 0.077), signs=(0.345, 0.345, 0.715, 0.715), turns=1.0,
+                res=(_IB_N_RES ** 2 + _IB_B_RES ** 2) ** 0.5, q=(1.153 + 0.7739) / 2.0, label="BOTH",
+                about="Both humbuckers in parallel: derived from the two fitted."),
+        5: dict(points=(0.049, 0.077), turns=1.43, res=_IB_B_RES, q=0.7739, label="BRIDGE",
+                about="The bridge humbucker, wound hot: the one that drives the amp. Fitted to recordings (IDMT, the RG2820)."),
+    },
+    "jbass": {
+        "name": "Jazz Bass", "switch": "toggle3",
+        1: dict(points=(0.168,), turns=2.0, res=4867.0 / _SQ2, label="NECK",
+                about="The neck coil alone: the thump. Derived from the pair fitted."),
+        6: dict(points=(0.098, 0.168), turns=1.0, res=4867.0, label="BOTH",
+                about="Both coils, as the fit (IDMT's three basses): the Jazz Bass's own."),
+        5: dict(points=(0.098,), turns=2.0, res=4867.0 / _SQ2, label="BRIDGE",
+                about="The bridge coil alone: the growl. Derived from the pair fitted."),
+    },
+    "clav": {
+        "name": "Clavinet D6", "switch": "rockers",
+        1: dict(clav="centre", label="A C \xb7 CENTRE",
+                about="The centre pickup alone, above the strings: warm. The one the recordings were played on (fitted)."),
+        5: dict(clav="bridge", label="B C \xb7 BRIDGE",
+                about="The bridge pickup alone, under the strings 4 cm from their ends: bright and thin."),
+        6: dict(clav="both", label="A D \xb7 BOTH",
+                about="Both pickups in phase: full."),
+        7: dict(clav="anti", label="B D \xb7 ANTI",
+                about="Both pickups against each other: the fundamental cancels -- hollow, the funk sound."),
+    },
+}
+_PK_CLASSES = {}
+
+
+def pk_key(variation, choice):
+    """The variation key a part plays with PICKUP_CHOICES[choice] (0 its own),
+    its cabinet choice kept."""
+    return (int(variation) & ~(0xF << PK_SHIFT)) | (int(choice) << PK_SHIFT)
+
+
+def pk_of(variation):
+    """The pickup choice a variation key carries (0 the voice's own)."""
+    return (int(variation) >> PK_SHIFT) & 0xF
+
+
+def pk_choices(cls):
+    """The PICKUP_CHOICES indices a voice offers: its family's, else none."""
+    if getattr(cls, 'pk_offer', None) is not None:
+        return cls.pk_offer                 # (a pickup variant: its voice's)
+    fam = PICKUP_FAMILIES.get(getattr(cls, 'pickup_family', None) or "")
+    return tuple(sorted(k for k in fam if isinstance(k, int))) if fam else ()
+
+
+def pk_near(cls):
+    """Which of its family's choices a voice's pickup is, else the nearest --
+    by its coils' count and their mean place (the cards light it as its own)."""
+    own = pk_own(cls)
+    if own or not pk_choices(cls):
+        return own
+    fam = PICKUP_FAMILIES[cls.pickup_family]
+    pts = tuple(cls.pickup_points or ())
+    if not pts:
+        return pk_choices(cls)[0]
+    m = sum(pts) / len(pts)
+    return min((k for k in fam if isinstance(k, int) and "points" in fam[k]),
+               key=lambda k: (len(fam[k]["points"]) != len(pts), abs(sum(fam[k]["points"]) / len(fam[k]["points"]) - m)))
+
+
+def pk_base(cls):
+    """Where a voice's family's blocks start in native.cab_terms (its choice
+    added: nv_pk_variant's) -- past the cabinets', 8 a family; 0 none."""
+    fam = getattr(cls, 'pickup_family', None)
+    if fam not in PICKUP_FAMILIES:
+        return 0
+    return len(CAB_CHOICES) + 8 * list(PICKUP_FAMILIES).index(fam)
+
+
+def pk_own(cls):
+    """Which of its family's choices a voice's own pickup is (0 none of them)."""
+    fam = PICKUP_FAMILIES.get(getattr(cls, 'pickup_family', None) or "")
+    if not fam:
+        return 0
+    for k, d in fam.items():
+        if not isinstance(k, int):
+            continue
+        if "clav" in d:
+            if getattr(cls, 'clav_pickup', None) == d["clav"]:
+                return k
+        elif tuple(round(q, 4) for q in (cls.pickup_points or ())) == tuple(round(q, 4) for q in d["points"]):
+            return k
+    return 0
+
+
+def pickup_class(base, choice):
+    """BASE through its family's pickup CHOICE: its coils, their wiring and
+    resonance swapped, all else its own -- its winding relative to its own
+    pickup kept (its voicing), its players the same."""
+    k = (base, int(choice))
+    if k in _PK_CLASSES:
+        return _PK_CLASSES[k]
+    fam = PICKUP_FAMILIES[base.pickup_family]
+    d = fam[int(choice)]
+    attrs = {'pk_choice': PICKUP_CHOICES[choice], 'pk_offer': pk_choices(base),
+             'section_salt_name': getattr(base, 'section_salt_name', base.__name__)}
+    if "clav" in d:
+        attrs['clav_pickup'] = d["clav"]
+    else:
+        own = pk_own(base)
+        v = float(base.pickup_turns) / float(fam[own]["turns"]) if own else 1.0
+        attrs.update(pickup_points=tuple(d["points"]), pickup_signs=d.get("signs"),
+                     pickup_turns=v * float(d["turns"]), pickup_resonance_hz=float(d["res"]))
+        if "q" in d:
+            attrs['pickup_q'] = float(d["q"])
+    got = type("%s_pk_%s" % (base.__name__, PICKUP_CHOICES[choice].replace("+", "_")), (base,), attrs)
+    _PK_CLASSES[k] = got
+    return got
 
 
 def amplified(cls):
@@ -3065,25 +3218,33 @@ def cabinet_class(base, choice):
 
 
 def cab_variant(program, variation):
-    """VARIATIONS' answer for a cabinet variant: the variation's (or the
-    capital's) class through the choice -- a routed one note by note --
-    or None where there is no such variation or the voice does not offer
-    that choice."""
+    """VARIATIONS' answer for a variant -- a cabinet choice (bits 12-15), a
+    pickup choice (16-19) or both: the variation's (or the capital's) class
+    through its pickup, then its cabinet -- a routed one note by note -- or
+    None where there is no such variation or the voice offers neither."""
     p = int(program) & 0x7F
     v, c = cab_of(variation)
-    if c <= 0 or c >= len(CAB_CHOICES):
+    pk = pk_of(variation)
+    if (c <= 0 and pk <= 0) or c >= len(CAB_CHOICES) or pk >= len(PICKUP_CHOICES):
         return None
     base = dict.get(VARIATIONS, (p, v)) if v else PROGRAM_CLASS.get(p, PluckedStringProperties)
     if base is None or (p, v) in LAYERED:
         return None
+
+    def made(b):
+        if (c and c not in cab_choices(b)) or (pk and pk not in pk_choices(b)):
+            return None
+        if pk:
+            b = pickup_class(b, pk)
+        return cabinet_class(b, c) if c else b
     if isinstance(base, type):
-        return cabinet_class(base, c) if c in cab_choices(base) else None
-    if c not in cab_choices(base(60)):
+        return made(base)
+    if made(base(60)) is None:
         return None
     k = (p, int(variation))
     if k not in _CAB_CLASSES:
-        def pick(note, _b=base, _c=c):
-            return cabinet_class(_b(note), _c)
+        def pick(note, _b=base):
+            return made(_b(note))
         _CAB_CLASSES[k] = pick
     return _CAB_CLASSES[k]
 

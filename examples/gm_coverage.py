@@ -2206,8 +2206,24 @@ def about_json(path):
             if PMC.amplified(c0):
                 nm = "leslie" if getattr(c0, 'leslie', False) else getattr(c0, 'cabinet', None) or "direct"
                 own["%d.%d" % (p, v)] = PMC.CAB_CHOICES.index(nm)
+    # ...and THE PICKUPS (patch_map.PICKUP_FAMILIES): each family's name, its
+    # switch (the card draws it), its choices in the switch's order (neck to
+    # bridge) and each choice's label, what it is, its coils' places --
+    # with each voice's family and its own choice (else the nearest), by program
+    pk_order = {"strat": [1, 2, 3, 4, 5], "ibanez": [1, 6, 5], "jbass": [1, 6, 5], "clav": [1, 5, 6, 7]}
+    pickups = {f: {"name": d["name"], "switch": d["switch"], "order": pk_order[f],
+                   "choices": {str(c): [e["label"], e["about"], list(e.get("points", ()))]
+                               for c, e in d.items() if isinstance(c, int)}}
+               for f, d in PMC.PICKUP_FAMILIES.items()}
+    pk_own = {}
+    for p in range(128):
+        for v in [0] + sorted(vv for (pp, vv) in dict.keys(PMC.VARIATIONS) if pp == p):
+            c0 = PMC.variation_class(p, v) if v else PMC.PROGRAM_CLASS.get(p)
+            c0 = c0 if isinstance(c0, type) or c0 is None else c0(60)
+            if c0 is not None and PMC.pk_choices(c0):
+                pk_own["%d.%d" % (p, v)] = [c0.pickup_family, PMC.pk_near(c0)]
     doc = {"levels": [LEVEL[k] for k in range(5)], "programs": progs, "desc": desc,
-           "cabinets": cabs, "cab_own": own, "stops": stop_notes, "perc": perc,
+           "cabinets": cabs, "cab_own": own, "pickups": pickups, "pk_own": pk_own, "stops": stop_notes, "perc": perc,
            "kits": kits, "kit_only": sorted(k for k in getattr(PM, "KIT_ONLY", ()) if k < 128),
            "efx": {k: [r, note] for k, (r, note) in EFX_RATED.items()},
            "effects": {k: [r, note] for k, r, note in EFFECTS_RATED}}

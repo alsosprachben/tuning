@@ -1346,6 +1346,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
     std::map<int, std::map<int, int>> ctrl;     // channel -> control -> value
     std::map<int, int> prog, bmsb, blsb, drums, bsel;
     std::map<int, int> cabsel;      // ...each channel's cabinet (CC83, tonelib.CABINET_CC), latched as a bank
+    std::map<int, int> pksel;       // ...and its pickup (CC85, tonelib.PICKUP_CC), the same
     // the map CC32 0 reads its bank in (blockrender.DEFAULT_MAP: TUNING_MAP)
     const char *tmap = nv_env("TUNING_MAP");
     const int default_map = tmap && *tmap ? atoi(tmap) : 0;
@@ -1924,6 +1925,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             rxbank = lvl != 1;
             bmsb.clear(); blsb.clear(); drums.clear(); prog.clear(); bsel.clear(); ctrl.clear(); rsel.clear(); nsel.clear();
             cabsel.clear();
+            pksel.clear();
             P.mvol.push_back(std::make_tuple(t, seq, 1.0));      // (the master volume back to full)
             P.events.push_back(LiveEv{t, 6, -1, (int)P.sysex.size(), 0});     // (the live part's too)
             P.sysex.push_back(d);
@@ -1996,7 +1998,9 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             // ...THROUGH THE CABINET the channel's CC83 chose (patch_map.cab_key):
             // over bit 16 of the bank, Song::bank's to find where the voice offers it
             if (!dr && cabsel.count(ch) && cabsel[ch] > 0)
-                bs |= cabsel[ch] << 16;
+                bs |= (cabsel[ch] & 15) << 16;
+            if (!dr && pksel.count(ch) && pksel[ch] > 0)    // (...and its pickup over bit 20: patch_map.pk_key)
+                bs |= (pksel[ch] & 7) << 20;
             drums[ch] = dr;
             bsel[ch] = bs;
             if (dr)         // "When the Drum Set is changed, DRUM SETUP PARAMETER values will all be initialized"
@@ -2023,6 +2027,8 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 bmsb[ch] = v;
             else if (cc == 83)
                 cabsel[ch] = v;
+            else if (cc == 85)
+                pksel[ch] = v;
             else if (cc == 32)
                 blsb[ch] = v;
             ctrl[ch][cc] = v;

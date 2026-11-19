@@ -310,6 +310,9 @@ void nv_host_set_rotary(nv_host *h, int row, int mode, double spread_deg);
    its voice offers -- how many; -1 no such row -- and set (-1 none) */
 int nv_host_cabinet(nv_host *h, int row, int *chosen, int *now, int *offer, int cap);
 void nv_host_set_cabinet(nv_host *h, int row, int choice);
+/* ...and its pickup (live.set_pickup), the same way: PICKUP_CHOICES indices */
+int nv_host_pickup(nv_host *h, int row, int *chosen, int *now, int *offer, int cap);
+void nv_host_set_pickup(nv_host *h, int row, int choice);
 void nv_host_set_drive(nv_host *h, int row, double v);
 
 /* ---- THE CONTROLLER MATRIX (livetui's C): a channel's sources to destinations ----

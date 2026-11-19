@@ -2046,7 +2046,7 @@ static int run(int argc, char **argv)
             auto it = x.made.find(std::make_pair(q, c));
             if (it != x.made.end())
                 return it->second;
-            const NoteClass *d = nv_cab_variant((*x.K)[q], c);
+            const NoteClass *d = nv_variant((*x.K)[q], c);     // (c the variant code: its pickup, its cabinet)
             int r = q;
             if (d != (*x.K)[q]) {
                 x.K->push_back(d);

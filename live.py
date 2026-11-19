@@ -3568,6 +3568,10 @@ class Patch:
             if _cbv:
                 tr.append(mido.Message("control_change", channel=ch, control=T.CABINET_CC,
                                        value=_cbv, time=0))
+            _pkv = __import__("patch_map").pk_of(self.variation)     # (...its pickup: CC85, the same)
+            if _pkv:
+                tr.append(mido.Message("control_change", channel=ch, control=T.PICKUP_CC,
+                                       value=_pkv, time=0))
         _prog = self.program
         if self.drums and _prog >= 128:
             # A MAP'S OWN DRUM SET (kit_in_map's 128 x map + program): selected
@@ -4121,17 +4125,31 @@ def _CABM():
     return __import__("patch_map").CAB_MASK
 
 
-def with_cab(program, drums, variation, choice):
+def with_cab(program, drums, variation, choice, pickup=0):
     """The patch variation key for VARIATION through cabinet CHOICE (a
-    CAB_CHOICES index; 0 the voice's own): the choice where the voice offers
-    it, else the variation alone."""
+    CAB_CHOICES index; 0 the voice's own) and PICKUP (a PICKUP_CHOICES
+    index, the same): each where the voice offers it, else without it."""
     _PM = __import__("patch_map")
     v = patch_variation(program, drums, int(variation or 0) & _PM.CAB_MASK)
-    if choice and not drums:
+    if drums:
+        return v
+    if choice:
         k = _PM.cab_key(v, choice)
         if ((int(program) & 0x7F), k) in _PM.VARIATIONS:
-            return k
+            v = k
+    if pickup:
+        k = _PM.pk_key(v, pickup)
+        if ((int(program) & 0x7F), k) in _PM.VARIATIONS:
+            v = k
     return v
+
+
+def pk_index(name):
+    """A saved pickup name's PICKUP_CHOICES index: None absent, 0 "own"."""
+    if name is None:
+        return None
+    ch = __import__("patch_map").PICKUP_CHOICES
+    return 0 if name == "own" else (ch.index(name) if name in ch else None)
 
 
 def cab_index(name):
@@ -4221,6 +4239,9 @@ class Part:
         # index (patch_map), None the voice's own -- or, a file's, the
         # channel's CC83 at its program change. Kept across program changes
         self.cab = None
+        # ...AND THE PICKUP (Live.set_pickup): a PICKUP_CHOICES index, None
+        # the voice's own -- or the channel's CC85 -- kept the same way
+        self.pk = None
         self.cc_map = "gm"      # "messenger": its channel's CCs are a Messenger's chart
         # THE STANDARD ITS PATCH WAS PICKED IN (livetui.patch_tree): "gm", "sc1"-
         # "sc4" (a Sound Canvas level, its map), "mt32". Where the picker opens
@@ -4274,7 +4295,8 @@ class Part:
     # (the GS variation; a cabinet choice rides the patch's key over it --
     # patch_map.cab_key -- read as `cabinet`)
     variation = property(lambda self: self.patch.variation & __import__("patch_map").CAB_MASK)
-    cabinet = property(lambda self: self.patch.variation >> __import__("patch_map").CAB_SHIFT)
+    cabinet = property(lambda self: (self.patch.variation >> __import__("patch_map").CAB_SHIFT) & 15)
+    pickup = property(lambda self: __import__("patch_map").pk_of(self.patch.variation))
     drums = property(lambda self: self.patch.drums)
     organ = property(lambda self: self.patch.organ)
     tuner = property(lambda self: self.patch.tuner)
@@ -4320,6 +4342,8 @@ class Part:
             d["bank"] = int(self.variation)       # the GS variation; absent = the capital tone
         if self.cab is not None:                  # (its cabinet, chosen on the part: by name)
             d["cabinet"] = __import__("patch_map").CAB_CHOICES[self.cab] or "own"
+        if self.pk is not None:                   # (...its pickup, the same)
+            d["pickup"] = __import__("patch_map").PICKUP_CHOICES[self.pk] or "own"
         if self.synth:
             d["synth"] = dict(self.synth)
         if self.synth_b:
@@ -4345,10 +4369,11 @@ class Part:
     @staticmethod
     def from_dict(d, progress=None, eastern=None):
         _base = d.get("tuner", "hybrid")
-        _cab = cab_index(d.get("cabinet"))
+        _cab, _pk = cab_index(d.get("cabinet")), pk_index(d.get("pickup"))
         patch = patch_for(d.get("program", 56), d.get("drums", False),
                           tuner_for(d.get("program", 56), d.get("drums", False), _base, eastern),
-                          progress, with_cab(d.get("program", 56), d.get("drums", False), d.get("bank", 0), _cab or 0))
+                          progress, with_cab(d.get("program", 56), d.get("drums", False), d.get("bank", 0), _cab or 0,
+                                             _pk or 0))
         p = Part(patch, d.get("channel"), d.get("lo", 0), d.get("hi", 127),
                  d.get("transpose", 0), d.get("level_db", 0.0))
         p.base_tuner = _base
@@ -4381,6 +4406,7 @@ class Part:
         p.std = d.get("std", "gm")
         p.fixed_touch = None if d.get("fixed_touch") is None else bool(d["fixed_touch"])
         p.cab = _cab
+        p.pk = _pk
         p.rotary = d.get("rotary") if d.get("rotary") in ("room", "mics") else None
         p.rotary_sep = (math.radians(max(0.0, min(180.0, float(d["rotary_spread"]))))
                         if d.get("rotary_spread") is not None else None)
@@ -4799,6 +4825,7 @@ class Live:
         # ...and THE CABINET a file selects (tonelib.CABINET_CC, 83: a
         # CAB_CHOICES index), latched as the bank is, read at the program change
         self.cab_cc = {}
+        self.pk_cc = {}         # ...and its pickup (tonelib.PICKUP_CC, 85: a PICKUP_CHOICES index), the same
         # THE STANDARD (Sound Canvas map) a channel's map 0 plays -- 0 ours, 1
         # SC-55, 2 SC-88, 3 SC-88 Pro, 4 SC-8850 (blockrender.DEFAULT_MAP, the
         # --map option, the panel's standard) -- and a part's own, where a
@@ -6350,6 +6377,8 @@ class Live:
                 self.bank_lsb[ch] = msg.value
             elif msg.control == T.CABINET_CC:       # the cabinet (a CAB_CHOICES index), latched as a bank
                 self.cab_cc[ch] = msg.value
+            elif msg.control == T.PICKUP_CC:        # the pickup (a PICKUP_CHOICES index), the same
+                self.pk_cc[ch] = msg.value
             elif msg.control == 10:                 # pan
                 # THE LEVEL IMAGE FOLLOWS THE POT, THE TIME IMAGE DOES NOT --
                 # see Slab.repan. A note keeps the interaural delay it was
@@ -6575,8 +6604,9 @@ class Live:
                 _pp = kit_in_map(_prog, _map) if _pd and _msb != T.GM2_DRUM_BANK else _prog
                 # (its cabinet: the part's own choice, else the channel's CC83)
                 _cb = part.cab if part.cab is not None else self.cab_cc.get(ch, 0)
+                _pu = part.pk if part.pk is not None else self.pk_cc.get(ch, 0)
                 want = (_pp, _pd, self._tuner_for(_pp, _pd, part.base_tuner),
-                        with_cab(_pp, _pd, _var, _cb))
+                        with_cab(_pp, _pd, _var, _cb, _pu))
                 self._ask_patch(part, want)
             if self.patch_reqs:
                 self.patch_go.set()
@@ -8420,7 +8450,21 @@ class Live:
         it, as a program change rebuilds one; kept on the part across them."""
         _PM = __import__("patch_map")
         part.cab = None if choice is None else max(0, min(len(_PM.CAB_CHOICES) - 1, int(choice)))
-        want = (part.program, part.drums, part.tuner, with_cab(part.program, part.drums, part.variation, part.cab or 0))
+        want = (part.program, part.drums, part.tuner,
+                with_cab(part.program, part.drums, part.variation, part.cab or 0, part.pk or 0))
+        self._ask_patch(part, want)
+        if self.patch_reqs:
+            self.patch_go.set()
+        self.dirty = True
+
+    def set_pickup(self, part, choice):
+        """A PART's PICKUP (the AMP card's switch): a PICKUP_CHOICES index,
+        None the voice's own -- what each is, its instrument's
+        (patch_map.PICKUP_FAMILIES). Rebuilt and kept as set_cabinet's."""
+        _PM = __import__("patch_map")
+        part.pk = None if choice is None else max(0, min(len(_PM.PICKUP_CHOICES) - 1, int(choice)))
+        want = (part.program, part.drums, part.tuner,
+                with_cab(part.program, part.drums, part.variation, part.cab or 0, part.pk or 0))
         self._ask_patch(part, want)
         if self.patch_reqs:
             self.patch_go.set()

@@ -5,8 +5,14 @@
 // one it offers: patch_map.CAB_CHOICES, each what it is and how we know it),
 // and an organ's LESLIE (the half-moon's speed, how the rotors are heard).
 // The web's AMP card's, the same calls: "amp" (the valve, the speed, a
-// Leslie on), the parts push's "cabinet" and "rotary", drive_set,
-// cabinet_set, part_cc 80, rotary_set.
+// Leslie on), the parts push's "cabinet", "pickup" and "rotary", drive_set,
+// cabinet_set, pickup_set, part_cc 80, rotary_set.
+//
+// ...and ahead of the valve, a guitar's, a bass's or a Clavinet's PICKUP
+// (patch_map.PICKUP_FAMILIES): its switch drawn as the instrument's own --
+// a Stratocaster's 5-way blade, a 3-way toggle, the D6's two rockers (Ben:
+// "switch gadgets, like the knobs, more familiar to guitar players") --
+// over the string, its coils where they sit, the ones heard lit.
 #pragma once
 
 #include "app.h"
@@ -39,6 +45,147 @@ inline void amp_open(App &a, bool on)
         amp_take(a, *s);
 }
 
+// THE PICKUP SWITCH, drawn as its instrument's (the family's "switch"):
+// "blade5" a Stratocaster's blade in its slot, "toggle3" a 3-way toggle in
+// its ring, "rockers" the Clavinet D6's two rocker tabs (A/B, C/D). pos the
+// choices in the switch's order, labels theirs, now the one it is on.
+// Returns the choice tapped, -1 none
+inline int pk_switch(App &a, const std::string &kind, float x, float y, float w, float h, const std::vector<int> &pos,
+                     const std::vector<std::string> &labels, int now)
+{
+    ImDrawList *d = dl();
+    const float k = a.k;
+    auto Q = [&](float xx, float yy) { return P(a, xx, yy); };
+    const ImU32 CHROME = IM_COL32(0xb9, 0xbe, 0xc2, 255), CHROME_D = IM_COL32(0x6e, 0x74, 0x7a, 255),
+                SLOT = IM_COL32(0x0c, 0x0d, 0x0f, 255), TIP = IM_COL32(0xee, 0xea, 0xdc, 255),
+                TIP_D = IM_COL32(0xa9, 0xa3, 0x8f, 255);
+    int hit = -1;
+    auto zone = [&](const char *id, int i, float zx, float zy, float zw, float zh) {
+        ImGui::SetCursorScreenPos(Q(zx, zy));
+        ImGui::PushID(id);
+        ImGui::PushID(i);
+        if (ImGui::InvisibleButton("z", ImVec2(std::max(1.0f, zw * k), std::max(1.0f, zh * k))))
+            hit = pos[(size_t)i];
+        ImGui::PopID();
+        ImGui::PopID();
+    };
+    const int n = (int)pos.size();
+    int at = 0;
+    for (int i = 0; i < n; i++)
+        if (pos[(size_t)i] == now)
+            at = i;
+    if (kind == "blade5" || n > 3 && kind != "rockers") {
+        // THE BLADE: a chrome plate, the slot along it, a detent a position,
+        // the white tip where it rests (the neck's end to the left)
+        const float py = y + 6, ph = std::min(64.0f, h * 0.45f), sx0 = x + 26, sx1 = x + w - 26;
+        d->AddRectFilled(Q(x, py), Q(x + w, py + ph), CHROME_D, ph * 0.5f * k);
+        d->AddRectFilled(Q(x + 2, py + 2), Q(x + w - 2, py + ph - 2), CHROME, ph * 0.5f * k);
+        d->AddRectFilled(Q(sx0 - 6, py + ph / 2 - 5), Q(sx1 + 6, py + ph / 2 + 5), SLOT, 5 * k);
+        for (int i = 0; i < n; i++) {
+            const float dx = n > 1 ? sx0 + (sx1 - sx0) * i / (n - 1) : (sx0 + sx1) / 2;
+            d->AddLine(Q(dx, py + 6), Q(dx, py + 12), CHROME_D, 2 * k);
+            d->AddLine(Q(dx, py + ph - 12), Q(dx, py + ph - 6), CHROME_D, 2 * k);
+            label_c(a, a.bold, 14, dx, py + ph + 10, i == at ? LCD : SILK_DIM, labels[(size_t)i], (sx1 - sx0) / std::max(1, n - 1));
+            zone("blade", i, dx - (sx1 - sx0) / std::max(2, 2 * (n - 1)), py - 4, (sx1 - sx0) / std::max(1, n - 1),
+                 ph + 50);
+        }
+        const float tx = n > 1 ? sx0 + (sx1 - sx0) * at / (n - 1) : (sx0 + sx1) / 2, tw = 30, th = ph + 18;
+        d->AddRectFilled(Q(tx - tw / 2 + 2, py - 9 + 3), Q(tx + tw / 2 + 2, py - 9 + th + 3), IM_COL32(0, 0, 0, 90), 9 * k);
+        d->AddRectFilled(Q(tx - tw / 2, py - 9), Q(tx + tw / 2, py - 9 + th), TIP_D, 9 * k);
+        d->AddRectFilled(Q(tx - tw / 2 + 2, py - 7), Q(tx + tw / 2 - 2, py - 9 + th - 4), TIP, 8 * k);
+        for (int g = 0; g < 4; g++)                 // (its grip's ridges)
+            d->AddLine(Q(tx - tw / 2 + 6, py + 2 + g * (th - 22) / 3), Q(tx + tw / 2 - 6, py + 2 + g * (th - 22) / 3),
+                       TIP_D, 1.5f * k);
+    } else if (kind == "rockers") {
+        // THE D6's ROCKERS: A/B and C/D, each tab down on one half -- A C the
+        // centre pickup, B C the bridge, A D both, B D both against each other
+        static const int AB[8] = {0, 0, 0, 0, 0, 1, 0, 1}, CD[8] = {0, 0, 0, 0, 0, 0, 1, 1};
+        const int ab = AB[now & 7], cd = CD[now & 7];
+        const float tw = std::min(110.0f, (w - 30) / 2), th = std::min(120.0f, h - 30), gx = x + (w - 2 * tw - 30) / 2;
+        static const char *NM[2][2] = {{"A", "B"}, {"C", "D"}};
+        for (int r = 0; r < 2; r++) {
+            const float rx = gx + r * (tw + 30), ry = y + 4;
+            const int down = r ? cd : ab;
+            d->AddRectFilled(Q(rx - 4, ry - 4), Q(rx + tw + 4, ry + th + 4), SLOT, 8 * k);
+            for (int half = 0; half < 2; half++) {
+                const float hy = ry + half * th / 2;
+                const bool pressed = half == down;
+                const ImU32 top = pressed ? IM_COL32(0x1e, 0x20, 0x23, 255) : IM_COL32(0x3c, 0x40, 0x45, 255);
+                d->AddRectFilled(Q(rx, hy), Q(rx + tw, hy + th / 2 - 2), top, 6 * k);
+                if (!pressed)
+                    d->AddRectFilled(Q(rx + 3, hy + 3), Q(rx + tw - 3, hy + 9), IM_COL32(0x58, 0x5d, 0x63, 255), 4 * k);
+                text_c(a, a.bold, 21, rx + tw / 2, hy + th / 4 - a.lh(21) / 2 - 1, pressed ? LCD : SILK, NM[r][half]);
+                // (a tap on a half: that rocker down there, the other as it is)
+                const int nab = r ? ab : half, ncd = r ? half : cd;
+                const int c = nab ? (ncd ? 7 : 5) : (ncd ? 6 : 1);
+                ImGui::SetCursorScreenPos(Q(rx, hy));
+                ImGui::PushID("rock");
+                ImGui::PushID(r * 2 + half);
+                if (ImGui::InvisibleButton("z", ImVec2(tw * k, th / 2 * k)))
+                    hit = c;
+                ImGui::PopID();
+                ImGui::PopID();
+            }
+        }
+        for (int i = 0; i < n; i++)
+            if (pos[(size_t)i] == now)
+                text_c(a, a.bold, 14, x + w / 2, y + th + 18, LCD, labels[(size_t)i]);
+    } else {
+        // THE TOGGLE: its ring, the lever tilted to the neck (up), straight
+        // out (both) or to the bridge (down), its cream tip; the positions named beside
+        const float cx = x + std::min(90.0f, w * 0.3f), cy = y + h * 0.45f, R = std::min(40.0f, h * 0.3f);
+        // (the ring nut, and the lever out of it: tilted up to the neck, down
+        // to the bridge -- straight out at BOTH, seen end on, its tip alone)
+        d->AddCircleFilled(Q(cx, cy), R * 0.62f * k, CHROME_D, 32);
+        d->AddCircleFilled(Q(cx, cy), R * 0.55f * k, CHROME, 32);
+        d->AddCircleFilled(Q(cx, cy), R * 0.22f * k, IM_COL32(0x2b, 0x2e, 0x32, 255), 20);
+        const float ang[3] = {-1.0f, 0.0f, 1.0f};
+        const float tilt = ang[std::min(at, 2)];
+        const float ex = cx + std::fabs(tilt) * R * 0.45f, ey = cy + tilt * R * 1.5f;
+        if (tilt != 0.0f) {
+            d->AddLine(Q(cx, cy), Q(ex, ey), CHROME_D, 11 * k);
+            d->AddLine(Q(cx, cy), Q(ex, ey), CHROME, 7 * k);
+        }
+        d->AddCircleFilled(Q(ex, ey), 14 * k, TIP_D, 24);
+        d->AddCircleFilled(Q(ex - 1, ey - 1), 12 * k, TIP, 24);
+        for (int i = 0; i < n && i < 3; i++) {
+            const float ly = cy + ang[i] * R * 1.5f - a.lh(14) / 2;
+            text(a, a.bold, 14, cx + R + 46, ly, i == at ? LCD : SILK_DIM, labels[(size_t)i]);
+            zone("tog", i, x, cy + ang[i] * R * 1.5f - R * 0.75f, w, R * 1.5f);
+        }
+    }
+    return hit;
+}
+
+// THE STRING UNDER THE COILS: the last stretch before the bridge (at the
+// right), each of the family's coils where it sits, the ones heard lit
+inline void pk_string(App &a, float x, float y, float w, const std::vector<double> &all, const std::vector<double> &lit)
+{
+    if (all.empty())
+        return;
+    ImDrawList *d = dl();
+    const float k = a.k;
+    double qmax = 0;
+    for (double q : all)
+        qmax = std::max(qmax, q);
+    qmax *= 1.18;
+    const float bx = x + w - 10;
+    auto X = [&](double q) { return bx - (float)(q / qmax) * (w - 20); };
+    d->AddRectFilled(P(a, bx - 4, y - 14), P(a, bx + 6, y + 14), IM_COL32(0x9a, 0x9f, 0xa3, 255), 2 * k);
+    d->AddLine(P(a, x, y), P(a, bx, y), IM_COL32(0xc8, 0xc8, 0xc0, 255), 2 * k);
+    for (double q : all) {
+        bool on = false;
+        for (double l : lit)
+            on = on || std::fabs(l - q) < 1e-6;
+        const float cx = X(q);
+        d->AddRectFilled(P(a, cx - 7, y - 11), P(a, cx + 7, y + 11), on ? LCD : IM_COL32(0x2e, 0x31, 0x35, 255), 3 * k);
+        d->AddRect(P(a, cx - 7, y - 11), P(a, cx + 7, y + 11), on ? LCD : SILK_DIM, 3 * k, 0, 1.2f * k);
+    }
+    text(a, a.font, 14, x, y + 18, SILK_DIM, "\xe2\x86\x90 neck");
+    const std::string br = "bridge";
+    text(a, a.font, 14, bx - text_w(a, a.font, 14, br) + 6, y + 18, SILK_DIM, br);
+}
+
 inline void draw_amp(App &a)
 {
     AmpUi &M = g_amp;
@@ -57,7 +204,20 @@ inline void draw_amp(App &a)
     if (p)
         text(a, a.font, 14, TX, HY + 1, OWN, fit(a, a.font, 14, "part " + pad2(a.row + 1) + " \xc2\xb7 " + str(p, "name"), IP ? 600 : 900));
     const int kind = (int)num(&M.st, "kind", 0);
-    if (!p || kind == 0 || flag(p, "drums")) {
+    // (its pickup: [chosen (-1 none), now (0 its own), [the choices offered]] -- the parts push's)
+    std::vector<int> pk_offer;
+    int pk_chosen = -1, pk_now = 0;
+    if (p) {
+        const J *pv = p->get("pickup");
+        if (pv && pv->is(J::ARR) && pv->a.size() >= 3 && pv->a[2].is(J::ARR)) {
+            pk_chosen = (int)pv->a[0].d();
+            pk_now = (int)pv->a[1].d();
+            for (const J &o : pv->a[2].a)
+                pk_offer.push_back((int)o.d());
+        }
+    }
+    const bool has_pk = p && !flag(p, "drums") && !pk_offer.empty();
+    if (!p || (kind == 0 && !has_pk) || flag(p, "drums")) {
         const std::string why = p && flag(p, "drums")
                                     ? "A drum set has no amplifier: its drums are heard as they are."
                                     : "This voice plays through no amplifier or speaker of its own -- an acoustic "
@@ -71,12 +231,103 @@ inline void draw_amp(App &a)
     const bool organ = kind == 1, les = flag(&M.st, "leslie");
     const float G = IP ? 8 : 14, W = X1 - X0;
     // (the Leslie's column an organ's alone: the speaker takes its width otherwise)
-    const float VW = IP ? 300 : 460, LW = organ ? (IP ? 300 : 460) : 0, SW = W - VW - LW - (organ ? 2 : 1) * G;
+    const float PW = has_pk ? (kind == 0 ? W : (IP ? 330 : 520)) : 0;
+    const float VW = kind == 0 ? 0 : IP ? 300 : 460, LW = organ ? (IP ? 300 : 460) : 0;
+    const float SW = kind == 0 ? 0 : W - PW - VW - LW - (organ ? 2 : 1) * G - (has_pk ? G : 0);
     const float H = Y1 - Y0;
+
+    // THE PICKUP: the switch as the instrument has it, the string under its coils, what it is
+    if (has_pk) {
+        const float x = X0, y = Y0;
+        look::tray(a, x, y, PW, H, 10);
+        heading(a, x + 14, y + 12, "PICKUP", "pickup");
+        LibUi &L = g_lib;
+        if (!L.loaded)
+            lib_load(a);
+        const J *fams = L.about.get("pickups"), *owns = L.about.get("pk_own");
+        std::string fam;
+        int own = 0;
+        if (owns) {
+            const J *o = owns->get(std::to_string((int)num(p, "program")) + "." + std::to_string((int)num(p, "variation")));
+            if (o && o->is(J::ARR) && o->a.size() >= 2) {
+                fam = o->a[0].s;
+                own = (int)o->a[1].d();
+            }
+        }
+        const J *F = fams && !fam.empty() ? fams->get(fam) : nullptr;
+        const J *chs = F ? F->get("choices") : nullptr;
+        auto ch = [&](int c) -> const J * { return chs ? chs->get(std::to_string(c)) : nullptr; };
+        auto lab = [&](int c) -> std::string {
+            const J *e = ch(c);
+            return e && e->is(J::ARR) && !e->a.empty() ? e->a[0].s : "?";
+        };
+        auto pts = [&](int c) {
+            std::vector<double> v;
+            const J *e = ch(c);
+            if (e && e->is(J::ARR) && e->a.size() >= 3 && e->a[2].is(J::ARR))
+                for (const J &q : e->a[2].a)
+                    v.push_back(q.d());
+            return v;
+        };
+        int now = pk_now;
+        auto ht = a.hold.find("pickup");
+        if (ht != a.hold.end() && ImGui::GetTime() < ht->second.second)
+            now = (int)ht->second.first;
+        else if (pk_chosen > 0)
+            now = pk_chosen;
+        const int lit = now ? now : own;
+        // (the switch's order: the family's own, neck to bridge)
+        std::vector<int> order;
+        const J *ord = F ? F->get("order") : nullptr;
+        if (ord && ord->is(J::ARR))
+            for (const J &o : ord->a)
+                if (std::find(pk_offer.begin(), pk_offer.end(), (int)o.d()) != pk_offer.end())
+                    order.push_back((int)o.d());
+        if (order.empty())
+            order = pk_offer;
+        std::vector<std::string> labels;
+        for (int c : order)
+            labels.push_back(lab(c));
+        if (F)
+            text(a, a.bold, 14, x + 14, y + (IP ? 40 : 48), SILK, str(F, "name"));
+        const float sy = y + (IP ? 70 : 84), sh = IP ? 130 : 170;
+        const int c = pk_switch(a, F ? str(F, "switch") : "blade5", x + 20, sy, PW - 40, sh, order, labels, lit);
+        if (c > 0) {
+            a.hold["pickup"] = {(double)c, ImGui::GetTime() + 0.8};
+            call(a, "{\"call\":\"pickup_set\",\"row\":" + std::to_string(a.row) + ",\"choice\":"
+                        + std::to_string(c == own && pk_chosen < 0 ? -1 : c) + "}");
+        }
+        float ty = sy + sh + (IP ? 14 : 24);
+        std::vector<double> all;
+        for (int o : order)
+            for (double q : pts(o))
+                if (std::find_if(all.begin(), all.end(), [&](double z) { return std::fabs(z - q) < 1e-6; }) == all.end())
+                    all.push_back(q);
+        if (!all.empty()) {
+            pk_string(a, x + 20, ty + 14, PW - 40, all, pts(lit));
+            ty += IP ? 50 : 60;
+        }
+        const bool mine = pk_chosen > 0 && pk_chosen != own;
+        if (button(a, "amppkown", x + 14, ty, PW - 28, IP ? 40 : 40,
+                   mine ? "BACK TO THE VOICE'S " + lab(own) : "AS THE VOICE \xc2\xb7 " + lab(own), false, mine)) {
+            a.hold["pickup"] = {(double)own, ImGui::GetTime() + 0.8};
+            call(a, "{\"call\":\"pickup_set\",\"row\":" + std::to_string(a.row) + ",\"choice\":-1}");
+        }
+        ty += IP ? 52 : 56;
+        const J *e = ch(lit);
+        std::string ab = e && e->is(J::ARR) && e->a.size() >= 2 ? e->a[1].s : "";
+        if (kind == 0)
+            ab += " No amplifier of its own: it is heard straight from its pickups.";
+        const auto ls = wrap(a, a.font, 14, ab, PW - 28);
+        for (size_t i = 0; i < ls.size(); i++)
+            text(a, a.font, 14, x + 14, ty + i * LH, SILK_DIM, ls[i]);
+    }
+    if (kind == 0)
+        return;
 
     // THE VALVE: tubeamp's triode, driven -- 0 clean, 1 the edge of breakup, past it the clip
     {
-        const float x = X0, y = Y0;
+        const float x = X0 + (has_pk ? PW + G : 0), y = Y0;
         look::tray(a, x, y, VW, H, 10);
         heading(a, x + 14, y + 12, "VALVE", "drive");
         const J *dv = M.st.get("drive");
@@ -132,7 +383,7 @@ inline void draw_amp(App &a)
 
     // THE SPEAKER: the voice's own, or one it offers -- each what it is, and how we know it
     {
-        const float x = X0 + VW + G, y = Y0;
+        const float x = X0 + (has_pk ? PW + G : 0) + VW + G, y = Y0;
         look::tray(a, x, y, SW, H, 10);
         heading(a, x + 14, y + 12, "SPEAKER", "cabinet");
         LibUi &L = g_lib;

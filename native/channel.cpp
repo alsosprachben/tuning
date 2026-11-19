@@ -250,7 +250,9 @@ struct Song {
         // (its cabinet first, the file's CC83 over bit 16: its voice's once K
         // is known, nv_song_cab_resolve -- whatever the bank, and with no
         // tables at all: a live template's capital through a cabinet)
-        const int cab = bsel >> 16;
+        // ...and its PICKUP, the file's CC85 over bit 20: the variant code
+        // (nv_variant's) the cabinet in its low 4 bits, the pickup over them
+        const int cab = ((bsel >> 16) & 15) | (((bsel >> 20) & 7) << 4);
         bsel &= 0xFFFF;
         if (!notes.empty() && !notes.back().drum)
             notes.back().cab = cab;

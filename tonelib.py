@@ -4425,6 +4425,8 @@ class ClavinetProperties(InharmonicStringProperties):
     (Remaggi, Gabrielli et al.); the ladder, the decay and the stiffness are
     fitted to the takes (examples/clav_fit.py).
     """
+    # ITS PICKUP SWITCH, the part's to set (the AMP card): the D6's: its two rocker switches (clav_pickup)
+    pickup_family = 'clav'
 
     # Struck at the very end of what sounds: 0.042 of the speaking length,
     # FITTED (clav_fit.py; the estimate was 0.035), the comb's first null
@@ -10608,6 +10610,8 @@ class ElectricGuitarProperties(PluckedStringProperties):
     That is also why it can be amplified to the point of feedback, which this
     does not model.
     """
+    # ITS PICKUP SWITCH, the part's to set (the AMP card): the Stratocaster's: its 5-way switch (patch_map.PICKUP_FAMILIES)
+    pickup_family = 'strat'
     # THE SPECTRUM, FITTED (examples/egtr_fit.py --ladder=27) to IDMT-SMT-
     # Guitar's Stratocaster on its NECK single coil, DI, 78 notes each at its
     # own fret: the ladder's miss 5.33 -> 4.23 dB (median, h2-h10). The coil
@@ -10798,6 +10802,8 @@ class ElectricBassProperties(ElectricGuitarProperties):
     two nearly cancel. ESTIMATED, like the guitar's, and worth measuring if a
     reference ever turns up.
     """
+    # ITS PICKUP SWITCH, the part's to set (the AMP card): the Jazz Bass's: its two coils, each or both
+    pickup_family = 'jbass'
     # THE SPECTRUM, FITTED (examples/egtr_fit.py --ladder=33/34) to IDMT-SMT-
     # Bass, DI, three basses on both pickups: a Jazz bass's two coils (~85 and
     # ~145 mm of 864); the pickup's load at 4.87 kHz, Q 1.05, from the PICK's
@@ -11282,6 +11288,8 @@ class JazzGuitarProperties(ElectricGuitarProperties):
 
     Three nulls converging on the 4th harmonic is the sound.
     """
+    # ITS PICKUP SWITCH, the part's to set (the AMP card): the Ibanez RG2820's: neck and bridge humbuckers, each or both
+    pickup_family = 'ibanez'
     # FITTED (--ladder=26) to the RG2820's NECK humbucker, DI: 8.95 -> 5.40 dB.
     strike_point = 0.1923
     strike_depth = 0.8113
@@ -11374,6 +11382,8 @@ class OverdrivenGuitarProperties(ElectricGuitarProperties):
 
     Bridge pickup, because that is what the position is for.
     """
+    # ITS PICKUP SWITCH, the part's to set (the AMP card): the Ibanez's: neck, both, bridge
+    pickup_family = 'ibanez'
     initial_gain = 0.0741522   # held at its level before the IDMT fit (egtr_fit.py), with
     # amp_reference moving with it -- the drive as voiced (turns x coils x the family's base)
     # FITTED to the RG2820's BRIDGE humbucker, DI (the same pickup as GM 30, its fit): the
@@ -11410,6 +11420,8 @@ class DistortionGuitarProperties(ElectricGuitarProperties):
     push the front end, and its own 36th-harmonic null keeps the very top from
     turning to hash before the speaker gets to it.
     """
+    # ITS PICKUP SWITCH, the part's to set (the AMP card): the Ibanez's: neck, both, bridge
+    pickup_family = 'ibanez'
     initial_gain = 0.106201   # held at its level before the IDMT fit (egtr_fit.py), with
     # amp_reference moving with it -- the drive as voiced (turns x coils x the family's base)
     # FITTED to the RG2820's BRIDGE humbucker, DI (--ladder=30, 6.25 -> 3.40 dB): the
@@ -23408,6 +23420,12 @@ ROTARY_CC = 82
 # offer leaves it its own.
 CABINET_CC = 83
 
+# THE PICKUP (patch_map.PICKUP_CHOICES, Ben 2026-11-19): CC85, the same way --
+# its value a choice's index (0 the voice's own, 1 neck, 2 neck+middle, 3
+# middle, 4 middle+bridge, 5 bridge, 6 neck+bridge, 7 anti-phase), what each
+# is the instrument's (PICKUP_FAMILIES), latched as a bank select is.
+PICKUP_CC = 85
+
 # CC67 for the note being built, set by the renderer exactly as
 # bagpipe_drones and honky_detune are: a per-note fact that reaches the voice
 # through the one place that knows both the file and the class.
@@ -28112,6 +28130,8 @@ class GuitarFeedbackProperties(Feedback, ElectricGuitarProperties):
     """GS 31.8 "Gt. Feedback": the feedback ITSELF, on a clean amp (the
     Gretsch's): the note's fundamental sustained by the loop, swelling in
     over the pluck, its odd harmonics rising as the amp saturates."""
+    # ITS PICKUP SWITCH, the part's to set (the AMP card): the Gretsch's own: no switch
+    pickup_family = None
     # against the Gretsch's clean G4 (examples/feedback_fit.py): the
     # fundamental ~23 dB over the pluck a second in, its odd harmonics at
     # -25/-16/-21 dB by 3 s, sinking ~0.7 dB/s while held
@@ -28378,6 +28398,8 @@ class HawaiianGuitarProperties(Plectrum, JazzGuitarProperties):
     IT SUSTAINS: the decay fitted to them, the low harmonics ringing at 2-6
     dB/s where the archtop's die at 6-8 -- a solid neck, high strings, no
     frets to damp."""
+    # ITS PICKUP SWITCH, the part's to set (the AMP card): a lap steel's own: no switch
+    pickup_family = None
     # FINGERPICKS, NOT A FLATPICK: the takes' top does not fall after the
     # strike (examples/plectrum_fit.py, FALL ~0 dB) -- no transient boost
     pick_slope_db = 0.0

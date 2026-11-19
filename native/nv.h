@@ -934,6 +934,13 @@ typedef struct NoteClass {
     // tremolo) and its level makeup (leslie_makeup_db) -- nv_cab_variant's
     int cab_mask, cab_lfast;
     double cab_mk;
+    // ...AND THE PICKUPS IT OFFERS (patch_map.pk_choices: bit p a
+    // PICKUP_CHOICES index), where its family's terms start in the
+    // cabinets' table (pk_base + p: nv_cab_terms' blocks past the cabinets),
+    // and its own pickup's winding there (pk_t0: its turns kept relative to
+    // it) -- nv_pk_variant's
+    int pk_mask, pk_base;
+    double pk_t0;
     // THE KEY-UP'S CLICK (release_click_db: n_click 0 none): the jack's
     // fixed modes (Hz, amplitude) at click_db, decaying click_dec dB/s for
     // click_s; on an organ with choirs (click_jacks), one a drawn stop's jack
@@ -1518,6 +1525,10 @@ void nv_song_vars(void *s, int nent, const int *nls, const int *ls, const double
 void nv_song_cab_resolve(void *s, int (*cb)(void *, int, int), void *ctx);
 void nv_cab_terms(int n, const double *terms);
 const NoteClass *nv_cab_variant(const NoteClass *k, int c);
+const NoteClass *nv_pk_variant(const NoteClass *k, int p);
+/* a variation key's VARIANT CODE (its bits 12-19 over 12: the cabinet in
+   the low 4, the pickup in the next 3) -- the pickup's, then the cabinet's */
+const NoteClass *nv_variant(const NoteClass *k, int code);
 int nv_song_note_bank(void *s, int bsel);
 int nv_song_kidx(void *s, int i);
 int nv_song_tone(void *s, int i);

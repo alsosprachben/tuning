@@ -466,6 +466,14 @@ a.hb { text-decoration: none; text-align: center; display: inline-block; }
 /* THE AMP card: the valve, the speaker, an organ's Leslie */
 .amp { flex: 1; min-height: 0; display: grid; grid-template-columns: 400px 1fr 400px; gap: 12px; }
 .amp.no-les { grid-template-columns: 400px 1fr; }
+.amp.has-pk { grid-template-columns: 380px 360px 1fr 360px; }
+.amp.has-pk.no-les { grid-template-columns: 380px 400px 1fr; }
+.amp.pk-only { grid-template-columns: minmax(0, 560px); }
+.amp .pk-svg { width: 100%; height: auto; display: block; }
+.amp .pk-hit { cursor: pointer; }
+.amp .pk-t { font: 700 12px var(--f-ui); fill: var(--silk-dim, #8a9099); letter-spacing: .06em; }
+.amp .pk-t.big { font-size: 22px; fill: var(--silk); }
+.amp .pk-t.on { fill: var(--lcd); }
 .amp section { background: #1f2225; border: 1px solid var(--edge); border-radius: 10px; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; }
 .amp h3 { margin: 0; font: 700 11px var(--f-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--silk); }
 .amp h4 { margin: 6px 0 0; font: 700 10px var(--f-ui); letter-spacing: .14em; color: var(--silk-dim, #8a9099); }
@@ -473,7 +481,7 @@ a.hb { text-decoration: none; text-align: center; display: inline-block; }
 .amp .amp-cabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .amp .amp-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .amp .amp-row.two { grid-template-columns: 1fr 1fr; }
-.amp .amp-now { font: 700 13px var(--f-ui); color: var(--silk); margin: 4px 0 0; }
+.amp .amp-now, .amp .amp-pkname { font: 700 13px var(--f-ui); color: var(--silk); margin: 4px 0 0; }
 .amp .pn-note { margin: 0; }
 .amp-empty { font-size: 18px; color: var(--silk-dim, #8a9099); }
 .amp .hb.on { background: var(--lcd); border-color: var(--lcd); color: var(--lcd-bg); box-shadow: 0 0 10px rgba(240, 180, 60, .35); }   /* (the speaker, speed, way heard in use: lit as the cards' choices are) */

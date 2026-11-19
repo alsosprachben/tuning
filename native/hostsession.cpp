@@ -90,6 +90,16 @@ static int cab_index(const std::string &s)
             return i;
     return -1;
 }
+// ...THE PICKUP CHOICES' NAMES (patch_map.PICKUP_CHOICES; 0 "own"), the same
+static const char *const PK_NAMES[] = {"own", "neck", "neck+middle", "middle", "middle+bridge", "bridge", "neck+bridge",
+                                       "anti"};
+static int pk_index(const std::string &s)
+{
+    for (int i = 0; i < (int)(sizeof PK_NAMES / sizeof PK_NAMES[0]); i++)
+        if (s == PK_NAMES[i])
+            return i;
+    return -1;
+}
 
 static std::string beside(const std::string &path, const char *name)
 {
@@ -543,8 +553,10 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
                 sp.rot_sep = rs && rs->is(sess::J::NUM) ? std::max(0.0, std::min(180.0, rs->d())) * M_PI / 180.0 : -1.0;
                 const sess::J *cb = pd.get("cabinet");  // (its cabinet, chosen: live's Part.cab by name; absent, none)
                 sp.cab = cb && cb->is(sess::J::STR) ? cab_index(cb->s) : -1;
+                const sess::J *pu = pd.get("pickup");   // (...its pickup: live's Part.pk by name)
+                sp.pk = pu && pu->is(sess::J::STR) ? pk_index(pu->s) : -1;
                 if (!sp.drums)
-                    sp.var = with_cab(sp.program, sp.var, std::max(0, sp.cab));
+                    sp.var = with_cab(sp.program, sp.var, std::max(0, sp.cab), std::max(0, sp.pk));
                 const sess::J *dr = pd.get("drive");    // (an organ's drive knob: live's Part.drive; absent, the voice's)
                 sp.drive = dr && dr->is(sess::J::NUM) ? std::max(0.0, dr->d()) : -1.0;
                 const sess::J *cm = pd.get("cc_map");   // (a Messenger read on it: nvlive reads one on every part)
@@ -592,9 +604,12 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
                 {                               // (its cabinet: the pick below takes it -- at the start, its own rebuild)
                     std::lock_guard<std::mutex> lk(parts_mu);
                     pats[0].cab = sp.cab;
+                    pats[0].pk = sp.pk;
                 }
                 if (at_start && sp.cab >= 0 && !sp.drums)
                     set_cabinet(0, sp.cab);
+                if (at_start && sp.pk >= 0 && !sp.drums)
+                    set_pickup(0, sp.pk);
                 if (at_start)                   // (else after the pick's swap, below: a new program clears it)
                     part_drive(0, sp.drive);
                 if (!at_start) {
@@ -822,7 +837,8 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
             pd.o["drawn"] = sess::arr();
         }
         const PartAt &pa = rows[k];
-        const int vk = pa.drums ? 0 : (k == 0 ? (shown_program >= 128 ? 0 : shown_var.load()) : pa.var);
+        // (the GS variation alone: a cabinet's or a pickup's choice over bit 12 is saved by name, below -- live's to_dict)
+        const int vk = (pa.drums ? 0 : (k == 0 ? (shown_program >= 128 ? 0 : shown_var.load()) : pa.var)) & 4095;
         pd.o["program"] = sess::integer((k == 0 ? shown_program.load() : pa.program) & 127);
         pd.o["drums"] = sess::boolean(k == 0 ? shown_program >= 128 : pa.drums);
         if (vk)
@@ -843,6 +859,10 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
             pd.o["cabinet"] = sess::str(CAB_NAMES[pa.cab]);
         else
             pd.o.erase("cabinet");
+        if (pa.pk >= 0 && pa.pk < (int)(sizeof PK_NAMES / sizeof PK_NAMES[0]))      // (...its pickup, the same)
+            pd.o["pickup"] = sess::str(PK_NAMES[pa.pk]);
+        else
+            pd.o.erase("pickup");
         if (pa.rot_mode >= 0)                   // (its rotary heard, live's likewise: only when set)
             pd.o["rotary"] = sess::str(pa.rot_mode ? "mics" : "room");
         else
@@ -914,7 +934,7 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
     if (parts.a.empty())
         return j;
     sess::J &p0 = parts.a[0];
-    const int sp = shown_program, sv = sp >= 128 ? 0 : shown_var.load();
+    const int sp = shown_program, sv = sp >= 128 ? 0 : shown_var.load() & 4095;     // (the GS variation alone)
     p0.o["program"] = sess::integer(sp & 127);
     {                                           // (the tuner it plays: the session's, --tuner's, the panel's)
         std::lock_guard<std::mutex> lk(bmu);
@@ -1435,10 +1455,10 @@ int nv_host_cabinet(nv_host *h, int row, int *chosen, int *now, int *offer, int 
     const int v = pa.want >= 0 ? pa.want_var : pa.var, p = pa.want >= 0 ? pa.want : pa.program;
     const bool dr = pa.want >= 0 ? pa.want_dr : pa.drums;
     *chosen = pa.cab;
-    *now = dr ? 0 : v >> 12;
+    *now = dr ? 0 : (v >> 12) & 15;
     int n = 0;
-    for (int c = 1; !dr && c < 64; c++)
-        if (h->with_cab(p, v, c) >> 12 == c) {
+    for (int c = 1; !dr && c < 16; c++)
+        if (((h->with_cab(p, v, c) >> 12) & 15) == c) {
             if (n < cap)
                 offer[n] = c;
             n++;
@@ -1450,6 +1470,37 @@ void nv_host_set_cabinet(nv_host *h, int row, int choice)
     size_t i;
     if (row_index(h, row, i))
         h->set_cabinet(i, choice);
+}
+// A PART's PICKUP (live.set_pickup), as nv_host_cabinet: *chosen (-1 none),
+// *now the one it plays through (0 its own), offer[] the PICKUP_CHOICES its
+// voice offers (patch_map.pk_choices) -- how many; -1 no such row
+int nv_host_pickup(nv_host *h, int row, int *chosen, int *now, int *offer, int cap)
+{
+    size_t i;
+    if (!row_index(h, row, i))
+        return -1;
+    std::lock_guard<std::mutex> lk(h->parts_mu);
+    if (i >= h->pats.size())
+        return -1;
+    const nv_host::PartAt &pa = h->pats[i];
+    const int v = pa.want >= 0 ? pa.want_var : pa.var, p = pa.want >= 0 ? pa.want : pa.program;
+    const bool dr = pa.want >= 0 ? pa.want_dr : pa.drums;
+    *chosen = pa.pk;
+    *now = dr ? 0 : (v >> 16) & 7;
+    int n = 0;
+    for (int c = 1; !dr && c < 8; c++)
+        if (((h->with_cab(p, v, 0, c) >> 16) & 7) == c) {
+            if (n < cap)
+                offer[n] = c;
+            n++;
+        }
+    return n;
+}
+void nv_host_set_pickup(nv_host *h, int row, int choice)
+{
+    size_t i;
+    if (row_index(h, row, i))
+        h->set_pickup(i, choice);
 }
 
 void nv_host_set_rotary(nv_host *h, int row, int mode, double spread_deg)

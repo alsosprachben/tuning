@@ -1121,6 +1121,7 @@ struct nv_host {
         double rot_sep = -1.0;                  // ...the mics' angle apart, radians (<0 the default)
         double drive = -1.0;                    // an organ's drive knob (live's Part.drive: <0 the voice's)
         int cab = -1;                           // its cabinet, chosen (live's Part.cab: a CAB_CHOICES index, -1 none)
+        int pk = -1;                            // its pickup, chosen (live's Part.pk: a PICKUP_CHOICES index, -1 none)
         bool is(int prog, bool dr, int v) const
         {
             return want >= 0 ? want == prog && want_dr == dr && want_var == v
@@ -1187,7 +1188,7 @@ struct nv_host {
     int split;
     int bank0;
     std::vector<PartAt> pats;
-    std::map<int, void *> caches;
+    std::map<long long, void *> caches;          // (by ckey: 64 bits, its variant's and room's fields wide)
     bool dry;
     void * conv_cn;
     void * conv_cp;
@@ -1208,15 +1209,21 @@ struct nv_host {
     std::map<int, int> bmsb;
     std::map<int, int> blsb;
     std::map<int, int> hcab;                // each channel's cabinet (CC83, tonelib.CABINET_CC), latched as the bank
+    std::map<int, int> hpk;                 // ...and its pickup (CC85, tonelib.PICKUP_CC), the same
     std::function<int(int p, int v)> cab_mask_of;     // (the cabinets a variation's voice offers: its cab_mask)
-    // VARIATION v THROUGH CABINET c (live.with_cab): the variant's key where the
-    // voice offers it (its class's cab_mask), else v alone
-    int with_cab(int p, int v, int c) const
+    std::function<int(int p, int v)> pk_mask_of;      // (...the pickups: its pk_mask)
+    // VARIATION v THROUGH CABINET c AND PICKUP k (live.with_cab): the
+    // variant's key, each where the voice offers it (its class's cab_mask,
+    // pk_mask: patch_map.cab_key's bits 12-15, pk_key's 16-18), else without
+    int with_cab(int p, int v, int c, int k = 0) const
     {
         v &= 4095;
-        if (c <= 0 || c > 30 || !cab_mask_of)
-            return v;
-        return (cab_mask_of(p, v) >> c) & 1 ? v | (c << 12) : v;
+        int r = v;
+        if (c > 0 && c <= 15 && cab_mask_of && ((cab_mask_of(p, v) >> c) & 1))
+            r |= c << 12;
+        if (k > 0 && k <= 7 && pk_mask_of && ((pk_mask_of(p, v) >> k) & 1))
+            r |= k << 16;
+        return r;
     }
     bool rxbank;
     int chdr[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0};    // each channel drums (live's ch_drums)
@@ -1253,7 +1260,7 @@ struct nv_host {
     // two blocks with its templates (retire_req, under bmu), freed by the
     // builder once the part reaches it no more (nv_part_cache_reap); the
     // keys the parts play or want (the audio thread's, under bmu)
-    std::map<int, long long> cache_used;
+    std::map<long long, long long> cache_used;
     std::map<void *, long long> cache_bytes;
     long long cache_tick = 0, cache_cap = 256LL << 20;
     // THE PATCHES' BUDGET (A5: iOS ends an app over its memory): the bytes
@@ -1276,7 +1283,7 @@ struct nv_host {
     bool oct_on = false;
     std::map<int, std::array<unsigned, 256>> oct_rooms;  // (key_room -> masks)
     std::array<unsigned, 256> oct_any{};        // (every room's: a room the file did not name)
-    std::set<int> partial;                      // (cmu: the patches built for a file's octaves)
+    std::set<long long> partial;                      // (cmu: the patches built for a file's octaves)
     bool fill_req = false;                      // (bmu: unused -- a file's patches now fill on demand)
     // A5's ON DEMAND: a note that found no template is held by the part
     // (nv_part_late), its template asked; the builder builds that one first,
@@ -1312,14 +1319,16 @@ struct nv_host {
     // a patch's key holds it past bit 22, so a room's patches and another's
     // are told apart (a file's built ahead in each)
     int key_room = 0;
-    // (a variation's CABINET -- patch_map.cab_key's choice over its bit 12 --
-    // in bits 22-25 of its own, past the variation's 14; the room over them)
-    static const int KEY_CAB_SHIFT = 22, KEY_ROOM_SHIFT = 26;
-    int ckey(int prog, bool dr, int var) const
+    // (a variation's VARIANT -- patch_map.cab_key's cabinet over its bit 12,
+    // pk_key's pickup over bit 16: 8 bits -- in bits 22-29 of its own, past
+    // the variation's 14; the room over them, in bit 32 on: a 64-bit key)
+    static const int KEY_CAB_SHIFT = 22, KEY_ROOM_SHIFT = 32;
+    long long ckey(int prog, bool dr, int var) const
     {
-        const int k = dr && prog >= 128 ? 256 * (4096 + prog) + 128
-                                        : 256 * (var & 4095) + (dr ? 128 : 0) + (prog & 127) + ((var >> 12) << KEY_CAB_SHIFT);
-        return k + (key_room << KEY_ROOM_SHIFT);
+        const long long k = dr && prog >= 128 ? 256LL * (4096 + prog) + 128
+                                              : 256LL * (var & 4095) + (dr ? 128 : 0) + (prog & 127)
+                                                + ((long long)((var >> 12) & 255) << KEY_CAB_SHIFT);
+        return k + ((long long)key_room << KEY_ROOM_SHIFT);
     }
     int room_key_of(const std::string &name) const;
     // a file's notes scanned (fileplay, --test --file-octaves): only their
@@ -1343,10 +1352,10 @@ struct nv_host {
     void file_report();                         // (stderr: notes missed, the patches' MB -- a file played's)
     bool room_async = false;                    // (room_switch from the builder: old patches freed as it goes)
     std::vector<std::pair<void *, std::vector<const void *>>> retire_req;
-    std::vector<int> pin_keys;
+    std::vector<long long> pin_keys;
     int cache_freed = 0;
     std::function<void(const std::vector<void *> &)> retire;
-    std::function<void(const std::set<int> &)> cache_trim;
+    std::function<void(const std::set<long long> &)> cache_trim;
     std::function<void()> pins_update;
     std::function<int(double *bq)> room_band_q;
     // (tl: a GS reverb's tail -- gain, time scale, delay feedback < 0 none --
@@ -1491,6 +1500,7 @@ struct nv_host {
         double rot_sep = -1.0;              // (...the mics' angle apart, radians: <0 the default)
         double drive = -1.0;                // (an organ's drive knob: <0 the voice's)
         int cab = -1;                       // (its cabinet, chosen: a CAB_CHOICES index, -1 none)
+        int pk = -1;                        // (its pickup, chosen: a PICKUP_CHOICES index, -1 none)
         std::vector<std::string> drawn;     // (an organ's stops by name: a session's or preset's; none the voice's)
     };
     std::vector<PartSpec> add_req;
@@ -1508,6 +1518,7 @@ struct nv_host {
     void part_touch(size_t row, int fixed);         // (livetui.toggle_touch: 1 fixed, 0 velocity)
     void part_rotary(size_t row, int mode, double sep);     // (live.set_rotary: -1 its own way, 0 room, 1 mics)
     void set_cabinet(size_t row, int choice);               // (live.set_cabinet: a CAB_CHOICES index, -1 none)
+    void set_pickup(size_t row, int choice);                // (live.set_pickup: a PICKUP_CHOICES index, -1 none)
     void rotary_refresh();                          // (the host's copies from the parts': a CC82 may have moved them)
     std::chrono::steady_clock::time_point rotary_read{};
     void part_drive(size_t row, double v);          // (an organ's drive knob, live.set_drive: <0 the voice's)
