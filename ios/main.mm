@@ -63,14 +63,24 @@ int main(int argc, char *argv[])
                         return;
                     UIWindowSceneGeometryPreferencesIOS *gp =
                         [[UIWindowSceneGeometryPreferencesIOS alloc] initWithInterfaceOrientations:UIInterfaceOrientationMaskLandscape];
+                    fprintf(stderr, "clavitone: window key; orientation %d, asking for landscape\n",
+                            (int)sc.effectiveGeometry.interfaceOrientation);
                     [sc requestGeometryUpdateWithPreferences:gp
-                                                errorHandler:^(NSError *e) { NSLog(@"clavitone: landscape refused: %@", e); }];
+                                                errorHandler:^(NSError *e) {
+                                                    fprintf(stderr, "clavitone: landscape refused: %s\n",
+                                                            e.localizedDescription.UTF8String);
+                                                }];
                     UIViewController *rc = w.rootViewController;
                     [rc setNeedsUpdateOfSupportedInterfaceOrientations];
                     // (the lock once the turn is made: asked again after it)
                     for (double t : {0.3, 1.0, 2.5})
                         dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(t * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
                             [rc setNeedsUpdateOfPrefersInterfaceOrientationLocked];
+                            fprintf(stderr, "clavitone: at %.1f s orientation %d, locked %d, %.0fx%.0f\n", t,
+                                    (int)sc.effectiveGeometry.interfaceOrientation,
+                                    (int)sc.effectiveGeometry.isInterfaceOrientationLocked,
+                                    sc.effectiveGeometry.coordinateSpace.bounds.size.width,
+                                    sc.effectiveGeometry.coordinateSpace.bounds.size.height);
                         });
                 }];
     audio_session();

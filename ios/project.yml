@@ -26,6 +26,10 @@ targets:
       - path: ../ui                 # (as ui/ in the bundle: its fonts, help.json, about.json -- nvlive's exe dir + /ui)
         type: folder
         buildPhase: resources
+      - path: ../gpukernel.metal    # (the GPU's kernel, compiled at run time on Metal -- beside the executable, relocate.h)
+        buildPhase: resources
+      - path: ../voicedesc.h
+        buildPhase: resources
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.clavitone.app
