@@ -9,9 +9,11 @@
 #import <AVFoundation/AVFoundation.h>
 #import <Foundation/Foundation.h>
 #import <UIKit/UIKit.h>
+#import <UniformTypeIdentifiers/UniformTypeIdentifiers.h>
 #import <objc/runtime.h>
 #include <mach/mach.h>
 #include <os/proc.h>
+#include <mutex>
 #include <thread>
 
 #include <SDL3/SDL.h>
@@ -21,6 +23,82 @@
 #include <vector>
 
 int nvlive_main(int argc, char **argv);         // (nvlive.cpp's main, renamed: C++ linkage)
+extern "C" void nv_ui_files_dirs(const char *music, const char *tmp);
+
+// THE FILES PICKER (the Files card's FILES..., nui's hooks): iOS's document
+// picker for MIDI files -- iCloud Drive, On My iPad, a USB drive -- each file
+// copied into Documents/MIDI (a copy: the picker's own is gone with its
+// sandbox), the last one's path left for the card to take, the UI woken
+static std::mutex g_pick_mu;
+static std::string g_picked;
+@interface ClavitonePicker : NSObject <UIDocumentPickerDelegate>
+@end
+@implementation ClavitonePicker
+- (void)documentPicker:(UIDocumentPickerViewController *)c didPickDocumentsAtURLs:(NSArray<NSURL *> *)urls
+{
+    NSString *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
+    NSString *dir = [docs stringByAppendingPathComponent:@"MIDI"];
+    NSFileManager *fm = [NSFileManager defaultManager];
+    [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
+    std::string last;
+    for (NSURL *u in urls) {
+        const BOOL scoped = [u startAccessingSecurityScopedResource];
+        NSString *to = [dir stringByAppendingPathComponent:u.lastPathComponent];
+        [fm removeItemAtPath:to error:nil];
+        NSError *e = nil;
+        if ([fm copyItemAtURL:u toURL:[NSURL fileURLWithPath:to] error:&e])
+            last = to.UTF8String;
+        else
+            fprintf(stderr, "clavitone: could not copy %s: %s\n", u.lastPathComponent.UTF8String,
+                    e.localizedDescription.UTF8String);
+        if (scoped)
+            [u stopAccessingSecurityScopedResource];
+    }
+    if (!last.empty()) {
+        fprintf(stderr, "clavitone: picked %s\n", last.c_str());
+        std::lock_guard<std::mutex> lk(g_pick_mu);
+        g_picked = last;
+    }
+    SDL_Event ev{};
+    ev.type = SDL_EVENT_USER;               // (the UI waits on events: woken to take it)
+    SDL_PushEvent(&ev);
+}
+@end
+static ClavitonePicker *g_picker = nil;
+extern "C" int nui_pick_available(void) { return 1; }
+extern "C" void nui_pick_midi(void)
+{
+    dispatch_async(dispatch_get_main_queue(), ^{
+        NSMutableArray<UTType *> *types = [NSMutableArray array];
+        for (NSString *x in @[ @"mid", @"midi", @"kar", @"smf" ])
+            if (UTType *t = [UTType typeWithFilenameExtension:x])
+                [types addObject:t];
+        UIDocumentPickerViewController *dp = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:types
+                                                                                                         asCopy:YES];
+        if (!g_picker)
+            g_picker = [ClavitonePicker new];
+        dp.delegate = g_picker;
+        dp.allowsMultipleSelection = YES;
+        UIViewController *top = nil;
+        for (UIScene *sc in UIApplication.sharedApplication.connectedScenes)
+            if ([sc isKindOfClass:[UIWindowScene class]])
+                for (UIWindow *w in ((UIWindowScene *)sc).windows)
+                    if (w.isKeyWindow)
+                        top = w.rootViewController;
+        while (top.presentedViewController)
+            top = top.presentedViewController;
+        [top presentViewController:dp animated:YES completion:nil];
+    });
+}
+extern "C" int nui_pick_take(char *path, int cap)
+{
+    std::lock_guard<std::mutex> lk(g_pick_mu);
+    if (g_picked.empty() || cap <= 0)
+        return 0;
+    snprintf(path, (size_t)cap, "%s", g_picked.c_str());
+    g_picked.clear();
+    return 1;
+}
 
 // THE AUDIO ROUTE as iOS has it: its rate, its buffer, its latency, each
 // output (a USB adapter's own rate shows here) -- at the start, and at each change
@@ -132,6 +210,9 @@ int main(int argc, char *argv[])
     audio_route("at the start");
     memory_watch();
     setenv("NV_PATCH_SIZES", "1", 1);               // (each patch built: its size, in the log)
+    // (the Files card's MUSIC: Documents, which the Files app shows -- the
+    //  picked files' MIDI folder and the renders inside it)
+    nv_ui_files_dirs(d.c_str(), NSTemporaryDirectory().UTF8String);
     const std::string nvx = d + "/live.nvx";
     if (access(nvx.c_str(), R_OK) != 0) {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Clavitone",

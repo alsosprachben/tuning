@@ -95,6 +95,9 @@
 
 #include <poll.h>
 #include "selfexe.h"
+#ifdef __APPLE__
+#include <TargetConditionals.h>
+#endif
 #include "hostlive.h"
 #include "host.h"
 #include "uiserve.h"
@@ -945,7 +948,12 @@ int nv_host::run(int argc, char **argv)
                 }
             }
             const char *hm = getenv("HOME");
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+            // (iOS: into Documents, where the Files app shows them -- the app's own Music is hidden)
+            const std::string rd = std::string(hm ? hm : "/tmp") + "/Documents/Renders";
+#else
             const std::string rd = std::string(hm ? hm : "/tmp") + "/Music/renders";
+#endif
             nv_ui_files_config(fx.c_str(), rd.c_str());
             ui_srv.renders = rd;
             fprintf(stderr, "nvlive: files: renders to %s%s\n", rd.c_str(),

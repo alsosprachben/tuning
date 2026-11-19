@@ -320,6 +320,14 @@ static std::vector<Step> load_script(const char *path)
 }
 }  // namespace nui
 
+// THE SYSTEM's FILE PICKER (iOS's: the app shell's, ios/main.mm, defines
+// these over the defaults here -- none elsewhere): whether there is one, open
+// it for MIDI files, and take a file picked (copied into the app's own
+// folders; its path into buf: 1, else 0)
+extern "C" __attribute__((weak)) int nui_pick_available(void) { return 0; }
+extern "C" __attribute__((weak)) void nui_pick_midi(void) {}
+extern "C" __attribute__((weak)) int nui_pick_take(char *, int) { return 0; }
+
 // THE WINDOW, on the calling thread until it closes: 0, or why it could not open
 // (stopped: the host's own stop -- Ctrl-C, the engine ending -- asked each turn)
 extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*stopped)(void))

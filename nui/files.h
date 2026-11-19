@@ -60,6 +60,9 @@ inline std::string mmss(double s)
     snprintf(b, sizeof b, "%d:%02d", (int)(s / 60), (int)std::fmod(s, 60));
     return b;
 }
+extern "C" int nui_pick_available(void);
+extern "C" void nui_pick_midi(void);
+extern "C" int nui_pick_take(char *path, int cap);
 inline void fl_take(const J &r)
 {
     FilesUi &F = g_fl;
@@ -160,11 +163,29 @@ inline void draw_files(App &a)
         const std::string m = str(&F.list, "music");
         fl_go(a, m.empty() ? home + "/Music" : m);
     }
+    // THE SYSTEM's PICKER (iOS: iCloud Drive, On My iPad, a USB drive): a MIDI
+    // file copied in (Documents/MIDI) and chosen here, its folder shown
+    const bool picker = nui_pick_available() != 0;
+    if (picker && button(a, "flpick", X0 + BW - 112, Y0 + 34, 100, IP ? 44 : 36, "FILES\xe2\x80\xa6", false, true, B21))
+        nui_pick_midi();
+    {
+        char pk[2048];
+        if (nui_pick_take(pk, (int)sizeof pk) && pk[0]) {
+            const std::string p = pk;
+            fl_go(a, p.substr(0, p.rfind('/')));
+            F.sel = p;
+            F.rep_for.clear();
+            J r = call(a, "{\"call\":\"file_info\",\"path\":" + jstr(p) + "}");
+            F.info = r.get("info") ? *r.get("info") : J();
+            F.scroll_find = 0;
+            fl_report(a);
+        }
+    }
     std::string d = F.dir;
     if (!home.empty() && d.rfind(home, 0) == 0)
         d = "~" + d.substr(home.size());
     // (a long path: its end)
-    while (d.size() > 3 && text_w(a, a.font, 14, d) > BW - 240)
+    while (d.size() > 3 && text_w(a, a.font, 14, d) > BW - (picker ? 360 : 240))
         d = "\xe2\x80\xa6" + d.substr(d[0] == '\xe2' ? 4 : 1);
     text(a, a.font, 14, X0 + 220, Y0 + 34 + ((IP ? 44 : 36) - a.lh(14)) / 2, LCD, d);
     const J *es = F.list.get("entries");
