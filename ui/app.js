@@ -114,6 +114,7 @@ function drawDisplay() {
   const p = cur();
   $('partno').textContent = p ? pad(S.row + 1, 2) : '--';
   $('patch').textContent = p ? p.name : '';
+  $('pdesc').textContent = p ? patchDesc(p) : '';
   $('family').textContent = p
     ? (p.drums ? 'DRUM SET ' + p.program : 'PROGRAM ' + pad(p.program, 3) + (p.variation ? '.' + p.variation : '') + ' · ' + famName(p)) +
       (p.channel < 0 ? ' · ALL CH' : ' · CH ' + (p.channel + 1))
@@ -1686,7 +1687,7 @@ Kit.press($('flAsk'), b => flRender(b.dataset.ask === 'whole' ? 'best' : 'heard'
 // ---------------------------------------------------------------- THE NOTES
 // What each program and stop is, and what it was fitted to (about.json:
 // examples/gm_coverage.py --about, the coverage page's own words)
-fetch('about.json').then(r => (r.ok ? r.json() : null)).then(a => { S.about = a; drawAbout(); drawTiles(true); }).catch(() => {});
+fetch('about.json').then(r => (r.ok ? r.json() : null)).then(a => { S.about = a; drawAbout(); drawDisplay(); drawTiles(true); }).catch(() => {});
 function aboutHtml(title, rn) {
   if (!rn) return '';
   const [r, note] = rn, lv = S.about.levels[r] || '';
@@ -1702,7 +1703,8 @@ function patchAbout(p) {
 }
 function drawAbout() {
   const p = cur();
-  $('libAbout').innerHTML = p && patchAbout(p) ? aboutHtml(p.name, patchAbout(p)) : '';
+  const pd = p && patchDesc(p) ? ' · ' + patchDesc(p) : '';
+  $('libAbout').innerHTML = p && patchAbout(p) ? aboutHtml(p.name + pd, patchAbout(p)) : '';
   $('pianoAbout').innerHTML = p && patchAbout(p) ? aboutHtml(p.name, patchAbout(p)) : '';
   const st = S.stops, el = $('stopAbout');
   if (!st || st.program < 0 || !S.about) { el.innerHTML = ''; return; }

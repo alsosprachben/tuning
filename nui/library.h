@@ -93,6 +93,19 @@ inline void lib_load(App &a)
     L.favs_kept = flag(&f, "kept");
 }
 
+// A PART's patch's few words (about.json's desc), for the display and the notes
+inline std::string patch_desc(App &a, const J *part)
+{
+    LibUi &L = g_lib;
+    if (!L.loaded)
+        lib_load(a);
+    const J *d = L.about.get("desc");
+    if (!d || !part || flag(part, "drums"))
+        return "";
+    const J *e = d->get(std::to_string((int)num(part, "program")) + "." + std::to_string((int)num(part, "variation")));
+    return e && e->is(J::STR) ? e->s : "";
+}
+
 inline bool is_cur(const Patch &p, const J *q)
 {
     return q && flag(q, "drums") == p.drums && (int)num(q, "program") == p.program &&
@@ -294,7 +307,8 @@ inline void draw_library(App &a)
                                         ? lv->a[(size_t)r].s : "";
             const float ay = Y1 - aboutH;
             look::tray(a, MX, ay, MW, aboutH, 8);
-            text(a, a.bold, 14, MX + 12, ay + 8, SILK, fit(a, a.bold, 14, str(cur, "name"), MW - 400));
+            const std::string pd = patch_desc(a, cur);
+            text(a, a.bold, 14, MX + 12, ay + 8, SILK, fit(a, a.bold, 14, str(cur, "name") + (pd.empty() ? "" : " \xc2\xb7 " + pd), MW - 400));
             const std::string rt = std::to_string(r) + " \xc2\xb7 " + lvl;
             text(a, a.font, 14, MX + MW - 12 - text_w(a, a.font, 14, rt), ay + 8, LCD, rt);
             const auto lines = wrap(a, a.font, 14, e->a[1].is(J::STR) ? e->a[1].s : "", MW - 24);
@@ -305,7 +319,8 @@ inline void draw_library(App &a)
     }
 
     // THE TILES: a grid that scrolls under a finger
-    const float tw_min = T ? 200 : 280, th = T ? 48 : 54, gap = T ? 6 : 8, star = T ? 44 : 52;
+    // (three across, a line taller than the names alone: each patch's few words, whole, on two lines under its name)
+    const float tw_min = T ? 280 : 400, th = T ? 62 : 74, gap = T ? 6 : 8, star = T ? 44 : 52;
     const int cols = std::max(1, (int)((MW + gap) / (tw_min + gap)));
     const float tw = (MW - gap * (cols - 1)) / cols;
     const int rows = ((int)list.size() + cols - 1) / cols;
@@ -382,9 +397,13 @@ inline void draw_library(App &a)
             if (p.desc.empty())
                 text(a, a.font, 14, x + name_x, y + (th - h14) / 2, isc ? LCD_BG : SILK, fit(a, a.font, 14, p.name, nw));
             else {
-                const float y0 = y + (th - 2 * h14 - 3) / 2;
+                const auto dl2 = wrap(a, a.font, 14, p.desc, nw);
+                const size_t n = std::min<size_t>(2, dl2.size());
+                const float y0 = y + (th - (1 + n) * h14 - 2 * n) / 2;
                 text(a, a.font, 14, x + name_x, y0, isc ? LCD_BG : SILK, fit(a, a.font, 14, p.name, nw));
-                text(a, a.font, 14, x + name_x, y0 + h14 + 3, isc ? LCD_BG : SILK_DIM, fit(a, a.font, 14, p.desc, nw));
+                for (size_t i = 0; i < n; i++)
+                    text(a, a.font, 14, x + name_x, y0 + (h14 + 2) * (i + 1), isc ? LCD_BG : SILK_DIM,
+                         i + 1 == n && dl2.size() > n ? fit(a, a.font, 14, dl2[i] + " \xe2\x80\xa6", nw) : dl2[i]);
             }
             look::star(a, x + tw - star / 2, y + th / 2, h21 * 0.5f, fav ? (isc ? LCD_BG : LCD) : (isc ? LCD_DIM : SILK_DIM), fav);
         }

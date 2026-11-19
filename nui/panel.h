@@ -135,6 +135,8 @@ inline std::string health_line(App &a, const J *m, bool &warn)
     return "";
 }
 
+std::string patch_desc(App &a, const J *part);   // (library.h: the part's patch's few words)
+
 inline void draw_display(App &a)
 {
     const float X = 26, Y = 22, W = 1424, H = 232;
@@ -156,7 +158,15 @@ inline void draw_display(App &a)
     }
     look::lcd_text(a, 14, X + 92, Y + 14, LCD, fam);
     look::lcd_text(a, 35, X + 14, Y + 34, LCD, p ? pad2(a.row + 1) : "--");
-    look::lcd_text(a, 35, X + 92, Y + 34, LCD, p ? fit(a, a.font, 35, str(p, "name"), W - 300) : "");
+    // (the name, and after it the patch's few words -- "Hammond: 16 5-1/3 8 1, Leslie fast")
+    const std::string nm = p ? fit(a, a.font, 35, str(p, "name"), W - 300) : "";
+    look::lcd_text(a, 35, X + 92, Y + 34, LCD, nm);
+    if (p) {
+        const float dx = X + 92 + text_w(a, a.lcd ? a.lcd : a.font, 35, nm) + 28, dw = X + W - 190 - dx;
+        const std::string pd = patch_desc(a, p);
+        if (!pd.empty() && dw > 80)
+            look::lcd_text(a, 21, dx, Y + 34 + a.lh(35) - a.lh(21) - 2, LCD, fit(a, a.lcd ? a.lcd : a.font, 21, pd, dw));
+    }
     // the engine's load (the web's #cpu, #voices, #health)
     const J *m = a.meters.is(J::OBJ) ? &a.meters : nullptr;
     char b[64];
@@ -256,7 +266,14 @@ inline void draw_display_tab(App &a)
     look::lcd_text(a, 14, X + 8, Y + 6, LCD, "PART  " + fam);
     look::lcd_text(a, 28, X + 8, Y + 18, LCD, p ? pad2(a.row + 1) : "--");
     const float nx = X + 8 + text_w(a, a.font, 28, "00") + 10;
-    look::lcd_text(a, 28, nx, Y + 18, LCD, p ? fit(a, a.font, 28, str(p, "name"), W - (nx - X) - 130) : "");
+    const std::string nm = p ? fit(a, a.font, 28, str(p, "name"), W - (nx - X) - 130) : "";
+    look::lcd_text(a, 28, nx, Y + 18, LCD, nm);
+    if (p) {                            // (...and after it the patch's few words)
+        const float dx = nx + text_w(a, a.lcd ? a.lcd : a.font, 28, nm) + 16, dw = X + W - 104 - dx;
+        const std::string pd = patch_desc(a, p);
+        if (!pd.empty() && dw > 60)
+            look::lcd_text(a, 14, dx, Y + 18 + a.lh(28) - a.lh(14) - 2, LCD, fit(a, a.lcd ? a.lcd : a.font, 14, pd, dw));
+    }
     const J *m = a.meters.is(J::OBJ) ? &a.meters : nullptr;
     char b[64];
     const double bud = num(m, "budget_ms"), mean = num(m, "ms_mean");
