@@ -78,7 +78,6 @@ int nv_tcache_build_var(void *h, int program, int note, int bucket, int nb, int 
 int nv_drum_axis_ud(int pitch, int pan, const int *ud, int uset);
 int nv_tcache_build_var_ud(void *h, int program, int note, int bucket, int nb, int axis, int pitch, int pan,
                            const int *ud);
-void nv_live_var_cabs(int n, const int *rows);
 void nv_live_vars(int nent, const int *nls, const int *ls, const double *trim, const int *gs, const int *gm2,
                   int nslot, const OrganSpec *const *so, const int *soff, const OrganSpec *const *sog,
                   long long kn);
@@ -1195,15 +1194,15 @@ struct nv_host {
     std::map<int, int> bmsb;
     std::map<int, int> blsb;
     std::map<int, int> hcab;                // each channel's cabinet (CC83, tonelib.CABINET_CC), latched as the bank
-    std::map<long long, int> vcab_m;        // the cabinet table: (program, variation, choice) -> its entry
+    std::function<int(int p, int v)> cab_mask_of;     // (the cabinets a variation's voice offers: its cab_mask)
     // VARIATION v THROUGH CABINET c (live.with_cab): the variant's key where the
-    // voice offers it (the export's cabinet table), else v alone
+    // voice offers it (its class's cab_mask), else v alone
     int with_cab(int p, int v, int c) const
     {
         v &= 4095;
-        if (c <= 0)
+        if (c <= 0 || c > 30 || !cab_mask_of)
             return v;
-        return vcab_m.count(((long long)(p & 127) * 4096 + v) * 64 + c) ? v | (c << 12) : v;
+        return (cab_mask_of(p, v) >> c) & 1 ? v | (c << 12) : v;
     }
     bool rxbank;
     int chdr[16] = {0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0, 0, 0, 0, 0, 0};    // each channel drums (live's ch_drums)

@@ -1777,7 +1777,9 @@ class SynthProperties:
         cls = type(self)
         got = _SECTION_SALT.get(cls)
         if got is None:
-            got = _crc32(cls.__name__.encode()) & 0xFFFF
+            # (a class standing for another's players -- a cabinet variant,
+            # patch_map.cabinet_class -- names whose: the speaker changed, not them)
+            got = _crc32(getattr(cls, 'section_salt_name', cls.__name__).encode()) & 0xFFFF
             _SECTION_SALT[cls] = got
         return got
 

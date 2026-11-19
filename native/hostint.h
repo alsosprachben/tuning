@@ -86,7 +86,7 @@ struct Export {
     };
     std::vector<int> vmap, vgs, vgm2, dmap;    // ...and DRON: K's drone region
     std::vector<int> vslot_v;                   // each slot's variation key (live.Patch.variation)
-    std::vector<int> vcab;                      // the cabinet table (VARS' last): 5 a row, native.VAR_CABS
+    std::vector<double> cabt;                   // the cabinet choices' speakers (VARS' last): 36 a choice, native.cab_terms
     // VNAM: the variations the picker offers: program, key, name
     std::vector<std::array<int, 2>> vpv;
     std::vector<std::string> vnames;

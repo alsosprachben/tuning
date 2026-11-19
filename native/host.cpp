@@ -206,13 +206,13 @@ bool read_export(const char *path, Export &E)
                     ok = fread(E.vents[e].trim, 8, 2, f) == 2;
                 for (int e = 1; ok && e <= ne; e++)
                     ok = fread(&E.vents[e].pcls, 4, 1, f) == 1;
-                // ...THE CABINET TABLE, last (native.VAR_CABS: program, variation,
-                // its entry, choice, the variant's entry), where the export has one
+                // ...THE CABINET CHOICES' SPEAKERS, last (native.cab_terms: 36
+                // doubles a choice -- nv_cab_terms), where the export has them
                 if (ok && ftell(f) < vp + 8 + vl) {
                     int nc = 0;
                     ok = fread(&nc, 4, 1, f) == 1;
-                    E.vcab.resize(ok ? 5 * (size_t)nc : 0);
-                    ok = ok && fread(E.vcab.data(), 4, E.vcab.size(), f) == E.vcab.size();
+                    E.cabt.resize(ok ? 36 * (size_t)nc : 0);
+                    ok = ok && fread(E.cabt.data(), 8, E.cabt.size(), f) == E.cabt.size();
                 }
             } else {
                 fseek(f, vp, SEEK_SET);
@@ -821,9 +821,7 @@ int nv_host::open(int argc, char **argv)
         }
         nv_live_vars((int)E.vents.size(), nls.data(), ls.data(), vt.data(), E.vgs.data(), E.vgm2.data(),
                      ns, so.data(), soff.data(), sog.data(), (long long)K.size());
-        nv_live_var_cabs((int)(E.vcab.size() / 5), E.vcab.data());
-        for (size_t r = 0; r + 4 < E.vcab.size(); r += 5)
-            vcab_m[((long long)E.vcab[r] * 4096 + E.vcab[r + 1]) * 64 + E.vcab[r + 3]] = E.vcab[r + 4];
+        nv_cab_terms((int)(E.cabt.size() / 36), E.cabt.data());
     }
     memset(&t, 0, sizeof t);
     t.sr = SR; t.retrigger_fade = E.k[K_RETRIGGER]; t.nyq_om = E.k[K_NYQ_OM];
@@ -1250,12 +1248,7 @@ int nv_host::open(int argc, char **argv)
     };
     // the entry a variation key selects for a program (live.cpp's var_entry): 0 none
     var_entry_of = [&](int p, int v) -> int {
-        if (v >> 12) {                          // (a cabinet variant: its own entry, where the voice offers it)
-            auto it = vcab_m.find(((long long)(p & 127) * 4096 + (v & 4095)) * 64 + (v >> 12));
-            if (it != vcab_m.end())
-                return it->second;
-            v &= 4095;
-        }
+        v &= 4095;                              // (a cabinet choice over bit 12: the variation's entry -- its voice the cache's)
         if (!v || E.vgs.empty() || p < 0 || p > 127)
             return 0;
         int msb = v & 0x7F, mp = v >> 7;
@@ -1263,6 +1256,11 @@ int nv_host::open(int argc, char **argv)
             return 0;
         int bs = 1 + 128 * (mp >= 1 && mp <= 4 ? mp : 0) + msb;
         return E.vgs[((size_t)((bs - 1) / 128) * 128 + p) * 128 + (bs - 1) % 128];
+    };
+    // the cabinets a program's variation offers a part (its key-60 class's cab_mask)
+    cab_mask_of = [&](int p, int v) -> int {
+        const NoteClass *k = cls60(p & 127, v & 4095);
+        return k ? k->cab_mask : 0;
     };
     // the class a program's variation sounds at key 60 (live's Patch pc)
     cls60 = [&](int prog, int var) -> const NoteClass * {
@@ -1346,7 +1344,7 @@ int nv_host::open(int argc, char **argv)
             for (int k = 0; k < 128 && !native; k++)
                 native = E.cmap[(dr ? NV_K_DRUMS : 0) + 128 * (prog & 127) + k] >= 0;
         }
-        if (var) {                              // (a variation's: its slots the engine's)
+        if (var & 4095) {                       // (a variation's: its slots the engine's -- a cabinet choice alone over bit 12 is the capital's)
             int en = var_entry_of(prog & 127, var);
             native = en > 0;
             for (const auto &l : en > 0 ? E.vents[en].ls : std::vector<std::array<int, 4>>())

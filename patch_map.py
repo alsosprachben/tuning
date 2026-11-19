@@ -3030,6 +3030,8 @@ def amplified(cls):
 def cab_choices(cls):
     """The CAB_CHOICES indices a voice offers: none for an unamplified one;
     the Leslie only on a tonewheel (its rotors are fitted to one)."""
+    if getattr(cls, 'cab_offer', None) is not None:
+        return cls.cab_offer                # (a cabinet variant: its voice's)
     if not amplified(cls):
         return ()
     tw = issubclass(cls, __import__("tonelib").TonewheelProperties)
@@ -3046,7 +3048,9 @@ def cabinet_class(base, choice):
         return _CAB_CLASSES[k]
     name = CAB_CHOICES[choice]
     les0 = bool(getattr(base, 'leslie', False))
-    attrs = {'cab_choice': name}
+    attrs = {'cab_choice': name, 'cab_offer': cab_choices(base),
+             # (the same players: their seeds the voice's -- only the speaker changes)
+             'section_salt_name': getattr(base, 'section_salt_name', base.__name__)}
     if name == "leslie":
         attrs.update(leslie=True, cabinet=None)
     else:
@@ -3083,16 +3087,3 @@ def cab_variant(program, variation):
         _CAB_CLASSES[k] = pick
     return _CAB_CLASSES[k]
 
-
-def cab_variation_keys():
-    """Every cabinet variant a voice offers: (program, key) -- the export's
-    VARS carry them (native.variation_tables)."""
-    out = []
-    for p in range(128):
-        for v in [0] + sorted(vv for (pp, vv) in dict.keys(VARIATIONS) if pp == p):
-            if v and (p, v) in LAYERED:
-                continue
-            c0 = (dict.get(VARIATIONS, (p, v)) if v else PROGRAM_CLASS.get(p, PluckedStringProperties))
-            c0 = c0 if isinstance(c0, type) else c0(60)
-            out.extend((p, cab_key(v, c)) for c in cab_choices(c0))
-    return out

@@ -210,6 +210,7 @@ struct Ev {
     double gl_lv = 1.0, gl_sm = 0.0, gl_dt = 0.0;
     int slot = -1;                      // its variation's slot (bank select: K[NV_K_VAR + 128 x slot + key]), -1 none
     int kover = -1;                     // its class's own index in K (a drone's: _DRONE_PC), -1 none
+    int cab = 0;                        // its cabinet (a file's CC83, patch_map.CAB_CHOICES): nv_song_cab_resolve's
     // A USER DRUM SET's key (user_drum): its source's kit index (128 set +
     // key, -1 none) and its own settings, as dst's (a bit a parameter: 0
     // pitch, 1 level, 2 pan, 6 rx note on), the file's edits over them
@@ -236,9 +237,6 @@ struct Song {
     std::vector<std::vector<std::array<int, 4>>> vls;
     std::vector<double> vtrim;
     std::vector<int> vgs, vgm2;
-    // ...and THE CABINET VARIANTS (nv_song_var_cabs): (program, its variation's
-    // entry, choice) -> the variant's entry; a bsel's choice over bit 16
-    std::map<long long, int> vcab;
     // each channel's keys as the file wrote them (_prep_choir_parts reads
     // the notes before a layered variation or a stroke expands them)
     std::map<long long, std::vector<int>> wkeys;
@@ -249,22 +247,26 @@ struct Song {
     // (no table), 1 played
     int bank(int bsel)
     {
+        // (its cabinet first, the file's CC83 over bit 16: its voice's once K
+        // is known, nv_song_cab_resolve -- whatever the bank, and with no
+        // tables at all: a live template's capital through a cabinet)
+        const int cab = bsel >> 16;
+        bsel &= 0xFFFF;
+        if (!notes.empty() && !notes.back().drum)
+            notes.back().cab = cab;
+        if (!bsel)
+            return 1;
         if (vgs.empty())
             return 0;
         Ev e = notes.back();
         if (e.prog < 0 || e.prog > 127)
             return 1;
-        const int cab = bsel >> 16;
-        bsel &= 0xFFFF;
         int en = !bsel ? 0 : bsel <= 640 ? vgs[((size_t)((bsel - 1) / 128) * 128 + e.prog) * 128 + (bsel - 1) % 128]
                                          : vgm2[(size_t)e.prog * 128 + (bsel - 641)];
-        if (cab) {                          // (its cabinet, the file's CC83: the variant's entry where the voice offers it)
-            auto it = vcab.find(((long long)e.prog * 4096 + std::max(0, en)) * 64 + cab);
-            if (it != vcab.end())
-                en = it->second;
+        if (en <= 0) {                      // (a variation not built: the capital, as a Sound Canvas)
+            notes.back().cab = cab;         // (...its cabinet, the file's CC83: its voice's, once K is known)
+            return 1;
         }
-        if (en <= 0)
-            return 1;                       // (a variation not built: the capital, as a Sound Canvas)
         notes.pop_back();
         for (const auto &l : vls[en]) {
             int k = e.note + l[1];
@@ -273,6 +275,7 @@ struct Song {
             Ev x = e;
             x.note = k;
             x.slot = l[0];
+            x.cab = cab;                    // (its cabinet: nv_song_cab_resolve's, once K is known)
             x.trim = vtrim[en];
             notes.push_back(x);
         }
@@ -3003,14 +3006,19 @@ void nv_song_vars(void *s, int nent, const int *nls, const int *ls, const double
 
 int nv_song_note_bank(void *s, int bsel) { return ((nv::Song *)s)->bank(bsel); }
 
-// THE CABINET TABLE (VARS' last, native.VAR_CABS): n rows of (program,
-// variation, its entry, choice, the variant's entry)
-void nv_song_var_cabs(void *s, int n, const int *rows)
+// THE CABINET's VOICES (a file's CC83 on a note: Song::bank's cab), once K
+// is known: each such note's class index through cb(ctx, its index, its
+// choice) -- the renderer's, its voice through the cabinet put in its K
+// (nv_cab_variant) -- the note's own (kover) where it differs
+void nv_song_cab_resolve(void *s, int (*cb)(void *, int, int), void *ctx)
 {
     nv::Song *g = (nv::Song *)s;
-    g->vcab.clear();
-    for (int i = 0; i < n; i++)
-        g->vcab[((long long)rows[5 * i] * 4096 + rows[5 * i + 2]) * 64 + rows[5 * i + 3]] = rows[5 * i + 4];
+    for (auto &e : g->notes)
+        if (e.cab > 0 && !e.drum && e.kover < 0) {
+            const int q = e.kidx(), r = cb(ctx, q, e.cab);
+            if (r != q)
+                e.kover = r;
+        }
 }
 
 int nv_song_kidx(void *s, int i) { return ((nv::Song *)s)->notes[i].kidx(); }

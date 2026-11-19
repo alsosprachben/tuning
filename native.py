@@ -256,7 +256,7 @@ class NoteClass(ctypes.Structure):
                    ('trem_stereo', I), ('trem_intrinsic', I), ('touch_sensitive', I),
                    ('cab_set', I), ('n_cab_fm', I), ('n_cab_afm', I), ('cab_floor', C), ('cab_fm', C * 3 * 4),
                    ('cab_afm', C * 3 * 4), ('cab_corner', C), ('cab_order', C), ('cab_cut', C), ('cab_bell', C),
-                   ('cab_ref', C), ('n_click', I), ('click_jacks', I), ('click_db', C), ('click_hz', C * 16),
+                   ('cab_ref', C), ('cab_mask', I), ('cab_lfast', I), ('cab_mk', C), ('n_click', I), ('click_jacks', I), ('click_db', C), ('click_hz', C * 16),
                    ('click_amp', C * 16), ('click_dec', C), ('click_s', C), ('pre_pluck', I),
                    ('moog', MoogSpec), ('brass', I), ('bn_slur', I),
                    ('os_floor_db', C), ('os_max_s', C), ('tail_set', I), ('tail_db', C), ('tail_dbs', C),
@@ -567,7 +567,7 @@ def _load():
             ('nv_midi_banked', I, [ctypes.c_void_p]), ('nv_midi_note_bsel', I, [ctypes.c_void_p, I]),
             ('nv_midi_chprog_bsel', I, [ctypes.c_void_p, I]),
             ('nv_song_vars', None, [ctypes.c_void_p, I] + [ctypes.c_void_p] * 5),
-            ('nv_song_var_cabs', None, [ctypes.c_void_p, I, ctypes.c_void_p]),
+            ('nv_cab_terms', None, [I, ctypes.c_void_p]), ('nv_cab_variant', ctypes.c_void_p, [ctypes.c_void_p, I]),
             ('nv_song_slot_organs', None, [ctypes.c_void_p, I, ctypes.c_void_p]),
             ('nv_strings', I, [ctypes.POINTER(VoiceInit), P, D, C, C, C, ctypes.c_void_p, ctypes.c_void_p, I]),
             ('nv_strings_og', I, [ctypes.POINTER(VoiceInit), P, ctypes.c_void_p, D, C, C, C, ctypes.c_void_p,
@@ -3613,6 +3613,11 @@ def note_class(cls):
             k.cab_corner, k.cab_order = float(cb.bore_corner_hz), float(cb.bore_order)
             k.cab_cut, k.cab_bell = float(cb.bell_cutoff_hz or 0.0), float(cb.bell_order)
             k.cab_ref = float(cb._ref)
+        # ...the cabinets it offers a part, a Leslie's speed and makeup (nv_cab_variant's)
+        import patch_map as _PMK
+        k.cab_mask = sum(1 << c for c in _PMK.cab_choices(cls))
+        k.cab_lfast = 2 if getattr(cls, 'leslie_fast', True) else 1
+        k.cab_mk = float(getattr(cls, 'leslie_makeup_db', 0.0) or 0.0)
         # its key-up's click (release_click_db), a jack a drawn stop on a choired organ
         cdb, cm = getattr(cls, 'release_click_db', None), getattr(cls, 'release_click_modes', ()) or ()
         if clav_voice(cls) and cdb is not None:
@@ -5611,10 +5616,7 @@ def song_vars(song_p, gs):
         _SONG_VARS[key] = (len(nls), (I_ * len(nls))(*nls), (I_ * max(1, len(ls)))(*ls), (D_ * len(tr))(*tr),
                            (I_ * (5 * 128 * 128))(*[e for m in vgs for row in m for e in row]),
                            (I_ * (128 * 128))(*[e for row in vgm2 for e in row]))
-        _cr = [x for row in VAR_CABS for x in row]
-        _SONG_VARS[('cabs', key)] = (len(VAR_CABS), (I_ * max(1, len(_cr)))(*_cr))
     lib().nv_song_vars(song_p, *_SONG_VARS[key])
-    lib().nv_song_var_cabs(song_p, *_SONG_VARS[('cabs', key)])     # (the cabinet variants: VAR_CABS)
     # ...and each one-tone variation's organ, its slot's (nvrender's ent_organ)
     if 'organs' not in _SONG_VARS:
         slots, entries = variation_tables()[:2]
@@ -5670,7 +5672,32 @@ def sfx_strokes(cls):
     return any(PM.rasp_strokes(k, 0.0, 1.0, kit=so[0]) is not None for k in keys)
 
 
-VAR_CABS = []       # (program, variation, its entry, cabinet choice, the variant's entry): variation_tables'
+def cab_terms():
+    """THE CABINET CHOICES' SPEAKERS, as the engine swaps them into a voice
+    (nv_cab_variant: a cabinet variant made from its voice's class, not
+    exported -- each would carry the whole voice): 36 numbers a
+    patch_map.CAB_CHOICES index -- [0] a Leslie, [1] cab_set, [2] n_cab_fm, [3]
+    n_cab_afm, [4] cab_floor, [5..16] cab_fm, [17..28] cab_afm, [29] corner,
+    [30] order, [31] cut, [32] bell, [33] ref: note_class's terms for it."""
+    import patch_map as P
+    import cabinet as _CAB
+    out = []
+    for name in P.CAB_CHOICES:
+        t = [0.0] * 36
+        t[0] = 1.0 if name == "leslie" else 0.0
+        cb = _CAB.get(name) if name not in (None, "direct", "leslie") else None
+        if cb is not None and os.environ.get('TUNING_CABINET', '1') != '0':
+            t[1], t[2], t[3] = 1.0, float(len(cb.formants)), float(len(cb.antiformants))
+            t[4] = float(cb.formant_floor)
+            for i, row in enumerate(cb.formants):
+                t[5 + 3 * i:8 + 3 * i] = [float(x) for x in row]
+            for i, row in enumerate(cb.antiformants):
+                t[17 + 3 * i:20 + 3 * i] = [float(x) for x in row]
+            t[29], t[30] = float(cb.bore_corner_hz), float(cb.bore_order)
+            t[31], t[32] = float(cb.bell_cutoff_hz or 0.0), float(cb.bell_order)
+            t[33] = float(cb._ref)
+        out.extend(t)
+    return out
 
 
 def variation_tables():
@@ -5731,21 +5758,6 @@ def variation_tables():
             layer_slots = [(len(slots) - 1, 0, 0, 127)]
         ent[(p, v)] = len(entries)
         entries.append((p, v, layer_slots))
-    # ...AND THE CABINET VARIANTS (patch_map.cab_variation_keys): a part's or a
-    # file's (CC83) cabinet choice on an amplified voice, each an entry of its
-    # own past GS's -- VAR_CABS keys them by (program, variation, its entry,
-    # choice), the native lookups' (the cabinet table, VCAB)
-    del VAR_CABS[:]
-    for (p, k) in P.cab_variation_keys():
-        vp = P.VariationProgram(p, k)
-        cl = [B.property_class_for_note(vp, kk) for kk in range(128)]
-        if not all(ok(c) for c in cl if c is not None):
-            cl = [None] * 128
-        slots.append((p, k, -1, cl))
-        ent[(p, k)] = len(entries)
-        entries.append((p, k, [(len(slots) - 1, 0, 0, 127)]))
-        bv, ch = P.cab_of(k)
-        VAR_CABS.append((p, bv, ent.get((p, bv), 0) if bv else 0, ch, ent[(p, k)]))
     gs = [[[0] * 128 for _ in range(128)] for _ in range(5)]
     for m in range(5):
         for p in range(128):

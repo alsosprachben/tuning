@@ -68,7 +68,7 @@ void nv_song_chokes_n(void *s, const unsigned long long *choke, int n);
 void nv_song_kits_n(void *s, const double *f0, const double *seat, int n);
 void nv_song_strokes_k(void *s, const NoteClass *const *K, const int *kind, const double *par);
 void nv_song_vars(void *s, int nent, const int *nls, const int *ls, const double *trim, const int *gs, const int *gm2);
-void nv_song_var_cabs(void *s, int n, const int *rows);
+void nv_song_cab_resolve(void *s, int (*cb)(void *, int, int), void *ctx);
 void nv_song_slot_organs(void *s, int n, const OrganSpec *const *so);
 void nv_song_slot_orgs(void *s, int n, const int *off, const OrganSpec *const *og);
 void nv_log_n(long n, const double *x, double *out);
@@ -260,6 +260,7 @@ static std::vector<const OrganSpec *> g_slot_organ;
 static std::vector<int> g_slot_off;                 // ...and every organ its tone brings (nv_song_slot_orgs')
 static std::vector<const OrganSpec *> g_slot_og;
 static thread_local int g_tmpl_var = 0;
+static thread_local const std::map<int, int> *g_tmpl_cabk = nullptr;     // (the template's cabinet voices: Cache::cabk)
 static long long g_k_n = 0;             // K's length a cache copies (0: the programs' and drum sets' only)
 // THE MAPS' OWN DRUM SETS (the export's MKIT: a drum program 128 + j): their
 // keys' region of K and how many (nv_tcache_mapk); the sets' tables are
@@ -267,22 +268,18 @@ static long long g_k_n = 0;             // K's length a cache copies (0: the pro
 static int g_mapk_base = 0, g_mapk_n = 0;
 static std::vector<int> g_mapk_ids;  // (their ids, 128 x map + program: a template selects one by them)
 
-// THE CABINET VARIANTS (the export's VARS, its cabinet table: nv_live_var_cabs):
-// (program, variation, choice) -> the variant's entry -- patch_map.cab_key's
-// choice over bit 12 of a variation key
-static std::map<long long, int> g_var_cab;
-static std::vector<int> g_var_cab_rows;     // (the rows as given: a song's, nv_song_var_cabs)
-static long long cab_k(int p, int v, int c) { return ((long long)p * 4096 + v) * 64 + c; }
+// THE CABINET CHOICES' SPEAKERS (the export's VARS, last: native.cab_terms --
+// nv_cab_terms): each patch_map.CAB_CHOICES index's 36 doubles -- [0] a Leslie,
+// [1] cab_set, [2] n_cab_fm, [3] n_cab_afm, [4] cab_floor, [5..16] cab_fm,
+// [17..28] cab_afm, [29] corner, [30] order, [31] cut, [32] bell, [33] ref
+static std::vector<double> g_cab_terms;
+static std::mutex g_cab_mu;
+static std::map<std::pair<const NoteClass *, int>, std::unique_ptr<NoteClass>> g_cab_made;
 
 // the entry variation key v selects for program p (the reader's bsel, Song::bank's): 0 the capital
 static int var_entry(int p, int v)
 {
-    if (v >> 12) {                          // (a cabinet variant: its own entry, where the voice offers it)
-        auto it = g_var_cab.find(cab_k(p, v & 4095, v >> 12));
-        if (it != g_var_cab.end())
-            return it->second;
-        v &= 4095;
-    }
+    v &= 4095;                              // (a cabinet choice over bit 12: the variation's own entry -- Cache::cab_prep makes its voice)
     if (!v || g_var_gs.empty() || p < 0 || p > 127)
         return 0;
     int msb = v & 0x7F, mp = v >> 7;
@@ -619,7 +616,7 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
     const int mid = kit && program >= 128 && program - 128 < (int)g_mapk_ids.size() ? g_mapk_ids[program - 128] : -1;
     std::vector<uint8_t> f = mid >= 0 ? nv::live::one_note(mid & 127, note, vel, 9, fast, 480 * 18, nullptr, 128 * (mid >> 7))
                            : kit ? nv::live::one_note(program, note, vel, 9, fast, 480 * 18)
-                                 : nv::live::one_note(program, note, vel, 0, fast, 480, og, ven ? g_tmpl_var : 0, fast_cc, cork);
+                                 : nv::live::one_note(program, note, vel, 0, fast, 480, og, (ven || (g_tmpl_var >> 12)) ? g_tmpl_var : 0, fast_cc, cork);
     int err = 0;
     void *m = nv_midi_read_plain(f.data(), (long long)f.size(), &err);
     if (!m)
@@ -647,11 +644,17 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
     if (ven) {                              // (bank select's tables, before the note takes its variation)
         nv_song_vars(song, (int)g_var_nls.size(), g_var_nls.data(), g_var_ls.data(), g_var_trim.data(),
                      g_var_gs.data(), g_var_gm2.data());
-        nv_song_var_cabs(song, (int)(g_var_cab_rows.size() / 5), g_var_cab_rows.data());
+
         nv_song_slot_organs(song, (int)g_slot_organ.size(), g_slot_organ.data());
         nv_song_slot_orgs(song, (int)g_slot_organ.size(), g_slot_off.data(), g_slot_og.data());
     }
     nv_midi_song(m, song, trim);
+    if (g_tmpl_cabk)                        // (its cabinet's voices: the note to its class's, Cache::cab_prep's)
+        nv_song_cab_resolve(song, [](void *ctx, int q, int) {
+            const auto &mp = *(const std::map<int, int> *)ctx;
+            auto it = mp.find(q);
+            return it == mp.end() ? q : it->second;
+        }, (void *)g_tmpl_cabk);
     if (kit) {
         // AN EDITED DRUM KEY's: the one-note file's drum NRPNs, the song's
         // (nvrender's dedit pass) -- its pitch and pan as the file's note has them
@@ -1634,12 +1637,44 @@ struct Cache {
             return K[g_mapk_base + 128 * (program - 128) + key];    // (a map's own set)
         if (program < 0 || program > 127 || key < 0 || key > 127)
             return nullptr;
+        if (!drums && (var >> 12) && cab_prog == program && cabq[key] >= 0)
+            return K[cabq[key]];            // (its cabinet's voice: cab_prep's)
         int en = drums ? 0 : var_entry(program, var);
         if (en) {
             int q = var_kidx(en, key);
             return q >= 0 && q < (int)K.size() ? K[q] : nullptr;
         }
         return K[(drums ? NV_K_DRUMS : 0) + 128 * program + key];
+    }
+    // THE CABINET's VOICES (a variation key's choice over bit 12): each key's
+    // class through it (nv_cab_variant), put in K past its end -- room kept
+    // for them when the cache was made, so K never moves under a reader --
+    // and cabq the index a key's note takes (its template's, its class's).
+    // Made before the program's first template, once
+    int cab_prog = -1;
+    int cabq[128];
+    std::map<int, int> cabk;                // (an index in K -> its cabinet's: the template song's notes)
+    void cab_prep(int program)
+    {
+        if (drums || !(var >> 12) || cab_prog == program || program < 0 || program > 127)
+            return;
+        const int c = var >> 12, en = var_entry(program, var);
+        for (int key = 0; key < 128; key++) {
+            const int q = en ? var_kidx(en, key) : 128 * program + key;
+            cabq[key] = -1;
+            if (q < 0 || q >= (int)K.size() || !K[q])
+                continue;
+            auto it = cabk.find(q);
+            if (it == cabk.end()) {
+                const NoteClass *d = nv_cab_variant(K[q], c);
+                if (d == K[q] || K.size() >= K.capacity())
+                    continue;
+                K.push_back(d);
+                it = cabk.emplace(q, (int)K.size() - 1).first;
+            }
+            cabq[key] = it->second;
+        }
+        cab_prog = program;
     }
     Kits kit;
     std::vector<double> les;            // the Leslie's constants (leslie.cpp's L_*), empty: none
@@ -1671,6 +1706,8 @@ struct Cache {
         g_raga_sa = raga_sa;                // (the template's prepare: T.raga_sa_note, T.raga_spec)
         g_raga_nsw = raga_nsw;
         g_tmpl_var = drums ? 0 : var;       // (its variation's bank, before its program change)
+        cab_prep(program);                  // (...through its cabinet: its voices in K, cabk)
+        g_tmpl_cabk = cabk.empty() ? nullptr : &cabk;
         g_tmpl_stk = !drums && !kit.f0.empty() ? &kit : nullptr;   // (a melodic cache's borrowed strokes)
         for (int i = 0; i < raga_nsw; i++)
             g_raga_sw[i] = raga_sw[i];
@@ -2307,6 +2344,7 @@ void *nv_tcache_new(const NoteClass *const *K, const NoteIn *tmpl, const double 
                     double xdec_nepers, double SR)
 {
     nv::live::Cache *C = new nv::live::Cache();
+    C->K.reserve((g_k_n > 2 * NV_K_DRUMS ? g_k_n : 2 * NV_K_DRUMS) + 256);    // (room for its cabinet's voices: cab_prep)
     C->K.assign(K, K + (g_k_n > 2 * NV_K_DRUMS ? g_k_n : 2 * NV_K_DRUMS));
     C->t = *tmpl;
     memcpy(C->freq, freq, sizeof C->freq);
@@ -2690,14 +2728,53 @@ const NoteClass *nv_tcache_class(void *h, int program)
 // A CACHE's VARIATION (live.Patch.variation), before its templates are warmed
 void nv_tcache_set_var(void *h, int v) { ((nv::live::Cache *)h)->var = v; }
 
-// THE CABINET TABLE (VARS' last: native.VAR_CABS): n rows of (program,
-// variation, its entry, choice, the variant's entry)
-void nv_live_var_cabs(int n, const int *rows)
+// THE CABINET CHOICES' SPEAKERS (VARS' last: native.cab_terms), 36 doubles a choice
+void nv_cab_terms(int n, const double *terms)
 {
-    g_var_cab.clear();
-    g_var_cab_rows.assign(rows, rows + 5 * (size_t)std::max(0, n));
-    for (int i = 0; i < n; i++)
-        g_var_cab[cab_k(rows[5 * i], rows[5 * i + 1], rows[5 * i + 3])] = rows[5 * i + 4];
+    std::lock_guard<std::mutex> lk(g_cab_mu);
+    g_cab_terms.assign(terms, terms + 36 * (size_t)std::max(0, n));
+}
+
+// A VOICE THROUGH CABINET CHOICE c (patch_map.cabinet_class): its own class
+// copied, its speaker, its Leslie and -- a Leslie coming or going -- its
+// level (cab_mk) changed, all else (its tables) shared; made once and kept.
+// The voice itself where it does not offer c (cab_mask) or there is no table
+const NoteClass *nv_cab_variant(const NoteClass *k, int c)
+{
+    if (!k || c <= 0 || c >= 31 || !((k->cab_mask >> c) & 1))
+        return k;
+    std::lock_guard<std::mutex> lk(g_cab_mu);
+    if ((size_t)(36 * (c + 1)) > g_cab_terms.size())
+        return k;
+    auto &slot = g_cab_made[std::make_pair(k, c)];
+    if (slot)
+        return slot.get();
+    const double *T = g_cab_terms.data() + 36 * (size_t)c;
+    std::unique_ptr<NoteClass> d(new NoteClass(*k));
+    d->leslie = T[0] != 0.0 ? (k->leslie ? k->leslie : k->cab_lfast) : 0;
+    d->cab_set = (int)T[1];
+    d->n_cab_fm = (int)T[2];
+    d->n_cab_afm = (int)T[3];
+    d->cab_floor = T[4];
+    for (int i = 0; i < 4; i++)
+        for (int j = 0; j < 3; j++) {
+            d->cab_fm[i][j] = T[5 + 3 * i + j];
+            d->cab_afm[i][j] = T[17 + 3 * i + j];
+        }
+    d->cab_corner = T[29];
+    d->cab_order = T[30];
+    d->cab_cut = T[31];
+    d->cab_bell = T[32];
+    d->cab_ref = T[33];
+    const bool les0 = k->leslie != 0, les1 = d->leslie != 0;
+    if (les0 != les1 && k->cab_mk != 0.0)   // (as Python's: initial_gain x 10 ** (+-mk / 20))
+    {
+        const double f = pow(10.0, (les1 ? k->cab_mk : -k->cab_mk) / 20.0);
+        d->init.initial_gain = k->init.initial_gain * f;
+        d->tmpl.gain = k->tmpl.gain * f;    // (its template's: initial_gain's product, the same factor)
+    }
+    slot = std::move(d);
+    return slot.get();
 }
 int nv_tcache_var(void *h) { return ((nv::live::Cache *)h)->var; }
 

@@ -929,6 +929,11 @@ typedef struct NoteClass {
     // own level at 1 kHz (cab_ref); cab_set 0 none
     int cab_set, n_cab_fm, n_cab_afm;
     double cab_floor, cab_fm[4][3], cab_afm[4][3], cab_corner, cab_order, cab_cut, cab_bell, cab_ref;
+    // ...AND THE CABINETS IT OFFERS a part (patch_map.cab_choices: bit c a
+    // CAB_CHOICES index), the Leslie's speed one would start at (1 chorale, 2
+    // tremolo) and its level makeup (leslie_makeup_db) -- nv_cab_variant's
+    int cab_mask, cab_lfast;
+    double cab_mk;
     // THE KEY-UP'S CLICK (release_click_db: n_click 0 none): the jack's
     // fixed modes (Hz, amplitude) at click_db, decaying click_dec dB/s for
     // click_s; on an organ with choirs (click_jacks), one a drawn stop's jack
@@ -1510,7 +1515,9 @@ int nv_song_n_notes(void *s);
    its variation's notes (0: no table); a note's class index in K, and its
    tone on its part (_TONE_SEGS) */
 void nv_song_vars(void *s, int nent, const int *nls, const int *ls, const double *trim, const int *gs, const int *gm2);
-void nv_song_var_cabs(void *s, int n, const int *rows);
+void nv_song_cab_resolve(void *s, int (*cb)(void *, int, int), void *ctx);
+void nv_cab_terms(int n, const double *terms);
+const NoteClass *nv_cab_variant(const NoteClass *k, int c);
 int nv_song_note_bank(void *s, int bsel);
 int nv_song_kidx(void *s, int i);
 int nv_song_tone(void *s, int i);

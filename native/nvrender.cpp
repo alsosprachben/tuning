@@ -605,7 +605,7 @@ struct Export {
     };
     std::vector<VarEnt> vents;
     std::vector<int> vgs, vgm2;
-    std::vector<int> vcab;                // the cabinet table (VARS' last): 5 a row, native.VAR_CABS
+    std::vector<double> cabt;             // the cabinet choices' speakers (VARS' last): 36 a choice, native.cab_terms
 };
 
 static bool read_export(const char *path, Export &E)
@@ -747,13 +747,13 @@ static bool read_export(const char *path, Export &E)
                     ok = fread(E.vents[e].trim, 8, 2, f) == 2;
                 for (int e = 1; ok && e <= ne; e++)
                     ok = fread(&E.vents[e].pcls, 4, 1, f) == 1;
-                // ...THE CABINET TABLE, last (native.VAR_CABS: program, variation,
-                // its entry, choice, the variant's entry), where the export has one
+                // ...THE CABINET CHOICES' SPEAKERS, last (native.cab_terms: 36
+                // doubles a choice -- nv_cab_terms), where the export has them
                 if (ok && ftell(f) < vp + 8 + vl) {
                     int nc = 0;
                     ok = fread(&nc, 4, 1, f) == 1;
-                    E.vcab.resize(ok ? 5 * (size_t)nc : 0);
-                    ok = ok && fread(E.vcab.data(), 4, E.vcab.size(), f) == E.vcab.size();
+                    E.cabt.resize(ok ? 36 * (size_t)nc : 0);
+                    ok = ok && fread(E.cabt.data(), 8, E.cabt.size(), f) == E.cabt.size();
                 }
                 E.nslot = ns;
             } else {
@@ -1051,22 +1051,12 @@ static int run(int argc, char **argv)
     // BANK SELECT: the entry a bank selects for a program (Song::bank's), 0
     // the capital; and the class indices a reader's note makes -- a
     // variation's layers each theirs (none, where no layer takes it)
-    std::map<long long, int> vcab_m;        // (program, its entry, choice) -> the cabinet variant's entry
-    for (size_t r = 0; r + 4 < E.vcab.size(); r += 5)
-        vcab_m[((long long)E.vcab[r] * 4096 + E.vcab[r + 2]) * 64 + E.vcab[r + 3]] = E.vcab[r + 4];
     auto ent_of = [&](int p, int bs) -> int {
-        const int cab = bs >> 16;           // (a file's CC83 cabinet, over bit 16: Song::bank's)
-        bs &= 0xFFFF;
-        if ((!bs && !cab) || E.vgs.empty() || p < 0 || p > 127)
+        bs &= 0xFFFF;                       // (a file's CC83 cabinet over bit 16: its voice the song's, nv_song_cab_resolve)
+        if (!bs || E.vgs.empty() || p < 0 || p > 127)
             return 0;
-        int en = !bs ? 0 : bs <= 640 ? E.vgs[((size_t)((bs - 1) / 128) * 128 + p) * 128 + (bs - 1) % 128]
-                                     : E.vgm2[(size_t)p * 128 + (bs - 641)];
-        if (cab) {
-            auto it = vcab_m.find(((long long)p * 4096 + std::max(0, en)) * 64 + cab);
-            if (it != vcab_m.end())
-                en = it->second;
-        }
-        return en;
+        return bs <= 640 ? E.vgs[((size_t)((bs - 1) / 128) * 128 + p) * 128 + (bs - 1) % 128]
+                         : E.vgm2[(size_t)p * 128 + (bs - 641)];
     };
     auto note_ks = [&](int i, const int *iv) -> std::vector<int> {
         int en = iv[4] ? 0 : ent_of(iv[3], nv_midi_note_bsel(midi, i));
@@ -1463,7 +1453,7 @@ static int run(int argc, char **argv)
             vt.push_back(v.trim[nv_midi_gs(midi) ? 1 : 0]);
         }
         nv_song_vars(song, (int)E.vents.size(), nls.data(), ls.data(), vt.data(), E.vgs.data(), E.vgm2.data());
-        nv_song_var_cabs(song, (int)(E.vcab.size() / 5), E.vcab.data());
+
     }
     // ...and each variation's organ, a one-tone variation's slot's (its
     // tone's class, vents' pcls), for the song's organs
@@ -2041,6 +2031,31 @@ static int run(int argc, char **argv)
     for (int q = 0; q < (int)E.cmap.size(); q++)
         if (E.cmap[q] >= 0)
             K[q] = (const NoteClass *)E.classes[E.cmap[q]].data();
+    // THE CABINET's VOICES (a file's CC83): each such note's class through it
+    // (nv_cab_variant), put in K past its end before anything reads K
+    nv_cab_terms((int)(E.cabt.size() / 36), E.cabt.data());
+    {
+        struct Cx {
+            std::vector<const NoteClass *> *K;
+            std::map<std::pair<int, int>, int> made;
+        } cx{&K, {}};
+        nv_song_cab_resolve(song, [](void *ctx, int q, int c) {
+            Cx &x = *(Cx *)ctx;
+            if (q < 0 || q >= (int)x.K->size() || !(*x.K)[q])
+                return q;
+            auto it = x.made.find(std::make_pair(q, c));
+            if (it != x.made.end())
+                return it->second;
+            const NoteClass *d = nv_cab_variant((*x.K)[q], c);
+            int r = q;
+            if (d != (*x.K)[q]) {
+                x.K->push_back(d);
+                r = (int)x.K->size() - 1;
+            }
+            x.made[std::make_pair(q, c)] = r;
+            return r;
+        }, &cx);
+    }
     nv_song_strokes_k(song, K.data(), E.kit_skind.data(), E.kit_spar.data());   // (a gesture's strokes, _prep_strokes)
     // ...and A USER DRUM SET's keys (user_drum: GS's sets 65 and 66, programs
     // 64 and 65), each stroke and layer as its own key: another set's key --
