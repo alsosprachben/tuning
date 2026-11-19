@@ -3122,9 +3122,20 @@ static int run(int argc, char **argv)
             const long long m0 = nv_song_mix(song, i), m = br ? m0 + 65536 : m0;
             if (std::find(lch.begin() + nles, lch.end(), m) != lch.end())
                 continue;
-            if (std::find(lch.begin(), lch.begin() + nles, m) != lch.begin() + nles) {
-                fprintf(stderr, "nvrender: refused: a Rotary on a Leslie's channel\n");
-                return 2;
+            // AN ORGAN ON A ROTARY (blockrender: the first note of the channel
+            // decides -- through the Rotary, the type's rotors and mics stand
+            // in the organ's own cabinet's place; else the organ keeps its own
+            // and the Rotary is not its): its record replaced where it stands
+            long org = -1;
+            for (long k = 0; k < nles; k++)
+                if (lch[(size_t)k] == m)
+                    org = k;
+            if (org >= 0) {
+                bool first = true;
+                for (int j = 0; j < i && first; j++)
+                    first = nv_song_mix(song, j) != m0;
+                if (br || !first)
+                    continue;
             }
             std::vector<double> hr, dr;
             const double *first = nullptr;
@@ -3148,6 +3159,18 @@ static int run(int argc, char **argv)
                 continue;
             const double gs[10] = {1.0, first[147], first[148], first[145], first[146], first[149], first[150],
                                    1.0, first[152], (double)(dr.size() / 2)};
+            if (org >= 0) {                     // (in the organ's place: its requests, its record)
+                long off = 0;
+                for (long k = 0; k < org; k++)
+                    off += 2L * lnreq[(size_t)k];
+                lreq.erase(lreq.begin() + off, lreq.begin() + off + 2L * lnreq[(size_t)org]);
+                std::vector<double> rq(hr);
+                rq.insert(rq.end(), dr.begin(), dr.end());
+                lreq.insert(lreq.begin() + off, rq.begin(), rq.end());
+                lnreq[(size_t)org] = (int)(hr.size() / 2);
+                std::copy(gs, gs + 10, lgs.begin() + 10 * org);
+                continue;
+            }
             lreq.insert(lreq.end(), hr.begin(), hr.end());
             lreq.insert(lreq.end(), dr.begin(), dr.end());
             lch.push_back(m);
