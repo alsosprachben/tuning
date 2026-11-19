@@ -1315,7 +1315,7 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
             nv_host_set_global(h, i, arg_d(q, "v", 0.0));
         }
     } else if (call == "amp") {                // (the AMP card: a part's valve, its Leslie's speed; its cabinet in the parts push)
-        double ao[5] = {};
+        double ao[6] = {0, 0, 0, 0, 0, 1};
         const int kind = nv_host_amp(h, row, ao);
         J o = sess::obj();
         o.o["row"] = sess::integer(row);
@@ -1326,6 +1326,7 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         o.o["drive"] = dv;
         o.o["speed"] = sess::integer((long)ao[3]);
         o.o["leslie"] = sess::boolean(ao[4] != 0.0);
+        o.o["wheel"] = num(ao[5]);          // (the mod wheel's scale on the drive: what sounds is the drive times it)
         r.o["amp"] = o;
     } else if (call == "stops") {
         r.o["stops"] = stops_of(h, row);

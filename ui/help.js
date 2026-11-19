@@ -216,7 +216,7 @@ const HELP = {
     title: 'Valve (drive)',
     intro: 'The valve amplifier\'s drive, in front of the speaker (or an organ\'s Leslie): a guitar\'s, a bass\'s, an organ\'s. On the AMP card for every amplified voice; an organ\'s on its Stops card too, where the mod wheel is the swell pedal.',
     terms: [
-      ['Drive', '0 is clean; 1 the edge of breakup; turned past it, it growls and clips. Its distortion is mostly the notes mixing, so a chord thickens where one note barely would. The knob reaches twice the voice\'s own drive, at least 3.'],
+      ['Drive', '0 is clean; 1 the edge of breakup; turned past it, it growls and clips. Its distortion is mostly the notes mixing, so a chord thickens where one note barely would. Two knobs: DRIVE, the drive set (the voice\'s own, or turned), and SOUNDING, what plays -- the mod wheel scales the drive, up to four times the voice\'s own. Both reach that far (at least 3).'],
       ['AS THE VOICE (n)', 'The knob is at the voice\'s own drive, n.'],
       ['BACK TO THE VOICE\'S n', 'You have turned it; tap to put the voice\'s own back. Double-tapping the knob does the same.'],
     ],
@@ -235,7 +235,7 @@ const HELP = {
     title: 'Amp',
     intro: 'What the selected part\'s voice plays through, as it is modelled: its valve amplifier, the speaker it drives, and an organ\'s Leslie. An acoustic voice has none of these: it is heard as it is.',
     terms: [
-      ['VALVE', 'The amplifier\'s triode stage and its drive: clean at 0, the edge of breakup at 1, a clip past it. The knob reaches twice the voice\'s own (at least 3); AS THE VOICE puts the voice\'s back.'],
+      ['VALVE', 'The amplifier\'s triode stage and its drive: clean at 0, the edge of breakup at 1, a clip past it. DRIVE is the drive set; SOUNDING beside it what plays, the mod wheel\'s scale on it (up to four times the voice\'s own, the knobs\' reach). AS THE VOICE puts the voice\'s back.'],
       ['SPEAKER', 'The cabinet: the voice\'s own, or another it can play through. The line under the buttons says what that speaker is and how we know it -- measured, fitted, or voiced from its design.'],
       ['LESLIE', 'An organ\'s rotating speaker: its speed (STOP, SLOW, FAST -- the half-moon, CC80) and how it is heard (IN THE ROOM, or TWO MICS round it). Shown when the organ plays through one.'],
       ['Kept', 'The part keeps its valve, speaker and how its Leslie is heard through program changes, and in the session.'],

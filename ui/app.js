@@ -630,7 +630,7 @@ function drawAmp() {
         : 'This voice plays through no amplifier or speaker of its own: an acoustic instrument is heard as it is. The Rhodes and Wurlitzer, the organs, the electric guitars and basses have one.'}</p>`;
       return;
     }
-    el.innerHTML = `<section><h3 data-help="drive">Valve</h3><div class="amp-knob"></div>` +
+    el.innerHTML = `<section><h3 data-help="drive">Valve</h3><div class="amp-knobs"><div class="amp-knob"></div><div class="amp-sound"></div></div>` +
       `<button class="hb amp-back" data-kit="1"></button><p class="pn-note amp-vnote"></p></section>` +
       `<section><h3 data-help="cabinet">Speaker</h3><div class="amp-cabs">` +
       [0, ...offer].map(c => `<button class="hb amp-cab" data-kit="1" data-c="${c}"></button>`).join('') +
@@ -642,6 +642,9 @@ function drawAmp() {
       fmt: v => (v * AMP.top).toFixed(2),
       onChange: v => { const d = Math.round(v * AMP.top * 100) / 100; ampHold('drive', d, 600); send(d); },
       onReset: back });
+    // (what SOUNDS: the drive with the mod wheel's scale on it -- display only, put back each poll)
+    AMP.sound = Kit.knob(el.querySelector('.amp-sound'), { label: 'Sounding', value: 0, size: 'big',
+      fmt: v => (v * AMP.top).toFixed(2), onChange: () => drawAmp(), onReset: () => drawAmp() });
     Kit.press(el.querySelector('.amp-back'), back);
     el.querySelectorAll('.amp-cab').forEach(b => Kit.press(b, () => {
       const c = +b.dataset.c; ampHold('cab', c); drawAmp();
@@ -650,17 +653,23 @@ function drawAmp() {
   }
   if (!kind || !p || p.drums) return;
   // THE VALVE
+  // TWO KNOBS (Ben): the DRIVE set and what SOUNDS (the mod wheel's scale
+  // on it, display only); one range, the wheel's whole reach (4x the voice's)
   const [dnow, dvoice, dmine] = st.drive;
-  AMP.top = Math.max(3, Math.ceil(dvoice * 2));         // (its range: twice the voice's own, at least 3)
+  const wheel = st.wheel || 1;
+  AMP.top = Math.max(3, Math.ceil(dvoice * 4));
   const held = ampHeld('drive', null);
-  const v = held === null ? dnow : held < 0 ? dvoice : held, mine = held === null ? dmine >= 0 : held >= 0;
-  AMP.knob.set(v / AMP.top, v.toFixed(2), mine);
+  const base = held === null ? (dmine >= 0 ? dmine : dvoice) : held < 0 ? dvoice : held, mine = held === null ? dmine >= 0 : held >= 0;
+  const sounds = held === null ? dnow : base * wheel;
+  AMP.knob.set(base / AMP.top, base.toFixed(2), mine);
+  AMP.sound.set(sounds / AMP.top, sounds.toFixed(2), false);
   const bk = el.querySelector('.amp-back');
   bk.textContent = mine ? `BACK TO THE VOICE'S ${dvoice.toFixed(2)}` : `AS THE VOICE (${dvoice.toFixed(2)})`;
   bk.disabled = !mine;
   el.querySelector('.amp-vnote').textContent = (dvoice > 0 || dnow > 0
     ? 'A triode stage before the speaker: clean at 0, the edge of breakup at 1, a clip past it. Its distortion is mostly the notes mixing: a chord thickens where one note barely would.'
-    : 'No valve of its own: turned up, it gains one, a triode stage before the speaker, the edge of breakup at 1.') + (organ ? ' The mod wheel is the swell.' : '');
+    : 'No valve of its own: turned up, it gains one, a triode stage before the speaker, the edge of breakup at 1.') +
+    (organ ? ' The mod wheel is the swell.' : ` SOUNDING is the drive with the mod wheel's scale on it (now ×${wheel.toFixed(2)}).`);
   // THE SPEAKER
   const now = ampHeld('cab', cv[0] > 0 ? cv[0] : cv[1]);
   el.querySelectorAll('.amp-cab').forEach(b => {

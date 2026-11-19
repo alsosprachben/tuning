@@ -67,16 +67,24 @@ inline void draw_amp(App &a)
         const double now = dv && dv->is(J::ARR) && dv->a.size() >= 3 ? dv->a[0].d() : 0.0;
         const double voice = dv && dv->is(J::ARR) && dv->a.size() >= 3 ? dv->a[1].d() : 0.0;
         const double mine = dv && dv->is(J::ARR) && dv->a.size() >= 3 ? dv->a[2].d() : -1.0;
-        const double top = std::max(3.0, std::ceil(voice * 2.0));    // (its range: twice the voice's own, at least 3)
+        // TWO KNOBS (Ben): the DRIVE set -- the voice's own or the knob's --
+        // and what SOUNDS, the mod wheel's scale on it (display only); one
+        // range for both, the wheel's whole reach: four times the voice's own,
+        // at least 3
+        const double wheel = num(&M.st, "wheel", 1.0);
+        const double top = std::max(3.0, std::ceil(voice * 4.0));
         auto it = a.hold.find("drive");
         const bool held = it != a.hold.end() && ImGui::GetTime() < it->second.second;
-        const double v = held ? (it->second.first < 0 ? voice : it->second.first) : now;
+        const double base = held ? (it->second.first < 0 ? voice : it->second.first) : (mine >= 0 ? mine : voice);
+        const double sounds = held ? base * wheel : now;
         const bool own = held ? it->second.first >= 0 : mine >= 0;
-        float v01 = (float)(v / top);
-        char vt[16];
-        snprintf(vt, sizeof vt, "%.2f", v);
-        const float KS = IP ? 96 : 140, ky = y + (IP ? 120 : 160);
-        const int f = knob(a, "ampdrive", x + VW / 2, ky, KS, v01, "DRIVE", vt, false, {}, 0, own);
+        float v01 = (float)(base / top), s01 = (float)(sounds / top);
+        char vt[16], st_[16];
+        snprintf(vt, sizeof vt, "%.2f", base);
+        snprintf(st_, sizeof st_, "%.2f", sounds);
+        const float KS = IP ? 80 : 120, ky = y + (IP ? 110 : 150);
+        const int f = knob(a, "ampdrive", x + VW * 0.28f, ky, KS, v01, "DRIVE", vt, false, {}, 0, own);
+        knob(a, "ampsounds", x + VW * 0.72f, ky, KS, s01, "SOUNDING", st_, false, {}, 0, false);    // (display only)
         if (f & K_CHANGED) {
             const double d = std::round(v01 * top * 100) / 100;
             a.hold["drive"] = {d, ImGui::GetTime() + 0.6};
@@ -99,7 +107,9 @@ inline void draw_amp(App &a)
                                        "thickens where one note barely would."
                                      : "No valve of its own: turned up, it gains one -- a triode stage before "
                                        "the speaker, the edge of breakup at 1.";
-        const auto ls = wrap(a, a.font, 14, note + (organ ? " The mod wheel is the swell." : ""), VW - 28);
+        char wn[96];
+        snprintf(wn, sizeof wn, " SOUNDING is the drive with the mod wheel's scale on it (now x%.2f).", wheel);
+        const auto ls = wrap(a, a.font, 14, note + (organ ? " The mod wheel is the swell." : std::string(wn)), VW - 28);
         for (size_t i = 0; i < ls.size(); i++)
             text(a, a.font, 14, x + 14, by + (IP ? 56 : 54) + i * LH, SILK_DIM, ls[i]);
     }

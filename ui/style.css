@@ -469,7 +469,7 @@ a.hb { text-decoration: none; text-align: center; display: inline-block; }
 .amp section { background: #1f2225; border: 1px solid var(--edge); border-radius: 10px; padding: 12px 16px; display: flex; flex-direction: column; gap: 10px; min-height: 0; overflow-y: auto; }
 .amp h3 { margin: 0; font: 700 11px var(--f-ui); letter-spacing: .16em; text-transform: uppercase; color: var(--silk); }
 .amp h4 { margin: 6px 0 0; font: 700 10px var(--f-ui); letter-spacing: .14em; color: var(--silk-dim, #8a9099); }
-.amp .amp-knob { align-self: center; }
+.amp .amp-knobs { display: flex; justify-content: space-around; align-items: flex-start; }
 .amp .amp-cabs { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .amp .amp-row { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .amp .amp-row.two { grid-template-columns: 1fr 1fr; }

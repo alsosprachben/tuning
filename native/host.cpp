@@ -3785,7 +3785,7 @@ int nv_host::amp_state(size_t row, double *out)
     if (pi < 0)
         return 0;
     struct Got {
-        double o[5];
+        double o[6];
         int r = 0;
         std::atomic<bool> done{false};
     };

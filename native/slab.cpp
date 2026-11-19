@@ -13946,11 +13946,16 @@ int nv_part_amp_get(void *h, int pi, double *out)
     if (pi < 0 || pi >= (int)P->patches.size())
         return 0;
     const nv::slab::Part::Patch &p = P->patches[pi];
-    out[0] = p.amp;
+    // (the mod wheel's scale on it, where the wheel has moved: CC12, the
+    // drive's step -- what sounds is the drive times it, up to LIVE_DRIVE_RANGE)
+    auto st = P->drive_step.find(p.pid);
+    const double f = st == P->drive_step.end() ? 1.0 : 4.0 * st->second / (double)P->LIVE_DRIVE_STEPS;
+    out[0] = p.amp * f;
     out[1] = p.amp0;
     out[2] = p.drive;
     out[3] = P->half_moon;
     out[4] = p.leslie ? 1.0 : 0.0;
+    out[5] = f;
     if (p.drums)
         return 0;
     if (p.leslie || p.wheel_swell)
