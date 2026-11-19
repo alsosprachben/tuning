@@ -2,7 +2,7 @@
 """The native UI's two libraries, fetched and built: SDL3 (zlib licence:
 the window, touch, pen and graphics context on Linux, iOS, macOS, Windows)
 and Dear ImGui (MIT: layout, text and input; every control drawn by us).
-    python3 examples/third_party.py [fetch|build|all]      (default all)
+    python3 examples/third_party.py [fetch|build|all|ios]      (default all)
 Each pinned to a release and its archive's SHA-256, downloaded into
 third_party/downloads/ (git-ignored, as all of third_party/ but nothing of
 ours is), unpacked into a fresh folder of its own. SDL3 built as a static
@@ -101,6 +101,29 @@ def build_sdl3_macos():
     return prefix
 
 
+def build_sdl3_ios(sdk):
+    """SDL3 for iOS (Part C): static, UIKit and Metal, arm64, iOS 17 and
+    after -- the device's (iphoneos) or the simulator's (iphonesimulator) --
+    into third_party/sdl3-ios-SDK/."""
+    src = fetch("SDL3")
+    prefix = os.path.join(TP, "sdl3-ios-" + sdk)
+    if os.path.exists(os.path.join(prefix, "lib", "libSDL3.a")):
+        print("  SDL3 built: %s" % prefix)
+        return prefix
+    bld = os.path.join(TP, "build-sdl3-ios-" + sdk)
+    off = ["AUDIO", "JOYSTICK", "HAPTIC", "HIDAPI", "CAMERA", "SENSOR", "POWER", "TESTS", "EXAMPLES",
+           "SHARED", "VULKAN", "DIALOG", "TRAY", "GPU", "OPENGLES"]
+    cfg = ["cmake", "-S", src, "-B", bld, "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_INSTALL_PREFIX=" + prefix,
+           "-DCMAKE_SYSTEM_NAME=iOS", "-DCMAKE_OSX_SYSROOT=" + sdk, "-DCMAKE_OSX_ARCHITECTURES=arm64",
+           "-DCMAKE_OSX_DEPLOYMENT_TARGET=17.0", "-DSDL_STATIC=ON", "-DSDL_METAL=ON"] + ["-DSDL_%s=OFF" % o for o in off]
+    subprocess.check_call(cfg, stdout=subprocess.DEVNULL)
+    subprocess.check_call(["cmake", "--build", bld, "-j", str(min(8, os.cpu_count() or 2))], stdout=subprocess.DEVNULL)
+    subprocess.check_call(["cmake", "--install", bld], stdout=subprocess.DEVNULL)
+    shutil.rmtree(bld, ignore_errors=True)
+    print("  SDL3 built: %s" % prefix)
+    return prefix
+
+
 def main(argv):
     what = argv[1] if len(argv) > 1 else "all"
     if what in ("fetch", "all"):
@@ -108,6 +131,10 @@ def main(argv):
             fetch(n)
     if what in ("build", "all"):
         build_sdl3_macos() if sys.platform == "darwin" else build_sdl3_linux()
+    if what == "ios":                   # (on a Mac with Xcode: the device's and the simulator's)
+        fetch("imgui")
+        for sdk in ("iphoneos", "iphonesimulator"):
+            build_sdl3_ios(sdk)
     return 0
 
 

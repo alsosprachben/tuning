@@ -347,7 +347,7 @@ def lib():
 
 
 
-def _build_objects(units):
+def _build_objects(units, bdir=None, xform=None):
     """Each unit (name, compiler and flags, source) compiled to .nvbuild/NAME.o
     unless its stamp still holds -- the hash of its command and of the contents
     of every file the compiler read for it (its -MMD list) -- the stale ones at
@@ -356,7 +356,10 @@ def _build_objects(units):
     never see a half-written object. Returns the objects, in the units' order."""
     import concurrent.futures
     import hashlib
-    bdir = os.path.join(HERE, '.nvbuild')
+    # (bdir: another platform's objects, apart -- an iOS build's; xform its
+    #  command as run, in place of this platform's toolchain)
+    bdir = bdir or os.path.join(HERE, '.nvbuild')
+    xform = xform or _TC.cmd
     os.makedirs(bdir, exist_ok=True)
 
     def stamp(cmd, dep):
@@ -368,7 +371,7 @@ def _build_objects(units):
         # (the command AS RUN: the toolchain's, its CPU target in place of
         # -march=native -- stamped as written, an object built before the
         # target was fixed passed as current, AVX-512 and all)
-        h = hashlib.sha256('\0'.join(_TC.cmd(list(cmd))).encode())
+        h = hashlib.sha256('\0'.join(xform(list(cmd))).encode())
         for path in text.split(':', 1)[1].split() if ':' in text else ():
             try:
                 with open(path, 'rb') as f:
@@ -390,7 +393,7 @@ def _build_objects(units):
         o, d, st = (os.path.join(bdir, name + x) for x in ('.o', '.d', '.stamp'))
         pid = '.%d.tmp' % os.getpid()
         try:
-            subprocess.check_call(_TC.cmd(cmd + ['-c', src, '-o', o + pid, '-MMD', '-MF', d + pid]))
+            subprocess.check_call(xform(cmd + ['-c', src, '-o', o + pid, '-MMD', '-MF', d + pid]))
             # (the .d names the object it was written as: the stamp reads only its list)
             new = stamp(cmd + ['-c', src], d + pid)
             os.replace(o + pid, o)
@@ -437,6 +440,37 @@ def _kernel_units(nat):
                 os.path.join(HERE, 'convolver.c'))])
 
 
+def _lib_units(apple):
+    """libnative's compile units (name, compiler and flags, source), as this
+    machine's build writes them -- apple: Metal's beside OpenCL (macOS, iOS)."""
+    flags = ['-O2', '-march=native', '-ffp-contract=off', '-fno-builtin', '-fPIC']
+    cxx = ['g++', '-std=c++17'] + flags
+    nat = lambda f: os.path.join(HERE, 'native', f)
+    units = ([('tone', ['gcc'] + flags, nat('tone.c'))]
+             + [(f[:-4], cxx, nat(f)) for f in ('engine.cpp', 'channel.cpp', 'room.cpp', 'midi.cpp', 'register.cpp',
+                                                'prepare.cpp', 'render.cpp', 'live.cpp', 'slab.cpp')]
+             # register.py's C core, under ITS flags (register._load_core's): the same arithmetic
+             + [('registercore', ['gcc', '-O3', '-march=native', '-ffp-contract=off', '-fopenmp-simd',
+                                  '-fno-math-errno', '-mprefer-vector-width=512', '-fPIC'],
+                 os.path.join(HERE, 'registercore.c'))]
+             + [(f[:-4], cxx, nat(f)) for f in ('livereg.cpp', 'gpu.cpp', 'tuner.cpp', 'bend.cpp', 'leslie.cpp',
+                                                'tubeamp.cpp', 'scanner.cpp', 'reed.cpp', 'epiano.cpp',
+                                                'efxchain.cpp')]
+             # (macOS: the GPU on Metal too -- gpu.cpp's nv_cl_* call it under TUNING_GPU_API=metal)
+             + ([('gpu_metal', cxx + ['-x', 'objective-c++', '-fobjc-arc'], nat('gpu_metal.mm'))]
+                if apple else [])
+             # live.py's tap kernel (the insertion effect's copies), under ITS
+             # flags (live.ensure_tap_lib's): the same arithmetic
+             + [('tapkernel', ['gcc', '-O3', '-march=native', '-fPIC'], os.path.join(HERE, 'tapkernel.c'))]
+             # roomtail.py's late field (live.room_irs's), drawn natively; the
+             # live host (host.h: nvlive's, as a library); a part's own bus live
+             # (live.LiveBus: efxbus's processors, block by block)
+             + [(f[:-4], cxx, nat(f)) for f in ('roomtail.cpp', 'host.cpp', 'hostsession.cpp', 'uiapi.cpp', 'livebus.cpp',
+                                                'nvroomtail.cpp', 'nvrender.cpp', 'kernels.cpp')]
+             + _kernel_units(nat))
+    return units
+
+
 def _load():
     srcs = ([os.path.join(HERE, 'native', f) for f in ('tone.c', 'voice.c', 'pycompat.h', 'nv.h', 'engine.cpp',
                                                        'channel.cpp', 'room.cpp', 'midi.cpp', 'strings.c', 'exactmath.c',
@@ -463,31 +497,7 @@ def _load():
         # x*x is correctly rounded where pow, at 0.52 ULP, is not always).
         # The C core (tone.c, with voice.c) and the C++ engine (engine.cpp)
         # under the same flags, linked into one library.
-        flags = ['-O2', '-march=native', '-ffp-contract=off', '-fno-builtin', '-fPIC']
-        cxx = ['g++', '-std=c++17'] + flags
-        nat = lambda f: os.path.join(HERE, 'native', f)
-        units = ([('tone', ['gcc'] + flags, nat('tone.c'))]
-                 + [(f[:-4], cxx, nat(f)) for f in ('engine.cpp', 'channel.cpp', 'room.cpp', 'midi.cpp', 'register.cpp',
-                                                    'prepare.cpp', 'render.cpp', 'live.cpp', 'slab.cpp')]
-                 # register.py's C core, under ITS flags (register._load_core's): the same arithmetic
-                 + [('registercore', ['gcc', '-O3', '-march=native', '-ffp-contract=off', '-fopenmp-simd',
-                                      '-fno-math-errno', '-mprefer-vector-width=512', '-fPIC'],
-                     os.path.join(HERE, 'registercore.c'))]
-                 + [(f[:-4], cxx, nat(f)) for f in ('livereg.cpp', 'gpu.cpp', 'tuner.cpp', 'bend.cpp', 'leslie.cpp',
-                                                    'tubeamp.cpp', 'scanner.cpp', 'reed.cpp', 'epiano.cpp',
-                                                    'efxchain.cpp')]
-                 # (macOS: the GPU on Metal too -- gpu.cpp's nv_cl_* call it under TUNING_GPU_API=metal)
-                 + ([('gpu_metal', cxx + ['-x', 'objective-c++', '-fobjc-arc'], nat('gpu_metal.mm'))]
-                    if _TC.DARWIN else [])
-                 # live.py's tap kernel (the insertion effect's copies), under ITS
-                 # flags (live.ensure_tap_lib's): the same arithmetic
-                 + [('tapkernel', ['gcc', '-O3', '-march=native', '-fPIC'], os.path.join(HERE, 'tapkernel.c'))]
-                 # roomtail.py's late field (live.room_irs's), drawn natively; the
-                 # live host (host.h: nvlive's, as a library); a part's own bus live
-                 # (live.LiveBus: efxbus's processors, block by block)
-                 + [(f[:-4], cxx, nat(f)) for f in ('roomtail.cpp', 'host.cpp', 'hostsession.cpp', 'uiapi.cpp', 'livebus.cpp',
-                                                    'nvroomtail.cpp', 'nvrender.cpp', 'kernels.cpp')]
-                 + _kernel_units(nat))
+        units = _lib_units(_TC.DARWIN)
         objs = _build_objects(units)
         try:
             subprocess.check_call(_TC.cmd(['g++', '-shared'] + objs + ['-o', tmp, '-lmvec', '-lm', '-ldl']))
@@ -4779,6 +4789,66 @@ def build_nvlive():
                                          '-Wl,-rpath,$ORIGIN']))
         os.replace(tmp, exe)
     return exe
+
+
+# THE iOS BUILD (Part C; on a Mac with Xcode): libnative's units and the
+# native interface's compiled by the iOS SDK's clang -- arm64, iOS 17 and
+# after, the device's (iphoneos) or the simulator's (iphonesimulator) --
+# into static archives an Xcode project links: libnative-ios-SDK.a and
+# libnui-ios-SDK.a (SDL3 for iOS beside them: examples/third_party.py ios).
+# No OpenMP, nothing loaded at run time (native/kernels.h), Metal for the GPU.
+IOS_MIN = '17.0'
+IOS_CPU = '-mcpu=apple-a14'     # (a fixed target, as toolchain.TARGET: A14 and after)
+
+
+def _ios_xform(sdk):
+    root = subprocess.check_output(['xcrun', '--sdk', sdk, '--show-sdk-path'], text=True).strip()
+    minv = ('-miphoneos-version-min=' if sdk == 'iphoneos' else '-mios-simulator-version-min=') + IOS_MIN
+
+    def x(c):
+        out = []
+        for a in c:
+            if a in ('gcc', 'clang'):
+                out += ['xcrun', '--sdk', sdk, 'clang', '-isysroot', root, '-arch', 'arm64', minv]
+            elif a in ('g++', 'clang++'):
+                out += ['xcrun', '--sdk', sdk, 'clang++', '-isysroot', root, '-arch', 'arm64', minv]
+            elif a == '-march=native':
+                out.append(IOS_CPU)
+            elif a in ('-fopenmp', '-mprefer-vector-width=512'):
+                continue
+            else:
+                out.append(a)
+        return out
+    return x
+
+
+def build_ios(sdk='iphoneos'):
+    """libnative-ios-SDK.a and libnui-ios-SDK.a (see above): their paths."""
+    x = _ios_xform(sdk)
+    bdir = os.path.join(HERE, '.nvbuild-ios-' + sdk)
+
+    def archive(name, objs):
+        out = os.path.join(HERE, '%s-ios-%s.a' % (name, sdk))
+        tmp = '%s.%d.tmp' % (out, os.getpid())
+        subprocess.check_call(['xcrun', '--sdk', sdk, 'libtool', '-static', '-no_warning_for_no_symbols',
+                               '-o', tmp] + objs)
+        os.replace(tmp, out)
+        return out
+    lib_a = archive('libnative', _build_objects(_lib_units(True), bdir, x))
+    tp = os.path.join(HERE, 'third_party')
+    sdl = os.path.join(tp, 'sdl3-ios-' + sdk)
+    imgui = os.path.join(tp, 'imgui-1.93.0')
+    inc = ['-I' + os.path.join(sdl, 'include'), '-I' + imgui, '-I' + os.path.join(HERE, 'nui')]
+    ucx = ['clang++', '-std=c++17', '-O2'] + inc
+    umm = ['clang++', '-std=c++17', '-O2', '-x', 'objective-c++', '-fobjc-arc'] + inc
+    nui_a = archive('libnui', _build_objects(
+        [('nui_' + os.path.basename(f).rsplit('.', 1)[0], ucx, f) for f in (
+            os.path.join(imgui, 'imgui.cpp'), os.path.join(imgui, 'imgui_draw.cpp'), os.path.join(imgui, 'imgui_tables.cpp'),
+            os.path.join(imgui, 'imgui_widgets.cpp'), os.path.join(imgui, 'backends', 'imgui_impl_sdl3.cpp'),
+            os.path.join(HERE, 'nui', 'nui.cpp'))]
+        + [('nui_imgui_impl_metal', umm, os.path.join(imgui, 'backends', 'imgui_impl_metal.mm')),
+           ('nui_gfx_metal', umm, os.path.join(HERE, 'nui', 'gfx_metal.mm'))], bdir, x))
+    return lib_a, nui_a
 
 
 def build_nvrender():
