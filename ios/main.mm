@@ -50,6 +50,15 @@ int main(int argc, char *argv[])
     audio_session();
     NSString *docs = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, YES).firstObject;
     const std::string d = docs.UTF8String;
+    // THE LOG: the engine's stderr (its start, its notes, the counts it prints
+    // at QUIT) into Documents/nvlive.log, the last run's beside it -- read
+    // back by devicectl, the cable free for a keyboard meanwhile
+    {
+        const std::string lg = d + "/nvlive.log";
+        rename(lg.c_str(), (d + "/nvlive.prev.log").c_str());
+        if (FILE *f = freopen(lg.c_str(), "w", stderr))
+            setvbuf(f, nullptr, _IOLBF, 0);
+    }
     const std::string nvx = d + "/live.nvx";
     if (access(nvx.c_str(), R_OK) != 0) {
         SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "Clavitone",
