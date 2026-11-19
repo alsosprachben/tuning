@@ -1,0 +1,49 @@
+# Clavitone for iOS (Part C): xcodegen in ios/, then build in Xcode or by
+# xcodebuild. Links the static archives native.build_ios makes beside the
+# tree (libnative-ios-SDK.a, libnui-ios-SDK.a) and SDL3 for iOS
+# (examples/third_party.py ios), PLATFORM_NAME choosing the device's or the
+# simulator's; compiles nvlive.cpp itself (its main renamed) and main.mm.
+name: ClavitoneIOS
+options:
+  bundleIdPrefix: com.clavitone
+  deploymentTarget:
+    iOS: "17.0"
+settings:
+  base:
+    CLANG_CXX_LANGUAGE_STANDARD: c++17
+    ENABLE_BITCODE: NO
+    DEAD_CODE_STRIPPING: YES
+targets:
+  Clavitone:
+    type: application
+    platform: iOS
+    sources:
+      - path: main.mm
+      - path: ../native/nvlive.cpp
+        compilerFlags: "-Dmain=nvlive_main -DNV_NATIVE_UI -ffp-contract=off -fno-builtin"
+      - path: ../ui                 # (as ui/ in the bundle: its fonts, help.json, about.json -- nvlive's exe dir + /ui)
+        type: folder
+        buildPhase: resources
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.clavitone.app
+        TARGETED_DEVICE_FAMILY: "2"
+        HEADER_SEARCH_PATHS: "$(SRCROOT)/../native $(SRCROOT)/../nui $(SRCROOT)/../third_party/imgui-1.93.0 $(SRCROOT)/../third_party/sdl3-ios-$(PLATFORM_NAME)/include"
+        OTHER_LDFLAGS: "$(SRCROOT)/../libnative-ios-$(PLATFORM_NAME).a $(SRCROOT)/../libnui-ios-$(PLATFORM_NAME).a $(SRCROOT)/../third_party/sdl3-ios-$(PLATFORM_NAME)/lib/libSDL3.a -framework CoreMedia -framework CoreVideo -framework CoreGraphics -framework GameController -framework Metal -framework QuartzCore -framework UIKit -framework AVFoundation -framework AudioToolbox -framework CoreMIDI -framework CoreFoundation -lc++"
+        CODE_SIGN_STYLE: Automatic
+        INFOPLIST_KEY_UIFileSharingEnabled: YES
+        INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace: YES
+        INFOPLIST_KEY_UIRequiresFullScreen: YES
+        INFOPLIST_KEY_UIStatusBarHidden: YES
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Clavitone
+    info:
+      path: Info.plist
+      properties:
+        UIBackgroundModes: [audio]
+        UIFileSharingEnabled: true
+        LSSupportsOpeningDocumentsInPlace: true
+        UIRequiresFullScreen: true
+        UIStatusBarHidden: true
+        UISupportedInterfaceOrientations~ipad: [UIInterfaceOrientationLandscapeLeft, UIInterfaceOrientationLandscapeRight]
