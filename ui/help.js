@@ -228,6 +228,7 @@ const HELP = {
       ['IN THE ROOM', 'The cabinet heard where it stands: its horn and drum turning toward you and away, the room around it.'],
       ['TWO MICS', 'The cabinet as a studio records it: a mic either side, one to each speaker, each hearing the rotors from its own angle. Wide.'],
       ['SPREAD', 'How far apart the two mics stand round the cabinet, in degrees. Double-tap for the default, the Rotary effect\'s own (136\u00b0).'],
+      ['CC82', 'A file or a keyboard knob sets it too, on the part\'s channel: 0 the cabinet in the room, 1 to 127 two mics, the value \u00d7 180/127 degrees apart (96 is 136\u00b0, the Rotary effect\'s own scale). A note hears the setting it starts under.'],
     ],
   },
   piano: {

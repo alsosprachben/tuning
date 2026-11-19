@@ -6156,6 +6156,14 @@ class Live:
                     self.half_moon = _lad.index(_zt)
                     self.rotor_horn.target = _zt
                     self.rotor_drum.target = _zt
+            if msg.control == T.ROTARY_CC:
+                # THE ROTARY HEARD (CC82): the channel's parts switched as the
+                # cards switch them -- 0 the cabinet in the room, else two mics
+                # value x pi / 127 apart (over a Rotary type's Separate too)
+                for p in parts:     # (a muted part's too: it is a setting, not a sound)
+                    if p.channel is None or p.channel == self._pc(ch):
+                        p.rotary = "room" if msg.value == 0 else "mics"
+                        p.rotary_sep = None if msg.value == 0 else math.pi * msg.value / 127.0
             if msg.control == 1:
                 self.cc1_count += 1; self.cc1_last = msg.value
                 # THE MOD WHEEL IS GM's MODULATION: vibrato, or a Moog's LFO 2

@@ -69,6 +69,7 @@ int nv_tcache_slots(void *h, int *nb, int *sp);
 int nv_tcache_has(void *h, int note, int bucket, int speed);
 void nv_part_late(void *h, int on);
 void nv_part_rotary(void *h, int pi, int mode, double sep);
+int nv_part_rotary_get(void *h, int pi, double *out);
 void nv_part_stand_in(void *h, double ms);
 int nv_part_asks(void *h, void **cache, int *prog, int *drums, int *note, int *bucket, int *axis, int cap);
 void nv_part_late_counts(void *h, long *out);
@@ -1448,6 +1449,8 @@ struct nv_host {
     void pick_row(size_t row, int sp);
     void part_touch(size_t row, int fixed);         // (livetui.toggle_touch: 1 fixed, 0 velocity)
     void part_rotary(size_t row, int mode, double sep);     // (live.set_rotary: -1 its own way, 0 room, 1 mics)
+    void rotary_refresh();                          // (the host's copies from the parts': a CC82 may have moved them)
+    std::chrono::steady_clock::time_point rotary_read{};
     void part_drive(size_t row, double v);          // (an organ's drive knob, live.set_drive: <0 the voice's)
     int drive_state(size_t row, double *out);       // (nv_part_drive_get's: 1 an organ's, 0 not, -1 unread)
     void messenger_reading(bool on);                // (livetui's M: every part reads a Messenger's chart)

@@ -3673,6 +3673,49 @@ void nv_host::part_rotary(size_t row, int mode, double sep)
     post([this, pi, mode, sep](long long) { nv_part_rotary(part, pi, mode, sep); });
 }
 
+// ...the host's copies brought up to the parts' (a file's or a keyboard's CC82
+// switches them on the audio thread): read between two blocks, at most every
+// 100 ms (the cards ask each poll)
+void nv_host::rotary_refresh()
+{
+    const auto now = std::chrono::steady_clock::now();
+    if (now - rotary_read < std::chrono::milliseconds(100))
+        return;
+    rotary_read = now;
+    std::vector<int> pis;
+    {
+        std::lock_guard<std::mutex> lk(parts_mu);
+        for (const PartAt &pa : pats)
+            pis.push_back(pa.gone ? -1 : pa.pi);
+    }
+    struct Got {
+        std::vector<double> o;
+        std::atomic<bool> done{false};
+    };
+    auto got = std::make_shared<Got>();
+    got->o.assign(2 * pis.size(), -2.0);
+    auto take = [this, got, pis](long long) {
+        for (size_t i = 0; i < pis.size(); i++)
+            if (pis[i] >= 0)
+                nv_part_rotary_get(part, pis[i], got->o.data() + 2 * i);
+        got->done = true;
+    };
+    if (scene_inline)
+        take(0);
+    else
+        post(take);
+    for (int i = 0; i < 50 && !got->done && !g_stop; i++)
+        std::this_thread::sleep_for(std::chrono::milliseconds(1));
+    if (!got->done)
+        return;
+    std::lock_guard<std::mutex> lk(parts_mu);
+    for (size_t i = 0; i < pis.size() && i < pats.size(); i++)
+        if (pis[i] >= 0 && pats[i].pi == pis[i] && got->o[2 * i] > -2.0) {
+            pats[i].rot_mode = (int)got->o[2 * i];
+            pats[i].rot_sep = got->o[2 * i + 1];
+        }
+}
+
 // AN ORGAN's DRIVE KNOB (live.set_drive): the host's copy now (a session's),
 // the patch's between two blocks
 void nv_host::part_drive(size_t row, double v)

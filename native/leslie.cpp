@@ -276,7 +276,26 @@ struct LeslieSet {
     std::vector<Rotor> rotors;
     double sr;
     const double *L, *gs, *place;
+    std::vector<std::vector<std::pair<double, int>>> mics;     // (each channel's CC82: leslie.Requests.mics)
 };
+// THE ROTARY HEARD (tonelib.ROTARY_CC, CC82): each channel's timeline
+// (seconds, value), for the sets made after on this thread -- a render's
+// (nv_leslie_mics; nmic NULL clears it). Thread-local: live's template
+// builds beside an in-process render take none
+static thread_local std::vector<std::vector<std::pair<double, int>>> t_mics;
+void nv_leslie_mics(int nch, const int *nmic, const double *mic)
+{
+    t_mics.clear();
+    if (!nmic)
+        return;
+    long q = 0;
+    for (int k = 0; k < nch; k++) {
+        std::vector<std::pair<double, int>> m;
+        for (int j = 0; j < nmic[k]; j++, q++)
+            m.push_back(std::make_pair(mic[2 * q], (int)mic[2 * q + 1]));
+        t_mics.push_back(m);
+    }
+}
 void *nv_leslie_new(int nch, const long long *chans, const int *nreq, const double *req, double sr, const double *L,
                     const double *gs, const double *place)
 {
@@ -290,6 +309,8 @@ void *nv_leslie_new(int nch, const long long *chans, const int *nreq, const doub
     h->L = L;
     h->gs = gs;
     h->place = place;
+    h->mics = t_mics;
+    h->mics.resize((size_t)nch);
     return h;
 }
 void nv_leslie_free(void *h) { delete (LeslieSet *)h; }
@@ -382,9 +403,28 @@ int nv_leslie_row(void *hv, double *r, double *cp, float *lob, int *on)
     // A RECORDED ROTARY (its Separate): the direct sound as two
     // microphones round the cabinet hear it -- mic A to the left, mic B
     // to the right, Separate apart -- each its own swing and Doppler
+    // ...its spacing (leslie.mic_sep): the file's CC82 at the note's onset
+    // (0 the cabinet in the room), else the Rotary's Separate, else none
+    bool mic = G && G[7] != 0.0;
+    double sep = mic ? G[8] : 0.0;
+    {
+        const auto &ms = h.mics[(size_t)it->second];
+        const double t_on = r[cNON] / sr;
+        int v = -1;
+        for (const auto &e : ms) {
+            if (e.first <= t_on)
+                v = e.second;
+            else
+                break;
+        }
+        if (v >= 0) {
+            mic = v != 0;
+            sep = M_PI * v / 127.0;
+        }
+    }
     std::vector<double> rB, twinB;
-    if (G && G[7] != 0.0 && place && r[cDIR] > 0.5) {
-        double az0 = r[cAZ], sep = G[8];
+    if (mic && place && r[cDIR] > 0.5) {
+        double az0 = r[cAZ];
         rB.assign(r, r + NCOLS);
         to_mic(rB.data(), 1, az0 + 0.5 * sep, place, f);
         to_mic(r, 0, az0 - 0.5 * sep, place, f);

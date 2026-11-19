@@ -275,6 +275,30 @@ def path(freq_hz, x, z, fast=True):
     return path_at(freq_hz, azimuth(x, z), fast)
 
 
+class Requests(list):
+    """A Leslie channel's speed requests (seconds, Hz) -- with, where the file
+    sends CC82 (tonelib.ROTARY_CC), its timeline in .mics: (seconds, value)."""
+    mics = None
+
+
+def mic_sep(rec, t_on):
+    """The two mics' angle apart a note at t_on hears on a channel: the
+    file's CC82 at its onset (0 the cabinet in the room: None; else value x
+    pi / 127), else an insertion Rotary's Separate, else None -- in the room."""
+    sep = rec.get('separate') if isinstance(rec, dict) else None
+    mics = rec.get('mics') if isinstance(rec, dict) else getattr(rec, 'mics', None)
+    if mics:
+        v = None
+        for t, x in mics:
+            if t <= t_on:
+                v = x
+            else:
+                break
+        if v is not None:
+            sep = None if v == 0 else math.pi * v / 127.0
+    return sep
+
+
 def make_rotors(channels):
     """Each Leslie channel's horn and drum rotors, from its speed history --
     or, for an insertion effect's Rotary (gsefx.rotary_setup), a dict giving
@@ -446,7 +470,7 @@ def expand(A, channels, sr, cols, meta=None, loudest=None, rotors=None, flips=No
         # speaker -- mic A to the left, mic B to the right, Separate apart --
         # so each has its own angle to the rotors: its own swing and its own
         # Doppler. The room's images still hear the cabinet itself.
-        sep = channels[ch].get('separate') if isinstance(channels[ch], dict) else None
+        sep = mic_sep(channels[ch], float(A['non'][i]) / float(sr))
         mic = sep is not None and place is not None and float(A['dr'][i]) > 0.5
         rB = twinB = None
         if mic:

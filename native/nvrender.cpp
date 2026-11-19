@@ -264,6 +264,7 @@ int nv_chorus_row(double *r, int kind, double send, int nc, const double *cents,
 void *nv_leslie_new(int nch, const long long *chans, const int *nreq, const double *req, double sr, const double *L,
                     const double *gs, const double *place);
 void nv_leslie_free(void *h);
+void nv_leslie_mics(int nch, const int *nmic, const double *mic);
 int nv_leslie_row(void *h, double *r, double *cp, float *lob, int *on);
 long nv_amp_segment(const double *const *live, long nl, double a, double b, double drive, double ref, double imb,
                     double sr, double **out, long *src_i);
@@ -3155,6 +3156,24 @@ static int run(int argc, char **argv)
             }
         }
     }
+    // THE ROTARY HEARD (leslie.Requests.mics): each rotary channel's part's
+    // CC82 (tonelib.ROTARY_CC), for the rotors made next on this thread
+    {
+        std::vector<int> nmic;
+        std::vector<double> mic;
+        for (long long c : lch) {
+            const int n82 = nv_song_ccs(song, c % 256, 82, nullptr, nullptr, 0);
+            std::vector<double> t82((size_t)n82);
+            std::vector<int> v82((size_t)n82);
+            nv_song_ccs(song, c % 256, 82, t82.data(), v82.data(), n82);
+            for (int q = 0; q < n82; q++) {
+                mic.push_back(t82[(size_t)q]);
+                mic.push_back((double)v82[(size_t)q]);
+            }
+            nmic.push_back(n82);
+        }
+        nv_leslie_mics((int)lch.size(), nmic.data(), mic.data());
+    }
     // (a stream's rotors: its rows through them one at a time -- Pass::add)
     void *s_les = g_stream && !lch.empty()
                       ? nv_leslie_new((int)lch.size(), lch.data(), lnreq.data(), lreq.data(), SR, LES, lgs.data(),
@@ -3164,8 +3183,10 @@ static int run(int argc, char **argv)
                                             SR, LES, lobe, nullptr, nullptr, lgs.data(),
                                             E.k.data() + K_GSPLACE) < 0) {
         fprintf(stderr, "nvrender: refused: a Leslie by sidebands (leslie.KERNEL_LOBE off)\n");
+        nv_leslie_mics(0, nullptr, nullptr);
         return 2;
     }
+    nv_leslie_mics(0, nullptr, nullptr);       // (made into the rotors above: the next render's own)
     const long N = (long)out[0];
     const int nblk = (int)out[1];
     // ...in prepare's final types (FINAL_DTYPES)

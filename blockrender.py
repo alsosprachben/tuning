@@ -8063,6 +8063,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     cons_bursts = []
     _CONS_SRC = {}
     _LESLIE_CH = {}
+    _LES_MICS = set()           # (the rotary channels whose CC82 timeline is attached)
     _FILTER_CH = {}     # channel -> its moving filter (efxfilter.Channel)
     # THE FREE-STRING REGISTER: channel -> its class's strike list and setup,
     # and the strike whose rows are being emitted (closed at the next note)
@@ -9188,6 +9189,24 @@ def _prepare(path, tuner='hybrid440', sink=None):
                                 if getattr(props, 'leslie_fast', True)
                                 else _LES0.CHORALE))
             _LESLIE_CH[em.channel] = _req
+        # THE ROTARY HEARD (tonelib.ROTARY_CC, CC82): the part's timeline on
+        # each of its rotary channels -- an organ's, an insertion Rotary's, a
+        # parallel type's branch B -- once
+        for _lc in (em.channel, em.channel + _GSX.VIRT):
+            _lr = _LESLIE_CH.get(_lc)
+            if _lr is None or _lc in _LES_MICS:
+                continue
+            _LES_MICS.add(_lc)
+            _m82 = [(t, v) for t, cc, v in in_order(ccs.get(_GSX.part_of(em.channel), [])) if cc == T.ROTARY_CC]
+            if not _m82:
+                continue
+            if isinstance(_lr, dict):
+                _lr['mics'] = _m82
+            else:
+                import leslie as _LES1
+                _lr = _LES1.Requests(_lr)
+                _lr.mics = _m82
+                _LESLIE_CH[_lc] = _lr
         seats = props.section_seats() if hasattr(props,'section_seats') else None
         if seats:
             nt.li, nt.ri, _sd0, _sd1 = seats[0]

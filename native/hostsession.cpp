@@ -655,6 +655,8 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
     for (int i = 1; i < 6; i++)
         j.o[KEYS[i]] = sess::real(gval[i]);
     j.o["mod_rate"] = sess::real(gval[9]);
+    rotary_read = {};                           // (its parts' rotary as they stand: a CC82's too)
+    rotary_refresh();
     j.o["stand_in_ms"] = sess::real(gval[NV_G_STAND_IN]);
     j.o["rubato"] = sess::boolean(rub_wish.load());
     j.o["std_map"] = sess::integer(default_map);
@@ -1380,6 +1382,7 @@ int nv_host_rotary(nv_host *h, int row, double *out)
     size_t i;
     if (!row_index(h, row, i))
         return 0;
+    h->rotary_refresh();
     std::lock_guard<std::mutex> lk(h->parts_mu);
     if (i >= h->pats.size())
         return 0;

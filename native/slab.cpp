@@ -10898,6 +10898,16 @@ struct Part {
                 rotor_drum.target = ladder[half_moon];
             }
         }
+        if (cc == 82) {
+            // THE ROTARY HEARD (tonelib.ROTARY_CC): the channel's parts switched
+            // as the cards switch them -- 0 the cabinet in the room, else two
+            // mics v x pi / 127 apart (over a Rotary type's Separate too)
+            for (Patch &p : patches)
+                if (p.channel < 0 || p.channel == pc(ch)) {
+                    p.rot_mode = v == 0 ? 0 : 1;
+                    p.rot_sep = v == 0 ? -1.0 : M_PI * v / 127.0;
+                }
+        }
         if (cc == NV_CC_SCANNER) {
             cc_scan[ch] = v;                           // the scanner's selector (_scan_stamp)
             if (scan_async)                         // ...its new position prepared (_scan_prefetch)
@@ -13866,6 +13876,18 @@ void nv_part_rotary(void *h, int pi, int mode, double sep)
         return;
     P->patches[pi].rot_mode = mode < 0 ? -1 : mode != 0;
     P->patches[pi].rot_sep = sep;
+}
+
+// ...and as it stands (a CC82 may have moved it): out[0] the mode, [1] the
+// angle (radians, <0 the default)
+int nv_part_rotary_get(void *h, int pi, double *out)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (pi < 0 || pi >= (int)P->patches.size())
+        return 0;
+    out[0] = P->patches[pi].rot_mode;
+    out[1] = P->patches[pi].rot_sep;
+    return 1;
 }
 
 // ...and what it is: out[0] the drive in use, [1] the voice's, [2] the

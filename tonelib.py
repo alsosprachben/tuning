@@ -23372,6 +23372,14 @@ WHEEL_CC = {'vibrato': 1, 'lfo2': 1, 'crescendo': 4, 'swell': 11, 'drive': 12, '
             'drones': 18, 'drone stop': 18, 'drone note': 18, 'mouth': 19, 'crank': 20,
             'tone': 70, 'leslie': 80, 'scanner': 81, 'tremolo': 92}
 
+# THE ROTARY HEARD (Ben, 2026-11-18): CC82 beside the Leslie's speed (80) and
+# the scanner (81) -- 0 the cabinet in the room, 1-127 two mics round it at
+# value x 180/127 degrees apart (the Rotary type's Separate scale: 96 is
+# 136). A file's, a keyboard's knob, the cards' switch; absent, each sound
+# its own way (an organ's in the room, a Rotary type's mics at Separate).
+# A note hears the value at its onset.
+ROTARY_CC = 82
+
 # CC67 for the note being built, set by the renderer exactly as
 # bagpipe_drones and honky_detune are: a per-note fact that reaches the voice
 # through the one place that knows both the file and the class.
