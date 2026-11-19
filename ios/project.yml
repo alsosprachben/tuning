@@ -33,6 +33,7 @@ targets:
         HEADER_SEARCH_PATHS: "$(SRCROOT)/../native $(SRCROOT)/../nui $(SRCROOT)/../third_party/imgui-1.93.0 $(SRCROOT)/../third_party/sdl3-ios-$(PLATFORM_NAME)/include"
         OTHER_LDFLAGS: "$(SRCROOT)/../libnative-ios-$(PLATFORM_NAME).a $(SRCROOT)/../libnui-ios-$(PLATFORM_NAME).a $(SRCROOT)/../third_party/sdl3-ios-$(PLATFORM_NAME)/lib/libSDL3.a -framework CoreMedia -framework CoreVideo -framework CoreGraphics -framework GameController -framework Metal -framework QuartzCore -framework UIKit -framework AVFoundation -framework AudioToolbox -framework CoreMIDI -framework CoreFoundation -lc++"
         CODE_SIGN_STYLE: Automatic
+        DEVELOPMENT_TEAM: WB63Q3HT25         # (Ben's Personal Team: free signing, 7 days an install)
         INFOPLIST_KEY_UIFileSharingEnabled: YES
         INFOPLIST_KEY_LSSupportsOpeningDocumentsInPlace: YES
         INFOPLIST_KEY_UIRequiresFullScreen: YES
