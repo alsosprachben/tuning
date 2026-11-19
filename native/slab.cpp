@@ -130,6 +130,7 @@ static double moog_a_vel_gain(int vel)
 }
 extern "C" const OrganSpec *nv_tcache_organ(void *h, int program);
 extern "C" const NoteClass *nv_tcache_class(void *h, int program);
+extern "C" int nv_tcache_var(void *h);
 extern "C" void nv_tcache_free(void *h);
 extern "C" const NoteClass *nv_tcache_key_class(void *h, int program, int key);
 extern "C" double nv_tcache_trim(void *h, int program);
@@ -7358,8 +7359,14 @@ struct Part {
         if (w.bank && reg_on && w.pi == 0)
             reg_forget(w.bank, n0);
         const bool had_les = any_leslie(), new_prog = w.program != p.program;
-        if (w.program != p.program || w.cache != p.cache) {
-            p.syn.clear();                      // A NEW PROGRAM IS A NEW PATCH: its knobs its own (Part.set_patch)
+        // A NEW PROGRAM IS A NEW PATCH: its knobs its own (Part.set_patch) --
+        // its program or its GS variation another, as live's compares them;
+        // the same voice through another cabinet (a variation key's choice
+        // over bit 12) or built again in another room keeps them
+        const bool same_voice = !w.drums && !p.drums && w.program == p.program && p.cache && w.cache
+                                && (nv_tcache_var(w.cache) & 4095) == (nv_tcache_var(p.cache) & 4095);
+        if (!same_voice && (w.program != p.program || w.cache != p.cache)) {
+            p.syn.clear();
             p.mb.reset();
             p.syn_b.clear();
             p.mb_b.reset();
