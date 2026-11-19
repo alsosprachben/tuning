@@ -5,6 +5,7 @@
 // loader: ImFontLoader). Sizes asked for round to the nearest multiple of 7.
 #pragma once
 
+#include <algorithm>
 #include <cstdint>
 #include <cstdlib>
 #include <cstring>
@@ -90,7 +91,15 @@ inline bool bdf_parse(const std::string &text, Bdf &out)
 // ImGui asks in points at the screen's density -- its framebuffer scale, 2 on
 // a Retina screen -- so the bitmap is baked in device pixels and its metrics
 // handed back in points)
-inline float bdf_density(const ImFontBaked *baked) { return baked->RasterizerDensity > 0 ? baked->RasterizerDensity : 1.0f; }
+// (the density: the baked font's, else the screen's framebuffer scale -- ImGui
+//  bakes at its config's 1 on a Retina screen, where a 10.5 point size is 21
+//  device pixels, and taken as 1 it rounded up to a 2x glyph, 28: a third too big)
+inline float bdf_density(const ImFontBaked *baked)
+{
+    const float fb = ImGui::GetIO().DisplayFramebufferScale.x;
+    const float d = baked->RasterizerDensity > 0 ? baked->RasterizerDensity : 1.0f;
+    return std::max(d, fb > 0 ? fb : 1.0f);
+}
 inline int bdf_scale(const Bdf &b, float size)
 {
     const int cell = b.ascent + b.descent;
