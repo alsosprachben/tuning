@@ -1673,7 +1673,7 @@ function drawScenes() {
   const sp = SC.sel.preset, ss = SC.sel.scene;
   $('scPresets').innerHTML = x.presets.length ? x.presets.map(p => `<div class="sc-item${p.name === sp ? ' on' : ''}" data-kind="preset" data-name="${esc(p.name)}" data-kit="1">` +
     `<b>${esc(p.name)}</b><span>${esc(partsSay(p.parts))}${p.tuner ? ' · ' + esc(p.tuner) : ''}</span>` +
-    (p.name === sp ? `<div class="sc-do"><button class="hb" data-do="preset_load" data-kit="1">LOAD</button><button class="hb" data-do="preset_save" data-kit="1">SAVE OVER</button><button class="hb" data-do="preset_delete" data-kit="1">DELETE</button></div>` : '') +
+    (p.name === sp ? `<div class="sc-do"><button class="hb" data-do="preset_load" data-kit="1">LOAD</button><button class="hb" data-do="preset_save" data-kit="1">SAVE OVER</button><button class="hb" data-do="preset_delete" data-kit="1">DELETE</button><button class="hb" data-do="preset_midi" data-kit="1">AS MIDI</button></div>` : '') +
     '</div>').join('') : '<p class="pn-note">No presets yet.</p>';
   $('scScenes').innerHTML = x.scenes.length ? x.scenes.map(c => `<div class="sc-item${c.name === ss ? ' on' : ''}" data-kind="scene" data-name="${esc(c.name)}" data-kit="1">` +
     `<b>${esc(c.name)}</b><span>${c.n} setting${c.n === 1 ? '' : 's'}</span>` +

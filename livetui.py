@@ -1027,6 +1027,24 @@ class TUI:
         self.row = 0
         self.say("loading %r" % names[pick])
 
+    def preset_midi(self, scr):
+        """A PRESET's SETUP MEASURE (live.preset_midi), written beside
+        presets.json as setups/NAME.mid -- the Scenes card's AS MIDI."""
+        d = LV.load_presets()
+        if not d:
+            self.say("no presets in %s yet" % os.path.basename(LV.PRESET_PATH))
+            return
+        names = sorted(d)
+        pick = self.menu(scr, "write preset as MIDI", names)
+        if pick is None:
+            return
+        nm = names[pick]
+        fn = "".join(c if c.isascii() and (c.isalnum() or c in " -_.") else "_" for c in nm)
+        out = os.path.join(os.path.dirname(LV.PRESET_PATH), "setups", fn + ".mid")
+        os.makedirs(os.path.dirname(out), exist_ok=True)
+        LV.preset_midi(d[nm], nm).save(out)
+        self.say("written: %s" % out)
+
     # ---- little modal widgets ----------------------------------------------
     def prompt(self, scr, label):
         h, w = scr.getmaxyx()
@@ -2947,7 +2965,7 @@ class TUI:
         "tab": (9,), "\u2191\u2193": (curses.KEY_UP, curses.KEY_DOWN),
         "\u2190\u2192": (curses.KEY_LEFT, curses.KEY_RIGHT), "-/+": (ord("-"), ord("=")),
         "_/+": (ord("_"), ord("+")), "\u23ce": (10,), "a": (ord("a"),), "s": (ord("s"),),
-        "d": (ord("d"),), "m": (ord("m"),), "o": (ord("o"),), "S/L": (ord("S"), ord("L")),
+        "d": (ord("d"),), "m": (ord("m"),), "o": (ord("o"),), "S/L": (ord("S"), ord("L")), "W": (ord("W"),),
         "N/R": (ord("N"), ord("R")), "?": (ord("?"),), "P": (ord("P"),), "r": (ord("r"),),
         "space": (ord(" "),), "b": (ord("b"),), "0": (ord("0"),), "D": (ord("D"),),
         "B": (ord("B"),), "M": (ord("M"),), "T": (ord("T"),),
@@ -3421,6 +3439,7 @@ class TUI:
             "",
             "presets",
             "  S save   L load   -- presets.json, data only; voices live in tonelib.py",
+            "  W        write a preset as a MIDI setup measure (setups/NAME.mid)",
             "  N save   R recall a SCENE: every channel's controls as MIDI events",
             "  E        the EASTERN tuning: a raga system and Sa for every Indian voice",
             "    (volume, pan, expression, CC91, sound controls, tuning, mono --",
@@ -3576,6 +3595,8 @@ class TUI:
             self.save_preset(scr)
         elif c == ord("L"):
             self.load_preset(scr)
+        elif c == ord("W"):
+            self.preset_midi(scr)
         elif c == ord("E"):
             self.pick_eastern(scr)
         elif c == ord("X"):

@@ -13,6 +13,7 @@
 //
 // Never on the audio thread: the host's calls post their work to it.
 #include <algorithm>
+#include <cctype>
 #include <cmath>
 #include <cstdio>
 #include <cstdlib>
@@ -1572,7 +1573,8 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
             w->scenes_sent.clear();
         }
         r.o["scenes"] = scenes_of(h);
-    } else if (call == "preset_save" || call == "preset_load" || call == "preset_delete" || call == "scene_save"
+    } else if (call == "preset_save" || call == "preset_load" || call == "preset_delete" || call == "preset_midi"
+               || call == "scene_save"
                || call == "scene_recall" || call == "scene_delete") {     // name
         const J *nm = q.get("name");
         const std::string name = nm && nm->is(J::STR) ? nm->s : "";
@@ -1584,6 +1586,18 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
             rc = nv_host_preset_save(h, name.c_str(), msg, sizeof msg);
         } else if (call == "preset_load") {
             rc = nv_host_preset_load(h, name.c_str(), msg, sizeof msg);
+        } else if (call == "preset_midi") {
+            // ITS SETUP MEASURE (live.preset_midi) in the music folder's
+            // setups/, where the Files card finds it: NAME.mid, the name's
+            // letters, digits, spaces and - _ . kept
+            std::string fn;
+            for (unsigned char c : name)
+                fn += isalnum(c) || c == ' ' || c == '-' || c == '_' || c == '.' ? (char)c : '_';
+            const std::string dir = fileplay::music_root() + "/setups";
+            mkdir(dir.c_str(), 0755);
+            rc = nv_preset_midi_file(h->presets_path().c_str(), name.c_str(), (dir + "/" + fn + ".mid").c_str());
+            snprintf(msg, sizeof msg, rc ? "could not write setups/%s.mid" : "written: setups/%s.mid, on the Files card",
+                     fn.c_str());
         } else if (call == "scene_save") {
             rc = nv_host_scene_save(h, name.c_str(), msg, sizeof msg);
         } else if (call == "scene_recall") {

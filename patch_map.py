@@ -2988,6 +2988,9 @@ for _k, _db in VARIATION_TRIM_EAR.items():
 # is a patch rebuilt as a program change rebuilds it, live and in files --
 # and a file selects it as a bank select does: tonelib.CABINET_CC (83), its
 # value CAB_CHOICES' index, at once; a program change puts it back to 0.
+# FIXED FROM HERE ON (Ben, 2026-11-19): files carry these indexes as CC83's
+# values (and presets' setup measures, live.preset_midi) -- a new choice goes
+# at the END, none is ever moved or taken out.
 CAB_CHOICES = (None, "direct", "leslie", "hammond", "guitar12", "guitar412", "jc120",
                "bass410", "rhodes", "wurlitzer")
 # ...what each is, for the cards (what we model and how we know it)
@@ -3036,6 +3039,7 @@ def cab_of(variation):
 # RELATIVE to its own pickup (its turns over its own choice's): Overdriven's
 # bridge humbucker is voiced 1.07 against Distortion's 1.43, and stays so.
 PK_SHIFT = 16
+# FIXED FROM HERE ON, as CAB_CHOICES: CC85's values -- a new one at the end.
 PICKUP_CHOICES = (None, "neck", "neck+middle", "middle", "middle+bridge", "bridge", "neck+bridge", "anti")
 _SQ2 = 2.0 ** 0.5
 _STRAT_RES, _STRAT_BRIDGE_T = 5025.0, 1.07

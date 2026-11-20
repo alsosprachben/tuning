@@ -5,6 +5,9 @@
 // nvlive, the terminal client, links them from the library as before.
 #include <dlfcn.h>
 #include <algorithm>
+#include <cmath>
+#include <map>
+#include <set>
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -80,7 +83,7 @@ void nv_host::session_apply()
 // ---- SCENES AND PRESETS (live's) ----
 
 // THE CABINET CHOICES by name (patch_map.CAB_CHOICES -- the same order: an
-// index is CC83's value), 0 "own", and a session's name's index (-1 none)
+// index is CC83's value: FIXED, a new one at the end), 0 "own", and a session's name's index (-1 none)
 static const char *const CAB_NAMES[] = {"own", "direct", "leslie", "hammond", "guitar12", "guitar412", "jc120",
                                         "bass410", "rhodes", "wurlitzer"};
 static int cab_index(const std::string &s)
@@ -1140,6 +1143,207 @@ int nv_host_preset_load(nv_host *h, const char *name, char *msg, int cap)
     h->apply_setup(*p, false);
     copy_out(std::string("loading '") + name + "'", msg, cap);
     return 0;
+}
+
+// ---- A PRESET AS A MIDI SETUP MEASURE (live.preset_midi: the same bytes) ----
+
+// a text event's bytes: printable ASCII kept, every other byte '?'
+static std::string ascii_text(const std::string &s)
+{
+    std::string o;
+    for (unsigned char c : s)
+        o += c >= 32 && c < 127 ? (char)c : '?';
+    return o;
+}
+
+// a type-0 Standard MIDI File as mido writes one (running status; a sysex
+// F0, its length, its data, F7; a meta FF, type, length, data)
+struct SmfOut {
+    std::vector<uint8_t> d;
+    int run = -1;
+    long long at = 0;
+    void vlq(unsigned long v)
+    {
+        uint8_t b[5];
+        int n = 0;
+        b[n++] = v & 0x7F;
+        while (v >>= 7)
+            b[n++] = 0x80 | (v & 0x7F);
+        while (n)
+            d.push_back(b[--n]);
+    }
+    void when(long long t)
+    {
+        vlq((unsigned long)(t - at));
+        at = t;
+    }
+    void meta(long long t, int type, const std::string &x)
+    {
+        when(t);
+        d.push_back(0xFF);
+        d.push_back((uint8_t)type);
+        vlq(x.size());
+        d.insert(d.end(), x.begin(), x.end());
+        run = -1;
+    }
+    void sysex(long long t, const std::vector<uint8_t> &x)
+    {
+        when(t);
+        d.push_back(0xF0);
+        vlq(x.size() + 1);
+        d.insert(d.end(), x.begin(), x.end());
+        d.push_back(0xF7);
+        run = -1;
+    }
+    void msg(long long t, int status, int a, int b = -1)
+    {
+        when(t);
+        if (status != run)
+            d.push_back((uint8_t)status);
+        d.push_back((uint8_t)a);
+        if (b >= 0)
+            d.push_back((uint8_t)b);
+        run = status;
+    }
+};
+
+static std::vector<uint8_t> gs_dt1(int a0, int a1, int a2, int v)
+{
+    const int sum = a0 + a1 + a2 + v;
+    return {0x41, 0x10, 0x42, 0x12, (uint8_t)a0, (uint8_t)a1, (uint8_t)a2, (uint8_t)v, (uint8_t)((128 - sum % 128) % 128)};
+}
+
+std::string preset_smf(const sess::J &p, const std::string &name)
+{
+    const long long GAP = 48, END = 1920;      // (live's SETUP_GAP_TICKS, SETUP_END_TICKS)
+    SmfOut o;
+    o.meta(0, 0x03, ascii_text(name));
+    o.meta(0, 0x51, std::string("\x07\xA1\x20", 3));       // set_tempo 500000
+    o.sysex(0, {0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41});   // GS Reset
+    const long long t = GAP;
+    // THE CHANNELS' CONTROLS (the preset's scene): their bank aside
+    if (const sess::J *cs = p.get("chanstate"))
+        if (cs->is(sess::J::ARR))
+            for (const sess::J &e : cs->a) {
+                if (!e.is(sess::J::STR))
+                    continue;
+                int ch, c, v;
+                if (sscanf(e.s.c_str(), "control_change channel=%d control=%d value=%d", &ch, &c, &v) == 3) {
+                    if (c != 0 && c != 32)
+                        o.msg(t, 0xB0 | (ch & 15), c & 127, v & 127);
+                } else if (!e.s.compare(0, 12, "sysex data=(")) {
+                    std::vector<uint8_t> d;
+                    const char *q = e.s.c_str() + 12;
+                    while (*q && *q != ')') {
+                        char *end;
+                        const long b = strtol(q, &end, 10);
+                        if (end == q)
+                            break;
+                        d.push_back((uint8_t)std::max(0L, std::min(127L, b)));
+                        q = *end == ',' ? end + 1 : end;
+                    }
+                    o.sysex(t, d);
+                }
+            }
+    std::vector<const sess::J *> parts;
+    if (const sess::J *ps = p.get("parts"))
+        if (ps->is(sess::J::ARR))
+            for (const sess::J &x : ps->a)
+                if (x.is(sess::J::OBJ))
+                    parts.push_back(&x);
+    auto has = [](const sess::J *x, const char *k) { const sess::J *v = x->get(k); return v && !v->is(sess::J::NUL); };
+    auto num = [](const sess::J *x, const char *k, double d) { const sess::J *v = x->get(k); return v ? v->d(d) : d; };
+    std::set<int> taken;
+    for (const sess::J *x : parts)
+        if (has(x, "channel"))
+            taken.insert((int)x->get("channel")->i() & 15);
+    std::map<int, int> owner;
+    for (size_t i = 0; i < parts.size(); i++) {
+        const sess::J *x = parts[i];
+        const bool drums = num(x, "drums", 0.0) != 0.0;
+        int ch = -1;
+        if (has(x, "channel"))
+            ch = (int)x->get("channel")->i() & 15;
+        else if (drums && !owner.count(9) && !taken.count(9))
+            ch = 9;
+        else
+            for (int c = 0; c < 16 && ch < 0; c++)
+                if (c != 9 && !taken.count(c) && !owner.count(c))
+                    ch = c;
+        const int lo = (int)num(x, "lo", 0), hi = (int)num(x, "hi", 127), tr = (int)num(x, "transpose", 0);
+        char tx[160];
+        if (ch < 0 || owner.count(ch)) {
+            if (ch < 0)
+                snprintf(tx, sizeof tx, "part %zu: no channel left", i + 1);
+            else
+                snprintf(tx, sizeof tx, "part %zu: shares channel %d with part %d", i + 1, ch + 1, owner[ch] + 1);
+            o.meta(t, 0x01, ascii_text(tx));
+            continue;
+        }
+        owner[ch] = (int)i;
+        if (tr)
+            snprintf(tx, sizeof tx, "part %zu: channel %d, keys %d-%d, transpose %+d", i + 1, ch + 1, lo, hi, tr);
+        else
+            snprintf(tx, sizeof tx, "part %zu: channel %d, keys %d-%d", i + 1, ch + 1, lo, hi);
+        o.meta(t, 0x01, ascii_text(tx));
+        int prog = (int)num(x, "program", 0);
+        if (drums != (ch == 9)) {               // (GS's Use For Rhythm Part: channel 10 block 0, 1-9 1-9, 11-16 A-F)
+            const int blk = ch == 9 ? 0 : ch < 9 ? ch + 1 : ch;
+            o.sysex(t, gs_dt1(0x40, 0x10 | blk, 0x15, drums ? 1 : 0));
+        }
+        int b0, b32;
+        if (drums) {
+            b0 = 0;
+            b32 = prog >= 128 ? prog / 128 : 0;
+            prog %= 128;
+        } else {
+            const int v = (int)num(x, "bank", 0) & 4095;       // (patch_map.bank_select)
+            b0 = v & 0x7F;
+            b32 = v >> 7;
+        }
+        o.msg(t, 0xB0 | ch, 0, b0);
+        o.msg(t, 0xB0 | ch, 32, b32);
+        o.msg(t, 0xC0 | ch, prog & 127);
+        if (!drums) {
+            const sess::J *cb = x->get("cabinet"), *pu = x->get("pickup");
+            const int cab = cb && cb->is(sess::J::STR) ? cab_index(cb->s) : -1, pk = pu && pu->is(sess::J::STR) ? pk_index(pu->s) : -1;
+            if (cab > 0)
+                o.msg(t, 0xB0 | ch, 83, cab);
+            if (pk > 0)
+                o.msg(t, 0xB0 | ch, 85, pk);
+        }
+        const int vol = num(x, "muted", 0.0) != 0.0 ? 0
+                        : (int)std::max(0.0, std::min(127.0, std::nearbyint(127.0 * pow(10.0, num(x, "level_db", 0.0) / 40.0))));
+        o.msg(t, 0xB0 | ch, 7, vol);
+        if (has(x, "pan"))
+            o.msg(t, 0xB0 | ch, 10, std::max(0, std::min(127, (int)x->get("pan")->i())));
+    }
+    o.meta(END, 0x2F, "");
+    std::string f = "MThd";
+    const uint8_t hd[10] = {0, 0, 0, 6, 0, 0, 0, 1, 480 >> 8, 480 & 255};
+    f.append((const char *)hd, 10);
+    f += "MTrk";
+    const size_t n = o.d.size();
+    const uint8_t ln[4] = {(uint8_t)(n >> 24), (uint8_t)(n >> 16), (uint8_t)(n >> 8), (uint8_t)n};
+    f.append((const char *)ln, 4);
+    f.append((const char *)o.d.data(), n);
+    return f;
+}
+
+// A PRESET's SETUP MEASURE written to OUT (live.preset_midi): 0, or -1 (no
+// such preset, or not written)
+extern "C" int nv_preset_midi_file(const char *presets_path, const char *name, const char *out)
+{
+    sess::J d;
+    const sess::J *p = presets_path && name && sess::load(presets_path, d) ? d.get(name) : nullptr;
+    if (!p || !p->is(sess::J::OBJ) || !out)
+        return -1;
+    const std::string f = preset_smf(*p, name);
+    FILE *fh = fopen(out, "wb");
+    if (!fh)
+        return -1;
+    const bool ok = fwrite(f.data(), 1, f.size(), fh) == f.size();
+    return fclose(fh) == 0 && ok ? 0 : -1;
 }
 
 int nv_host_session_load(nv_host *h)

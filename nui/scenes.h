@@ -77,7 +77,7 @@ inline void sc_list(App &a, const char *id, float x, float y, float w, float h, 
         text(a, a.font, 21, x + 12, iy + (a.tab ? 7 : 8), LCD, fit(a, a.font, 21, nm, w - 32));
         text(a, a.font, 14, x + 12, iy + (a.tab ? 13 : 16) + a.lh(21), SILK_DIM, fit(a, a.font, 14, say(it), w - 32));
         if (on) {
-            const float bw = (w - 8 - 24 - 2 * 8) / 3;
+            const float na = (float)std::max<size_t>(1, acts.size()), bw = (w - 8 - 24 - (na - 1) * 8) / na;
             for (size_t k = 0; k < acts.size(); k++) {
                 const float bx = x + 12 + k * (bw + 8), by = iy + ih;
                 const float bs = a.tab ? 21 : 14;
@@ -183,7 +183,7 @@ inline void draw_scenes(App &a)
         return s + (t.empty() ? "" : " \xc2\xb7 " + t);
     };
     sc_list(a, "scp", X0 + 12, Y0 + 40, PW - 24, Y1 - Y0 - (IP ? 104 : 110), C.s.get("presets"), C.sel_preset, C.scroll_p, parts_say,
-            {{"LOAD", "preset_load"}, {"SAVE OVER", "preset_save"}, {"DELETE", "preset_delete"}});
+            {{"LOAD", "preset_load"}, {"SAVE OVER", "preset_save"}, {"DELETE", "preset_delete"}, {"AS MIDI", "preset_midi"}});
     if (button(a, "presetsave", X0 + 12, Y1 - (IP ? 54 : 58), IP ? PW - 24 : 300, 44, "SAVE THIS SETUP AS\xe2\x80\xa6", false, true, IP ? 21 : 14)) {
         C.naming = "preset_save";
         C.name.clear();

@@ -515,6 +515,7 @@ const HELP = {
       ['LOAD', 'Brings that setup back.'],
       ['SAVE OVER', 'Saves the setup now in its place.'],
       ['DELETE', 'Takes it away.'],
+      ['AS MIDI', 'Writes what a MIDI file can say of it as a one-bar MIDI file, setups/NAME.mid in the music folder (the Files card): a GS Reset, the scene, then each part on a channel -- its bank, program, speaker (CC83), pickup (CC85), level and pan. Paste it at the top of a song so the song plays on this setup. A part\'s key range, transpose, tuner and knobs have no MIDI word: the preset keeps them, and the file names each part\'s keys in a text event.'],
       ['SAVE THIS SETUP AS…', 'Name a new preset on the screen\'s keys and save the setup now.'],
     ],
   },

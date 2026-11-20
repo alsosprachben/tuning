@@ -13112,6 +13112,112 @@ def efx_recall(live, d):
         live.efx_send(ev)
 
 
+
+# A PRESET AS A MIDI SETUP MEASURE (Ben, 2026-11-19): what a MIDI file can
+# say of a preset, written as one -- to paste at the top of a song, or play
+# into the rig. A GS Reset, then (50 ms on, as a module wants after one) the
+# channels' controls the preset keeps (its scene: chanstate), then each part
+# on a channel of its own: its bank (CC0, CC32), its program, its cabinet
+# (CC83) and pickup (CC85) after the program change that puts them back, its
+# level (CC7) and pan (CC10). A part with no channel takes the first one free
+# (a drum part channel 10), a drum part elsewhere is made one by GS's Use For
+# Rhythm Part. What MIDI has no word for -- a part's key range and
+# transpose, its tuner, its knobs -- the presets keep; a text event names
+# each part's range. native/hostsession.cpp's preset_smf writes the same
+# bytes (examples/preset_midi_check.py).
+SETUP_GAP_TICKS = 48            # (480 a beat at 120: 50 ms after the reset)
+SETUP_END_TICKS = 1920          # (one bar of 4/4)
+GS_RESET = (0x41, 0x10, 0x42, 0x12, 0x40, 0x00, 0x7F, 0x00, 0x41)
+
+
+def _ascii_text(s):
+    """S as a text event's bytes: printable ASCII kept, every other byte '?'
+    (hostsession's the same, byte by byte)."""
+    return "".join(chr(b) if 32 <= b < 127 else "?" for b in str(s).encode("utf-8"))
+
+
+def _gs_sysex(addr, data):
+    """A GS data set (DT1) to ADDR, its Roland checksum."""
+    body = list(addr) + list(data)
+    return [0x41, 0x10, 0x42, 0x12] + body + [(128 - sum(body) % 128) % 128]
+
+
+def preset_midi(preset, name=""):
+    """The setup measure for PRESET (a presets.json entry, or a session):
+    a type-0 mido.MidiFile."""
+    _PM = __import__("patch_map")
+    M, MM = mido.Message, mido.MetaMessage
+    out = []                            # (tick, message) in order
+    out.append((0, MM("track_name", name=_ascii_text(name))))
+    out.append((0, MM("set_tempo", tempo=500000)))
+    out.append((0, M("sysex", data=list(GS_RESET))))
+    t = SETUP_GAP_TICKS
+    # THE CHANNELS' CONTROLS (scene_from's): their bank aside -- each part's own, below
+    for e in preset.get("chanstate") or ():
+        try:
+            m = mido.Message.from_str(e)
+        except Exception:
+            continue
+        if m.type == "control_change" and m.control not in (0, 32):
+            out.append((t, M("control_change", channel=m.channel, control=m.control, value=m.value)))
+        elif m.type == "sysex":
+            out.append((t, M("sysex", data=list(m.data))))
+    parts = [p for p in preset.get("parts") or () if isinstance(p, dict)]
+    taken = {int(p["channel"]) & 15 for p in parts if p.get("channel") is not None}
+    owner = {}
+    for i, p in enumerate(parts):
+        drums = bool(p.get("drums"))
+        if p.get("channel") is not None:
+            ch = int(p["channel"]) & 15
+        elif drums and 9 not in owner and 9 not in taken:
+            ch = 9
+        else:
+            ch = next((c for c in range(16) if c != 9 and c not in taken and c not in owner), None)
+        lo, hi, tr = int(p.get("lo", 0)), int(p.get("hi", 127)), int(p.get("transpose", 0))
+        if ch is None or ch in owner:
+            out.append((t, MM("text", text=_ascii_text(
+                "part %d: %s" % (i + 1, "no channel left" if ch is None
+                                 else "shares channel %d with part %d" % (ch + 1, owner[ch] + 1))))))
+            continue
+        owner[ch] = i
+        out.append((t, MM("text", text=_ascii_text(
+            "part %d: channel %d, keys %d-%d%s" % (i + 1, ch + 1, lo, hi,
+                                                 ", transpose %+d" % tr if tr else "")))))
+        prog = int(p.get("program", 0))
+        if drums != (ch == 9):
+            # USE FOR RHYTHM PART (GS 40 1x 15): x the part's block -- channel
+            # 10's 0, channels 1-9 1-9, 11-16 A-F -- map 1, or off
+            blk = 0 if ch == 9 else ch + 1 if ch < 9 else ch
+            out.append((t, M("sysex", data=_gs_sysex((0x40, 0x10 | blk, 0x15), (1 if drums else 0,)))))
+        if drums:
+            b0, b32 = 0, (prog // 128 if prog >= 128 else 0)
+            prog %= 128
+        else:
+            b0, b32 = _PM.bank_select(int(p.get("bank", 0)) & _PM.CAB_MASK)
+        out.append((t, M("control_change", channel=ch, control=0, value=b0)))
+        out.append((t, M("control_change", channel=ch, control=32, value=b32)))
+        out.append((t, M("program_change", channel=ch, program=prog & 127)))
+        if not drums:
+            cab, pk = cab_index(p.get("cabinet")), pk_index(p.get("pickup"))
+            if cab:
+                out.append((t, M("control_change", channel=ch, control=T.CABINET_CC, value=cab)))
+            if pk:
+                out.append((t, M("control_change", channel=ch, control=T.PICKUP_CC, value=pk)))
+        vol = 0 if p.get("muted") else max(0, min(127, int(round(127.0 * 10.0 ** (float(p.get("level_db", 0.0)) / 40.0)))))
+        out.append((t, M("control_change", channel=ch, control=7, value=vol)))
+        if p.get("pan") is not None:
+            out.append((t, M("control_change", channel=ch, control=10, value=max(0, min(127, int(p["pan"]))))))
+    out.append((SETUP_END_TICKS, MM("end_of_track")))
+    mid = mido.MidiFile(type=0, ticks_per_beat=480)
+    track = mido.MidiTrack()
+    mid.tracks.append(track)
+    prev = 0
+    for tk, m in out:
+        track.append(m.copy(time=tk - prev))
+        prev = tk
+    return mid
+
+
 def save_preset(name, live, path=PRESET_PATH):
     """Store the whole performance state under `name`. Presets are DATA, not
     code: a voice is still only ever defined in tonelib.py."""

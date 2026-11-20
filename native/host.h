@@ -197,6 +197,11 @@ int nv_host_presets(nv_host *h, char *names, int cap);
    happened in msg */
 int nv_host_preset_save(nv_host *h, const char *name, char *msg, int cap);
 int nv_host_preset_load(nv_host *h, const char *name, char *msg, int cap);
+/* A PRESET's SETUP MEASURE (live.preset_midi): what a MIDI file can say of
+   preset NAME in PRESETS_PATH -- a GS Reset, its scene, each part's bank,
+   program, cabinet (CC83), pickup (CC85), level and pan -- written to OUT as
+   a Standard MIDI File; 0, or -1 */
+int nv_preset_midi_file(const char *presets_path, const char *name, const char *out);
 /* the session read and applied (an app's start: 0, -1 none), written (its quit) */
 int nv_host_session_load(nv_host *h);
 int nv_host_session_save(nv_host *h);
