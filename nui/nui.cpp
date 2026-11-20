@@ -295,6 +295,9 @@ static void audit_write(const char *path, const std::string &shot)
     fprintf(f, "== %s\n", shot.c_str());
     for (const auto &c : A.cuts)
         fprintf(f, "CUT\t%s\n", c.c_str());
+    if (getenv("NUI_TEXT_AUDIT_ALL"))       // (every text box, for a probe)
+        for (const auto &t : A.texts)
+            fprintf(f, "TEXT\t%s\t%.1f,%.1f %.1fx%.1f\n", t.s.c_str(), t.x0, t.y0, t.x1 - t.x0, t.y1 - t.y0);
     const float m = 1.0f;               // (a pixel's touch is not an overlap)
     const auto &T = A.texts;
     for (size_t i = 0; i < T.size(); i++)
@@ -305,7 +308,10 @@ static void audit_write(const char *path, const std::string &shot)
             if (p.x0 + m < q.x1 && q.x0 + m < p.x1 && p.y0 + m < q.y1 && q.y0 + m < p.y1)
                 fprintf(f, "OVERLAP\t%s\t%s\t%.0f,%.0f\n", p.s.c_str(), q.s.c_str(), p.x0, p.y0);
             // (two texts on one line closer than a space: read as one -- "LEVEL FEEDBACK")
-            else if (std::fabs(p.y0 - q.y0) < 2 && std::fabs((p.y1 - p.y0) - (q.y1 - q.y0)) < 1) {
+            else if (std::fabs((p.y1 - p.y0) - (q.y1 - q.y0)) < 1 &&
+                     std::min(p.y1, q.y1) - std::max(p.y0, q.y0) > 2.0f) {
+                // (two texts of one size: a big number beside its name is set apart by its size)
+                // (side by side, at all level with each other)
                 const float gap = p.x0 < q.x0 ? q.x0 - p.x1 : p.x0 - q.x1;
                 if (gap >= -m && gap < std::min(10.0f, 0.6f * (p.y1 - p.y0)))
                     fprintf(f, "CROWD\t%s\t%s\t%.0f,%.0f\tgap %.1f\n", p.s.c_str(), q.s.c_str(), p.x0, p.y0, gap);

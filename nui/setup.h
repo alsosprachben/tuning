@@ -300,13 +300,14 @@ inline void draw_setup(App &a)
     }
     std::string note;
     if (flag(&U.s, "rubato_on")) {
-        const std::pair<std::string, std::string> rows[5] = {{"Callbacks that waited", jnum(rv(0))},
+        const std::pair<std::string, std::string> rows[6] = {{"Callbacks that waited", jnum(rv(0))},
                                                              {"Time held, ever", ms(rv(1))},
                                                              {"Owed now", ms(rv(2))},
-                                                             {"Time returned", ms(rv(6)) + " (" + jnum(rv(5)) + " cuts)"},
-                                                             {"Held by the partials ringing on", ms(rv(7))}};
+                                                             {"Time returned", ms(rv(6))},
+                                                             {"Cuts", jnum(rv(5))},
+                                                             {"Held by ringing notes", ms(rv(7))}};
         for (const auto &row : rows) {
-            text(a, a.font, 14, CX + 12, y, SILK_DIM, fit(a, a.font, 14, row.first, CW - 150));
+            text(a, a.font, 14, CX + 12, y, SILK_DIM, row.first);
             text(a, a.font, 14, CX + CW - 12 - text_w(a, a.font, 14, row.second), y, LCD, row.second);
             y += IP ? LH + 6 : 24;
         }

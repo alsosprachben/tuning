@@ -80,7 +80,7 @@ inline void draw_matrix(App &a)
     static const char *SRC[6] = {"Mod wheel", "Pitch bend", "Channel aftertouch", "Poly aftertouch", "CC1", "CC2"};
     static const char *DG[11] = {"", "", "", "LFO 1", "LFO 1", "LFO 1", "LFO 1", "LFO 2", "LFO 2", "LFO 2", "LFO 2"};
     static const char *DN[11] = {"Pitch", "Cutoff", "Amplitude", "Rate", "Pitch", "Filter", "Amp", "Rate", "Pitch", "Filter", "Amp"};
-    const float aboutH = 0, SW = IP ? 156 : 230, gy = Y0 + (IP ? 30 : 40), YB = (card_y1(a)) - aboutH - (IP ? 20 : 34);
+    const float aboutH = 0, SW = IP ? 156 : 252, gy = Y0 + (IP ? 30 : 40), YB = (card_y1(a)) - aboutH - (IP ? 20 : 34);
     const float cw = (X1 - X0 - SW) / 11, rh = (YB - gy) / 6;
     look::tray(a, X0, Y0, X1 - X0, YB - Y0, 9);
     // the destinations across (the LFOs' groups apart)

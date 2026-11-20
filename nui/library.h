@@ -141,37 +141,6 @@ inline std::vector<const Patch *> lib_shown()
     return out;
 }
 
-// WORDS WRAPPED to a width (design px): its lines
-inline std::vector<std::string> wrap(App &a, ImFont *f, float size, const std::string &s, float w)
-{
-    std::vector<std::string> lines;
-    std::string line, word;
-    auto flush_word = [&]() {
-        if (word.empty())
-            return;
-        const std::string t = line.empty() ? word : line + " " + word;
-        if (!line.empty() && text_w(a, f, size, t) > w) {
-            lines.push_back(line);
-            line = word;
-        } else
-            line = t;
-        word.clear();
-    };
-    for (char c : s) {
-        if (c == ' ' || c == '\n') {
-            flush_word();
-            if (c == '\n') {
-                lines.push_back(line);
-                line.clear();
-            }
-        } else
-            word += c;
-    }
-    flush_word();
-    if (!line.empty())
-        lines.push_back(line);
-    return lines;
-}
 
 // THE ON-SCREEN KEYS (the web's osk): true when DONE
 // THE SCREEN's OWN KEYS typing into q (a name's: with - and _); true on DONE

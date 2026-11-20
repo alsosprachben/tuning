@@ -351,10 +351,10 @@ def printed_value(name, n, v):
 
 # ROLAND'S FAMILIES OF TYPES, by their numbers (the SC-8850 OM, "Insertion
 # Effect Types"): the live panel's type tree
-CATEGORIES = (("Tone colour (filters)", 1, 4), ("Distortion", 5, 6), ("Modulation", 7, 13),
-              ("Compression", 14, 15), ("Chorus", 16, 20), ("Delay and reverb", 21, 28),
-              ("Pitch", 29, 30), ("3D and Lo-Fi", 31, 34), ("Two in series", 35, 46),
-              ("Three or more in series", 47, 55), ("Two in parallel", 56, 64))
+CATEGORIES = (("Tone colour", 1, 4), ("Distortion", 5, 6), ("Modulation", 7, 13),
+              ("Compression", 14, 15), ("Chorus", 16, 20), ("Delay, reverb", 21, 28),
+              ("Pitch", 29, 30), ("3D and Lo-Fi", 31, 34), ("In series", 35, 46),
+              ("Multi-effects", 47, 55), ("In parallel", 56, 64))
 
 
 def numbered():

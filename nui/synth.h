@@ -252,8 +252,9 @@ inline void draw_synth(App &a)
         int label_col;                  // (a first column for the rows' names)
     };
     // (in proportion to the controls side by side in each: a row's number a half)
-    static const Col COLS[] = {{"LFO 1", 2.6f, 0}, {"Oscillators", 5.6f, 1}, {"Mixer", 1.8f, 0},
-                               {"Filter", 2.4f, 0}, {"Envelopes", 5.2f, 1}, {"Delay", 2.2f, 0}};
+    // (labels wrap a little short of their cell, so a neighbour's one long word has room beside them)
+    static const Col COLS[] = {{"LFO 1", 3.1f, 0}, {"Oscillators", 5.4f, 1}, {"Mixer", 1.55f, 0},
+                               {"Filter", 3.1f, 0}, {"Envelopes", 5.4f, 1}, {"Delay", 2.4f, 0}};
     // (the iPad's pages: the left hand a column of its own, LFO 1 the full height for its stacks)
     static const Col PAGES[2][4] = {{{"Oscillators", 5.6f, 1}, {"Mixer", 1.8f, 0}, {"Filter", 2.4f, 0}, {nullptr, 0, 0}},
                                     {{"LFO 1", 2.2f, 0}, {"Left hand", 2.3f, 0}, {"Envelopes", 4.4f, 1}, {"Delay", 1.8f, 0}}};
@@ -267,12 +268,14 @@ inline void draw_synth(App &a)
     float tot = 0;
     for (const Col &c : cols)
         tot += c.weight;
-    const float X0 = T ? 18 : 26, X1 = T ? 1115 : 1894, gap = T ? 6 : 8, top = T ? 266 : 394, bottom = card_y1(a);
+    const float X0 = T ? 18 : 22, X1 = T ? 1115 : 1898, gap = T ? 6 : 5, top = T ? 266 : 394, bottom = card_y1(a);
     const float avail = X1 - X0 - gap * (cols.size() - 1);
     float cx0 = X0;
     for (const Col &col : cols) {
         const float cw = avail * col.weight / tot;
         look::tray(a, cx0, top, cw, bottom - top, 8);
+        a.lab_x0 = cx0 + 4;             // (its labels kept inside it)
+        a.lab_x1 = cx0 + cw - 4;
         // a column's sections: itself, and what stacks under it (the left hand under LFO 1)
         std::vector<std::pair<std::string, std::pair<float, float>>> secs;   // (name, (y0, y1))
         if (std::string(col.name) == "LFO 1" && !T) {
@@ -297,13 +300,14 @@ inline void draw_synth(App &a)
                 }
             const int lc = sec.first == "Oscillators" || sec.first == "Envelopes" ? 1 : 0;
             const float gx = cx0 + 6, gy = sy0 + 34, gw = cw - 12, gh = sy1 - sy0 - 40;
-            const float cellw = gw / (nc + (sec.first == "Oscillators" ? 1 : 0) - (sec.first == "Envelopes" ? 0 : 0)),
-                        cellh = gh / nr;
+            // (the Oscillators' row numbers a narrow column of their own; the knobs share the rest)
+            const float numw_ = sec.first == "Oscillators" ? 0.55f : 0.0f;
+            const float cellw = gw / (nc + numw_), cellh = gh / nr, gxk = gx + numw_ * cellw;
             (void)lc;
             // the rows' names
             if (sec.first == "Oscillators")
                 for (int r = 1; r <= 2; r++)
-                    text_c(a, a.font, 35, gx + cellw * 0.35f, gy + (r - 1) * cellh + cellh / 2 - 20, SILK_DIM, std::to_string(r));
+                    text_c(a, a.font, 35, gx + numw_ * cellw * 0.5f, gy + (r - 1) * cellh + cellh / 2 - 20, SILK_DIM, std::to_string(r));
             if (sec.first == "Envelopes") {
                 static const char *ENV[2] = {"FILTER", "AMPLIFIER"};
                 for (int r = 0; r < 2; r++) {
@@ -315,8 +319,8 @@ inline void draw_synth(App &a)
                 const Knob &k = Y.knobs[i];
                 if (k.column != sec.first)
                     continue;
-                const int c = k.col + (sec.first == "Oscillators" ? 1 : 0);
-                const float ccx = gx + (c - 0.5f) * cellw, ccy = gy + (k.row - 1) * cellh + k.rows * cellh / 2;
+                const int c = k.col;
+                const float ccx = gxk + (c - 0.5f) * cellw, ccy = gy + (k.row - 1) * cellh + k.rows * cellh / 2;
                 const bool own = syn_own(k);
                 const std::string id = "k" + std::to_string(k.knob);
                 const double pn = syn_pn(a, k);
@@ -333,7 +337,7 @@ inline void draw_synth(App &a)
                     for (char &ch : label)
                         ch = (char)toupper((unsigned char)ch);
                     if (k.steps.size() == 2 && k.words.size() == 2 && k.words[0] == "off" && k.words[1] == "on") {
-                        const int f = toggle(a, id.c_str(), ccx, ccy - 10, sel == 1, label, own, cellw - 6);
+                        const int f = toggle(a, id.c_str(), ccx, ccy - 10, sel == 1, label, own, cellw - 24);
                         if (f & K_RESET)
                             syn_forget(a, k);
                         else if (f & K_TAP)
@@ -341,8 +345,8 @@ inline void draw_synth(App &a)
                     } else {
                         int picked;
                         // (a stack wider than its cell starts at its cell's left, so it clears the control before)
-                        const float cl = gx + (c - 1) * cellw;
-                        const int f = segments(a, id, ccx, ccy - 10, k.words, sel, label, own, picked, cellw - 6,
+                        const float cl = gxk + (c - 1) * cellw;
+                        const int f = segments(a, id, ccx, ccy - 10, k.words, sel, label, own, picked, cellw - 24,
                                                k.words.size() > 2 ? cl : gx, gx + gw);
                         if (f & K_RESET)
                             syn_forget(a, k);
@@ -371,7 +375,7 @@ inline void draw_synth(App &a)
                 std::string label = k.generic;
                 for (char &ch : label)
                     ch = (char)toupper((unsigned char)ch);
-                const int f = knob(a, id.c_str(), ccx, ky, size, v01, label, words, k.centred, det, cellw - 6, own);
+                const int f = knob(a, id.c_str(), ccx, ky, size, v01, label, words, k.centred, det, cellw - 24, own);
                 if (f & K_CHANGED)
                     syn_set(a, k, (int)i, v01);
                 if (f & K_RESET)
@@ -379,6 +383,7 @@ inline void draw_synth(App &a)
             }
         }
         cx0 += cw + gap;
+        a.lab_x0 = a.lab_x1 = 0;
     }
 }
 

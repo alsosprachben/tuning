@@ -62,6 +62,7 @@ struct App {
     std::string warn;
     bool warn_red = false;
     double warn_until = 0.0;
+    float lab_x0 = 0, lab_x1 = 0;       // (the panel centred labels stay inside, while a card draws one; 0, 0 none)
     bool quit = false;
     bool animate = false;               // (a card asks for another frame: a blink, a send still due)
     double quit_armed = -10.0;          // (QUIT's first tap: a second within 3 s quits)
@@ -242,9 +243,16 @@ inline void text(App &a, ImFont *f, float size, float x, float y, ImU32 col, con
     audit_text(a, f, size, x, y, s);
     dl()->AddText(f, px(a, size), P(a, x, y), col, s.c_str());
 }
+// (a centred text kept inside the panel being drawn, where a card says which: App::lab_x0..lab_x1)
 inline void text_c(App &a, ImFont *f, float size, float cx, float y, ImU32 col, const std::string &s)
 {
-    text(a, f, size, cx - text_w(a, f, size, s) / 2, y, col, s);
+    const float w = text_w(a, f, size, s);
+    float x = cx - w / 2;
+    if (a.lab_x1 > a.lab_x0) {
+        x = std::min(x, a.lab_x1 - w);
+        x = std::max(x, a.lab_x0);
+    }
+    text(a, f, size, x, y, col, s);
 }
 // (a text cut to a width, with an ellipsis)
 inline std::string fit(App &a, ImFont *f, float size, const std::string &s, float w)
@@ -261,6 +269,58 @@ inline std::string fit(App &a, ImFont *f, float size, const std::string &s, floa
     }
     return t + "\xe2\x80\xa6";
 }
+// WORDS WRAPPED to a width (design px): its lines
+inline std::vector<std::string> wrap(App &a, ImFont *f, float size, const std::string &s, float w)
+{
+    std::vector<std::string> lines;
+    std::string line, word;
+    auto flush_word = [&]() {
+        if (word.empty())
+            return;
+        // (a word wider than the line by itself: broken after a hyphen or slash, else where it fills the line)
+        while (text_w(a, f, size, word) > w && word.size() > 1) {
+            size_t cut = word.find_first_of("-/");
+            if (cut == std::string::npos || text_w(a, f, size, word.substr(0, cut + 1)) > w) {
+                cut = 1;
+                while (cut + 1 < word.size() && text_w(a, f, size, word.substr(0, cut + 1) + "-") <= w)
+                    cut++;
+                if (!line.empty())
+                    lines.push_back(line);
+                lines.push_back(word.substr(0, cut) + "-");
+                line.clear();
+                word = word.substr(cut);
+                continue;
+            }
+            if (!line.empty())
+                lines.push_back(line);
+            lines.push_back(word.substr(0, cut + 1));
+            line.clear();
+            word = word.substr(cut + 1);
+        }
+        const std::string t = line.empty() ? word : line + " " + word;
+        if (!line.empty() && text_w(a, f, size, t) > w) {
+            lines.push_back(line);
+            line = word;
+        } else
+            line = t;
+        word.clear();
+    };
+    for (char c : s) {
+        if (c == ' ' || c == '\n') {
+            flush_word();
+            if (c == '\n') {
+                lines.push_back(line);
+                line.clear();
+            }
+        } else
+            word += c;
+    }
+    flush_word();
+    if (!line.empty())
+        lines.push_back(line);
+    return lines;
+}
+
 inline void rect(App &a, float x, float y, float w, float h, ImU32 col, float r = 6.0f)
 {
     dl()->AddRectFilled(P(a, x, y), P(a, x + w, y + h), col, r * a.k);
@@ -273,8 +333,14 @@ inline void frame(App &a, float x, float y, float w, float h, ImU32 col, float r
 // A LABEL's LINES: wrapped at its spaces where wider than w (at most two)
 inline std::vector<std::string> label_lines(App &a, ImFont *f, float size, const std::string &s, float w)
 {
-    if (w <= 0 || text_w(a, f, size, s) <= w || s.find(' ') == std::string::npos)
+    if (w <= 0 || text_w(a, f, size, s) <= w)
         return {s};
+    if (s.find(' ') == std::string::npos) {     // (one word: split after a hyphen or slash, else whole -- kept in its panel)
+        const size_t at = s.find_first_of("-/");
+        if (at == std::string::npos || at + 1 >= s.size())
+            return {s};
+        return {s.substr(0, at + 1), s.substr(at + 1)};
+    }
     // (the split nearest the middle that fits, else the middle's)
     size_t best = std::string::npos;
     float bestd = 1e9f;

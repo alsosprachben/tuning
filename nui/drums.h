@@ -190,7 +190,7 @@ inline void draw_drums(App &a)
     std::map<std::string, std::vector<const DrumKey *>> groups;
     for (const DrumKey *k : shown)
         groups[user && k->name.empty() ? "Not set" : sfx ? "Sounds" : drum_kind(k->name)].push_back(k);
-    const float pw_min = IP ? 96 : 112, ph = IP ? 56 : 62, pg = IP ? 5 : 6, hh = IP ? 18 : 24;
+    const float pw_min = IP ? 96 : 112, ph = IP ? 70 : 82, pg = IP ? 5 : 6, hh = IP ? 18 : 24;
     const float PW = PX1 - PX0 - 10;
     const int cols = std::max(1, (int)((PW + pg) / (pw_min + pg)));
     const float pw = (PW - pg * (cols - 1)) / cols;
@@ -282,10 +282,13 @@ inline void draw_drums(App &a)
         frame(a, x, y, pw, ph, sel ? LCD : EDGE, 9, sel ? 2.0f : 1.0f);
         const std::string kn = note_name_sharp(k.key);
         text(a, a.font, 14, x + 8, y + (IP ? 5 : 7), LCD, kn);
-        text(a, a.font, 14, x + 14 + text_w(a, a.font, 14, kn), y + (IP ? 5 : 7), LCD_DIM, std::to_string(k.key));
-        const auto ls = label_lines(a, a.font, 14, k.name.empty() ? "\xe2\x80\x94" : k.name, pw - 14);
-        for (size_t i = 0; i < ls.size(); i++)
-            text(a, a.font, 14, x + 8, y + (IP ? 8 : 10) + (i + 1) * LH, unset ? SILK_DIM : SILK, fit(a, a.font, 14, ls[i], pw - 14));
+        // (its MIDI key number at the pad's right, apart from the note name)
+        const std::string kk = std::to_string(k.key);
+        text(a, a.font, 14, x + pw - 8 - text_w(a, a.font, 14, kk), y + (IP ? 5 : 7), SILK_DIM, kk);
+        // (the drum's name whole, on up to three lines)
+        const auto ls = wrap(a, a.font, 14, k.name.empty() ? "\xe2\x80\x94" : k.name, pw - 14);
+        for (size_t i = 0; i < ls.size() && i < 3; i++)
+            text(a, a.font, 14, x + 8, y + (IP ? 6 : 8) + (i + 1) * (a.lh(14) + (IP ? 2 : 3)), unset ? SILK_DIM : SILK, ls[i]);
     }
     dl()->PopClipRect();
     if (content > view) {

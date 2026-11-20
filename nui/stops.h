@@ -191,9 +191,9 @@ inline void draw_stops(App &a)
                 const bool held = ImGui::IsItemActive();
                 look::chip(a, x, ty, tw, th, on, held);
                 const auto np = stop_parts(r < (int)names.size() ? names[(size_t)r] : std::to_string(r), feet);
-                const auto ls = label_lines(a, a.bold, 14, np.first, tw - 14);
-                for (size_t li = 0; li < ls.size(); li++)
-                    text_c(a, a.bold, 14, x + tw / 2, ty + (IP ? 6 : 10) + li * LH, on ? LCD_BG : SILK, fit(a, a.bold, 14, ls[li], tw - 10));
+                const auto ls = wrap(a, a.bold, 14, np.first, tw - 14);
+                for (size_t li = 0; li < ls.size() && li < 3; li++)
+                    text_c(a, a.bold, 14, x + tw / 2, ty + (IP ? 6 : 10) + li * LH, on ? LCD_BG : SILK, ls[li]);
                 if (!np.second.empty()) {   // (the footage; a drawbar's alone, big where it fits, centred)
                     const float fs = np.first.empty() && text_w(a, a.font, 35, np.second) <= tw - 14 ? 35 : 21;
                     text_c(a, a.font, fs, x + tw / 2, np.first.empty() ? ty + (th - a.lh(fs)) / 2 : ty + th - a.lh(21) - (IP ? 6 : 10),

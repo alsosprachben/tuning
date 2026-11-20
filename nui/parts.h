@@ -53,6 +53,30 @@ struct PartsUi {
 };
 static PartsUi g_parts;
 
+// A STRIP's NAME: its first words beside the number, the rest on the line under
+inline void strip_name(App &a, const std::string &nm, float x1, float y, float x2, float w1, float lh, bool dim)
+{
+    std::string first, rest = nm;
+    for (size_t i = nm.size(); i > 0; i--)          // (the most words that fit beside the number)
+        if ((i == nm.size() || nm[i] == ' ') && text_w(a, a.font, 14, nm.substr(0, i)) <= w1) {
+            first = nm.substr(0, i);
+            rest = i < nm.size() ? nm.substr(i + 1) : "";
+            break;
+        }
+    text(a, a.font, 14, x1, y, dim ? SILK_DIM : SILK, first);
+    if (!rest.empty())
+        text(a, a.font, 14, x2, y + lh, dim ? SILK_DIM : SILK, rest);
+}
+// A LANE's LABEL: the part and its range, the range left off where the lane is too short for both
+// (a lane a few keys wide: its part's name whole on its strip below)
+inline std::string lane_label(App &a, const std::string &part, const std::string &range, float w)
+{
+    const std::string both = part + "  " + range;
+    if (text_w(a, a.font, 14, both) <= w)
+        return both;
+    return text_w(a, a.font, 14, part) <= w ? part : fit(a, a.font, 14, part, w);
+}
+
 inline void draw_strips_tab(App &a, float X0, float X1, float sy, float Y1);
 inline void draw_parts(App &a)
 {
@@ -107,8 +131,8 @@ inline void draw_parts(App &a)
         rect(a, x1 - 5, y + 1, 5, lane - 3, LCD, 0);
         if (lane >= (T ? 10 : 14))
             text(a, a.font, 14, x0 + 9, y + (lane - 14) / 2, dim ? SILK_DIM : LCD,
-                 fit(a, a.font, 14, pad2(i + 1) + " " + str(part(a, i), "name") + "  " + note_name(lo) + "\xe2\x80\x93" +
-                                        note_name(hi), std::max(30.0f, x1 - x0 - 14)));
+                 lane_label(a, pad2(i + 1) + " " + str(part(a, i), "name"), note_name(lo) + " to " + note_name(hi),
+                            std::max(30.0f, x1 - x0 - 14)));
         // a lane's touch: near an end, that end follows the finger by key; else a tap selects
         ImGui::SetCursorScreenPos(P(a, X0, y));
         ImGui::PushID(i);
@@ -156,7 +180,7 @@ inline void draw_parts(App &a)
         return;
     }
     const float sy = ly0 + n * lane + 14, sh = 1056 - sy;
-    const float gap = 10, sw = std::max(108.0f, std::min(150.0f, (X1 - X0 - gap * (n - 1)) / std::max(1, n)));
+    const float gap = 10, sw = std::max(108.0f, std::min(240.0f, (X1 - X0 - gap * (n - 1)) / std::max(1, n)));
     for (int i = 0; i < n; i++) {
         const J *p = part(a, i);
         const float x = X0 + i * (sw + gap), cx = x + sw / 2;
@@ -172,13 +196,12 @@ inline void draw_parts(App &a)
         ImGui::PopID();
         const float nw = text_w(a, a.font, 21, pad2(i + 1));
         text(a, a.font, 21, x + 8, sy + 8, dim ? SILK_DIM : LCD, pad2(i + 1));
-        text(a, a.font, 14, x + 8 + nw + 8, sy + 13, dim ? SILK_DIM : SILK, fit(a, a.font, 14, str(p, "name"), sw - nw - 24));
-        const int lo = (int)pv(a, i, "lo"), hi = (int)pv(a, i, "hi", 127);
+        // (its name whole: beside the number, its rest on a second line)
+        strip_name(a, str(p, "name"), x + 8 + nw + 8, sy + 13, x + 8, sw - nw - 24, a.lh(14) + 3, dim);
         char pr[32];
         snprintf(pr, sizeof pr, "prog %03d%s", (int)num(p, "program"),
                  num(p, "variation") ? ("." + std::to_string((int)num(p, "variation"))).c_str() : "");
-        text(a, a.font, 14, x + 8, sy + 36, SILK_DIM,
-             fit(a, a.font, 14, std::string(flag(p, "drums") ? "drums" : pr) + " \xc2\xb7 " + note_name(lo) + "\xe2\x80\x93" + note_name(hi), sw - 14));
+        text(a, a.font, 14, x + 8, sy + 52, SILK_DIM, std::string(flag(p, "drums") ? "drums" : pr));
         // the pan knob
         const int pan = (int)pv(a, i, "pan", 64);
         float pv01 = pan / 127.0f;
@@ -265,13 +288,11 @@ inline void draw_strips_tab(App &a, float X0, float X1, float sy, float Y1)
         // the head: its number 3x, its name and program 2x
         text(a, a.font, 21, x + 6, sy + 6, dim ? SILK_DIM : LCD, pad2(i + 1));
         const float nw = text_w(a, a.font, 21, pad2(i + 1));
-        text(a, a.font, 14, x + 10 + nw, sy + 8, dim ? SILK_DIM : SILK, fit(a, a.font, 14, str(p, "name"), sw - nw - 16));
-        const int lo = (int)pv(a, i, "lo"), hi = (int)pv(a, i, "hi", 127);
+        strip_name(a, str(p, "name"), x + 10 + nw, sy + 8, x + 6, sw - nw - 16, a.lh(14) + 2, dim);
         char pr[32];
         snprintf(pr, sizeof pr, "prog %03d%s", (int)num(p, "program"),
                  num(p, "variation") ? ("." + std::to_string((int)num(p, "variation"))).c_str() : "");
-        text(a, a.font, 14, x + 6, sy + 26, SILK_DIM,
-             fit(a, a.font, 14, std::string(flag(p, "drums") ? "drums" : pr) + " \xc2\xb7 " + note_name(lo) + "\xe2\x80\x93" + note_name(hi), sw - 10));
+        text(a, a.font, 14, x + 6, sy + 8 + 2 * (a.lh(14) + 2), SILK_DIM, std::string(flag(p, "drums") ? "drums" : pr));
         // pan and level, knobs side by side
         const float ky = sy + 74;
         const int pan = (int)pv(a, i, "pan", 64);

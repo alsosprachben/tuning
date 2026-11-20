@@ -164,7 +164,7 @@ inline void draw_scenes(App &a)
     const float PW = IP ? 440 : 720, SW = IP ? 340 : 600, gap = IP ? 6 : 10, SX = X0 + PW + gap, MX = SX + SW + gap, MW = X1 - MX;
     look::tray(a, X0, Y0, PW, Y1 - Y0, 9);
     text(a, a.font, 14, heading(a, X0 + 12, Y0 + 10, "PRESETS", "sc:presets"), Y0 + 11, LCD,
-         fit(a, a.font, 14, "the whole setup: parts, routes, tuning, effects", PW - 130));
+         "the whole setup: parts, routes, tuning, effects");
     auto parts_say = [&](const J &p) {
         std::string s;
         if (const J *ps = p.get("parts"); ps && ps->is(J::ARR))
@@ -191,7 +191,7 @@ inline void draw_scenes(App &a)
 
     // THE SCENES: each channel's controls
     look::tray(a, SX, Y0, SW, Y1 - Y0, 9);
-    text(a, a.font, 14, heading(a, SX + 12, Y0 + 10, "SCENES", "sc:scenes"), Y0 + 11, LCD, fit(a, a.font, 14, "each channel's controls: levels, pans, sends, pedals", SW - 120));
+    text(a, a.font, 14, heading(a, SX + 12, Y0 + 10, "SCENES", "sc:scenes"), Y0 + 11, LCD, "each channel's levels, pans and sends");
     sc_list(a, "scs", SX + 12, Y0 + 40, SW - 24, Y1 - Y0 - (IP ? 104 : 110), C.s.get("scenes"), C.sel_scene, C.scroll_s,
             [](const J &c) {
                 const int n = (int)num(&c, "n");

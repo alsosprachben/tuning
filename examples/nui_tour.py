@@ -41,6 +41,14 @@ STATES = [
 ]
 
 
+# (more of a card, by taps in the layout's design units, for the first state only)
+EXTRA = {
+    ("ipad", "synth", "lead"): [("page2", [(617, 235)])],
+    ("laptop", "effects", "lead"): [("series", [(138, 542)]), ("multi", [(320, 542)]), ("parallel", [(518, 542)]),
+                                    ("delay", [(330, 510)])],
+}
+
+
 def picks(nvx):
     """the engine's patches (the patches call): their pick numbers by program, variation, drums, family"""
     import native as N
@@ -110,6 +118,14 @@ def tour(nvx, out, layout, session, ps, keep_ppm):
             ppm = os.path.join(d, "%s_%s.ppm" % (name, c))
             steps += ["tap %.0f %.0f" % (x, y), "wait 500", "shot " + ppm]
             shots.append(ppm)
+            # (what a card hides behind a touch: the iPad's second Synth page, the insertion
+            #  families with the longest type names)
+            for extra, taps in EXTRA.get((layout, c, name), []):
+                ppm = os.path.join(d, "%s_%s_%s.ppm" % (name, c, extra))
+                for t in taps:
+                    steps += ["tap %.0f %.0f" % t, "wait 400"]
+                steps += ["shot " + ppm]
+                shots.append(ppm)
     x, y = help_xy(layout)
     ppm = os.path.join(d, "help.ppm")
     steps += ["tap %.0f %.0f" % (x, y), "wait 500", "shot " + ppm, "quit"]

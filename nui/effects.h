@@ -11,6 +11,17 @@
 
 namespace nui {
 
+// (a family's name as gsefx.CATEGORIES now says it -- an export made before
+//  the shorter names still carries the long ones)
+inline std::string fam_label(const std::string &n)
+{
+    static const std::map<std::string, std::string> M = {
+        {"Tone colour (filters)", "Tone colour"}, {"Delay and reverb", "Delay, reverb"}, {"Two in series", "In series"},
+        {"Three or more in series", "Multi-effects"}, {"Two in parallel", "In parallel"}};
+    const auto it = M.find(n);
+    return it == M.end() ? n : it->second;
+}
+
 struct FxParam {
     int n = 0, fresh = 0;
     std::string name;
@@ -38,7 +49,7 @@ inline void fx_tables(const J &t)
     F.tables = true;
     if (const J *fs = t.get("families"); fs && fs->is(J::ARR))
         for (const J &f : fs->a)
-            F.fams.push_back({{(int)f.a[0].d(), (int)f.a[1].d()}, f.a[2].s});
+            F.fams.push_back({{(int)f.a[0].d(), (int)f.a[1].d()}, fam_label(f.a[2].s)});
     if (const J *ts = t.get("types"); ts && ts->is(J::ARR))
         for (const J &y : ts->a)
             F.types.push_back({(int)y.a[0].d(), (int)y.a[1].d(), (int)y.a[2].d(), y.a[3].s});
@@ -144,6 +155,19 @@ inline std::vector<int> irange(int lo, int hi)
     for (int i = lo; i <= hi; i++)
         v.push_back(i);
     return v;
+}
+// (the most columns, up to most, in which every name fits its button whole)
+inline int grid_cols(App &a, const std::vector<std::string> &names, float w, int most, float gap = 4)
+{
+    for (int c = most; c > 1; c--) {
+        const float bw = (w - gap * (c - 1)) / c;
+        bool ok = true;
+        for (const auto &n : names)
+            ok = ok && text_w(a, a.font, 14, n) <= bw - 12;
+        if (ok)
+            return c;
+    }
+    return 1;
 }
 // a row of choices: n buttons in a grid of cols; the lit one i
 inline int choice_grid(App &a, const std::string &id, float x, float y, float w, int cols, float bh,
@@ -257,7 +281,7 @@ inline void draw_effects(App &a)
     for (const auto &f : F.fams)
         fn.push_back(f.second);
     const float fy = Y0 + (IP ? 60 : 72);
-    const int fcols = IP ? 6 : 4;
+    const int fcols = grid_cols(a, fn, IW - 24, IP ? 6 : 4);
     const int hf = show_type ? choice_grid(a, "fxfam", IX + 12, fy, IW - 24, fcols, GH, fn, F.fam) : -1;
     if (hf >= 0)
         F.fam = hf;
@@ -272,7 +296,8 @@ inline void draw_effects(App &a)
             tn.push_back(pad2(t.num) + " " + t.name);
         }
     const float ty = fy + ((int)fn.size() + fcols - 1) / fcols * GR + (IP ? 8 : 10);
-    const int ht = show_type ? choice_grid(a, "fxtype", IX + 12, ty, IW - 24, 4, GH, tn, lit) : -1;
+    const int tcols_ = grid_cols(a, tn, IW - 24, 4);
+    const int ht = show_type ? choice_grid(a, "fxtype", IX + 12, ty, IW - 24, tcols_, GH, tn, lit) : -1;
     if (ht == 0)
         efx_send(a, "t", 0, 0);
     else if (ht > 0)
@@ -283,7 +308,17 @@ inline void draw_effects(App &a)
         F.e.o["efx"].o["lsb"] = sess::integer(ht ? shown[(size_t)ht - 1]->lsb : 0);
     }
     // its parameters, and its sends (a column at the right)
-    const float ky0 = IP ? Y0 + 64 : ty + 4 * 32 + 14, kh = YB - ky0 - 8;
+    // (the knobs under the tallest family's types, so they stay put from family to family)
+    int trows_max = 1;
+    for (const auto &fm : F.fams) {
+        std::vector<std::string> names = {"00 Thru"};
+        for (const FxType &t : F.types)
+            if (t.num >= fm.first.first && t.num <= fm.first.second)
+                names.push_back(pad2(t.num) + " " + t.name);
+        const int c = grid_cols(a, names, IW - 24, 4);
+        trows_max = std::max(trows_max, ((int)names.size() + c - 1) / c);
+    }
+    const float ky0 = IP ? Y0 + 64 : ty + trows_max * GR + 14, kh = YB - ky0 - 8;
     const auto pit = F.params.find(key);
     const float SW_ = IP ? 140 : 112, PW = IW - 24 - SW_;
     if (!show_par) {
@@ -296,7 +331,8 @@ inline void draw_effects(App &a)
         // (a Rotary type: one more cell, the part's ROOM / MICS -- how it is heard)
         const bool rotary = type && type->name.find("Rotary") != std::string::npos;
         const int cells = (int)ps.size() + (rotary ? 1 : 0);
-        const int cols = 7, rows = std::max(1, (cells + cols - 1) / cols);
+        // (seven across, or six where that adds no row: wider cells for the labels)
+        const int cols = cells > 7 && (cells + 5) / 6 == (cells + 6) / 7 ? 6 : 7, rows = std::max(1, (cells + cols - 1) / cols);
         const float cw = PW / cols, ch = std::min(IP ? 120.0f : 110.0f, kh / rows);
         const J *pv_ = x->get("p");
         for (size_t i = 0; i < ps.size(); i++) {
@@ -383,10 +419,12 @@ inline void draw_effects(App &a)
         if (at("rev", 3) >= 0)
             boxes[0].knobs.push_back({"Feedback", 0x35, at("rev", 3), 0, 127});
         // (the top row shorter: the reverb's and chorus's knobs one row each; the delay's two)
-        const float SX0 = IP ? X0 : IX + IW + 8, BW = (X1 - SX0 - 8) / 2, BH1 = IP ? 238 : 228;
+        const float SX0 = IP ? X0 : IX + IW + 8, BW = (X1 - SX0 - 8) / 2, BH1 = IP ? 238 : 322;
         for (int bi = 0; bi < 4; bi++) {
-            const float bx = SX0 + (bi % 2) * (BW + 8), by = bi < 2 ? Y0 : Y0 + BH1 + 8,
-                        BH = bi < 2 ? BH1 : YB - by;
+            // (each column its own split: the reverb short over a tall delay, the chorus tall over the EQ)
+            const float top_h = IP ? BH1 : (bi % 2 == 0 ? 214.0f : BH1);
+            const float bx = SX0 + (bi % 2) * (BW + 8), by = bi < 2 ? Y0 : Y0 + top_h + 8,
+                        BH = bi < 2 ? top_h : YB - by;
             look::tray(a, bx, by, BW, BH, 9);
             if (bi == 3) {   // THE EQ, of the whole mix
                 text(a, a.font, 14, heading(a, bx + 12, by + 10, "EQ", "fx:eq"), by + 11, LCD, "the whole mix");
@@ -418,7 +456,7 @@ inline void draw_effects(App &a)
             const Box &b = boxes[(size_t)bi];
             text(a, a.font, 14, heading(a, bx + 12, by + 10, b.name, std::string("fx:") + b.id), by + 11, LCD, b.cc);
             const int tv = fx_val(a, std::string(b.id) + "type", b.type);
-            const int tcols = IP ? (bi == 2 ? 5 : 4) : bi == 0 ? 4 : 3;     // (the chorus's and delay's names are longer)
+            const int tcols = IP ? (bi == 2 ? 5 : 4) : bi == 0 ? 4 : bi == 1 ? 2 : 3;     // (the chorus's and delay's names are longer)
             const int th = choice_grid(a, std::string("st") + b.id, bx + 12, by + 34, BW - 24, tcols, IP ? GH : 26, *b.types, tv);
             if (th >= 0) {
                 sys_send(a, 1, b.lo, th, std::string(b.id) + "type");
@@ -432,7 +470,7 @@ inline void draw_effects(App &a)
                     ky += LH;
                 }
             }
-            const int cols = IP && bi == 2 ? 9 : bi == 1 ? 6 : 5, rows = ((int)b.knobs.size() + cols - 1) / cols;
+            const int cols = IP && bi == 2 ? 9 : bi == 1 ? (IP ? 6 : 3) : 5, rows = ((int)b.knobs.size() + cols - 1) / cols;
             const float cw = (BW - 24) / cols, chh = (by + BH - ky) / std::max(1, rows);
             for (size_t k = 0; k < b.knobs.size(); k++) {
                 const Kn &kn = b.knobs[k];

@@ -10,6 +10,27 @@
 
 namespace nui {
 
+// THE DISPLAY's PATCH WORDS beside the name, whole: at their size on the
+// name's baseline if they fit, else a size down, else on two lines filling
+// the name's height (the words are capped at two lines' worth)
+inline void display_desc(App &a, const std::string &pd, float x, float y, float row_h, float w, float size)
+{
+    ImFont *f = a.lcd ? a.lcd : a.font;
+    if (text_w(a, f, size, pd) <= w) {
+        look::lcd_text(a, size, x, y + row_h - a.lh(size) - 2, LCD, pd);
+        return;
+    }
+    const float small = size > 14 ? 14 : size;
+    if (text_w(a, f, small, pd) <= w) {
+        look::lcd_text(a, small, x, y + row_h - a.lh(small) - 2, LCD, pd);
+        return;
+    }
+    const auto ls = wrap(a, f, small, pd, w);
+    const float lh = a.lh(small) + 2, y0 = y + row_h - 2 - lh * std::min<size_t>(2, ls.size());
+    for (size_t i = 0; i < ls.size() && i < 2; i++)
+        look::lcd_text(a, small, x, y0 + i * lh, LCD, ls[i]);
+}
+
 static const char *FAMILIES[16] = {"PIANO", "CHROMATIC PERC.", "ORGAN", "GUITAR", "BASS", "STRINGS", "ENSEMBLE",
                                    "BRASS", "REED", "PIPE", "SYNTH LEAD", "SYNTH PAD", "SYNTH EFFECTS", "ETHNIC",
                                    "PERCUSSIVE", "SOUND EFFECTS"};
@@ -165,7 +186,7 @@ inline void draw_display(App &a)
         const float dx = X + 92 + text_w(a, a.lcd ? a.lcd : a.font, 35, nm) + 28, dw = X + W - 190 - dx;
         const std::string pd = patch_desc(a, p);
         if (!pd.empty() && dw > 80)
-            look::lcd_text(a, 21, dx, Y + 34 + a.lh(35) - a.lh(21) - 2, LCD, fit(a, a.lcd ? a.lcd : a.font, 21, pd, dw));
+            display_desc(a, pd, dx, Y + 34, a.lh(35), dw, 21);
     }
     // the engine's load (the web's #cpu, #voices, #health)
     const J *m = a.meters.is(J::OBJ) ? &a.meters : nullptr;
@@ -272,7 +293,7 @@ inline void draw_display_tab(App &a)
         const float dx = nx + text_w(a, a.lcd ? a.lcd : a.font, 28, nm) + 16, dw = X + W - 104 - dx;
         const std::string pd = patch_desc(a, p);
         if (!pd.empty() && dw > 60)
-            look::lcd_text(a, 14, dx, Y + 18 + a.lh(28) - a.lh(14) - 2, LCD, fit(a, a.lcd ? a.lcd : a.font, 14, pd, dw));
+            display_desc(a, pd, dx, Y + 18, a.lh(28), dw, 14);
     }
     const J *m = a.meters.is(J::OBJ) ? &a.meters : nullptr;
     char b[64];

@@ -331,7 +331,10 @@ inline void draw_amp(App &a)
         if (F)
             text(a, a.bold, 14, x + 14, y + (IP ? 40 : 48), SILK, str(F, "name"));
         const float sy = y + (IP ? 70 : 84), sh = IP ? 130 : 170;
+        a.lab_x0 = x + 8;               // (the end positions' names kept inside the panel)
+        a.lab_x1 = x + PW - 8;
         const int c = pk_switch(a, F ? str(F, "switch") : "blade5", x + 20, sy, PW - 40, sh, order, labels, lit);
+        a.lab_x0 = a.lab_x1 = 0;
         if (c > 0) {
             a.hold["pickup"] = {(double)c, ImGui::GetTime() + 0.8};
             call(a, "{\"call\":\"pickup_set\",\"row\":" + std::to_string(a.row) + ",\"choice\":"
