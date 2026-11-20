@@ -2454,7 +2454,7 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 16.31 | SC-88 | FM Organ | `DrawbarOrgan_sc8850_16_31` | **4** | SC-8850 map: GM 16 Drawbar Organ with default_stops=0xd |
 | 16.32 | SC-88 | Organ 4 | `DrawbarOrgan_sc88_16_32` | **4** | SC-88 map: GM 16 Drawbar Organ with default_stops=0x1ff |
 | 16.33 | SC-88 | Even Bar | `DrawbarOrgan_sc88_16_33` | **4** | SC-88 map: GM 16 Drawbar Organ with default_stops=0x12d |
-| 16.40 | SC-88 | Organ Bass | `DrawbarOrgan_sc88_16_40` | **4** | SC-88 map: GM 16 Drawbar Organ with default_stops=0x5 |
+| 16.40 | SC-88 | Organ Bass | `DividerPedal_sc88_16_40` | **4** | SC-88 map: the DIVIDER ORGAN'S PEDALS (tonelib.DividerPedalProperties): Ben's Wurlitzer 4500's pedal board as its circuit (its 1965 schematic: the latch's 16' and 8' waves, each tab into the network around its 5 H coil; examples/wurlitzer_circuit.py --pedal), the duty and levels fitted to his recordings (3.9-8.5 dB rms from takes made in a garage); Bourdon 16' and Flute 8' |
 | 16.48 | SC-88 | 5th Organ | `DrawbarOrgan_sc88_16_48` | **4** | SC-88 map: layered: GM 16 + GM 16 +7 st -4 dB |
 | 16.126 | SC-55 | SLAP 4 | `SlapBass` | **4** | the CM-32P's SLAP 4: the SC-55 map's 36.0 Slap Bass 1, rated as that tone |
 | 17.1 | SC-88 | Organ 201 | `PercussiveOrgan_sc88_17_1` | **4** | SC-88 map: GM 17 Percussive Organ with default_stops=0x1007 |

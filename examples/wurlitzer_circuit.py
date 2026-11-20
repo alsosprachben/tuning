@@ -79,8 +79,9 @@ FLUTE_RANGES = ((25, (165.0, 202.0)), (37, (280.0, 313.0)), (49, (732.0, 732.0))
                 (72, (2005.0, 5671.0)))
 
 
-def transfer(net, f):
+def transfer(net, f, rload=None):
     """V(o)/V(s) of NET at frequencies F (complex), "o" loaded by RLOAD"""
+    rload = RLOAD if rload is None else rload
     nodes = sorted({n for _, a, b, _ in net for n in (a, b)} - {"s", "g"})
     idx = {n: i for i, n in enumerate(nodes)}
     out = np.empty(len(f), complex)
@@ -101,7 +102,7 @@ def transfer(net, f):
         for t, a, b, v in net:
             y = 1 / v if t == "R" else (1j * w * v if t == "C" else 1 / (1j * w * v))
             stamp(a, b, y)
-        stamp("o", "g", 1 / RLOAD)
+        stamp("o", "g", 1 / rload)
         out[k] = np.linalg.solve(Y, I)[idx["o"]]
     return out
 
@@ -315,5 +316,92 @@ def emit_py(tb):
     return "\n".join(lines)
 
 
+
+# THE PEDALS (straf pedal 652747, traced: schematics/straf_pedal_652747.md): the latch's
+# 16' and 8' squares, each tab a resistor (the Bourdon's with .022 µF across) into one
+# passive network around the 5 H coil, its node A into TR1's base (10K / 2.7K bias: 2.1K).
+# The volume tabs set TR1's gain only. Monophonic: the last pedal pressed sounds.
+PED_CORE = [("R", "o", "T", 1 * K), ("C", "T", "g", 0.82 * U), ("C", "T", "g", 0.01 * U),
+            ("L", "T", "X", 5.0), ("C", "X", "g", 0.22 * U), ("R", "P", "o", 56 * K),
+            ("R", "P", "q", 22 * K), ("C", "q", "X", 0.01 * U), ("R", "X", "Y", 33 * K),
+            ("C", "X", "Y", 0.01 * U), ("R", "Y", "T", 22 * K)]
+PED_TABS = {"Bourdon 16'": (0.5, [("R", "s", "X", 180 * K), ("C", "s", "X", 0.022 * U)]),
+            "Principal 16'": (0.5, [("R", "s", "P", 100 * K)]),
+            "Flute 8'": (1.0, [("R", "s", "X", 39 * K)]),
+            "String Bass 8'": (1.0, [("R", "s", "Y", 82 * K)])}
+PED_RLOAD = 2.1 * K
+# THE LATCH'S WAVES ARE NOT SQUARE: the takes' strong even harmonics need the flip-flops'
+# halves unequal -- duty 0.425 at 16', 0.45 at 8' (searched over 0.05-0.5, shapes only)
+PED_DUTY = {0.5: 0.425, 1.0: 0.45}
+
+
+def pedal_series(name, key_hz, n):
+    """a pedal tab's voltage at TR1's base: harmonics 1..n of its sounding pitch"""
+    ft, inj = PED_TABS[name]
+    f = key_hz * ft * np.arange(1, n + 1)
+    return f, square(n, PED_DUTY[ft]) * transfer(PED_CORE + inj, f, rload=PED_RLOAD)
+
+
+def pedal_measured(nh=24):
+    import wurlitzer_fit as WF
+    import wurlitzer_survey as WS
+    out = []
+    for name, take, (a, b), fac in WS.PEDALS:
+        if "Full" in name or "Medium" in name:
+            continue                                   # (Normal: the cleanest takes)
+        tab = name.split(" (")[0].replace("Pedal Flute", "Flute")
+        x = WS.load(take, WS.REF)
+        notes = WS.runs(x, a, b)
+        keys = [64.2, 96.3, 128.4][:len(notes)]          # (the pedal's 8' pitch, low C, G, C)
+        for (s, e), kh in zip(notes, keys):
+            seg = x[int((s + 0.3) * WS.SR):int((e - 0.12) * WS.SR)]
+            f0, _ = WS.spectrum(seg, kh * PED_TABS[tab][0])
+            out.append((tab, kh, f0, np.array(WF.table(seg, f0)[:nh])))
+    return out
+
+
+def pedal_main():
+    fit_ = json.load(open(os.path.expanduser("~/Documents/refs/wurlitzer_ben/circuit_fit.json")))
+    r = np.array(fit_["response_db"])           # the speaker the upper tabs found: the same console's
+    DUTY[0] = fit_.get("duty", 0.5)
+    data = pedal_measured()
+    per, lv = {}, {}
+    for name, kh, f0, tb in data:
+        f, v = pedal_series(name, kh, 24)
+        model = 20 * np.log10(np.abs(v) + 1e-12) + response_db(f, r)
+        m = tb > 0
+        meas = 20 * np.log10(tb[m])
+        keep = meas > meas.max() - 45
+        e = (model[m][keep] - model[m].max()) - (meas[keep] - meas.max())
+        per.setdefault(name, []).append(float(np.sqrt(np.mean(e ** 2))))
+        lv.setdefault(name, []).append(float(meas.max() - model[m].max()))
+        print("%-15s %6.1f  %4.1f dB  model %s\n%-15s %6s           meas  %s" % (
+            name, kh, per[name][-1], " ".join("%4.0f" % (model[i] - model[m].max()) for i in range(8)), "", "",
+            " ".join("%4.0f" % (20 * np.log10(tb[i] + 1e-12) - meas.max()) if tb[i] > 0 else "   ." for i in range(8))))
+    print("by tab:", ", ".join("%s %.1f" % (k, np.mean(v)) for k, v in per.items()))
+    return {k: float(np.mean(v)) for k, v in lv.items()}, r
+
+
+def pedal_tables(levels, r, nh=32):
+    out = {}
+    keys = [32.703 * 2 ** i for i in range(5)]       # the pedal's 8' pitch, C1 .. C5
+    for name in PED_TABS:
+        rows = []
+        for kh in keys:
+            f, v = pedal_series(name, kh, nh)
+            a = np.abs(v) * 10 ** ((response_db(f, r) + levels[name]) / 20)
+            a[f > 16000] = 0.0
+            rows.append((float(f[0]), a))
+        out[name] = rows
+    return out
+
+
 if __name__ == "__main__":
-    main(sys.argv[1:])
+    if "--pedal" in sys.argv:
+        lv, r = pedal_main()
+        if "--py" in sys.argv:
+            tb = pedal_tables(lv, r)
+            with open(os.path.expanduser("~/Documents/refs/wurlitzer_ben/pedal_tables.py.txt"), "w") as fh:
+                fh.write(emit_py(tb) + "\n")
+    else:
+        main(sys.argv[1:])

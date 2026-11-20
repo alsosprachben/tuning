@@ -1428,6 +1428,12 @@ def _sc88_var_rated():
             note = "a MENU: %d drums on consecutive keys from C2, each at its kit pitch (%s)" % (
                 len(how[1]), "; ".join("set %d's keys %s" % (st, ",".join(str(k) for _kd, k, s2 in how[1] if s2 == st))
                                       for st in sets))
+        elif kind == "cls" and how[1].__name__ == "DividerPedalProperties":
+            r = 4
+            note = ("the DIVIDER ORGAN'S PEDALS (tonelib.DividerPedalProperties): Ben's Wurlitzer 4500's pedal "
+                    "board as its circuit (its 1965 schematic: the latch's 16' and 8' waves, each tab into the "
+                    "network around its 5 H coil; examples/wurlitzer_circuit.py --pedal), the duty and levels "
+                    "fitted to his recordings (3.9-8.5 dB rms from takes made in a garage); Bourdon 16' and Flute 8'")
         elif kind == "cls" and how[1].__name__ == "DividerOrganProperties":
             # THE DIVIDER ORGAN (tonelib.DividerOrganProperties), its tabs fitted
             r = 4

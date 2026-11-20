@@ -11,7 +11,7 @@ and editing this table -- the dispatch stays data-driven.
 """
 
 from tonelib import (
-    DividerOrganProperties, divider_registration,
+    DividerOrganProperties, DividerPedalProperties, divider_registration,
     TaikoProperties,
     MelodicAgogoHighProperties,
     MelodicAgogoLowProperties,
@@ -1499,7 +1499,8 @@ SC88_CHEAP = {
                                 divider_registration(["Flute 8'", "Diapason 8'", "Quint 5-1/3'"], ["4'", "2'"]))),
     (16, 32): ("Organ 4", ("set", 16, dict(default_stops=0b111111111))),        # all nine
     (16, 33): ("Even Bar", ("set", 16, dict(default_stops=0b100101101))),       # the even ones: 16' 8' 4' 2' 1'
-    (16, 40): ("Organ Bass", ("set", 16, dict(default_stops=0b101))),           # 16' 8'
+    # THE PEDALS of the divider organ (tonelib.DividerPedalProperties): Bourdon 16' and Flute 8'
+    (16, 40): ("Organ Bass", ("cls", DividerPedalProperties, {})),
     (17, 1): ("Organ 201", ("set", 17, dict(default_stops=0b1000000000111))),   # 888, the B3's 2nd percussion
     (17, 32): ("Organ 5", ("set", 17, dict(default_stops=0b100100000111))),     # 888 and 1', 3rd percussion
     # Rotary Org. is the switchable one -- Roland has RotaryOrg.S and .F for
