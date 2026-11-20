@@ -2987,7 +2987,7 @@ for _k, _db in VARIATION_TRIM_EAR.items():
 # the patch's variation key, over CAB_SHIFT (cab_key), so a part switched
 # is a patch rebuilt as a program change rebuilds it, live and in files --
 # and a file selects it as a bank select does: tonelib.CABINET_CC (83), its
-# value CAB_CHOICES' index, read at the next program change.
+# value CAB_CHOICES' index, at once; a program change puts it back to 0.
 CAB_CHOICES = (None, "direct", "leslie", "hammond", "guitar12", "guitar412", "jc120",
                "bass410", "rhodes", "wurlitzer")
 # ...what each is, for the cards (what we model and how we know it)
@@ -3024,7 +3024,7 @@ def cab_of(variation):
 # THE PICKUP A PART PLAYS THROUGH (Ben, 2026-11-19: "should we do the same as
 # we did for amps?" -- and its control the instrument's own: the AMP card's
 # switch gadgets): a choice of PICKUP_CHOICES in bits 16-19 of the variation
-# key (pk_key), beside the cabinet's; CC85 a file's, latched as a bank is.
+# key (pk_key), beside the cabinet's; CC85 a file's, as CC83 is.
 # What each choice IS depends on the instrument -- PICKUP_FAMILIES, by the
 # voice class's pickup_family: where its coils sit (fractions of the
 # speaking length from the bridge), how they are wired, their resonance.

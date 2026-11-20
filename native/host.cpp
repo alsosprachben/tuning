@@ -1229,10 +1229,25 @@ int nv_host::open(int argc, char **argv)
             bmsb[ch] = b;
         else if (type == 2 && a == 32)
             blsb[ch] = b;
-        else if (type == 2 && a == 83)
-            hcab[ch] = b;
-        else if (type == 2 && a == 85)
-            hpk[ch] = b;
+        else if (type == 2 && (a == 83 || a == 85) && E.has_prog) {
+            // THE CABINET (CC83) or THE PICKUP (CC85) of the parts on the
+            // channel, at once (live's on_midi): the program on its way, if one
+            // is -- a program change puts it back to the voice's own
+            for (size_t i = 0; i < pats.size(); i++) {
+                PartAt &pa = pats[i];
+                if (pa.gone || pa.drums || (pa.channel >= 0 && pa.channel != ch))
+                    continue;
+                {
+                    std::lock_guard<std::mutex> lk(parts_mu);
+                    (a == 83 ? pa.cab : pa.pk) = b ? b : -1;
+                }
+                const bool w = pa.want >= 0;
+                const int p = w ? pa.want : pa.program, v = with_cab(p, w ? pa.want_var : pa.var, std::max(0, pa.cab),
+                                                                     std::max(0, pa.pk));
+                if (!pa.is(p, false, v))
+                    ask(i, p, false, v);
+            }
+        }
     };
     // ...and a reset's (GM System On, GM 2 On, GS Reset, SC mode): the latches
     // cleared, Rx.BANK SELECT off after GM 1's alone; true where it was one
@@ -1250,8 +1265,6 @@ int nv_host::open(int argc, char **argv)
         rxbank = lvl != 1;
         bmsb.clear();
         blsb.clear();
-        hcab.clear();
-        hpk.clear();
         for (int c = 0; c < 16; c++) {
             chdr[c] = c == 9;
             hn_msb[c] = hn_lsb[c] = 127;
@@ -1748,11 +1761,13 @@ int nv_host::open(int argc, char **argv)
             const PartAt &pa = pats[i];
             if (pa.gone || (pa.channel >= 0 && pa.channel != ch))
                 continue;
-            // (its cabinet and pickup: the part's own choices, else the channel's CC83, CC85 -- live.with_cab)
-            const auto hc = hcab.find(ch);
-            const auto hk = hpk.find(ch);
-            const int pv = pa.drums ? 0 : with_cab(prog & 127, var, pa.cab >= 0 ? pa.cab : hc != hcab.end() ? hc->second : 0,
-                                                   pa.pk >= 0 ? pa.pk : hk != hpk.end() ? hk->second : 0);
+            // (its cabinet and pickup back to the voice's own -- live's on_midi:
+            //  a program change is another instrument; CC83, CC85 after it choose again)
+            if (pa.cab >= 0 || pa.pk >= 0) {
+                std::lock_guard<std::mutex> lk(parts_mu);
+                pats[i].cab = pats[i].pk = -1;
+            }
+            const int pv = pa.drums ? 0 : with_cab(prog & 127, var, 0, 0);
             // a drum set in the map, where it has its own (live's kit_in_map:
             // CC32's map, else the standard's -- not GM 2's drum bank)
             const int pp = pa.drums && msb != 120 ? kit_in_map(prog & 127, lsb ? lsb : (int)default_map)
@@ -1770,9 +1785,16 @@ int nv_host::open(int argc, char **argv)
     reset_asked = [&]() {
         if (!E.has_prog)
             return;
-        for (size_t i = 0; i < pats.size(); i++)
-            if (!pats[i].gone && !pats[i].is(0, pats[i].drums, 0))
+        for (size_t i = 0; i < pats.size(); i++) {
+            if (pats[i].gone)
+                continue;
+            if (pats[i].cab >= 0 || pats[i].pk >= 0) {      // (its cabinet and pickup the voice's own)
+                std::lock_guard<std::mutex> lk(parts_mu);
+                pats[i].cab = pats[i].pk = -1;
+            }
+            if (!pats[i].is(0, pats[i].drums, 0))
                 ask(i, 0, pats[i].drums, 0);
+        }
     };
     // ...and once a block has run its posts, the programs posted are the parts'
     landed = [&]() {
@@ -3559,15 +3581,18 @@ void nv_host::pick_row(size_t row, int sp)
     post([this, row, sp](long long) {
         if (row >= pats.size() || pats[row].gone)
             return;
+        {                                       // (a pick is a program change: its cabinet and pickup the voice's own)
+            std::lock_guard<std::mutex> lk(parts_mu);
+            pats[row].cab = pats[row].pk = -1;
+        }
         const PartAt &pa = pats[row];
-        if (sp >= 256) {                        // (a variation: its program under its bank -- through the part's cabinet)
-            int p = E.vpv[sp - 256][0], v = with_cab(E.vpv[sp - 256][0], E.vpv[sp - 256][1], std::max(0, pa.cab),
-                                                                std::max(0, pa.pk));
+        if (sp >= 256) {                        // (a variation: its program under its bank)
+            int p = E.vpv[sp - 256][0], v = with_cab(E.vpv[sp - 256][0], E.vpv[sp - 256][1], 0, 0);
             if (!pa.is(p, false, v))
                 ask(row, p, false, v);
         } else {
             const int p = sp >= 128 ? kit_in_map(sp & 127, (int)default_map) : sp;    // (livetui's pick)
-            const int v = sp >= 128 ? 0 : with_cab(p, 0, std::max(0, pa.cab), std::max(0, pa.pk));
+            const int v = sp >= 128 ? 0 : with_cab(p, 0, 0, 0);
             if (!pa.is(p, sp >= 128, v))
                 ask(row, p, sp >= 128, v);
         }
@@ -3706,8 +3731,8 @@ void nv_host::part_touch(size_t row, int fixed)
 // two mics round it, a Rotary type's likewise -- the host's copy now, the
 // patch's between two blocks (the notes struck after it)
 // A PART's CABINET (live.set_cabinet): its patch rebuilt through CAB_CHOICES
-// [choice] (-1 none: the voice's own), as a pick rebuilds one; kept on the
-// part across program changes
+// [choice] (-1 none: the voice's own), as a pick rebuilds one -- the program
+// on its way, if one is; a program change puts it back to -1
 void nv_host::set_cabinet(size_t row, int choice)
 {
     if (!E.has_prog)
@@ -3732,8 +3757,8 @@ void nv_host::set_cabinet(size_t row, int choice)
 
 // A PART's PICKUP (live.set_pickup): its patch rebuilt through
 // PICKUP_CHOICES[choice] (-1 none: the voice's own) -- what that is, its
-// instrument's (patch_map.PICKUP_FAMILIES) -- its cabinet kept; kept on the
-// part across program changes, as the cabinet is
+// instrument's (patch_map.PICKUP_FAMILIES) -- its cabinet kept; a program
+// change puts it back to -1, as the cabinet
 void nv_host::set_pickup(size_t row, int choice)
 {
     if (!E.has_prog)

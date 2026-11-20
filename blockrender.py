@@ -671,8 +671,9 @@ def parse(path):
     def _map_of(ch):
         return _blsb.get(ch, 0) or _map0.get(ch, DEFAULT_MAP)
     _var = {}                # the channel's variation (GS bank), from its last program change
-    _cabsel = {}             # its cabinet (CC83, tonelib.CABINET_CC), latched as a bank: read at the program change
+    _cabsel = {}             # its cabinet (CC83, tonelib.CABINET_CC): at once, put back by a program change
     _pksel = {}              # ...its pickup (CC85, tonelib.PICKUP_CC), the same
+    _vbase = {}              # ...and the variation its program change chose, under them
     # THE DRUM INSTRUMENTS' OWN SETTINGS (GS): per channel, [(t, seq, key,
     # param, value)] from the drum NRPNs (18-1F rr) and the drum setup SysEx
     # (41 m p rr), key None with 'reset' where a drum set change or a reset
@@ -774,6 +775,25 @@ def parse(path):
         # any other bank plays the capital tone, as a Sound Canvas does
         v = _var.get(ch, 0)
         return VariationProgram(p, v) if v and ((p & 0x7F), v) in VARIATIONS else p
+    def _rechoose(ch):
+        # A CHANNEL's CC83 or CC85 (tonelib.CABINET_CC): its variation through
+        # the cabinet and the pickup chosen, each where its voice offers it
+        # (live.with_cab) -- the notes after it play that; a new one is a
+        # program the channel used (ch_progs)
+        if _drums.get(ch, _is_drums(ch)):
+            return
+        import patch_map as _PMC
+        _pr = ch_prog.get(ch, 0)
+        _v = _vb = _vbase.get(ch, 0)
+        _vb = _vb if _vb and ((_pr & 0x7F), _vb) in VARIATIONS else 0
+        for _sel, _key in ((_cabsel, _PMC.cab_key), (_pksel, _PMC.pk_key)):
+            _c = _sel.get(ch, 0)
+            if _c and ((_pr & 0x7F), _key(_vb, _c)) in VARIATIONS:
+                _v = _vb = _key(_vb, _c)
+        if _v != _var.get(ch, 0):
+            _var[ch] = _v
+            if ch in ch_prog:
+                ch_progs.setdefault(ch, []).append(_cur_prog(ch))
     def cv(ch):
         # GM's power-on defaults, not 127/127/64-as-an-accident: see
         # tonelib.GM_DEFAULT_VOLUME for why volume starts at 100.
@@ -868,21 +888,12 @@ def parse(path):
                 _pr = kit_in_map(_pr, _map_of(msg.channel))
             _drums[msg.channel] = _dr
             ch_prog[msg.channel] = _pr
-            # ...THROUGH THE CABINET the channel's CC83 chose (patch_map.cab_key),
-            # where its voice offers that one: the variation's key carries it
-            _cbs = _cabsel.get(msg.channel, 0)
-            if _cbs and not _dr:
-                import patch_map as _PMC
-                _vb = _var_ if _var_ and ((_pr & 0x7F), _var_) in VARIATIONS else 0
-                if ((_pr & 0x7F), _PMC.cab_key(_vb, _cbs)) in VARIATIONS:
-                    _var_ = _PMC.cab_key(_vb, _cbs)
-            # ...AND THE PICKUP its CC85 chose (patch_map.pk_key), the same way
-            _pks = _pksel.get(msg.channel, 0)
-            if _pks and not _dr:
-                import patch_map as _PMC
-                _vb = _var_ if _var_ and ((_pr & 0x7F), _var_) in VARIATIONS else 0
-                if ((_pr & 0x7F), _PMC.pk_key(_vb, _pks)) in VARIATIONS:
-                    _var_ = _PMC.pk_key(_vb, _pks)
+            # ...ITS CABINET AND PICKUP the voice's own: a program change is
+            # another instrument -- the channel's CC83, CC85 after it choose
+            # again (tonelib.CABINET_CC; _rechoose)
+            _cabsel.pop(msg.channel, None)
+            _pksel.pop(msg.channel, None)
+            _vbase[msg.channel] = 0 if _dr else _var_
             _var[msg.channel] = 0 if _dr else _var_
             if _dr and msg.channel in dedit:
                 # "When the Drum Set is changed, DRUM SETUP PARAMETER values
@@ -901,10 +912,9 @@ def parse(path):
                 _bmsb[msg.channel] = msg.value
             elif msg.control == 32:
                 _blsb[msg.channel] = msg.value
-            elif msg.control == T.CABINET_CC:
-                _cabsel[msg.channel] = msg.value
-            elif msg.control == T.PICKUP_CC:
-                _pksel[msg.channel] = msg.value
+            elif msg.control in (T.CABINET_CC, T.PICKUP_CC):
+                (_cabsel if msg.control == T.CABINET_CC else _pksel)[msg.channel] = msg.value
+                _rechoose(msg.channel)
             ctrl.setdefault(msg.channel, {})[msg.control] = msg.value
             if msg.channel in _cmx:
                 _cmx_upd(t, msg.channel)
@@ -1055,7 +1065,7 @@ def parse(path):
                 # its whole sound set is addressed through it. Every program
                 # goes to 0, as live's does; this renderer kept them.
                 _rxbank[0] = _lvl != 1
-                _bmsb.clear(); _blsb.clear(); _drums.clear(); ch_prog.clear(); _var.clear(); _cabsel.clear(); _pksel.clear()
+                _bmsb.clear(); _blsb.clear(); _drums.clear(); ch_prog.clear(); _var.clear(); _cabsel.clear(); _pksel.clear(); _vbase.clear()
                 _map0.clear()           # "When GS Reset is received ... 00: SELECTED"
                 _rmap.clear()
                 efxev.append((t, ('reset',)))

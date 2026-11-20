@@ -1345,8 +1345,9 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
     double t = 0.0;
     std::map<int, std::map<int, int>> ctrl;     // channel -> control -> value
     std::map<int, int> prog, bmsb, blsb, drums, bsel;
-    std::map<int, int> cabsel;      // ...each channel's cabinet (CC83, tonelib.CABINET_CC), latched as a bank
+    std::map<int, int> cabsel;      // ...each channel's cabinet (CC83, tonelib.CABINET_CC): at once, put back by a program change
     std::map<int, int> pksel;       // ...and its pickup (CC85, tonelib.PICKUP_CC), the same
+    std::map<int, int> bbase;       // ...and the bank its program change chose, under them
     // the map CC32 0 reads its bank in (blockrender.DEFAULT_MAP: TUNING_MAP)
     const char *tmap = nv_env("TUNING_MAP");
     const int default_map = tmap && *tmap ? atoi(tmap) : 0;
@@ -1926,6 +1927,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             bmsb.clear(); blsb.clear(); drums.clear(); prog.clear(); bsel.clear(); ctrl.clear(); rsel.clear(); nsel.clear();
             cabsel.clear();
             pksel.clear();
+            bbase.clear();
             P.mvol.push_back(std::make_tuple(t, seq, 1.0));      // (the master volume back to full)
             P.events.push_back(LiveEv{t, 6, -1, (int)P.sysex.size(), 0});     // (the live part's too)
             P.sysex.push_back(d);
@@ -1995,12 +1997,12 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 if (own >= 0)
                     dprog = 128 + own;
             }
-            // ...THROUGH THE CABINET the channel's CC83 chose (patch_map.cab_key):
-            // over bit 16 of the bank, Song::bank's to find where the voice offers it
-            if (!dr && cabsel.count(ch) && cabsel[ch] > 0)
-                bs |= (cabsel[ch] & 15) << 16;
-            if (!dr && pksel.count(ch) && pksel[ch] > 0)    // (...and its pickup over bit 20: patch_map.pk_key)
-                bs |= (pksel[ch] & 7) << 20;
+            // ...ITS CABINET AND PICKUP the voice's own: a program change is
+            // another instrument -- the channel's CC83, CC85 after it choose
+            // again (blockrender's _rechoose)
+            cabsel.erase(ch);
+            pksel.erase(ch);
+            bbase[ch] = bs;
             drums[ch] = dr;
             bsel[ch] = bs;
             if (dr)         // "When the Drum Set is changed, DRUM SETUP PARAMETER values will all be initialized"
@@ -2025,10 +2027,26 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 P.snd.push_back(CCEv{ch, t, cc, v});
             if (cc == 0)
                 bmsb[ch] = v;
-            else if (cc == 83)
-                cabsel[ch] = v;
-            else if (cc == 85)
-                pksel[ch] = v;
+            else if (cc == 83 || cc == 85) {
+                // THE CABINET or THE PICKUP the channel's next notes play
+                // (blockrender's _rechoose): over bits 16 and 20 of its bank,
+                // Song::bank's to find where the voice offers it; a new one a
+                // program the channel used
+                (cc == 83 ? cabsel : pksel)[ch] = v;
+                if (!is_drums(ch)) {
+                    int bs = bbase.count(ch) ? bbase[ch] : 0;
+                    if (cabsel.count(ch) && cabsel[ch] > 0)
+                        bs |= (cabsel[ch] & 15) << 16;
+                    if (pksel.count(ch) && pksel[ch] > 0)
+                        bs |= (pksel[ch] & 7) << 20;
+                    const int was = bsel.count(ch) ? bsel[ch] : 0;
+                    bsel[ch] = bs;
+                    if (bs != was && prog.count(ch)) {
+                        P.chprogs.push_back(std::make_pair(ch, prog[ch]));
+                        P.chbsel.push_back(bs);
+                    }
+                }
+            }
             else if (cc == 32)
                 blsb[ch] = v;
             ctrl[ch][cc] = v;

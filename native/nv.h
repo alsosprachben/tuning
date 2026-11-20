@@ -1522,7 +1522,7 @@ int nv_song_n_notes(void *s);
    its variation's notes (0: no table); a note's class index in K, and its
    tone on its part (_TONE_SEGS) */
 void nv_song_vars(void *s, int nent, const int *nls, const int *ls, const double *trim, const int *gs, const int *gm2);
-void nv_song_cab_resolve(void *s, int (*cb)(void *, int, int), void *ctx);
+void nv_song_cab_resolve(void *s, int (*cb)(void *, int, int, int *), void *ctx);
 void nv_cab_terms(int n, const double *terms);
 const NoteClass *nv_cab_variant(const NoteClass *k, int c);
 const NoteClass *nv_pk_variant(const NoteClass *k, int p);

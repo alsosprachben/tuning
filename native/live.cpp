@@ -68,7 +68,7 @@ void nv_song_chokes_n(void *s, const unsigned long long *choke, int n);
 void nv_song_kits_n(void *s, const double *f0, const double *seat, int n);
 void nv_song_strokes_k(void *s, const NoteClass *const *K, const int *kind, const double *par);
 void nv_song_vars(void *s, int nent, const int *nls, const int *ls, const double *trim, const int *gs, const int *gm2);
-void nv_song_cab_resolve(void *s, int (*cb)(void *, int, int), void *ctx);
+void nv_song_cab_resolve(void *s, int (*cb)(void *, int, int, int *), void *ctx);
 void nv_song_slot_organs(void *s, int n, const OrganSpec *const *so);
 void nv_song_slot_orgs(void *s, int n, const int *off, const OrganSpec *const *og);
 void nv_log_n(long n, const double *x, double *out);
@@ -158,12 +158,12 @@ static std::vector<uint8_t> one_note(int program, int note, int vel, int ch, int
         ev(0, {(uint8_t)(0xB0 | ch), 0, (uint8_t)(bank & 0x7F)});
         if ((bank & 4095) >> 7)
             ev(0, {(uint8_t)(0xB0 | ch), 32, (uint8_t)((bank & 4095) >> 7)});
-        if ((bank >> 12) & 15)              // (its cabinet, patch_map.cab_key's: CC83, latched as the bank)
-            ev(0, {(uint8_t)(0xB0 | ch), 83, (uint8_t)((bank >> 12) & 15)});
-        if ((bank >> 16) & 7)               // (its pickup, patch_map.pk_key's: CC85, the same)
-            ev(0, {(uint8_t)(0xB0 | ch), 85, (uint8_t)((bank >> 16) & 7)});
     }
     ev(0, {(uint8_t)(0xC0 | ch), (uint8_t)program});
+    if ((bank >> 12) & 15)                  // (its cabinet, patch_map.cab_key's: CC83, after the program change
+        ev(0, {(uint8_t)(0xB0 | ch), 83, (uint8_t)((bank >> 12) & 15)});        //  that puts it back)
+    if ((bank >> 16) & 7)                   // (its pickup, patch_map.pk_key's: CC85, the same)
+        ev(0, {(uint8_t)(0xB0 | ch), 85, (uint8_t)((bank >> 16) & 7)});
     ev(0, {(uint8_t)(0xB0 | ch), 7, 127});
     ev(0, {(uint8_t)(0xB0 | ch), 11, 127});
     if (og) {
@@ -652,7 +652,7 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
     }
     nv_midi_song(m, song, trim);
     if (g_tmpl_cabk)                        // (its cabinet's voices: the note to its class's, Cache::cab_prep's)
-        nv_song_cab_resolve(song, [](void *ctx, int q, int) {
+        nv_song_cab_resolve(song, [](void *ctx, int q, int, int *) {
             const auto &mp = *(const std::map<int, int> *)ctx;
             auto it = mp.find(q);
             return it == mp.end() ? q : it->second;

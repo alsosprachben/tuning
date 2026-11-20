@@ -23415,15 +23415,20 @@ ROTARY_CC = 82
 
 # THE CABINET (patch_map.CAB_CHOICES, Ben 2026-11-19): CC83 beside the
 # rotary heard -- its value a choice's index (0 the voice's own, 1 direct, 2
-# a Leslie, 3 the Hammond's own speaker, ...), latched as a bank select is
-# and read at the channel's next program change; a choice the voice does not
-# offer leaves it its own.
+# a Leslie, 3 the Hammond's own speaker, ...). It sets the choice of the
+# parts on its channel AT ONCE (their next notes; notes sounding keep their
+# voice), and A PROGRAM CHANGE PUTS IT BACK to the voice's own (Ben,
+# 2026-11-19): a file sends it after the program change, as it would a
+# volume, so a saved setup is bank, program, then CC83/CC85. A choice the
+# voice does not offer leaves it its own. General Purpose 8 in MIDI 1.0,
+# unused by GS and GM 2.
 CABINET_CC = 83
 
 # THE PICKUP (patch_map.PICKUP_CHOICES, Ben 2026-11-19): CC85, the same way --
 # its value a choice's index (0 the voice's own, 1 neck, 2 neck+middle, 3
 # middle, 4 middle+bridge, 5 bridge, 6 neck+bridge, 7 anti-phase), what each
-# is the instrument's (PICKUP_FAMILIES), latched as a bank select is.
+# is the instrument's (PICKUP_FAMILIES). Undefined in MIDI 1.0 (CC84 is GS's
+# portamento control, CC88 the high-resolution velocity prefix).
 PICKUP_CC = 85
 
 # CC67 for the note being built, set by the renderer exactly as

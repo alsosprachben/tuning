@@ -2039,10 +2039,14 @@ static int run(int argc, char **argv)
             std::vector<const NoteClass *> *K;
             std::map<std::pair<int, int>, int> made;
         } cx{&K, {}};
-        nv_song_cab_resolve(song, [](void *ctx, int q, int c) {
+        nv_song_cab_resolve(song, [](void *ctx, int q, int c, int *ec) {
             Cx &x = *(Cx *)ctx;
             if (q < 0 || q >= (int)x.K->size() || !(*x.K)[q])
                 return q;
+            {                                   // (the code the voice offers of c: its pickup's bits, its cabinet's)
+                const NoteClass *k0 = (*x.K)[q], *kp = nv_pk_variant(k0, (c >> 4) & 7);
+                *ec = (kp != k0 ? c & 0x70 : 0) | (nv_cab_variant(kp, c & 15) != kp ? c & 15 : 0);
+            }
             auto it = x.made.find(std::make_pair(q, c));
             if (it != x.made.end())
                 return it->second;

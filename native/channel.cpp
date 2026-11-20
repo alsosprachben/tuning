@@ -223,8 +223,13 @@ struct Ev {
                                          : slot >= 0 ? NV_K_VAR + 128 * slot + note : 128 * prog + note;
     }
     // ...and the TONE it is on its part (_TONE_SEGS' key: the program, or
-    // the variation -- a layered one's each layer -- as its own)
-    int tone() const { return slot >= 0 ? 1024 + slot : prog; }
+    // the variation -- a layered one's each layer -- as its own; and through
+    // a cabinet or a pickup its voice offers, that variant as its own, as
+    // blockrender's VariationProgram key has it: nv_song_cab_resolve's code)
+    int tone() const
+    {
+        return (slot >= 0 ? 1024 + slot : prog) + (drum ? 0 : cab << 16);
+    }
 };
 
 // A file's channels and notes.
@@ -3012,14 +3017,20 @@ int nv_song_note_bank(void *s, int bsel) { return ((nv::Song *)s)->bank(bsel); }
 // is known: each such note's class index through cb(ctx, its index, its
 // choice) -- the renderer's, its voice through the cabinet put in its K
 // (nv_cab_variant) -- the note's own (kover) where it differs
-void nv_song_cab_resolve(void *s, int (*cb)(void *, int, int), void *ctx)
+// (cb: the class note-class q plays through variant code c, and in *ec the
+// code its voice offers of it -- the cabinet's bits, the pickup's, or none --
+// which the note keeps as its tone's: blockrender's VariationProgram key)
+void nv_song_cab_resolve(void *s, int (*cb)(void *, int, int, int *), void *ctx)
 {
     nv::Song *g = (nv::Song *)s;
     for (auto &e : g->notes)
         if (e.cab > 0 && !e.drum && e.kover < 0) {
-            const int q = e.kidx(), r = cb(ctx, q, e.cab);
+            int ec = e.cab;
+            const int q = e.kidx(), r = cb(ctx, q, e.cab, &ec);
             if (r != q)
                 e.kover = r;
+            e.cab = r != q ? ec : 0;
+            g->mix.clear();
         }
 }
 

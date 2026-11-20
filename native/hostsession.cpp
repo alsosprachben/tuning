@@ -601,15 +601,17 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
                 part_set(0, sp.channel, sp.lo, sp.hi, sp.tr, sp.level, sp.muted);
                 part_touch(0, sp.fixed);
                 part_rotary(0, sp.rot_mode, sp.rot_sep);
-                {                               // (its cabinet: the pick below takes it -- at the start, its own rebuild)
-                    std::lock_guard<std::mutex> lk(parts_mu);
-                    pats[0].cab = sp.cab;
-                    pats[0].pk = sp.pk;
+                if (at_start) {                 // (its cabinet and pickup: at the start, their own rebuild --
+                    {                           //  else after the pick below, which puts them back to its own)
+                        std::lock_guard<std::mutex> lk(parts_mu);
+                        pats[0].cab = sp.cab;
+                        pats[0].pk = sp.pk;
+                    }
+                    if (sp.cab >= 0 && !sp.drums)
+                        set_cabinet(0, sp.cab);
+                    if (sp.pk >= 0 && !sp.drums)
+                        set_pickup(0, sp.pk);
                 }
-                if (at_start && sp.cab >= 0 && !sp.drums)
-                    set_cabinet(0, sp.cab);
-                if (at_start && sp.pk >= 0 && !sp.drums)
-                    set_pickup(0, sp.pk);
                 if (at_start)                   // (else after the pick's swap, below: a new program clears it)
                     part_drive(0, sp.drive);
                 if (!at_start) {
@@ -618,6 +620,10 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
                         if (E.vpv[j][0] == sp.program && E.vpv[j][1] == (sp.var & 4095))
                             code = 256 + (int)j;
                     pick_row(0, code);
+                    if (sp.cab >= 0 && !sp.drums)       // (posted after the pick: its program on its way)
+                        set_cabinet(0, sp.cab);
+                    if (sp.pk >= 0 && !sp.drums)
+                        set_pickup(0, sp.pk);
                     if (sp.drive >= 0.0) {      // (its drive knob, behind the swap that brings its program in)
                         const double dv = sp.drive;
                         {

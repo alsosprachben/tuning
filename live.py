@@ -3563,15 +3563,6 @@ class Patch:
             if _b32:
                 tr.append(mido.Message("control_change", channel=ch, control=32,
                                        value=_b32, time=0))
-            # ...AND ITS CABINET (patch_map.cab_key's choice: CC83, latched as the bank)
-            _cbv = __import__("patch_map").cab_of(self.variation)[1]
-            if _cbv:
-                tr.append(mido.Message("control_change", channel=ch, control=T.CABINET_CC,
-                                       value=_cbv, time=0))
-            _pkv = __import__("patch_map").pk_of(self.variation)     # (...its pickup: CC85, the same)
-            if _pkv:
-                tr.append(mido.Message("control_change", channel=ch, control=T.PICKUP_CC,
-                                       value=_pkv, time=0))
         _prog = self.program
         if self.drums and _prog >= 128:
             # A MAP'S OWN DRUM SET (kit_in_map's 128 x map + program): selected
@@ -3581,6 +3572,17 @@ class Patch:
             tr.append(mido.Message("control_change", channel=ch, control=32, value=_prog // 128, time=0))
             _prog %= 128
         tr.append(mido.Message("program_change", channel=ch, program=_prog, time=0))
+        # ...AND ITS CABINET (patch_map.cab_key's choice: CC83) and its pickup
+        # (CC85), after the program change that puts them back to its own
+        if self.variation and not self.drums:
+            _cbv = __import__("patch_map").cab_of(self.variation)[1]
+            if _cbv:
+                tr.append(mido.Message("control_change", channel=ch, control=T.CABINET_CC,
+                                       value=_cbv, time=0))
+            _pkv = __import__("patch_map").pk_of(self.variation)
+            if _pkv:
+                tr.append(mido.Message("control_change", channel=ch, control=T.PICKUP_CC,
+                                       value=_pkv, time=0))
         # THE CHANNEL'S VOLUME AT FULL. The stamp applies it (Live._chan_gain:
         # (CC7 x CC11)^2, the file's own law), so a template built at GM's
         # power-on 100 carried 0.62 of it already: every live note sat 4.1 dB
@@ -4822,10 +4824,6 @@ class Live:
         # Rx.BANK SELECT: off after GM1 System On, on after GS Reset or GM 2 On.
         self.bank_msb = {}
         self.bank_lsb = {}
-        # ...and THE CABINET a file selects (tonelib.CABINET_CC, 83: a
-        # CAB_CHOICES index), latched as the bank is, read at the program change
-        self.cab_cc = {}
-        self.pk_cc = {}         # ...and its pickup (tonelib.PICKUP_CC, 85: a PICKUP_CHOICES index), the same
         # THE STANDARD (Sound Canvas map) a channel's map 0 plays -- 0 ours, 1
         # SC-55, 2 SC-88, 3 SC-88 Pro, 4 SC-8850 (blockrender.DEFAULT_MAP, the
         # --map option, the panel's standard) -- and a part's own, where a
@@ -6375,10 +6373,16 @@ class Live:
                 self.bank_msb[ch] = msg.value
             elif msg.control == 32:                 # bank select LSB
                 self.bank_lsb[ch] = msg.value
-            elif msg.control == T.CABINET_CC:       # the cabinet (a CAB_CHOICES index), latched as a bank
-                self.cab_cc[ch] = msg.value
-            elif msg.control == T.PICKUP_CC:        # the pickup (a PICKUP_CHOICES index), the same
-                self.pk_cc[ch] = msg.value
+            elif msg.control in (T.CABINET_CC, T.PICKUP_CC):
+                # THE CABINET (CC83) or THE PICKUP (CC85) of the parts on the
+                # channel, at once -- a program change puts it back to the
+                # voice's own (tonelib.CABINET_CC)
+                for part in parts:
+                    if self._listens(part, ch) and not part.drums:
+                        if msg.control == T.CABINET_CC:
+                            self.set_cabinet(part, msg.value or None)
+                        else:
+                            self.set_pickup(part, msg.value or None)
             elif msg.control == 10:                 # pan
                 # THE LEVEL IMAGE FOLLOWS THE POT, THE TIME IMAGE DOES NOT --
                 # see Slab.repan. A note keeps the interaural delay it was
@@ -6602,11 +6606,12 @@ class Live:
                 _pd = _dr if (_said and part.channel == ch) else part.drums
                 # a drum set in the map, where it has its own (kit_in_map)
                 _pp = kit_in_map(_prog, _map) if _pd and _msb != T.GM2_DRUM_BANK else _prog
-                # (its cabinet: the part's own choice, else the channel's CC83)
-                _cb = part.cab if part.cab is not None else self.cab_cc.get(ch, 0)
-                _pu = part.pk if part.pk is not None else self.pk_cc.get(ch, 0)
+                # (its cabinet and pickup back to the voice's own: a
+                # program change is another instrument -- CC83, CC85 after
+                # it choose again)
+                part.cab = part.pk = None
                 want = (_pp, _pd, self._tuner_for(_pp, _pd, part.base_tuner),
-                        with_cab(_pp, _pd, _var, _cb, _pu))
+                        with_cab(_pp, _pd, _var, 0, 0))
                 self._ask_patch(part, want)
             if self.patch_reqs:
                 self.patch_go.set()
@@ -8447,25 +8452,29 @@ class Live:
     def set_cabinet(self, part, choice):
         """A PART's CABINET (the Effects and Stops cards' selector): a
         CAB_CHOICES index, None the voice's own. Its patch is rebuilt through
-        it, as a program change rebuilds one; kept on the part across them."""
+        it, as a program change rebuilds one -- the program on its way, if one
+        is (a file's CC83 just after its program change); a program change
+        puts it back to None."""
         _PM = __import__("patch_map")
         part.cab = None if choice is None else max(0, min(len(_PM.CAB_CHOICES) - 1, int(choice)))
-        want = (part.program, part.drums, part.tuner,
-                with_cab(part.program, part.drums, part.variation, part.cab or 0, part.pk or 0))
-        self._ask_patch(part, want)
+        self._ask_patch(part, self._chosen_want(part))
         if self.patch_reqs:
             self.patch_go.set()
         self.dirty = True
 
+    def _chosen_want(self, part):
+        """The patch PART plays through its cabinet and pickup choices: the
+        one on its way if one is (patch_want), else its own."""
+        b = self.patch_want.get(part.pid, part.patch.key)
+        return (b[0], b[1], b[2], with_cab(b[0], b[1], b[3], part.cab or 0, part.pk or 0))
+
     def set_pickup(self, part, choice):
         """A PART's PICKUP (the AMP card's switch): a PICKUP_CHOICES index,
         None the voice's own -- what each is, its instrument's
-        (patch_map.PICKUP_FAMILIES). Rebuilt and kept as set_cabinet's."""
+        (patch_map.PICKUP_FAMILIES). Rebuilt as set_cabinet's."""
         _PM = __import__("patch_map")
         part.pk = None if choice is None else max(0, min(len(_PM.PICKUP_CHOICES) - 1, int(choice)))
-        want = (part.program, part.drums, part.tuner,
-                with_cab(part.program, part.drums, part.variation, part.cab or 0, part.pk or 0))
-        self._ask_patch(part, want)
+        self._ask_patch(part, self._chosen_want(part))
         if self.patch_reqs:
             self.patch_go.set()
         self.dirty = True
@@ -11264,7 +11273,6 @@ class Live:
         self.slab.send = [1.0] * 256           # every channel back to the nominal distance
         self.bank_msb.clear()
         self.bank_lsb.clear()
-        self.cab_cc.clear()
         self.map0.clear()
         self.ch_drums.clear()
         # ...and the device-level state, BEFORE the per-channel loop re-pitches
@@ -11329,6 +11337,7 @@ class Live:
         self._efx_event(n0, ('reset',))
         self.efx_rev += 1
         for part in self.parts:
+            part.cab = part.pk = None           # (its cabinet and pickup the voice's own: a program change's)
             want = (0, part.drums, self._tuner_for(0, part.drums, part.base_tuner), 0)
             self._ask_patch(part, want)
         if self.patch_reqs:

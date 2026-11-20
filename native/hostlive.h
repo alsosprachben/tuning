@@ -1208,8 +1208,6 @@ struct nv_host {
     std::mutex cmu;
     std::map<int, int> bmsb;
     std::map<int, int> blsb;
-    std::map<int, int> hcab;                // each channel's cabinet (CC83, tonelib.CABINET_CC), latched as the bank
-    std::map<int, int> hpk;                 // ...and its pickup (CC85, tonelib.PICKUP_CC), the same
     std::function<int(int p, int v)> cab_mask_of;     // (the cabinets a variation's voice offers: its cab_mask)
     std::function<int(int p, int v)> pk_mask_of;      // (...the pickups: its pk_mask)
     // VARIATION v THROUGH CABINET c AND PICKUP k (live.with_cab): the
