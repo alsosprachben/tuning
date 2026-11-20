@@ -55,6 +55,7 @@ struct Msg {
     // 2 a part's copy as it receives it, the file render's only
     int rx = 0;
     bool direct = false;        // a part's own (a part parameter's, the CM-64 map's): no channel to route
+    bool ours = false;          // ...one the reader adds, not the file's (the CM-64 map's init): no word on whether it speaks GS
     // A MIDI 2.0 FILE's (ump.py): a slot's delta in seconds, as the file has
     // it (a raw stream's own, a Clip File's from its tempo), < 0 none (ticks
     // and tempo give it); a Note On's Pitch 7.9 attribute (NAN none); and a
@@ -1276,6 +1277,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                     const int v = ad == 0x1A ? 48 : 96;
                     const int cs = (128 - (0x40 + (0x10 | blk) + ad + v) % 128) % 128;
                     ex.push_back(Msg{0, 0xF0, 0, 0, 0, {0x41, 0x10, 0x42, 0x12, 0x40, (uint8_t)(0x10 | blk), (uint8_t)ad, (uint8_t)v, (uint8_t)cs}});
+                    ex.back().ours = true;      // (blockrender's gs_setup reads the file's own: an MT-32 file is no GS one)
                 }
             }
         }
@@ -1661,7 +1663,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                     if (tk == 1) {
                         bool gsh = d[0] == 0x41;
                         if (!seen_note && gsh)
-                            P.gs = 1;
+                            P.gs |= !m.ours;
                         P.master = 1;
                         if (ti[0] == 1) {
                             P.mvol.push_back(std::make_tuple(t, seq, td[0]));
@@ -1705,7 +1707,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 for (size_t i = 0; i < nbody && a + i < 12; i++)
                     sc[a + i] = (double)d[7 + i] - 64.0;
                 if (!seen_note)
-                    P.gs = 1;
+                    P.gs |= !m.ours;
                 P.sotas[ch2].push_back(std::make_pair(t, sc));
                 continue;
             }
@@ -1721,7 +1723,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 if (d[7])
                     bsel[ch2] = 0;              // (_var: a drum part's no variation)
                 if (!seen_note)
-                    P.gs = 1;
+                    P.gs |= !m.ours;
                 continue;
             }
             // THE GS SYSTEM EFFECTS and EQ (gs_setup): read by the first note, after it nothing
@@ -1729,7 +1731,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 && ((d[4] == 0x40 && (d[5] == 0x01 || d[5] == 0x02))
                     || ((d[4] == 0x40 || d[4] == 0x50) && (d[5] >> 4) == 4 && d[6] == 0x20))) {
                 if (!seen_note) {
-                    P.gs = 1;
+                    P.gs |= !m.ours;
                     int a = d[6], v = d[7];
                     if (d[4] == 0x40 && d[5] == 0x01) {
                         std::map<int, int> *g = a >= 0x38 && a <= 0x40 ? &P.gs_ch
@@ -1771,7 +1773,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                     mi->second.set(row, col, dep);
                     cmx_upd(t, ch2);
                     if (!seen_note)
-                        P.gs = 1;
+                        P.gs |= !m.ours;
                     continue;
                 }
             }
@@ -1813,7 +1815,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             if (d.size() >= 8 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12 && d[4] == 0x40 && d[5] == 0x00
                 && d[6] == 0x06) {
                 if (!seen_note)
-                    P.gs = 1;
+                    P.gs |= !m.ours;
                 continue;
             }
             // THE SOUND CANVAS'S DISPLAY (model 45H): kept for the render's
@@ -1844,7 +1846,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 }
                 if (k >= 0) {
                     if (!seen_note)
-                        P.gs = 1;
+                        P.gs |= !m.ours;
                     P.efx.push_back(Parsed::Efx{t, k, a, b});
                     P.events.push_back(LiveEv{t, 6, -1, (int)P.sysex.size(), 0});     // (the live part's too)
                     P.sysex.push_back(d);
@@ -1870,7 +1872,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                         it = gsstate.emplace(pc, std::array<int, 4>{64, 64, 0, 127}).first;
                     it->second[d[6] == 0x1A ? 0 : d[6] == 0x1B ? 1 : d[6] == 0x1D ? 2 : 3] = d[7];
                     if (!seen_note)
-                        P.gs = 1;
+                        P.gs |= !m.ours;
                     continue;
                 }
                 // ...its TONE MAP-0 NUMBER (4p 01, a map 1-4)
@@ -1919,7 +1921,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 // any other the loop leaves, as Python's
                 if (pblk) {
                     if (!seen_note)
-                        P.gs = 1;
+                        P.gs |= !m.ours;
                     continue;
                 }
             }
@@ -1933,7 +1935,7 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
                 P.gs_rv.clear(); P.gs_ch.clear(); P.gs_dl.clear(); P.gs_eq.clear(); P.gs_sw.clear();
             }
             if (!seen_note && d.size() >= 4 && d[0] == 0x41 && d[2] == 0x42 && d[3] == 0x12)
-                P.gs = 1;
+                P.gs |= !m.ours;
             rxbank = lvl != 1;
             bmsb.clear(); blsb.clear(); drums.clear(); prog.clear(); bsel.clear(); ctrl.clear(); rsel.clear(); nsel.clear();
             cabsel.clear();
