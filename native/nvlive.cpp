@@ -121,6 +121,20 @@ int nv_host::run(int argc, char **argv)
         if (!ft.empty())
             part_touch(0, atoi(ft.c_str()) ? 1 : 0);
     }
+    // --stops=WORD (live.set_stops on the first part): its organ's registration, bit i rank i
+    {
+        std::string sw = opt(argc, argv, "stops", "");
+        if (!sw.empty()) {
+            int pi;
+            {
+                std::lock_guard<std::mutex> lk(parts_mu);
+                pi = pats.empty() ? -1 : pats[0].pi;
+            }
+            long long w = strtoll(sw.c_str(), nullptr, 0);
+            if (pi >= 0)
+                post([this, pi, w](long long) { nv_part_post_stops(part, pi, w); });
+        }
+    }
     // --rotary=room|mics[:DEG] (live.set_rotary on the first part): its rotary
     // heard -- the cabinet in the room, or two mics DEG apart (none: the default)
     {

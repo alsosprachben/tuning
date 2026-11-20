@@ -258,7 +258,7 @@ double nv_cab_gain(const NoteClass *k, double f);
 int nv_stream_note(int j, int *i, int *band, double *land);
 long nv_damp_track(void *song, int i, const double *rows, long long nr, double land, double SR, long long blk,
                    long long nblk, double full_db_s, double residual, double knee_db, long long *b0, double *f0,
-                   float *dc, long cap);
+                   float *dc, long cap, double *beta);
 long long nv_play_own_end(int j, long long dflt);
 int nv_chorus_row(double *r, int kind, double send, int nc, const double *cents, double sr, double *cp, int *ci_out);
 void *nv_leslie_new(int nch, const long long *chans, const int *nreq, const double *req, double sr, const double *L,
@@ -4665,6 +4665,7 @@ static int run(int argc, char **argv)
             int jn = 0, ntr = 0;
             long long nblkv = 0;
             double dfull = 0.0, dres = 0.0, dknee = 0.0, dln = 0.0, dbeta = 0.0, dxdec = 0.0;
+            double tbeta = -1.0;                        // (the open track's own BETA: an organ's sustain, 0)
             std::vector<float> DM;
             std::vector<long> DMO, DMB, DMN;
             Store lescp;                            // (the Leslie's copies, after the table's rows)
@@ -5028,12 +5029,13 @@ static int run(int argc, char **argv)
                             stream_cast(nb.data() + NCOLS * r, p.kind);
                         std::vector<float> dc(4096);
                         long long b0 = 0;
+                        double tbeta = -1.0;
                         long nd = nv_damp_track(p.song, ni, nb.data(), r1 - i0, land, p.SR, p.BLK, p.nblkv, p.dfull,
-                                                p.dres, p.dknee, &b0, &tf0, dc.data(), (long)dc.size());
+                                                p.dres, p.dknee, &b0, &tf0, dc.data(), (long)dc.size(), &tbeta);
                         if (nd < 0) {
                             dc.resize(-nd);
                             nd = nv_damp_track(p.song, ni, nb.data(), r1 - i0, land, p.SR, p.BLK, p.nblkv, p.dfull,
-                                               p.dres, p.dknee, &b0, &tf0, dc.data(), (long)dc.size());
+                                               p.dres, p.dknee, &b0, &tf0, dc.data(), (long)dc.size(), &tbeta);
                         }
                         if (nd > 0) {
                             bool any = false;   // (a row of it not a burst no damper reaches: fast_rows)
@@ -5046,6 +5048,7 @@ static int run(int argc, char **argv)
                             }
                             if (any) {
                                 tix = p.ntr++;
+                                p.tbeta = tbeta;
                                 p.DMO.push_back((long)p.DM.size());
                                 p.DMB.push_back((long)b0);
                                 p.DMN.push_back(nd);
@@ -5074,7 +5077,7 @@ static int run(int argc, char **argv)
                             double nf = (double)(float)buf[11];
                             double x = (nf > 1e-6 ? nf : 1e-6) / (tf0 > 1e-6 ? tf0 : 1e-6);
                             dkv = tix;
-                            dgv = (float)(p.dln * pow(x, p.dbeta));
+                            dgv = (float)(p.dln * pow(x, p.tbeta >= 0.0 ? p.tbeta : p.dbeta));
                         }
                     }
                     p.amp_take(buf, {0, i0 + r, 0, 0}, dkv, dgv);     // (the amplifier's copy, before the cabinet)

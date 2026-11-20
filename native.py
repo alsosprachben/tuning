@@ -3003,7 +3003,7 @@ class OrganSpec(ctypes.Structure):
                    ('choir_beat', I * 8), ('n_buff', I), ('buff', (I * 2) * 8), ('rank_choir', I * 32),
                    ('choir_ratio', C * 8), ('cross', C), ('choir_cents', (C * 128) * 8),
                    ('choir_stiff', (C * 128) * 8), ('choir_bname', (ctypes.c_char * 16) * 8),
-                   ('siren_up', I)])
+                   ('siren_up', I), ('n_sus', I), ('sus_rank', I * 4), ('sus_t60', C * 4)])
 
 
 _ORGAN = {}
@@ -3259,6 +3259,14 @@ def organ(cls):
     _sc = T.sound_controls_of(cls)
     o.snd_mask = (1 if 'attack' in _sc else 0) | (2 if 'release' in _sc else 0) | (4 if 'decay' in _sc else 0)
     o.trem_class_depth = float(getattr(cls, 'tremulant_depth', 0.0) or 0.0)
+    # ITS SUSTAIN (sustain_stops): each stop's rank and T60, in the stop list's order
+    _sus = [(i, float(getattr(cls, 'sustain_stops', {})[k])) for i, k in enumerate(keys)
+            if k in (getattr(cls, 'sustain_stops', None) or {})]
+    if len(_sus) > 4:
+        return None
+    o.n_sus = len(_sus)
+    for q, (i, t) in enumerate(_sus):
+        o.sus_rank[q], o.sus_t60[q] = i, t
     if T.organ_wind(cls):
         import wind as WND
         o.wind = 1

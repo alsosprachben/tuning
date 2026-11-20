@@ -550,6 +550,10 @@ typedef struct OrganSpec {
     double choir_ratio[8], cross, choir_cents[8][128], choir_stiff[8][128];
     char choir_bname[8][16];
     int siren_up;           // a double siren's ranks on its upper disc (siren_upper), a bit a rank
+    /* ITS SUSTAIN (tonelib sustain_stops: the divider organ's tabs): each stop's rank
+       and T60 (s); a note let go with one drawn decays on a damper track of its own */
+    int n_sus, sus_rank[4];
+    double sus_t60[4];
 } OrganSpec;
 
 /* what the note setup reads of the voice besides its VoiceSnap */

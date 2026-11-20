@@ -6441,6 +6441,7 @@ struct Part {
     // bent, its strings struck
     void strike(int ch, int note, int vel, long long n0, bool slur = false)
     {
+        organ_sustain_cut(ch, note, n0);
         int pi = 0 <= note && note <= 127 ? patch_for(ch, note) : -1;
         if (!amp_holds(pi)) {
             strike_now(ch, note, vel, n0, slur);
@@ -8976,6 +8977,11 @@ struct Part {
                 }
                 if (open_ring_hold(i, ch, note))
                     continue;                       // an open string: the palm, not the key, stops it
+                {
+                    double t60 = organ_sustain(i);
+                    if (t60 > 0.0 && !mono[ch] && organ_sustain_open(ch, note, n0, t60))
+                        continue;                   // AN ORGAN's SUSTAIN: let go at its land (damp_block)
+                }
                 let_go(ch, note, n0);
             }
             if (held)
@@ -8993,6 +8999,11 @@ struct Part {
         }
         if (open_ring_hold(pi < 0 ? cur : pi, ch, note))
             return;                                 // an open string: the palm, not the key, stops it
+        {
+            double t60 = organ_sustain(pi < 0 ? cur : pi);
+            if (t60 > 0.0 && !mono[ch] && organ_sustain_open(ch, note, n0, t60))
+                return;                             // AN ORGAN's SUSTAIN: let go at its land (damp_block)
+        }
         let_go(ch, note, n0);
     }
 
@@ -11251,6 +11262,10 @@ struct Part {
         double dc, f0, non, lr, lra, af, su, vdb;
         std::set<Key> keys;
         std::vector<long> slots;            // sorted (np.union1d)
+        // AN ORGAN's SUSTAIN (tonelib sustain_stops): its dB a second from the key-up,
+        // every partial alike, and the sample its note is let go at (-1: let go)
+        double org_rate = 0.0;
+        long long org_land = -1;
     };
     std::vector<std::pair<std::pair<int, int>, DTrack>> dtracks;   // live's damp_tracks, in its order
     std::vector<int> free_tracks;
@@ -11268,7 +11283,7 @@ struct Part {
 
     void damp_block(long long n0, long long frames)
     {
-        if (!dmp_on)
+        if (!dmp_on && dtracks.empty())
             return;
         bool any = !dtracks.empty();
         for (int c = 0; c < 16 && !any; c++)
@@ -11276,7 +11291,7 @@ struct Part {
         if (!any)
             return;
         double dt = frames / rate;
-        for (const auto &cn : pedalled) {
+        for (const auto &cn : (dmp_on ? pedalled : std::set<std::pair<int, int>>())) {
             int ch = cn.first, note = cn.second;
             double c = nv_damper_contact(pedal_v[ch], note, 128);
             std::vector<Key> ks;
@@ -11309,8 +11324,21 @@ struct Part {
             }
             st.slots = alive;
             int ch = dtracks[i].first.first, note = dtracks[i].first.second;
-            double c = pedalled.count(dtracks[i].first) ? nv_damper_contact(pedal_v[ch], note, 128) : 0.0;
             double d0 = st.dc;
+            if (st.org_rate > 0.0) {
+                // AN ORGAN's SUSTAIN: its dB a second; at its land, the note let go
+                st.dc = d0 + st.org_rate * dt;
+                DM[2 * st.t] = (float)d0;
+                DM[2 * st.t + 1] = (float)st.dc;
+                if (st.org_land >= 0 && n0 + frames > st.org_land) {
+                    long long at = st.org_land > n0 ? st.org_land : n0;
+                    st.org_land = -1;
+                    let_go(ch, note, at);
+                }
+                i++;
+                continue;
+            }
+            double c = pedalled.count(dtracks[i].first) ? nv_damper_contact(pedal_v[ch], note, 128) : 0.0;
             if (0.0 < c && c < 1.0) {
                 double x = std::max(((double)n0 - st.non) / rate, 0.0);
                 double dc = st.su + (1.0 - st.su) * ((1.0 - st.af) * exp(-st.lr * x) + st.af * exp(-st.lra * x));
@@ -11370,6 +11398,68 @@ struct Part {
         return i;
     }
 
+    // AN ORGAN's SUSTAIN at a key-up (blockrender, after _note_pedal): the longest T60 of
+    // the part's sustain stops drawn now, 0 none
+    double organ_sustain(int pi) const
+    {
+        if (pi < 0 || pi >= (int)patches.size() || !patches[pi].organ)
+            return 0.0;
+        const OrganSpec *og = patches[pi].organ;
+        double best = 0.0;
+        for (int q = 0; q < og->n_sus; q++) {
+            int r = og->sus_rank[q];
+            if (r >= 0 && r < (int)patches[pi].drawn.size() && patches[pi].drawn[r] && og->sus_t60[q] > best)
+                best = og->sus_t60[q];
+        }
+        return best;
+    }
+
+    // ...its track: the key's rows, 60 dB in its T60 every partial alike, let go 70 dB down
+    bool organ_sustain_open(int ch, int note, long long n0, double t60)
+    {
+        if (free_tracks.empty() || dtrack_find(ch, note) >= 0)
+            return false;
+        std::vector<Key> ks;
+        for (auto &kv : S.live)
+            if (std::get<1>(kv.first) == ch && std::get<2>(kv.first) == note && !kv.second.empty())
+                ks.push_back(kv.first);
+        if (ks.empty())
+            return false;
+        DTrack st;
+        st.t = free_tracks.back();
+        free_tracks.pop_back();
+        st.dc = 0.0;
+        st.f0 = 440.0 * pow(2.0, (note - 69) / 12.0);
+        st.non = 0.0;
+        st.lr = st.lra = st.af = st.su = st.vdb = 0.0;
+        st.org_rate = 60.0 / t60;
+        st.org_land = n0 + (long long)(t60 * 70.0 / 60.0 * rate);
+        DM[2 * st.t] = DM[2 * st.t + 1] = 0.0f;
+        dtracks.emplace_back(std::make_pair(ch, note), st);
+        DTrack &dt = dtracks.back().second;
+        for (const Key &k : ks)
+            damp_mark(dt, k);
+        return true;
+    }
+
+    // ...a key let go whose sustain still holds it (the sweep leaves it: its land lets it go)
+    bool organ_sustaining(int ch, int note) const
+    {
+        long i = dtracks.empty() ? -1 : dtrack_find(ch, note);
+        return i >= 0 && dtracks[i].second.org_land >= 0;
+    }
+
+    // a key struck again while its sustain rings: that note let go now (blockrender: its
+    // land no later than the next strike's, less the steal-fade)
+    void organ_sustain_cut(int ch, int note, long long n0)
+    {
+        long i = dtrack_find(ch, note);
+        if (i >= 0 && dtracks[i].second.org_land >= 0) {
+            dtracks[i].second.org_land = -1;
+            let_go(ch, note, n0);
+        }
+    }
+
     // this slab key's rows onto the track: its index, each row's weight
     void damp_mark(DTrack &st, const Key &k)
     {
@@ -11380,7 +11470,8 @@ struct Part {
         for (long q : S.live[li].second) {
             S.dk[q] = st.t;
             double x = std::max((double)S.f4[F4_nf][q], 1e-6) / std::max(st.f0, 1e-6);
-            S.dg[q] = (float)(dmp_ln * pow(x, dmp_beta));     // damper.weight
+            // damper.weight (an organ's sustain: BETA 0, every partial alike)
+            S.dg[q] = (float)((dmp_on ? dmp_ln : M_LN10 / 20.0) * pow(x, st.org_rate > 0.0 ? 0.0 : dmp_beta));
             st.slots.insert(std::lower_bound(st.slots.begin(), st.slots.end(), q), q);
         }
         st.slots.erase(std::unique(st.slots.begin(), st.slots.end()), st.slots.end());
@@ -13479,6 +13570,7 @@ struct Part {
                 && std::get<3>(kv.first) < AMP_OLD0 && std::get<3>(kv.first) > MFK0
                 && !siren_of(std::get<0>(kv.first), ck.first, ck.second)
                 && !open_ring.count(std::make_tuple((long long)std::get<0>(kv.first), ck.first, ck.second))
+                && !organ_sustaining(ck.first, ck.second)
                 && std::none_of(cutting.begin(), cutting.end(), [&](const Cut &c) {
                        return c.pid == std::get<0>(kv.first) && c.ch == ck.first && c.cnote == ck.second;
                    }))
@@ -13782,6 +13874,22 @@ void nv_part_toggle_stop(void *h, int pi, int rank, long long n0)
         if (want[ri])
             q.names.push_back(p.organ->rank[ri].key);
     P->posts.push_back(std::move(q));   // (done in the next block, after its events: live.post)
+}
+
+// AN ORGAN'S REGISTRATION as a word (bit i: rank i), posted as the panel posts it
+// (live.set_stops) -- nvlive --test's --stops
+void nv_part_post_stops(void *h, int pi, long long word)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (pi < 0 || pi >= (int)P->patches.size() || !P->patches[pi].organ)
+        return;
+    nv::slab::Part::Patch &p = P->patches[pi];
+    nv::slab::Part::Post q{0, {}, nullptr};
+    q.pi = pi;
+    for (int ri = 0; ri < p.organ->n_rank; ri++)
+        if ((word >> ri) & 1)
+            q.names.push_back(p.organ->rank[ri].key);
+    P->posts.push_back(std::move(q));
 }
 
 // EACH CHANNEL's STATE a scene keeps (live.scene_from's, read from the

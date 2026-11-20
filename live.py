@@ -6744,6 +6744,8 @@ class Live:
                     continue
                 if self._open_ring_hold(part, ch, msg.note):
                     continue            # an open string: the palm, not the key, stops it
+                if ch not in self.mono and self._organ_sustain_open(part, ch, msg.note, n0):
+                    continue            # AN ORGAN'S SUSTAIN: let go at its land (_damp_block)
                 self._note_off(part, ch, msg.note, n0)
             if pedalled:
                 self.pedalled.add((ch, msg.note))
@@ -6878,6 +6880,7 @@ class Live:
                 and (self._drive(part) > 0.0 or self._efx_od(part) is not None))
 
     def _note_on(self, part, ch, note, vel, n0):
+        self._organ_sustain_cut(part, ch, note, n0)    # (a sustaining key struck again: let go now)
         if not self._amp_holds(part):
             return self._note_on_now(part, ch, note, vel, n0)
         self.amp_shifted.pop((part.pid, ch, note), None)
@@ -7571,6 +7574,16 @@ class Live:
                 sl.free_tracks.append(t)
                 continue
             st['slots'] = alive
+            if st.get('org_rate'):
+                # AN ORGAN'S SUSTAIN: its dB a second; at its land, the note let go
+                d0 = st['dc']
+                st['dc'] = d0 + st['org_rate'] * dt
+                sl.DM[2 * t] = d0
+                sl.DM[2 * t + 1] = st['dc']
+                if st['org_land'] >= 0 and n0 + frames > st['org_land']:
+                    at, st['org_land'] = max(st['org_land'], n0), -1
+                    self._note_off(st['part'], kk[1], kk[2], at)
+                continue
             v = self.pedal_v.get(kk[1], 0)
             c = _DMP.contact(v, kk[2], 128) if (kk[1], kk[2]) in self.pedalled else 0.0
             d0 = st['dc']
@@ -7609,7 +7622,8 @@ class Live:
         return st
 
     def _damp_mark(self, st, k):
-        """This slab key's rows onto the track: its index, each row's weight."""
+        """This slab key's rows onto the track: its index, each row's weight
+        (an organ's sustain: every partial alike, BETA 0)."""
         sl = self.slab
         ss = sl.live.get(k)
         st['keys'].add(k)
@@ -7617,8 +7631,43 @@ class Live:
             return
         idx = np.fromiter(ss, np.int64, len(ss))
         sl.a['dk'][idx] = st['t']
-        sl.a['dg'][idx] = _DMP.weight(sl.a['nf'][idx], st['f0'])
+        sl.a['dg'][idx] = _DMP.weight(sl.a['nf'][idx], st['f0'], 0.0 if st.get('org_rate') else None)
         st['slots'] = np.union1d(st['slots'], idx)
+
+    # AN ORGAN'S SUSTAIN (tonelib sustain_stops; blockrender's organ_t60): a key let go
+    # with a sustain stop drawn decays on a damper track of its own, 60 dB in the
+    # stop's T60, every partial alike, and is let go 70 dB down -- or when the key is
+    # struck again
+    def _organ_sustain(self, part):
+        if not part.organ:
+            return 0.0
+        ss = getattr(part.patch._voice_class(60), 'sustain_stops', None) or {}
+        return max([t for k, t in ss.items() if k in part.drawn] or [0.0])
+
+    def _organ_sustain_open(self, part, ch, note, n0):
+        t60 = self._organ_sustain(part)
+        sl = self.slab
+        kk = (part.pid, ch, note)
+        if not t60 > 0.0 or not sl.free_tracks or kk in self.damp_tracks:
+            return False
+        ks = [k for k, ss in sl.live.items() if (k[0], k[1], k[2]) == kk and ss]
+        if not ks:
+            return False
+        t = sl.free_tracks.pop()
+        st = dict(t=t, dc=0.0, f0=440.0 * 2.0 ** ((note - 69) / 12.0), keys=set(),
+                  slots=np.zeros(0, np.int64), non=0.0, lr=0.0, lra=0.0, af=0.0, su=0.0, vdb=0.0,
+                  org_rate=60.0 / t60, org_land=n0 + int(t60 * 70.0 / 60.0 * self.rate), part=part)
+        sl.DM[2 * t] = sl.DM[2 * t + 1] = 0.0
+        self.damp_tracks[kk] = st
+        for k in ks:
+            self._damp_mark(st, k)
+        return True
+
+    def _organ_sustain_cut(self, part, ch, note, n0):
+        st = self.damp_tracks.get((part.pid, ch, note))
+        if st is not None and st.get('org_rate') and st['org_land'] >= 0:
+            st['org_land'] = -1
+            self._note_off(part, ch, note, n0)
 
     def _reg_free(self, part, ch):
         """The keys whose strings are free on this channel, now."""
@@ -12567,6 +12616,9 @@ class Live:
         it one block after the pedal caught it. The damper pedal is safe here
         only because `pedalled` is checked below; sostenuto needed its own.
 
+        AND NOT AN ORGAN NOTE ITS SUSTAIN HOLDS (_organ_sustain_open): its key
+        is up, and its damper track's land lets it go.
+
         AND NOT THE BAGPIPE'S DRONES, for exactly the same reason and caught
         exactly the same way. A drone belongs to the PART, so no key is ever
         down for it -- and it was stamped, swept one block later, and rendered
@@ -12583,6 +12635,7 @@ class Live:
                   and (k[0], k[1], k[2]) not in self.siren_st
                   and (k[0], k[1], k[2]) not in self.cutting
                   and (k[0], k[1], k[2]) not in self.open_ring
+                  and self.damp_tracks.get((k[0], k[1], k[2]), {}).get('org_land', -1) < 0
                   and not self.slab.oneshot.get(k)]:
             self.slab.release(k, n)
             self.stuck += 1

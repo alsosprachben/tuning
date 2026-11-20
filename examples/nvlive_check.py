@@ -27,6 +27,7 @@ OpenCL, or "c" the C reference), from GPU-MIN busy slots (live's GPU_MIN).
 place of the export's, its free strings' bank built again at it.
 --eastern: a secondary tuning (a raga spec) for the Indian instruments, on
 both sides (live.Live(eastern=), nvlive --eastern).
+--stops=WORD: the part an organ registered (bit i its rank i), as its panel would (live.set_stops).
 --drums: the part a drum part, PROGRAM its drum set (live.Live(drums=True),
 nvlive --drums): the file's notes struck on its kit, whatever their channel.
 --beside: the drum set (Standard) on channel 10 beside the piano, which
@@ -240,7 +241,8 @@ def main(argv):
                           + (["--eastern-at=" + opt["eastern-at"]] if opt.get("eastern-at") else [])
                           + (["--metronome=" + opt["metronome"]] if opt.get("metronome") else [])
                           + (["--fixed-touch=" + opt["fixed-touch"]] if opt.get("fixed-touch") else [])
-                          + (["--rotary=" + opt["rotary"]] if opt.get("rotary") else []),
+                          + (["--rotary=" + opt["rotary"]] if opt.get("rotary") else [])
+                          + (["--stops=" + opt["stops"]] if opt.get("stops") else []),
                           stderr=subprocess.DEVNULL)
     raw = open(out, "rb").read()          # float32 stereo after a 44-byte header
     nv = np.frombuffer(raw[44:], np.float32).reshape(-1, 2)
@@ -263,6 +265,9 @@ def main(argv):
     ampsync.sync(lv)                            # (the valve in step, as nvlive --test answers it)
     if opt.get("fixed-touch"):                  # --fixed-touch=0|1: the part's switch (live's part.fixed_touch)
         lv.parts[0].fixed_touch = opt["fixed-touch"] == "1"
+    if opt.get("stops"):                        # --stops=WORD: the part's organ registration (live.set_stops)
+        _nm = lv.parts[0].patch.rank_names
+        lv.set_stops(lv.parts[0], {_nm[i] for i in range(len(_nm)) if (int(opt["stops"], 0) >> i) & 1}, 0)
     if opt.get("rotary"):                       # --rotary=room|mics[:DEG]: the part's rotary heard (live.set_rotary)
         _rm, _, _rd = opt["rotary"].partition(":")
         lv.set_rotary(lv.parts[0], _rm, float(_rd) * 3.141592653589793 / 180.0 if _rd else None)

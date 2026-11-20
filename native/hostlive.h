@@ -104,6 +104,7 @@ void nv_part_drums(void *h, int program, const unsigned long long *choke);
 void nv_part_program(void *h, int program);
 void nv_part_drone_patch(void *h, int pi, void *cache, int nbuckets, int speed);
 void nv_part_toggle_stop(void *h, int pi, int rank, long long n0);
+void nv_part_post_stops(void *h, int pi, long long word);
 int nv_part_drawn(void *h, int pi, char *out, int cap);
 void nv_part_set_drawn(void *h, int pi, const char *want, int n);
 void nv_part_chanstate(void *h, double *out);

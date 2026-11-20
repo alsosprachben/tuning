@@ -1850,6 +1850,29 @@ struct Song {
     // damper_pedal: the voice has dampers; mcut: a mono note cut by the next.
     // *band: a half-pedalled note that meets the band (its damper track is
     // the caller's).
+    // AN ORGAN's SUSTAIN at a key-up at t on channel c (blockrender, after _note_pedal):
+    // the longest T60 of its sustain stops drawn then, 0 none
+    double organ_sustain(long long c, double t) const
+    {
+        double best = 0.0;
+        for (const Organ &o : organs) {
+            if (o.ch != c || !o.spec->n_sus)
+                continue;
+            for (int q = 0; q < o.spec->n_sus; q++) {
+                double cur = 0.0;
+                for (auto &e : o.rank_ev[o.spec->sus_rank[q]]) {
+                    if (e.first <= t)
+                        cur = e.second;
+                    else
+                        break;
+                }
+                if (cur >= 0.5 && o.spec->sus_t60[q] > best)
+                    best = o.spec->sus_t60[q];
+            }
+        }
+        return best;
+    }
+
     double note_off(long long c, int note, double on, double off, bool damper_pedal, bool mcut,
                     double retrigger_fade, bool *band) const
     {
@@ -1858,6 +1881,19 @@ struct Song {
         auto nx_it = next_same.find(NoteKey{c, note, on});
         bool has_nx = nx_it != next_same.end();
         double nx = has_nx ? nx_it->second : 0.0;
+        // ...AN ORGAN's SUSTAIN (blockrender: its damper track, 70 dB in 70/60 of its T60)
+        if (!damper_pedal && !mcut) {
+            double t60 = organ_sustain(c, off);
+            if (t60 > 0.0) {
+                double land = off + t60 * 70.0 / 60.0;
+                if (has_nx)
+                    land = pymin(land, pymax(off, nx - retrigger_fade));
+                if (land > off) {
+                    *band = true;
+                    off = land;
+                }
+            }
+        }
         if (damper_pedal && !mcut && C && !C->pv_t.empty()) {
             const int top = 128;
             double land = C->damper_lands(off, note, top, total, band);
@@ -3106,6 +3142,12 @@ void nv_song_user_drum(void *s, int i, int uq, int umask, const int *uv)
     e.umask = umask;
     for (int q = 0; q < 9; q++)
         e.uv[q] = uv[q];
+}
+
+// AN ORGAN's SUSTAIN on channel ch at a key-up at t: its T60 (s), 0 none (Song::organ_sustain)
+double nv_song_organ_sustain(void *s, long long ch, double t)
+{
+    return ((nv::Song *)s)->organ_sustain(ch, t);
 }
 
 void nv_song_get_note(void *s, int i, long long *ch, int *iv, double *dv)

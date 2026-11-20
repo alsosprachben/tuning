@@ -611,7 +611,9 @@ struct Track {
     long long r0, r1, b0;
     double f0;
     std::vector<float> dc;
+    double beta = -1.0;     // its own BETA (damper.Tracks: an organ's sustain, 0); -1 the damper's
 };
+extern "C" double nv_song_organ_sustain(void *s, long long ch, double t);
 
 // damper.threshold_db / rate_db_s
 static double threshold_db(double c, double knee)
@@ -675,6 +677,20 @@ static bool damp_track(void *song, int i, const double *rows, long long nr, doub
     std::vector<double> edges(ne > 0 ? ne : 0), dc(edges.size(), 0.0);
     for (long long q = 0; q < ne; q++)
         edges[q] = (double)((b0 + q) * blk) / SR;
+    // AN ORGAN's SUSTAIN (blockrender._damp_close's organ_t60): 60 dB in its T60 from
+    // the key-up, every partial alike
+    double t60 = nv_song_organ_sustain(song, ch, off);
+    if (t60 > 0.0) {
+        for (long long q = 0; q < ne; q++) {
+            double x = edges[q] - off;
+            dc[q] = (60.0 / t60) * (x > 0.0 ? x : 0.0);
+        }
+        T.b0 = b0;
+        T.f0 = f0;
+        T.dc.assign(dc.begin(), dc.end());
+        T.beta = 0.0;
+        return true;
+    }
     double acc = 0.0;
     for (long long q = 0; q + 1 < ne; q++) {
         double c = nv_damper_contact(pedal_at(edges[q]), key, 128);
@@ -714,7 +730,7 @@ extern "C" int nv_stream_note(int j, int *i, int *band, double *land)
 // dc's length returned (0 none, -(length) cap too small)
 extern "C" long nv_damp_track(void *song, int i, const double *rows, long long nr, double land, double SR,
                               long long blk, long long nblk, double full_db_s, double residual, double knee_db,
-                              long long *b0, double *f0, float *dc, long cap)
+                              long long *b0, double *f0, float *dc, long cap, double *beta)
 {
     Track T;
     if (!damp_track(song, i, rows, nr, land, SR, blk, nblk, full_db_s, residual, knee_db, T))
@@ -723,6 +739,7 @@ extern "C" long nv_damp_track(void *song, int i, const double *rows, long long n
         return -(long)T.dc.size();
     *b0 = T.b0;
     *f0 = T.f0;
+    *beta = T.beta;
     std::copy(T.dc.begin(), T.dc.end(), dc);
     return (long)T.dc.size();
 }
@@ -1031,7 +1048,7 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
                     double nf = (double)(float)rows[NCOLS * r + C_nf];     /* prepare's nf: float32 */
                     double x = (nf > 1e-6 ? nf : 1e-6) / (T.f0 > 1e-6 ? T.f0 : 1e-6);
                     dk[r] = loc[t_of[r]];
-                    dg[r] = (float)(ln10_20 * pow(x, beta));
+                    dg[r] = (float)(ln10_20 * pow(x, T.beta >= 0.0 ? T.beta : beta));
                 }
             }
             long long ndm = 0;
