@@ -308,6 +308,7 @@ inline void lcd_window(App &a, float x, float y, float w, float h, bool lit = fa
 // the chassis, brushed, its top edge lit and its bottom dark
 inline void module(App &a, float x, float y, float w, float h, float r)
 {
+    audit_box(a, x, y, w, h);
     ImDrawList *d = dl();
     shadow(a, x, y, w, h, r, 8, 3, 0.6f);
     const int i0 = d->VtxBuffer.Size;
@@ -321,6 +322,7 @@ inline void module(App &a, float x, float y, float w, float h, float r)
 // shade darker, shadowed inside its top edge, its bottom lip lit
 inline void tray(App &a, float x, float y, float w, float h, float r)
 {
+    audit_box(a, x, y, w, h);
     ImDrawList *d = dl();
     const int i0 = d->VtxBuffer.Size;
     d->AddRectFilled(P(a, x, y), P(a, x + w, y + h), IM_COL32(255, 255, 255, 255), r * a.k);
@@ -524,6 +526,7 @@ inline void dial_cap(App &a, float cx, float cy, float r, float rot_deg)
 inline void lcd_text(App &a, float size, float x, float y, ImU32 col, const std::string &s, bool glow = true)
 {
     ImFont *f = a.lcd ? a.lcd : a.font;
+    audit_text(a, f, size, x, y, s);
     if (glow) {
         const float fb = std::max(1.0f, ImGui::GetIO().DisplayFramebufferScale.x);
         const float o = 1.0f / fb;      // (a device pixel, in points)

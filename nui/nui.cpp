@@ -284,6 +284,48 @@ static bool poll(App &a)
     return changed;
 }
 
+// ---- tests: the text audit's report on a shot (NUI_TEXT_AUDIT): appended,
+// a "== SHOT" line and then CUT, OVERLAP and SPILL lines, tab-separated
+static void audit_write(const char *path, const std::string &shot)
+{
+    const Audit &A = audit();
+    FILE *f = fopen(path, "a");
+    if (!f)
+        return;
+    fprintf(f, "== %s\n", shot.c_str());
+    for (const auto &c : A.cuts)
+        fprintf(f, "CUT\t%s\n", c.c_str());
+    const float m = 1.0f;               // (a pixel's touch is not an overlap)
+    const auto &T = A.texts;
+    for (size_t i = 0; i < T.size(); i++)
+        for (size_t j = i + 1; j < T.size(); j++) {
+            const auto &p = T[i], &q = T[j];
+            if (p.s == q.s && std::fabs(p.x0 - q.x0) < 3 && std::fabs(p.y0 - q.y0) < 3)
+                continue;               // (the same text drawn twice: a shadow, an engraving)
+            if (p.x0 + m < q.x1 && q.x0 + m < p.x1 && p.y0 + m < q.y1 && q.y0 + m < p.y1)
+                fprintf(f, "OVERLAP\t%s\t%s\t%.0f,%.0f\n", p.s.c_str(), q.s.c_str(), p.x0, p.y0);
+            // (two texts on one line closer than a space: read as one -- "LEVEL FEEDBACK")
+            else if (std::fabs(p.y0 - q.y0) < 2 && std::fabs((p.y1 - p.y0) - (q.y1 - q.y0)) < 1) {
+                const float gap = p.x0 < q.x0 ? q.x0 - p.x1 : p.x0 - q.x1;
+                if (gap >= -m && gap < std::min(10.0f, 0.6f * (p.y1 - p.y0)))
+                    fprintf(f, "CROWD\t%s\t%s\t%.0f,%.0f\tgap %.1f\n", p.s.c_str(), q.s.c_str(), p.x0, p.y0, gap);
+            }
+        }
+    for (const auto &t : T) {
+        // (the smallest box its centre is in: a button, a pocket, a plate)
+        const float cx = (t.x0 + t.x1) / 2, cy = (t.y0 + t.y1) / 2;
+        const Audit::Box *in = nullptr;
+        for (const auto &b : A.boxes)
+            if (cx >= b.x0 && cx <= b.x1 && cy >= b.y0 && cy <= b.y1 &&
+                (!in || (b.x1 - b.x0) * (b.y1 - b.y0) < (in->x1 - in->x0) * (in->y1 - in->y0)))
+                in = &b;
+        if (in && (t.x0 < in->x0 - m || t.x1 > in->x1 + m || t.y0 < in->y0 - m || t.y1 > in->y1 + m))
+            fprintf(f, "SPILL\t%s\t%.0f,%.0f\tbox %.0f,%.0f %.0fx%.0f\n", t.s.c_str(), t.x0, t.y0, in->x0, in->y0,
+                    in->x1 - in->x0, in->y1 - in->y0);
+    }
+    fclose(f);
+}
+
 // ---- tests: the script's steps (NUI_SCRIPT)
 struct Step {
     std::string op, arg;
@@ -509,9 +551,17 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
         }
         ImGui_ImplSDL3_NewFrame();
         ImGui::NewFrame();
+        {
+            Audit &A = audit();
+            A.texts.clear();
+            A.boxes.clear();
+            A.cuts.clear();
+        }
         draw(a);
         ImGui::Render();
         const bool shoot = !shot_path.empty() && --shot_in <= 0;
+        if (shoot && audit().on)
+            audit_write(getenv("NUI_TEXT_AUDIT"), shot_path);
         gfx_end(win, shoot ? shot_path.c_str() : nullptr);
         if (shoot)
             shot_path.clear();

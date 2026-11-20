@@ -189,13 +189,58 @@ inline float px(const App &a, float size)           // (code7's sizes: whole mul
 }
 inline ImDrawList *dl() { return ImGui::GetWindowDrawList(); }
 inline float App::lh(float size) const { return px(*this, size) / k; }
-inline void text(App &a, ImFont *f, float size, float x, float y, ImU32 col, const std::string &s)
-{
-    dl()->AddText(f, px(a, size), P(a, x, y), col, s.c_str());
-}
 inline float text_w(App &a, ImFont *f, float size, const std::string &s)
 {
     return f->CalcTextSizeA(px(a, size), FLT_MAX, 0.0f, s.c_str()).x / a.k;
+}
+
+// ---- THE TEXT AUDIT (NUI_TEXT_AUDIT=FILE, for the tour's checks): each
+// frame's texts, the boxes they belong in (cards' plates and pockets,
+// buttons) and every text fit() cut; at a scripted shot, written out as
+// CUT (an ellipsis), OVERLAP (two texts on each other) and SPILL (a text
+// past the edge of the box it is centred in)
+struct Audit {
+    struct Box {
+        float x0, y0, x1, y1;
+        std::string s;
+    };
+    bool on = false;
+    std::vector<Box> texts, boxes;
+    std::set<std::string> cuts;
+};
+inline Audit &audit()
+{
+    static Audit A;
+    static bool init = false;
+    if (!init) {
+        init = true;
+        A.on = getenv("NUI_TEXT_AUDIT") != nullptr;
+    }
+    return A;
+}
+inline void audit_box(const App &a, float x, float y, float w, float h)
+{
+    Audit &A = audit();
+    if (A.on)
+        A.boxes.push_back({x, y, x + w, y + h, ""});
+}
+inline void audit_text(App &a, ImFont *f, float size, float x, float y, const std::string &s)
+{
+    Audit &A = audit();
+    if (!A.on || s.empty())
+        return;
+    const float w = text_w(a, f, size, s), h = a.lh(size);
+    // (only what shows: a text the clip hides, or cuts at a scrolling list's edge, is not a fault)
+    const ImVec2 c0 = dl()->GetClipRectMin(), c1 = dl()->GetClipRectMax();
+    const ImVec2 p0 = P(a, x, y), p1 = P(a, x + w, y + h);
+    if (p0.x < c0.x - 1 || p0.y < c0.y - 1 || p1.x > c1.x + 1 || p1.y > c1.y + 1)
+        return;
+    A.texts.push_back({x, y, x + w, y + h, s});
+}
+inline void text(App &a, ImFont *f, float size, float x, float y, ImU32 col, const std::string &s)
+{
+    audit_text(a, f, size, x, y, s);
+    dl()->AddText(f, px(a, size), P(a, x, y), col, s.c_str());
 }
 inline void text_c(App &a, ImFont *f, float size, float cx, float y, ImU32 col, const std::string &s)
 {
@@ -206,6 +251,8 @@ inline std::string fit(App &a, ImFont *f, float size, const std::string &s, floa
 {
     if (text_w(a, f, size, s) <= w)
         return s;
+    if (audit().on)
+        audit().cuts.insert(s);
     std::string t = s;
     while (!t.empty() && text_w(a, f, size, t + "\xe2\x80\xa6") > w) {
         t.pop_back();
@@ -264,6 +311,7 @@ inline bool button(App &a, const char *id, float x, float y, float w, float h, c
     const bool held = ImGui::IsItemActive();
     ImGui::PopID();
     const bool press = held && enabled;
+    audit_box(a, x, y, w, h);
     if (on)
         look::lit_cap(a, x, y, w, h, press);
     else
