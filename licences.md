@@ -276,8 +276,11 @@ store build.
   - **TR-808:** only Siassios's pattern clips (Commons, CC BY-SA 3.0, lossy,
     overlapping): a listening check. MckAudio's MckSamplePacks (CC0, his own
     recordings) has every 808, 909, 707 and 606 voice, but from a Roland TR-8,
-    Roland's digital model, which is a question for the no-Roland-sounds rule.
-    Best route: ask Michael Fischer for a written licence for his set.
+    Roland's digital model. ACCEPTABLE (Ben, 2026-11-20: a played Roland,
+    recorded by its owner under a proper licence, is fine, like a clean room;
+    data pulled out of a Roland is not). The TR-8 models the 808 and 909
+    rather than playing samples, so this is the route for both, beside asking
+    Michael Fischer for a licence for his real 808.
   - **TR-707:** hesed23's "7X7 Free Samples" (Freesound, CC BY 4.0, one hit
     per voice) is from his circuit-bent 707: listen first. Emily Schmanks's
     two cymbals (Commons, CC0) for the cymbal envelope.
@@ -329,6 +332,23 @@ store build.
   Versilian's own "Upright Nr1" is the fallback with no third party.
 - **CC BY-SA** (the Piteå organ, the oud and traverso Commons files): see the
   share-alike question above.
+
+## Recording our own
+
+- **Roland hardware:** a recording of a Roland machine PLAYING, made by its
+  owner under a proper open licence, may be fitted. Data extracted from a
+  Roland (ROM dumps, its factory samples) may not, and the voices of the
+  sample-ROM machines (the TR-707, the 909's cymbals, the Sound Canvas) stay
+  doubtful.
+- **Ben's Wurlitzer organ (with pedals):** a transistor home organ we can
+  record ourselves, and own outright. It suits the electric organs that
+  aren't tonewheels: 60'sOrgan 1-3, Farf Organ, CheeseOrgan (all borrowing
+  the tonewheel model today), Organ Bass from its pedals, and its own
+  percussion and rotating speaker if it has them. It doesn't replace the
+  Hammond L102's drawbars (a different generator), but a recording session
+  could also take its percussion decay and vibrato.
+- **Biwa, rubab, 4' harpsichord, real 808/909:** a player or an owner,
+  recorded and released by us, closes each for good.
 
 ## About YouTube sources
 
