@@ -91,9 +91,10 @@ VARIATION_DESC = {
     (16, 1): "drawbars 16 8 4 2",
     (16, 8): "scanner chorus C3",
     (16, 9): "drawbars 8 4 2-2/3 2",
-    (16, 16): "drawbars 8 4 1",
-    (16, 17): "drawbars 8 4 2 1",
-    (16, 18): "drawbars 8 to 1, no 16 or 5-1/3",
+    # the divider organ (tonelib.DividerOrganProperties): its tabs and couplers
+    (16, 16): "Wurlitzer console: Flute 8' and its octave",
+    (16, 17): "Wurlitzer console: Flute 8', 4' and 2'",
+    (16, 18): "Wurlitzer: Flute, Diapason, Quint, octaves",
     (16, 32): "all nine drawbars",
     (16, 33): "even drawbars: 16 8 4 2 1",
     (16, 40): "drawbars 16 8: bass",

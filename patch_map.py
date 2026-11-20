@@ -11,6 +11,7 @@ and editing this table -- the dispatch stays data-driven.
 """
 
 from tonelib import (
+    DividerOrganProperties, divider_registration,
     TaikoProperties,
     MelodicAgogoHighProperties,
     MelodicAgogoLowProperties,
@@ -1441,6 +1442,7 @@ for _k, _src in (((72, 8), 75), ((72, 9), 75), ((15, 16), 15), ((15, 17), 15), (
 #   ("kit", key, set)             the set's key played from the keyboard
 #   ("rev", key, set)             ...and played backwards (the reverse cymbal's)
 #   ("set", program, {attrs})     the program's voice with these settings
+#   ("cls", class, {attrs})       a voice class of its own with these settings
 #   ("layer", ((program, semitones, dB[, vel lo, vel hi]), ...))
 WIDE = 0.5                       # key_pan_spread: +-0.5 of the field 30 keys from middle C
 
@@ -1484,9 +1486,17 @@ SC88_CHEAP = {
     (15, 1): ("Santur 2", ("set", 15, dict(detuned_pair=(-6.0, 6.0)))),
     (16, 1): ("Organ 101", ("set", 16, dict(default_stops=0b101101))),          # 16' 8' 4' 2'
     (16, 9): ("Organ 109", ("set", 16, dict(default_stops=0b111100))),          # 8' 4' 2 2/3' 2'
-    (16, 16): ("60'sOrgan 1", ("set", 16, dict(default_stops=0b100001100))),    # 8' 4' 1'
-    (16, 17): ("60'sOrgan 2", ("set", 16, dict(default_stops=0b100101100))),    # 8' 4' 2' 1'
-    (16, 18): ("60'sOrgan 3", ("set", 16, dict(default_stops=0b111111100))),    # 8' and every one over it
+    # THE 60'S ORGANS: the divider organ (tonelib.DividerOrganProperties, Ben's
+    # Wurlitzer measured), each registration the tabs and couplers nearest the
+    # drawbars these stood at (8' 4' 1'; 8' 4' 2' 1'; 8' and every one over
+    # it), searched over every set of up to three tabs and two couplers by its
+    # spectrum at C3, C4 and C5: 6.6, 6.5 and 9.4 dB rms
+    (16, 16): ("60'sOrgan 1", ("cls", DividerOrganProperties,
+                                divider_registration(["Flute 8'"], ["4'"]))),
+    (16, 17): ("60'sOrgan 2", ("cls", DividerOrganProperties,
+                                divider_registration(["Flute 8'"], ["4'", "2'"]))),
+    (16, 18): ("60'sOrgan 3", ("cls", DividerOrganProperties,
+                                divider_registration(["Flute 8'", "Diapason 8'", "Quint 5-1/3'"], ["4'", "2'"]))),
     (16, 32): ("Organ 4", ("set", 16, dict(default_stops=0b111111111))),        # all nine
     (16, 33): ("Even Bar", ("set", 16, dict(default_stops=0b100101101))),       # the even ones: 16' 8' 4' 2' 1'
     (16, 40): ("Organ Bass", ("set", 16, dict(default_stops=0b101))),           # 16' 8'
@@ -2029,6 +2039,10 @@ def _sc88_class(how, tag):
         return c, KIT_TRIM_DB
     if kind == "set":
         return routed_variation(how[1], tag, **how[2]), PROGRAM_TRIM_DB.get(how[1], 0.0)
+    if kind == "cls":
+        # ("cls", voice class, {attrs}): a voice of its own that no program
+        # routes to, with these settings (the divider organ's registrations)
+        return type("%s_%s" % (how[1].__name__, tag), (how[1],), dict(how[2])), 0.0
     if kind == "menu":
         return kit_menu(how[1], tag), KIT_TRIM_DB
     raise ValueError(kind)

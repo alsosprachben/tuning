@@ -1428,6 +1428,15 @@ def _sc88_var_rated():
             note = "a MENU: %d drums on consecutive keys from C2, each at its kit pitch (%s)" % (
                 len(how[1]), "; ".join("set %d's keys %s" % (st, ",".join(str(k) for _kd, k, s2 in how[1] if s2 == st))
                                       for st in sets))
+        elif kind == "cls" and how[1].__name__ == "DividerOrganProperties":
+            # THE DIVIDER ORGAN (tonelib.DividerOrganProperties), its tabs fitted
+            r = 4
+            _st = how[2]["stop_ranks"]
+            note = ("the DIVIDER ORGAN (tonelib.DividerOrganProperties): twelve oscillators, every octave "
+                    "divided down, so its ranks lock in phase and a chord stands still -- its tabs FITTED to "
+                    "Ben's own Wurlitzer console (c. 1968-70, his recordings; examples/wurlitzer_fit.py: 12 "
+                    "tabs at C3, C4, C5, rendered within 0.1-1.7 dB rms), its couplers measured on it; drawing "
+                    + ", ".join(_st[i][0] for i in range(len(_st)) if how[2]["default_stops"] >> i & 1))
         elif kind == "set":
             r = RATED[how[1]][0]
             note = "GM %d %s with %s" % (how[1], names[how[1]], ", ".join(

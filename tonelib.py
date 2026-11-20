@@ -6419,6 +6419,353 @@ class RockOrganProperties(TonewheelProperties):
     amp_drive = 0.92
 
 
+# --- THE DIVIDER ORGAN: Ben's Wurlitzer console (c. 1968-70), MEASURED ---------
+# Twelve oscillators, one a note name, every octave divided down from it; a tab
+# is a tone colour filtered from those divided waves. Each tab's harmonic
+# series at the three keys it was recorded on (C3, C4, C5, at its SOUNDING
+# pitch: mode_gains_points), all on one scale -- the Flute 8' at C4 -- so the
+# tabs' levels against each other and up the keyboard are the organ's own
+# (examples/wurlitzer_fit.py; Ben's takes, ~/Documents/refs/wurlitzer_ben,
+# with every Solo and Accent tab drawn: level boosts, +5 dB, the tone
+# unchanged). A harmonic not 8 dB clear of the garage's floor reads 0. The
+# garage and the console's speaker are in these numbers -- the organ as it is
+# heard -- so the voice plays through no cabinet of ours.
+
+class DividerTabProperties(StoppedPipeProperties):
+    """A divider organ's tab as a SPECTRUM a stop rank borrows (the 4th field of
+    DividerOrganProperties.stop_ranks): its measured series and nothing else --
+    the envelope, the keying and the pitch are the organ's. A pipe by descent
+    only because a measured table by register is what a pipe's spectrum is,
+    here and in the engine (native.pipe_voice): nothing of a pipe's speech is
+    borrowed, the host's envelope is the rank's."""
+    touch_sensitive = False
+    max_harmonic = 32
+    octave_gain = 0.0
+    mode_gains_low = None
+    # every tab on the one scale, so one gain for all: the organ's balance --
+    # HELD where 60's Organ 1 (its Flute 8' and 4' coupler) sounds as the
+    # drawbars it replaces did (8' 4' 1' on GM 16), so the bank's trims stand
+    # until it is levelled against GeneralUser's (sfx_levels --trim)
+    initial_gain = 0.00015 * 10 ** (51.4 / 20.0)
+
+
+class DividerTibia16Properties(DividerTabProperties):
+    """Tibia 16': a flute, almost a sine: its 3rd 5-15 dB down, the rest gone."""
+    mode_gains_points = (
+        (64.21, (0.42550, 0.01156, 0.23296, 0.00000, 0.09865, 0.00167, 0.11423, 0.00146, 0.03436, 0.00049,
+                  0.01212, 0.00036, 0.00340, 0.00032, 0.00025, 0.00024, 0.00030, 0.00014, 0.00047, 0.00012,
+                  0.00000, 0.00007, 0.00010, 0.00011, 0.00004, 0.00000, 0.00000, 0.00019, 0.00014, 0.00000,
+                  0.00010, 0.00027)),
+        (128.41, (1.62718, 0.00149, 0.30545, 0.00437, 0.03060, 0.00091, 0.00056, 0.00022, 0.00051, 0.00028,
+                  0.00004, 0.00016, 0.00000, 0.00019, 0.00023, 0.00035, 0.00021, 0.00014, 0.00011, 0.00007,
+                  0.00011, 0.00016, 0.00013, 0.00017, 0.00005, 0.00008, 0.00020, 0.00008, 0.00004, 0.00004,
+                  0.00007, 0.00007)),
+        (256.82, (0.75995, 0.01084, 0.01054, 0.00024, 0.00135, 0.00043, 0.00083, 0.00024, 0.00042, 0.00026,
+                  0.00024, 0.00016, 0.00000, 0.00045, 0.00019, 0.00012, 0.00005, 0.00009, 0.00000, 0.00003,
+                  0.00024, 0.00009, 0.00002, 0.00004, 0.00004, 0.00015, 0.00026, 0.00002, 0.00002, 0.00011,
+                  0.00005, 0.00002)),
+    )
+    mode_gains = mode_gains_points[-1][1]
+
+
+class DividerBassClarinet16Properties(DividerTabProperties):
+    """Bass Clarinet 16': odd harmonics, the evens 30-40 dB under them."""
+    mode_gains_points = (
+        (64.21, (0.02611, 0.00411, 0.07658, 0.00108, 0.04048, 0.00087, 0.05559, 0.00185, 0.06135, 0.00141,
+                  0.05979, 0.00113, 0.03026, 0.00059, 0.00155, 0.00027, 0.00042, 0.00029, 0.00642, 0.00041,
+                  0.00203, 0.00021, 0.00319, 0.00023, 0.00203, 0.00010, 0.00129, 0.00041, 0.00373, 0.00024,
+                  0.00339, 0.00041)),
+        (128.41, (0.30469, 0.00299, 0.11016, 0.00459, 0.07963, 0.00253, 0.01886, 0.00050, 0.00960, 0.00120,
+                  0.00435, 0.00062, 0.00131, 0.00114, 0.00625, 0.00072, 0.00583, 0.00033, 0.00624, 0.00047,
+                  0.00386, 0.00059, 0.00402, 0.00067, 0.00121, 0.00029, 0.00427, 0.00047, 0.00248, 0.00024,
+                  0.00088, 0.00038)),
+        (256.35, (0.27006, 0.00702, 0.10568, 0.00166, 0.02381, 0.00111, 0.02067, 0.00110, 0.00613, 0.00075,
+                  0.00640, 0.00104, 0.00267, 0.00089, 0.00181, 0.00057, 0.00129, 0.00000, 0.00066, 0.00000,
+                  0.00166, 0.00017, 0.00060, 0.00000, 0.00060, 0.00026, 0.00067, 0.00000, 0.00019, 0.00022,
+                  0.00055, 0.00000)),
+    )
+    mode_gains = mode_gains_points[-1][1]
+
+
+class DividerTrombone16Properties(DividerTabProperties):
+    """Trombone 16': its 2nd as strong as its fundamental: a brassy low end."""
+    mode_gains_points = (
+        (64.21, (0.29425, 0.78993, 0.11667, 0.00985, 0.03720, 0.07694, 0.05652, 0.00236, 0.06358, 0.03659,
+                  0.01554, 0.00024, 0.00393, 0.00089, 0.00013, 0.00015, 0.00025, 0.00029, 0.00025, 0.00010,
+                  0.00000, 0.00024, 0.00018, 0.00017, 0.00011, 0.00009, 0.00014, 0.00018, 0.00028, 0.00025,
+                  0.00020, 0.00023)),
+        (128.41, (0.94040, 0.27808, 0.09219, 0.01547, 0.04323, 0.01547, 0.00167, 0.00027, 0.00035, 0.00113,
+                  0.00019, 0.00020, 0.00012, 0.00099, 0.00031, 0.00025, 0.00025, 0.00012, 0.00020, 0.00005,
+                  0.00009, 0.00023, 0.00009, 0.00015, 0.00006, 0.00008, 0.00019, 0.00011, 0.00004, 0.00007,
+                  0.00006, 0.00012)),
+        (256.82, (0.35016, 0.59768, 0.02167, 0.00054, 0.00342, 0.00152, 0.00127, 0.00032, 0.00037, 0.00035,
+                  0.00017, 0.00022, 0.00006, 0.00035, 0.00015, 0.00015, 0.00005, 0.00009, 0.00003, 0.00000,
+                  0.00021, 0.00007, 0.00004, 0.00002, 0.00004, 0.00012, 0.00024, 0.00003, 0.00003, 0.00016,
+                  0.00005, 0.00002)),
+    )
+    mode_gains = mode_gains_points[-1][1]
+
+
+class DividerFlute8Properties(DividerTabProperties):
+    """Flute 8': near a sine: the scale every other tab is read on."""
+    mode_gains_points = (
+        (128.41, (1.47355, 0.31672, 0.09874, 0.02676, 0.00629, 0.00338, 0.00117, 0.00069, 0.00018, 0.00065,
+                  0.00032, 0.00025, 0.00011, 0.00018, 0.00014, 0.00021, 0.00017, 0.00000, 0.00054, 0.00024,
+                  0.00039, 0.00032, 0.00042, 0.00061, 0.00041, 0.00012, 0.00021, 0.00007, 0.00006, 0.00006,
+                  0.00012, 0.00009)),
+        (256.82, (0.99862, 0.04955, 0.01707, 0.00059, 0.00062, 0.00017, 0.00071, 0.00023, 0.00000, 0.00027,
+                  0.00038, 0.00046, 0.00000, 0.00012, 0.00007, 0.00009, 0.00003, 0.00004, 0.00004, 0.00000,
+                  0.00005, 0.00003, 0.00002, 0.00004, 0.00004, 0.00005, 0.00004, 0.00002, 0.00002, 0.00003,
+                  0.00004, 0.00000)),
+        (513.64, (1.12352, 0.00482, 0.00272, 0.00015, 0.00097, 0.00040, 0.00081, 0.00026, 0.00005, 0.00003,
+                  0.00002, 0.00004, 0.00003, 0.00003, 0.00002, 0.00003, 0.00002, 0.00002, 0.00002, 0.00001,
+                  0.00002, 0.00002, 0.00001, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000,
+                  0.00000, 0.00000)),
+    )
+    mode_gains = mode_gains_points[-1][1]
+
+
+class DividerDiapason8Properties(DividerTabProperties):
+    """Diapason 8': the organ's principal: every harmonic, falling ~4 dB each."""
+    mode_gains_points = (
+        (128.41, (0.47227, 0.10313, 0.07167, 0.06540, 0.03746, 0.01815, 0.00616, 0.00288, 0.00284, 0.00345,
+                  0.00123, 0.00157, 0.00041, 0.00185, 0.00115, 0.00080, 0.00092, 0.00034, 0.00092, 0.00047,
+                  0.00045, 0.00040, 0.00043, 0.00051, 0.00012, 0.00014, 0.00042, 0.00021, 0.00020, 0.00010,
+                  0.00010, 0.00013)),
+        (256.82, (0.24556, 0.10368, 0.03668, 0.00395, 0.00738, 0.00287, 0.00431, 0.00188, 0.00076, 0.00092,
+                  0.00081, 0.00087, 0.00039, 0.00043, 0.00023, 0.00033, 0.00005, 0.00002, 0.00011, 0.00003,
+                  0.00018, 0.00003, 0.00009, 0.00004, 0.00005, 0.00005, 0.00009, 0.00002, 0.00005, 0.00004,
+                  0.00011, 0.00003)),
+        (513.65, (0.21432, 0.00698, 0.00632, 0.00405, 0.00203, 0.00171, 0.00133, 0.00084, 0.00017, 0.00003,
+                  0.00008, 0.00010, 0.00015, 0.00003, 0.00019, 0.00002, 0.00002, 0.00002, 0.00005, 0.00002,
+                  0.00003, 0.00001, 0.00001, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000,
+                  0.00000, 0.00000)),
+    )
+    mode_gains = mode_gains_points[-1][1]
+
+
+class DividerString8Properties(DividerTabProperties):
+    """String 8': thin and bright, harmonics 2-12 near level, 22-26 dB under the Flute (its C3 key silent on Ben's organ: held from C4 down)."""
+    mode_gains_points = (
+        (256.82, (0.03004, 0.03402, 0.02272, 0.00312, 0.00867, 0.00390, 0.00784, 0.00344, 0.00198, 0.00239,
+                  0.00271, 0.00275, 0.00146, 0.00167, 0.00102, 0.00136, 0.00034, 0.00014, 0.00051, 0.00012,
+                  0.00078, 0.00014, 0.00027, 0.00016, 0.00019, 0.00019, 0.00032, 0.00007, 0.00018, 0.00008,
+                  0.00026, 0.00002)),
+        (513.65, (0.08068, 0.00570, 0.00943, 0.00768, 0.00654, 0.00572, 0.00566, 0.00357, 0.00074, 0.00019,
+                  0.00048, 0.00045, 0.00068, 0.00030, 0.00063, 0.00010, 0.00006, 0.00004, 0.00009, 0.00007,
+                  0.00006, 0.00001, 0.00003, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000,
+                  0.00000, 0.00000)),
+    )
+    mode_gains = mode_gains_points[-1][1]
+
+
+class DividerClarinet8Properties(DividerTabProperties):
+    """Clarinet 8': odd harmonics, the evens ~30 dB down."""
+    mode_gains_points = (
+        (128.41, (0.73427, 0.01505, 0.20290, 0.00630, 0.14560, 0.00546, 0.02963, 0.00098, 0.01683, 0.00187,
+                  0.00762, 0.00089, 0.00264, 0.00187, 0.01037, 0.00092, 0.00994, 0.00042, 0.01009, 0.00072,
+                  0.00634, 0.00085, 0.00682, 0.00104, 0.00198, 0.00050, 0.00695, 0.00070, 0.00394, 0.00039,
+                  0.00134, 0.00058)),
+        (256.82, (0.64532, 0.02716, 0.18309, 0.00135, 0.05242, 0.00205, 0.03625, 0.00178, 0.00852, 0.00170,
+                  0.01134, 0.00194, 0.00623, 0.00153, 0.00429, 0.00116, 0.00104, 0.00013, 0.00219, 0.00012,
+                  0.00311, 0.00023, 0.00124, 0.00023, 0.00068, 0.00031, 0.00123, 0.00012, 0.00073, 0.00016,
+                  0.00109, 0.00005)),
+        (513.64, (1.02796, 0.00436, 0.04539, 0.00401, 0.02525, 0.00405, 0.01779, 0.00246, 0.00192, 0.00020,
+                  0.00136, 0.00037, 0.00176, 0.00036, 0.00147, 0.00010, 0.00015, 0.00005, 0.00020, 0.00007,
+                  0.00014, 0.00002, 0.00007, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000,
+                  0.00000, 0.00000)),
+    )
+    mode_gains = mode_gains_points[-1][1]
+
+
+class DividerOboe8Properties(DividerTabProperties):
+    """Oboe 8': its weight at harmonics 4-12, ~20 dB under the Flute."""
+    mode_gains_points = (
+        (128.36, (0.00302, 0.00336, 0.00779, 0.01467, 0.01616, 0.01522, 0.00829, 0.00661, 0.01053, 0.02167,
+                  0.01129, 0.01886, 0.00482, 0.02560, 0.01702, 0.01041, 0.01373, 0.00424, 0.01233, 0.00656,
+                  0.00647, 0.00573, 0.00735, 0.00692, 0.00208, 0.00240, 0.00696, 0.00382, 0.00380, 0.00193,
+                  0.00131, 0.00273)),
+        (256.82, (0.00668, 0.02316, 0.03179, 0.00922, 0.05033, 0.03619, 0.06450, 0.02518, 0.01165, 0.01441,
+                  0.01441, 0.01648, 0.00756, 0.00983, 0.00544, 0.00760, 0.00133, 0.00083, 0.00302, 0.00063,
+                  0.00435, 0.00099, 0.00206, 0.00132, 0.00110, 0.00145, 0.00175, 0.00087, 0.00112, 0.00090,
+                  0.00168, 0.00020)),
+        (513.65, (0.05146, 0.01721, 0.08586, 0.05352, 0.03822, 0.03442, 0.02950, 0.02091, 0.00385, 0.00083,
+                  0.00256, 0.00331, 0.00418, 0.00318, 0.00499, 0.00071, 0.00028, 0.00038, 0.00065, 0.00056,
+                  0.00044, 0.00007, 0.00017, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000,
+                  0.00000, 0.00000)),
+    )
+    mode_gains = mode_gains_points[-1][1]
+
+
+class DividerTrumpet8Properties(DividerTabProperties):
+    """Trumpet 8': harmonics 1-7 within a few dB: the brightest of the loud tabs."""
+    mode_gains_points = (
+        (128.41, (0.11314, 0.06982, 0.09314, 0.13777, 0.12055, 0.08661, 0.03896, 0.02544, 0.03982, 0.06487,
+                  0.03052, 0.05306, 0.01451, 0.08194, 0.05245, 0.02598, 0.03450, 0.00757, 0.02506, 0.01108,
+                  0.00927, 0.00798, 0.00970, 0.00811, 0.00257, 0.00239, 0.00629, 0.00370, 0.00329, 0.00186,
+                  0.00099, 0.00221)),
+        (256.82, (0.16916, 0.21926, 0.18296, 0.03759, 0.14680, 0.10020, 0.20766, 0.06506, 0.02486, 0.02377,
+                  0.02027, 0.01883, 0.00750, 0.00867, 0.00435, 0.00573, 0.00104, 0.00064, 0.00146, 0.00031,
+                  0.00101, 0.00031, 0.00048, 0.00025, 0.00019, 0.00039, 0.00045, 0.00018, 0.00019, 0.00021,
+                  0.00014, 0.00003)),
+        (513.64, (0.51665, 0.06859, 0.24542, 0.12272, 0.06566, 0.04142, 0.02480, 0.01313, 0.00322, 0.00082,
+                  0.00082, 0.00080, 0.00071, 0.00063, 0.00089, 0.00017, 0.00006, 0.00005, 0.00008, 0.00017,
+                  0.00004, 0.00002, 0.00001, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000,
+                  0.00000, 0.00000)),
+    )
+    mode_gains = mode_gains_points[-1][1]
+
+
+class DividerKinura8Properties(DividerTabProperties):
+    """Kinura 8': its energy at harmonics 6-12, the buzz; ~20 dB under the Flute."""
+    mode_gains_points = (
+        (128.48, (0.00373, 0.00267, 0.00456, 0.00929, 0.00976, 0.00864, 0.00429, 0.00287, 0.00445, 0.00780,
+                  0.00393, 0.00632, 0.00206, 0.01254, 0.01130, 0.00714, 0.01399, 0.00441, 0.01912, 0.01125,
+                  0.01062, 0.01212, 0.01940, 0.01919, 0.00688, 0.00929, 0.02357, 0.01568, 0.01472, 0.00982,
+                  0.00656, 0.01439)),
+        (256.83, (0.00902, 0.01477, 0.01895, 0.00419, 0.01826, 0.01190, 0.03221, 0.01872, 0.01391, 0.02439,
+                  0.03093, 0.04413, 0.02788, 0.03930, 0.02589, 0.03926, 0.00928, 0.00669, 0.01589, 0.00483,
+                  0.02159, 0.00456, 0.01293, 0.00681, 0.00578, 0.00587, 0.00938, 0.00487, 0.00469, 0.00518,
+                  0.00970, 0.00128)),
+        (513.65, (0.03892, 0.00789, 0.02947, 0.03852, 0.06239, 0.09678, 0.11736, 0.10288, 0.03234, 0.01469,
+                  0.01248, 0.01922, 0.01823, 0.01689, 0.02461, 0.00632, 0.00205, 0.00151, 0.00153, 0.00253,
+                  0.00244, 0.00063, 0.00056, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000,
+                  0.00000, 0.00000)),
+    )
+    mode_gains = mode_gains_points[-1][1]
+
+
+class DividerQuint513Properties(DividerTabProperties):
+    """Quint 5-1/3': a flute a fifth up, off the G's divider: a tempered fifth."""
+    mode_gains_points = (
+        (193.69, (0.30968, 0.00196, 0.07350, 0.00102, 0.00047, 0.00022, 0.00130, 0.00014, 0.00121, 0.00017,
+                  0.00065, 0.00012, 0.00032, 0.00007, 0.00045, 0.00017, 0.00005, 0.00011, 0.00017, 0.00006,
+                  0.00015, 0.00004, 0.00006, 0.00004, 0.00006, 0.00006, 0.00006, 0.00006, 0.00003, 0.00003,
+                  0.00004, 0.00003)),
+        (387.36, (0.43725, 0.00290, 0.01621, 0.00051, 0.00727, 0.00047, 0.00136, 0.00044, 0.00163, 0.00010,
+                  0.00020, 0.00003, 0.00013, 0.00009, 0.00009, 0.00002, 0.00019, 0.00008, 0.00010, 0.00003,
+                  0.00004, 0.00007, 0.00004, 0.00002, 0.00002, 0.00004, 0.00002, 0.00001, 0.00001, 0.00001,
+                  0.00000, 0.00000)),
+        (774.72, (0.26699, 0.00189, 0.01493, 0.00131, 0.00088, 0.00015, 0.00056, 0.00008, 0.00049, 0.00017,
+                  0.00014, 0.00003, 0.00003, 0.00002, 0.00003, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000,
+                  0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000,
+                  0.00000, 0.00000)),
+    )
+    mode_gains = mode_gains_points[-1][1]
+
+
+class DividerClarinet4Properties(DividerTabProperties):
+    """Clarinet 4': the Clarinet an octave up."""
+    mode_gains_points = (
+        (256.82, (0.51933, 0.01368, 0.18020, 0.00177, 0.05112, 0.00197, 0.03445, 0.00166, 0.00914, 0.00175,
+                  0.01221, 0.00212, 0.00632, 0.00155, 0.00513, 0.00124, 0.00028, 0.00015, 0.00255, 0.00016,
+                  0.00329, 0.00019, 0.00158, 0.00033, 0.00058, 0.00031, 0.00122, 0.00014, 0.00053, 0.00019,
+                  0.00111, 0.00003)),
+        (513.64, (0.96616, 0.00313, 0.04733, 0.00413, 0.02607, 0.00397, 0.01770, 0.00276, 0.00201, 0.00029,
+                  0.00137, 0.00042, 0.00179, 0.00038, 0.00156, 0.00011, 0.00020, 0.00007, 0.00018, 0.00008,
+                  0.00013, 0.00001, 0.00005, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000,
+                  0.00000, 0.00000)),
+        (1027.26, (0.11089, 0.01099, 0.04989, 0.00674, 0.00071, 0.00149, 0.00301, 0.00048, 0.00028, 0.00016,
+                  0.00010, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000,
+                  0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000,
+                  0.00000, 0.00000)),
+    )
+    mode_gains = mode_gains_points[-1][1]
+
+
+class DividerOrganProperties(TonewheelProperties):
+    """THE DIVIDER ORGAN: an electronic home or combo organ of the 1960s, built
+    as Ben's Wurlitzer console is (measured: examples/wurlitzer_survey.py).
+
+    NOT A TONEWHEEL, though it shares the tonewheel's keying (a switch, no
+    touch, nothing decays) and so its machinery. Its generator is twelve
+    oscillators, one a note name, and every octave is DIVIDED down from one of
+    them: all 75 C's of every tab and octave in the survey within 0.6 cents of
+    one pitch. So its octaves are exact 2:1 -- the ranks stand at exact
+    footages, where a Hammond's wheels are tempered -- and two tabs on one key
+    are the same wave twice: Flute 8' with any other tab held steady to
+    +-0.1 dB, where a Hammond's drawbars beat. A held chord is STILL. The
+    quint is another oscillator's (the G's): a tempered fifth.
+
+    THE TABS ARE COLOURS, NOT HARMONICS: each a filtered divider output with a
+    whole series of its own (DividerTabProperties), drawn as stops. No key
+    click: over 4 kHz the first 15 ms of a note is no louder than the note
+    held. Each note rises in 10-17 ms (10 to 90 %) and is gone in under 0.1 s
+    when the key lifts -- the garage's own tail is all a longer reading saw.
+    No leakage, no foldback, no scanner; its own speaker is in the tables.
+    """
+    scanner_switch = False
+    leslie = False
+    leslie_fast = False
+    cabinet = None
+    amp_drive = 0.0
+    wheel_swell = True
+    # THE KEYING: no click, no contacts to bounce
+    contact_spread_s = 0.0
+    contact_noise_db = ()
+    drawbar_leak_db = None
+    pipe_ceiling_hz = None
+    max_harmonic = 32
+    # 10-17 ms to rise (10 to 90 %); a key-up as quick
+    attack_time = 0.012
+    chiff_min_valve_time = 0.010
+    chiff_max_valve_time = 0.015
+    release_valve_time = 0.015
+    # THE TABS, the upper manual's (bit i = stop_ranks[i]), each at its exact footage
+    stop_ranks = [
+        ("Tibia 16'", 0.5, 1.0, DividerTibia16Properties),
+        ("Bass Clarinet 16'", 0.5, 1.0, DividerBassClarinet16Properties),
+        ("Trombone 16'", 0.5, 1.0, DividerTrombone16Properties),
+        ("Flute 8'", 1.0, 1.0, DividerFlute8Properties),
+        ("Diapason 8'", 1.0, 1.0, DividerDiapason8Properties),
+        ("String 8'", 1.0, 1.0, DividerString8Properties),
+        ("Clarinet 8'", 1.0, 1.0, DividerClarinet8Properties),
+        ("Oboe 8'", 1.0, 1.0, DividerOboe8Properties),
+        ("Trumpet 8'", 1.0, 1.0, DividerTrumpet8Properties),
+        ("Kinura 8'", 1.0, 1.0, DividerKinura8Properties),
+        ("Quint 5-1/3'", 1.498307, 1.0, DividerQuint513Properties),
+        ("Clarinet 4'", 2.0, 1.0, DividerClarinet4Properties),
+    ]
+    crescendo_order = ["Flute 8'", "Diapason 8'", "Tibia 16'", "Clarinet 8'", "Quint 5-1/3'", "Clarinet 4'",
+                       "Trombone 16'", "Trumpet 8'", "Bass Clarinet 16'", "String 8'", "Oboe 8'", "Kinura 8'"]
+    default_stops = 0b000000001000          # the Flute 8'
+    # THE CARD (live.stop_rows), as the console's rail groups its tabs: the 16's,
+    # the 8' flues, the reeds, the mutations ("|" a break, not a stop)
+    stop_rows = [["Tibia 16'", "Bass Clarinet 16'", "Trombone 16'", "|", "Flute 8'", "Diapason 8'", "String 8'",
+                  "Clarinet 8'", "|", "Oboe 8'", "Trumpet 8'", "Kinura 8'", "|", "Quint 5-1/3'", "Clarinet 4'"]]
+
+    # THE COUPLERS (Upper to Upper 16', 4', 2'): each keys the octave below or
+    # above as well, so every drawn tab sounds again there -- its own colour at
+    # that key, read off its own tables. Measured on the Flute 8' at C4
+    # (examples/wurlitzer_survey.py): the coupled octave +2.1, -0.4, -10.2 dB
+    # against the 8', which less the Flute's own tables' rise to C3 and C5
+    # (+3.6, +1.0) leaves the coupler's own gain.
+    COUPLERS = {"16'": (0.5, 10 ** (-1.5 / 20)), "4'": (2.0, 10 ** (-1.4 / 20)), "2'": (4.0, 10 ** (-11.2 / 20))}
+
+
+def divider_registration(tabs, couplers=()):
+    """A divider organ's registration as a variation's settings: its TABS drawn
+    and the COUPLERS on -- each coupler a copy of every drawn tab at its
+    octave, ranks of their own after the twelve tabs (so the stop word still
+    reads tab by tab). {stop_ranks, default_stops} for patch_map's ("cls", ...)."""
+    D = DividerOrganProperties
+    names = [r[0] for r in D.stop_ranks]
+    ranks = list(D.stop_ranks)
+    bits = 0
+    for t in tabs:
+        bits |= 1 << names.index(t)
+    for c in couplers:
+        cr, cg = D.COUPLERS[c]
+        for t in tabs:
+            r = D.stop_ranks[names.index(t)]
+            bits |= 1 << len(ranks)
+            ranks.append(("%s, %s coupler" % (t, c), r[1] * cr, r[2] * cg, r[3]))
+    rows = [list(D.stop_rows[0])]
+    if len(ranks) > len(D.stop_ranks):
+        rows.append([r[0] for r in ranks[len(D.stop_ranks):]])     # (the couplers' copies: a row of their own)
+    return dict(stop_ranks=ranks, default_stops=bits, stop_rows=rows)
+
+
 class OrganProperties(StoppedPipeProperties):
     # THE CHEST (wind.py), shared by every rank on a division's channel: a
     # wander under Pitea's bound (0.3% RMS is 0.2 cents on a flue), and a
