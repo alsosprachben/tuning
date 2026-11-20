@@ -1433,9 +1433,11 @@ def _sc88_var_rated():
             r = 4
             _st = how[2]["stop_ranks"]
             note = ("the DIVIDER ORGAN (tonelib.DividerOrganProperties): twelve oscillators, every octave "
-                    "divided down, so its ranks lock in phase and a chord stands still -- its tabs FITTED to "
-                    "Ben's own Wurlitzer console (c. 1968-70, his recordings; examples/wurlitzer_fit.py: 12 "
-                    "tabs at C3, C4, C5, rendered within 0.1-1.7 dB rms), its couplers measured on it; drawing "
+                    "divided down, so its ranks lock in phase and a chord stands still -- each tab ITS CIRCUIT, "
+                    "Ben's own Wurlitzer 4500 (its 1965 service schematics: every R, C and L of each tab's "
+                    "network, the dividers' squares, the complex and flute signals; examples/wurlitzer_circuit.py), "
+                    "its levels, duty and speaker fitted to his recordings, bounded to the parts (3.5-7.8 dB rms "
+                    "from takes made in a garage: the shapes kept dry); its couplers measured on it; drawing "
                     + ", ".join(_st[i][0] for i in range(len(_st)) if how[2]["default_stops"] >> i & 1))
         elif kind == "set":
             r = RATED[how[1]][0]

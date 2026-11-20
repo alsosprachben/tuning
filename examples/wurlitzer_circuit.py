@@ -134,7 +134,7 @@ def flute_lp(f, key_hz, fc_scale):
     """the flute range filter of the generator note at KEY_HZ: its two resonances as 2-pole
     low-passes (Q 0.7), the corners x fc_scale; then 440K into 0.022 µF"""
     note = int(round(12 * math.log2(key_hz / 32.703))) + 1
-    fr = next(r for top, r in FLUTE_RANGES if note <= top)
+    fr = next((r for top, r in FLUTE_RANGES if note <= top), FLUTE_RANGES[-1][1])   # (past the top: the last)
     h = np.ones(len(f), complex)
     for fc in fr:
         s = 1j * f / (fc * fc_scale)
@@ -183,10 +183,21 @@ def measured(nh=24):
 
 
 KNOTS = np.array([40, 63, 100, 160, 250, 400, 630, 1000, 1600, 2500, 4000, 6300, 10000.0])
+# THE SPEAKER, NOT THE GARAGE (Ben: the takes were made in a garage, concrete floor and
+# full of things; the model is the organ dry). So the shared response is a SPEAKER's few
+# parameters, never a free curve that could learn the room's modes: a 2nd-order high-pass
+# (the cabinet's low end), a 2nd-order low-pass (the cones' top), and one shelf where the
+# 12" hands over to the 6x9" -- its frequency and its step.
+SPEAKER = ["fhp", "flp", "fshelf", "shelf_db"]
 
 
 def response_db(f, r):
-    return np.interp(np.log(f), np.log(KNOTS), r)
+    fhp, flp, fsh, sh = np.exp(r[0]), np.exp(r[1]), np.exp(r[2]), r[3]
+    s = 1j * f
+    hp = (s / fhp) ** 2 / (1 + s / fhp / 0.7 + (s / fhp) ** 2)
+    lp = 1 / (1 + s / flp / 0.7 + (s / flp) ** 2)
+    shelf = sh / 2 * np.tanh(2 * np.log2(f / fsh))
+    return 20 * np.log10(np.abs(hp * lp)) + shelf
 
 
 def fit(data, nh=24):
@@ -214,22 +225,39 @@ def fit(data, nh=24):
             # only harmonics within 45 dB of the note's strongest: the rest is the room's floor
             keep = meas > meas.max() - 45
             out.append(np.clip(model[m][keep] - meas[keep], -30, 30))
-        out.append(3.0 * np.diff(r, 2))                 # (the response smooth)
-        out.append([3.0 * np.mean(r)])                  # (its mean 0 dB: the levels are the tabs')
+
         return np.concatenate(out)
-    p0 = np.concatenate([np.zeros(len(names)), [0.0, 0.0, 0.0, -2.0, -1.0, -1.0], np.zeros(len(KNOTS))])
-    sol = least_squares(resid, p0, loss="soft_l1", f_scale=3.0, max_nfev=400)
+    p0 = np.concatenate([np.zeros(len(names)), [0.0, 0.0, 0.0, -2.0, -1.0, -1.0], [math.log(60.0), math.log(6000.0), math.log(800.0), -6.0]])
+    # (every fitted number held where the parts allow: the flute filter's coils and caps
+    #  within their tolerance, a console cabinet's low end, cones' top, the 12"/6x9" handover)
+    n = len(names)
+    lo = np.full(len(p0), -np.inf)
+    hi = np.full(len(p0), np.inf)
+    lo[n:n + 2], hi[n:n + 2] = math.log(0.05), math.log(1.0)          # (the 4' and 2' squares' shares)
+    lo[n + 2], hi[n + 2] = math.log(0.8), math.log(1.25)              # (the flute filters: +-20 %)
+    lo[n + 4], hi[n + 4] = math.log(0.05), math.log(2.0)
+    lo[n + 5], hi[n + 5] = -100.0, 100.0
+    r0 = n + 6
+    lo[r0], hi[r0] = math.log(30.0), math.log(120.0)
+    lo[r0 + 1], hi[r0 + 1] = math.log(3000.0), math.log(10000.0)
+    lo[r0 + 2], hi[r0 + 2] = math.log(400.0), math.log(2000.0)
+    lo[r0 + 3], hi[r0 + 3] = -12.0, 6.0
+    p0 = np.clip(p0, lo + 1e-6, hi - 1e-6)
+    sol = least_squares(resid, p0, loss="soft_l1", f_scale=3.0, max_nfev=600, bounds=(lo, hi))
     return unpack(sol.x), sol
 
 
 def main(argv):
     data = measured()
     (g, w, fcs, r), sol = fit(data)
+    if "--py" in argv:
+        with open(os.path.expanduser("~/Documents/refs/wurlitzer_ben/circuit_tables.py.txt"), "w") as fh:
+            fh.write(emit_py(tables((g, w, fcs, r))) + "\n")
     print("complex octave weights (8', 4', 2'): %.2f %.2f %.2f   flute corner x%.2f   divider duty %.3f"
           % (w + (fcs, DUTY[0])))
     print("Trombone's 8' share %.2f; Diapason's 82K branch %+.2f x its 12K" % (MIX["trombone8"], MIX["diap_inv"]))
-    print("shared response (dB) at", " ".join("%g" % k for k in KNOTS))
-    print("   ", " ".join("%5.1f" % v for v in r))
+    print("speaker: high-pass %.0f Hz, low-pass %.0f Hz, shelf %+.1f dB at %.0f Hz" % (
+        math.exp(r[0]), math.exp(r[1]), r[3], math.exp(r[2])))
     print("\n%-18s %8s  %s" % ("tab", "key Hz", "rms dB (harmonics within 45 dB of its strongest)"))
     per = {}
     for name, kh, f0, tb in data:
@@ -250,6 +278,41 @@ def main(argv):
         json.dump(dict(levels_db=g, complex_weights=w, flute_corner=fcs, response_db=list(map(float, r)),
                        knots=KNOTS.tolist(), rms_by_tab={k: float(np.mean(v)) for k, v in per.items()}, duty=DUTY[0], mix=MIX), fh, indent=1)
     print("written", out)
+
+
+# THE TABLES THE ENGINE PLAYS (--py): each tab's series from the circuit and the speaker
+# alone -- no garage -- at the keys C1 to C7 (its sounding pitch: mode_gains_points), its
+# fitted level, all on one scale: the Flute 8' at C4 as the tables had it (1.0, its power)
+ANCHOR_KEYS = [32.703 * 2 ** i for i in range(7)]          # C1 .. C7, the key's 8' pitch
+
+
+def tables(fitted, nh=32):
+    g, w, fcs, r = fitted
+    out = {}
+    for name in NETS:
+        rows = []
+        for kh in ANCHOR_KEYS:
+            f, v = tab_series(name, kh, nh, w, fcs)
+            a = np.abs(v) * 10 ** ((response_db(f, r) + g[name]) / 20)
+            a[f > 16000] = 0.0
+            rows.append((float(f[0]), a))
+        out[name] = rows
+    ref = next(a for f0, a in out["Flute 8'"] if abs(f0 - 261.6) < 1)
+    s = 1.0 / np.sqrt(np.sum(ref ** 2))
+    return {k: [(f0, a * s) for f0, a in v] for k, v in out.items()}
+
+
+def emit_py(tb):
+    lines = []
+    for name, rows in tb.items():
+        lines.append("# %s" % name)
+        lines.append("    mode_gains_points = (")
+        for f0, a in rows:
+            vals = ["%.6f" % x for x in a]
+            body = ",\n                  ".join(", ".join(vals[i:i + 8]) for i in range(0, len(vals), 8))
+            lines.append("        (%.2f, (%s))," % (f0, body))
+        lines.append("    )")
+    return "\n".join(lines)
 
 
 if __name__ == "__main__":
