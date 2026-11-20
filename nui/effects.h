@@ -190,7 +190,7 @@ inline void draw_effects(App &a)
     const J *x = F.e.get("efx"), *y = F.e.get("sys");
     if (!x || !F.tables)
         return;
-    const float aboutH = IP ? 72 : 104, YB = IP ? (page == 0 ? Y1 - aboutH - 8 : Y1) : Y1 - aboutH - 8;
+    const float aboutH = IP ? 30 : 44, YB = IP ? (page == 0 ? Y1 - aboutH - 8 : Y1) : Y1 - aboutH - 8;
 
     // THE INSERTION EFFECT
     const float IW = IP ? X1 - X0 : 780, IX = X0;
@@ -449,26 +449,20 @@ inline void draw_effects(App &a)
         }
     }
 
-    // WHAT IT IS: the insertion type's notes, or the system effect touched (on the iPad, with the type)
+    // WHAT IT IS: the insertion type's line, or the system effect touched's (on the iPad, with the type)
     if (!show_type)
         return;
     const float ay = Y1 - aboutH, aw = X1 - X0;
     look::tray(a, X0, ay, aw, aboutH, 8);
-    std::string title;
-    const J *e = nullptr;
+    std::string title, body;
     if (F.about_of == "efx") {
-        if (type) {
-            title = type->name;
-            if (const J *ef = L.about.get("efx"))
-                e = ef->get(type->name.c_str());
-            if (!e) {
-                text(a, a.font, 14, X0 + 12, ay + 12, LCD_DIM, type->name + ": no notes yet.");
-                return;
-            }
-        } else {
-            text(a, a.font, 14, X0 + 12, ay + 12, LCD_DIM, "Touch a knob or a type for what it is.");
+        if (!type) {
+            text(a, a.font, 14, X0 + 12, ay + (aboutH - a.lh(14)) / 2, LCD_DIM, "Touch a type for what it is.");
             return;
         }
+        title = type->name;
+        if (const J *ef = L.about.get("efx"))
+            body = str(ef, type->name.c_str());
     } else {
         static const std::map<std::string, std::pair<const char *, const char *>> N = {
             {"rev", {"Reverb", "Reverb (system)"}}, {"cho", {"Chorus", "Chorus (system)"}},
@@ -476,20 +470,11 @@ inline void draw_effects(App &a)
         const auto &nn = N.at(F.about_of);
         title = nn.first;
         if (const J *ef = L.about.get("effects"))
-            e = ef->get(nn.second);
+            body = str(ef, nn.second);
     }
-    text(a, a.bold, 14, X0 + 12, ay + (IP ? 6 : 10), SILK, title);
-    if (e && e->is(J::ARR) && e->a.size() >= 2) {
-        const int r = (int)e->a[0].d();
-        const J *lv = L.about.get("levels");
-        const std::string rt = std::to_string(r) + " \xc2\xb7 " +
-                               (lv && lv->is(J::ARR) && r >= 0 && r < (int)lv->a.size() && lv->a[(size_t)r].is(J::STR) ? lv->a[(size_t)r].s : "");
-        text(a, a.font, 14, X1 - 12 - text_w(a, a.font, 14, rt), ay + (IP ? 6 : 10), LCD, rt);
-        const auto lines = wrap(a, a.font, 14, e->a[1].is(J::STR) ? e->a[1].s : "", aw - 24);
-        for (size_t i = 0; i < lines.size() && i < 4; i++)
-            text(a, a.font, 14, X0 + 12, ay + (IP ? 10 : 14) + (i + 1) * LH, SILK_DIM,
-                 i == 3 && lines.size() > 4 ? fit(a, a.font, 14, lines[i] + " \xe2\x80\xa6", aw - 24) : lines[i]);
-    }
+    const float ly = ay + (aboutH - a.lh(14)) / 2;
+    text(a, a.bold, 14, X0 + 12, ly, SILK, title);
+    text(a, a.font, 14, X0 + 12 + text_w(a, a.bold, 14, title) + 14, ly, SILK_DIM, body);
 }
 
 }  // namespace nui

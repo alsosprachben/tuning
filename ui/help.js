@@ -28,6 +28,7 @@ const HELP = {
       ['STOPS', 'The selected part\'s organ: its stops or drawbars, and a tonewheel organ\'s drive.'],
       ['PIANO', 'The pedals, the dampers on the strings, and a key used as the sustain pedal.'],
       ['DRUMS', 'The drum kits and their sounds as pads to play; the user sets.'],
+      ['AMP', 'The selected part\'s speaker, its pickups, its valve\'s drive, and a Leslie\'s rotors.'],
       ['EFFECTS', 'The insertion effect, and the reverb, chorus, delay and EQ every part shares.'],
       ['MATRIX', 'What the wheels, aftertouch and two controllers move on the selected part.'],
       ['TUNING', 'The tuning every part plays in, and the Indian voices\' raga tuning.'],
@@ -104,7 +105,6 @@ const HELP = {
       ['A tile', 'Tap to play that patch on the selected part. The lit tile is the part\'s patch now; one blinking is still being built.'],
       ['Number', 'The program number, a variation after the dot; KIT and a number for a drum kit.'],
       ['★', 'Keeps the patch in Favourites (saved beside the session).'],
-      ['The notes below', 'What the selected part\'s patch is, how sure we are of it, and what it was fitted to.'],
     ],
   },
   synth: {
@@ -210,7 +210,7 @@ const HELP = {
       ['16′, 8′, 4′…', 'The pitch in organ feet: 8′ sounds as written, 16′ an octave lower, 4′ an octave higher; 2-2/3′ and 1-3/5′ add the twelfth and the seventeenth.'],
       ['Perc 3rd / Perc 2nd', 'A tonewheel organ\'s percussion: a short ping on the third or second harmonic as each key goes down, voiced two ways, L102 and B3.'],
       ['N of M drawn', 'How many stops are drawn.'],
-      ['The notes below', 'Touch a stop for what it is and what it was fitted to.'],
+      ['The line below', 'Touch a stop for what it is.'],
     ],
   },
   drive: {
@@ -238,7 +238,7 @@ const HELP = {
     terms: [
       ['PICKUP', 'Which of the instrument\'s pickups it plays on, on a switch drawn as the instrument\'s own: a 5-way blade (the Stratocaster\'s, the Ibanez\'s), a Jazz Bass\'s two volume knobs, a Clavinet\'s two rockers. Under it, the string with its coils where they sit, the ones heard lit.'],
       ['VALVE', 'The amplifier\'s triode stage and its drive: clean at 0, the edge of breakup at 1, a clip past it. DRIVE is the drive set; SOUNDING beside it what plays, the mod wheel\'s scale on it (up to four times the voice\'s own, the knobs\' reach). AS THE VOICE puts the voice\'s back.'],
-      ['SPEAKER', 'The cabinet: the voice\'s own, or another it can play through. The line under the buttons says what that speaker is and how we know it -- measured, fitted, or voiced from its design.'],
+      ['SPEAKER', 'The cabinet: the voice\'s own, or another it can play through. The line under the buttons says what that speaker is.'],
       ['LESLIE', 'An organ\'s rotating speaker: its speed (STOP, SLOW, FAST -- the half-moon, CC80) and how it is heard (IN THE ROOM, or TWO MICS round it). Shown when the organ plays through one.'],
       ['Kept', 'The part keeps its valve, speaker and how its Leslie is heard through program changes, and in the session.'],
     ],
@@ -247,22 +247,22 @@ const HELP = {
     title: 'Pickup',
     intro: 'The pickups the part\'s instrument plays on, on the AMP card. A pickup hears the string at the point where it sits: near the bridge it hears the upper harmonics strongly and the fundamental weakly (bright, thin), toward the neck the reverse (round, full). Two coils together add their combs -- and where they hear the string in opposite phase, cancel, which is the in-between positions\' hollow "quack". Choose a position, part by part; the session keeps it, and a program change puts the part back on its new voice\'s own.',
     terms: [
-      ['Stratocaster', 'Its 5-way blade, numbered as a Strat player numbers it: 1 the bridge pickup, 2 bridge and middle, 3 the middle, 4 middle and neck, 5 the neck. The neck pickup is fitted to recordings; position 4 is the fitted Funk Guitar\'s; the middle and bridge pickups are placed and wound as a standard Stratocaster\'s, from the neck\'s fit.'],
-      ['Humbuckers', 'The Ibanez\'s 5-way blade, numbered as Ibanez does: 1 the neck humbucker, 2 its two coils in parallel, 3 both humbuckers, 4 the two inside coils, 5 the bridge humbucker. The neck and bridge humbuckers are fitted to recordings; the rest are derived from them, wired as Ibanez\'s standard two-humbucker switch (DiMarzio\'s chart of it). Overdriven and Distortion Guitar play the bridge; Jazz Guitar the neck.'],
-      ['Jazz Bass', 'No switch: its two volume knobs, neck and bridge. Tap one to turn it fully up or off (one always stays up). Both up is the fitted sound; each alone is derived from it -- the bridge alone the growl, the neck alone the thump.'],
-      ['Clavinet', 'The D6\'s two rocker switches: A/B and C/D. A C the centre pickup alone (warm, the fitted one), B C the bridge pickup (thin), B D both in phase (full), A D both against each other (hollow: the fundamental cancelled -- the funk sound). The letters as the DAFx-12 paper on the D6\'s pickups lists them.'],
+      ['Stratocaster', 'Its 5-way blade, numbered as a Strat player numbers it: 1 the bridge pickup, 2 bridge and middle, 3 the middle, 4 middle and neck, 5 the neck.'],
+      ['Humbuckers', 'The Ibanez\'s 5-way blade, numbered as Ibanez does: 1 the neck humbucker, 2 its two coils in parallel, 3 both humbuckers, 4 the two inside coils, 5 the bridge humbucker. Overdriven and Distortion Guitar play the bridge; Jazz Guitar the neck.'],
+      ['Jazz Bass', 'No switch: its two volume knobs, neck and bridge. Tap one to turn it fully up or off (one always stays up). Both up is the full sound; the bridge alone the growl, the neck alone the thump.'],
+      ['Clavinet', 'The D6\'s two rocker switches: A/B and C/D. A C the centre pickup alone (warm), B C the bridge pickup (thin), B D both in phase (full), A D both against each other (hollow: the fundamental cancelled -- the funk sound).'],
       ['Level', 'A bridge pickup is wound hotter, as a real one is, to make up for the string moving less there; parallel coils load each other, which lifts their resonance. The levels follow from that, as on the instrument.'],
       ['CC85', 'A file or a keyboard chooses it too, on the part\'s channel, at once (the next notes). A program change puts it back to the voice\'s own, so a file sends it after the program change, as it would a volume: bank select, program change, then CC83 and CC85. 0 the voice\'s own, 1 neck, 2 the second position (a Strat\'s neck and middle, the Ibanez\'s neck humbucker in parallel), 3 middle, 4 the fourth (a Strat\'s middle and bridge, the Ibanez\'s inside coils), 5 bridge, 6 neck and bridge (both), 7 the Clavinet\'s both in anti-phase. One the instrument does not have leaves it its own.'],
     ],
   },
   cabinet: {
     title: 'Speaker (cabinet)',
-    intro: 'The speaker the part\'s voice plays through, on the AMP card -- what we model there, and how we know it. Every amplified voice has one of its own: the guitars and basses their amps\' cabinets, the Rhodes its suitcase, the Wurlitzer the speakers in its lid, the organs a Leslie or the Hammond\'s own speaker. Choose another, part by part; the session keeps it, and a program change puts the part back on its new voice\'s own.',
+    intro: 'The speaker the part\'s voice plays through, on the AMP card. Every amplified voice has one of its own: the guitars and basses their amps\' cabinets, the Rhodes its suitcase, the Wurlitzer the speakers in its lid, the organs a Leslie or the Hammond\'s own speaker. Choose another, part by part; the session keeps it, and a program change puts the part back on its new voice\'s own.',
     terms: [
-      ['OWN \u00b7 name', 'The voice\'s own speaker, named. Tap another to play through it; the line under the buttons says what that speaker is and what it was fitted to.'],
+      ['OWN \u00b7 name', 'The voice\'s own speaker, named. Tap another to play through it; the line under the buttons says what that speaker is.'],
       ['DIRECT', 'No speaker: the amplifier\'s output straight to the desk, as a direct box takes it. Brighter and harder, with nothing rounding the top.'],
       ['LESLIE', 'A tonewheel organ\'s rotating speaker: its horn and drum turning. Only an organ offers it. Its speed and how it is heard are on the AMP card\'s LESLIE.'],
-      ['HAMMOND', 'A Hammond\'s own speaker, no rotors: the L-102 spinet\'s, measured.'],
+      ['HAMMOND', 'A Hammond\'s own speaker, no rotors: the spinet\'s single 12-inch cone.'],
       ['Level', 'A Leslie coming or going keeps the organ\'s level: the rotors\' path is quieter than a fixed speaker\'s, and that is put back.'],
       ['CC83', 'A file or a keyboard chooses it too, on the part\'s channel, at once (the next notes). A program change puts it back to the voice\'s own, so a file sends it after the program change, as it would a volume: bank select, program change, then CC83 and CC85. 0 the voice\'s own, 1 direct, 2 a Leslie, 3 the Hammond\'s speaker, 4 a 1x12 guitar combo, 5 a closed 4x12, 6 a JC-120, 7 a bass 4x10, 8 the Rhodes suitcase, 9 the Wurlitzer\'s lid. One the voice does not offer leaves it its own.'],
     ],
@@ -314,7 +314,7 @@ const HELP = {
       ['Kits (left)', 'Tap a kit to put it on the selected part.'],
       ['A pad', 'Strikes its sound: higher up the pad is harder. Several fingers can play at once. Pads light as the keyboard or a file plays them.'],
       ['The key', 'Each pad\'s key name and MIDI number.'],
-      ['The notes', 'Touch a pad for what it is and what it was fitted to.'],
+      ['The line', 'Touch a pad for what it is, and the set it borrows from when it does.'],
       ['User Set 1 / 2', 'Kits you build yourself: each key takes its sound from any key of any kit. Touch a pad to choose.'],
     ],
   },
@@ -812,6 +812,15 @@ Object.assign(HELP, {
 });
 
 // THE CONTENTS: the topics in order, under their headings
+// THE CREDITS: the recordings our voices were modelled on, each source as its
+// licence asks it to be named -- the terms filled from credits.json (written
+// by examples/gm_coverage.py --about), by app.js here and help_json.js native
+HELP.credits = {
+  title: 'Credits',
+  intro: 'Many of the instruments here were modelled on recordings that their makers shared under open licences. These are the sources, by the voice each one shaped; CC BY licences ask to be named, and CC0 sources are listed with thanks.',
+  terms: [],
+};
+
 const HELP_TOC = [
   ['Start here', ['basics']],
   ['How to…', ['how:keyboard', 'how:file', 'how:layer', 'how:split', 'how:pedal', 'how:organ', 'how:save', 'how:tuning', 'how:stuck', 'how:breakup', 'how:quit']],
@@ -830,6 +839,7 @@ const HELP_TOC = [
   ['Scenes', ['scenes', 'sc:presets', 'sc:scenes', 'sc:metro', 'sc:gs']],
   ['Files', ['files', 'fl:browse', 'fl:file', 'fl:mode', 'fl:vel', 'fl:play', 'fl:render']],
   ['Setup', ['setup', 'su:midi', 'su:module', 'su:msgr', 'su:sound', 'su:rubato']],
+  ['About', ['credits']],
 ];
 
 // THE VIEWER: the contents (or what a search found) on the left, the topic on

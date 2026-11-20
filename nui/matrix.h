@@ -80,7 +80,7 @@ inline void draw_matrix(App &a)
     static const char *SRC[6] = {"Mod wheel", "Pitch bend", "Channel aftertouch", "Poly aftertouch", "CC1", "CC2"};
     static const char *DG[11] = {"", "", "", "LFO 1", "LFO 1", "LFO 1", "LFO 1", "LFO 2", "LFO 2", "LFO 2", "LFO 2"};
     static const char *DN[11] = {"Pitch", "Cutoff", "Amplitude", "Rate", "Pitch", "Filter", "Amp", "Rate", "Pitch", "Filter", "Amp"};
-    const float aboutH = IP ? 0 : 100, SW = IP ? 156 : 230, gy = Y0 + (IP ? 30 : 40), YB = (card_y1(a)) - aboutH - (IP ? 20 : 34);
+    const float aboutH = 0, SW = IP ? 156 : 230, gy = Y0 + (IP ? 30 : 40), YB = (card_y1(a)) - aboutH - (IP ? 20 : 34);
     const float cw = (X1 - X0 - SW) / 11, rh = (YB - gy) / 6;
     look::tray(a, X0, Y0, X1 - X0, YB - Y0, 9);
     // the destinations across (the LFOs' groups apart)
@@ -158,25 +158,6 @@ inline void draw_matrix(App &a)
         }
         text(a, a.font, 14, X0, YB + 8, SILK_DIM, fit(a, a.font, 14, s, X1 - X0));
     }
-    // WHAT IT IS (the laptop's: the iPad's in its ?)
-    if (IP)
-        return;
-    const float ay = 1056 - aboutH, aw = X1 - X0;
-    look::tray(a, X0, ay, aw, aboutH, 8);
-    if (const J *ef = L.about.get("effects"); ef && ef->is(J::OBJ))
-        for (const auto &kv : ef->o)
-            if (kv.first.rfind("Controller matrix", 0) == 0 && kv.second.is(J::ARR) && kv.second.a.size() >= 2) {
-                text(a, a.bold, 14, X0 + 12, ay + 10, SILK, "Controller matrix");
-                const int r = (int)kv.second.a[0].d();
-                const J *lv = L.about.get("levels");
-                const std::string rt = std::to_string(r) + " \xc2\xb7 " +
-                                       (lv && lv->is(J::ARR) && r >= 0 && r < (int)lv->a.size() && lv->a[(size_t)r].is(J::STR) ? lv->a[(size_t)r].s : "");
-                text(a, a.font, 14, X1 - 12 - text_w(a, a.font, 14, rt), ay + 10, LCD, rt);
-                const auto lines = wrap(a, a.font, 14, kv.second.a[1].is(J::STR) ? kv.second.a[1].s : "", aw - 24);
-                for (size_t i = 0; i < lines.size() && i < 3; i++)
-                    text(a, a.font, 14, X0 + 12, ay + 32 + i * 18, SILK_DIM,
-                         i == 2 && lines.size() > 3 ? fit(a, a.font, 14, lines[i] + " \xe2\x80\xa6", aw - 24) : lines[i]);
-            }
 }
 
 }  // namespace nui

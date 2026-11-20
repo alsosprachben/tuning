@@ -2,7 +2,7 @@
 // a pad struck harder the higher it is touched, lit as the keyboard or a
 // file plays it (the engine's hits). The kits down the side. A user set
 // (GS's two): each key takes its sound from a key of any set. Beside the
-// pads what the pad last touched is and what it was fitted to.
+// pads what the pad last touched is, and the set it borrows from.
 #pragma once
 
 #include <functional>
@@ -368,7 +368,7 @@ inline void draw_drums(App &a)
     }
     look::tray(a, SX, sy, SW, Y1 - sy, 9);
     if (D.touched < 0) {
-        const auto ls = wrap(a, a.font, 14, "Touch a pad for what it is and what it was fitted to.", SW - 24);
+        const auto ls = wrap(a, a.font, 14, "Touch a pad for what it is.", SW - 24);
         for (size_t i = 0; i < ls.size(); i++)
             text(a, a.font, 14, SX + 12, sy + 12 + i * LH, LCD_DIM, ls[i]);
         return;
@@ -385,24 +385,18 @@ inline void draw_drums(App &a)
         nkit = e.set;
         nkey = e.skey;
     }
+    // the pad's key and name (whole, wrapped), and the set it borrows from when it does
     const J *rn = drum_note(about, nkit, nkey);
-    text(a, a.bold, 14, SX + 12, sy + 10, SILK, fit(a, a.bold, 14, note_name_sharp(D.touched) + " " + e.name, SW - 24));
-    if (!rn || !rn->is(J::ARR) || rn->a.size() < 2) {
-        text(a, a.font, 14, SX + 12, sy + 14 + LH, LCD_DIM, "No notes for this one.");
-        return;
+    float y = sy + 10;
+    for (const auto &l : wrap(a, a.bold, 14, note_name_sharp(D.touched) + " " + e.name, SW - 24)) {
+        text(a, a.bold, 14, SX + 12, y, SILK, l);
+        y += LH;
     }
-    const int rt = (int)rn->a[0].d();
-    const J *lv = about.get("levels");
-    const auto rl = wrap(a, a.font, 14, std::to_string(rt) + " \xc2\xb7 " +
-         (lv && lv->is(J::ARR) && rt >= 0 && rt < (int)lv->a.size() && lv->a[(size_t)rt].is(J::STR) ? lv->a[(size_t)rt].s : ""), SW - 24);
-    for (size_t i = 0; i < rl.size(); i++)
-        text(a, a.font, 14, SX + 12, sy + 14 + (i + 1) * LH, LCD, rl[i]);
-    const float by = sy + 20 + (rl.size() + 1) * LH;
-    const auto ls = wrap(a, a.font, 14, rn->a[1].is(J::STR) ? rn->a[1].s : "", SW - 24);
-    const size_t maxl = (size_t)std::max(1.0f, (Y1 - by - 8) / LH);
-    for (size_t i = 0; i < ls.size() && i < maxl; i++)
-        text(a, a.font, 14, SX + 12, by + i * LH, SILK_DIM,
-             i + 1 == maxl && ls.size() > maxl ? fit(a, a.font, 14, ls[i] + " \xe2\x80\xa6", SW - 24) : ls[i]);
+    const std::string w = rn && rn->is(J::STR) ? rn->s : std::string("its own sound");
+    for (const auto &l : wrap(a, a.font, 14, w, SW - 24)) {
+        text(a, a.font, 14, SX + 12, y + 4, w.rfind("stand-in", 0) == 0 ? LCD : SILK_DIM, l);
+        y += LH;
+    }
 }
 
 }  // namespace nui

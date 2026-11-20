@@ -134,7 +134,7 @@ inline void draw_piano(App &a)
     const std::string info = ch < 0 ? "pedals on every channel" : "pedals on channel " + std::to_string(ch + 1);
     text(a, a.font, 14, X1 - text_w(a, a.font, 14, info), HY + 1, SILK_DIM, info);
 
-    const float aboutH = IP ? 76 : 140, Y0 = IP ? 260 : 394, Y1 = (card_y1(a)) - aboutH - (IP ? 8 : 10);
+    const float aboutH = 0, Y0 = IP ? 260 : 394, Y1 = (card_y1(a)) - aboutH - (IP ? 8 : 10);
     const float c1 = IP ? 300 : 430, c3 = IP ? 280 : 400, gap = IP ? 6 : 8, c2 = X1 - X0 - c1 - c3 - 2 * gap;
     auto col = [&](float x, float w, const char *title, const char *key) {
         look::tray(a, x, Y0, w, Y1 - Y0, 9);
@@ -282,26 +282,6 @@ inline void draw_piano(App &a)
                                                  : "Sympathetic strings: off (nvlive was started without them).", c3 - 24)) {
         text(a, a.font, 14, kx + 12, ky, SILK_DIM, l);
         ky += LH;
-    }
-
-    // WHAT IT IS: the part's patch
-    const float ay = (card_y1(a)) - aboutH, aw = X1 - X0;
-    look::tray(a, X0, ay, aw, aboutH, 8);
-    const J *p = part(a, a.row);
-    const J *e = nullptr;
-    if (const J *pr = L.about.get("programs"); pr && p && !flag(p, "drums"))
-        e = pr->get((std::to_string((int)num(p, "program")) + "." + std::to_string((int)num(p, "variation"))).c_str());
-    if (e && e->is(J::ARR) && e->a.size() >= 2) {
-        text(a, a.bold, 14, X0 + 12, ay + (IP ? 6 : 10), SILK, fit(a, a.bold, 14, str(p, "name"), aw - 420));
-        const int r = (int)e->a[0].d();
-        const J *lv = L.about.get("levels");
-        const std::string rt = std::to_string(r) + " \xc2\xb7 " +
-                               (lv && lv->is(J::ARR) && r >= 0 && r < (int)lv->a.size() && lv->a[(size_t)r].is(J::STR) ? lv->a[(size_t)r].s : "");
-        text(a, a.font, 14, X1 - 12 - text_w(a, a.font, 14, rt), ay + (IP ? 6 : 10), LCD, rt);
-        const auto lines = wrap(a, a.font, 14, e->a[1].is(J::STR) ? e->a[1].s : "", aw - 24);
-        for (size_t i = 0; i < lines.size() && i < 5; i++)
-            text(a, a.font, 14, X0 + 12, ay + (IP ? 10 : 14) + (i + 1) * LH, SILK_DIM,
-                 i == 4 && lines.size() > 5 ? fit(a, a.font, 14, lines[i] + " \xe2\x80\xa6", aw - 24) : lines[i]);
     }
 }
 

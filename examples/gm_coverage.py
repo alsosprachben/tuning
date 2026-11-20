@@ -2171,33 +2171,56 @@ def class_tree_md():
 
 
 def about_json(path):
-    """THE NOTES, for the touch interface's library and stops (ui/about.json):
-    each program's and variation's rating and note, by "program.bank", and each
-    organ's stops' by program and rank name -- the same words as this page,
-    so the two cannot drift. Written by --about[=PATH]."""
+    """THE INTERFACES' WORDS (ui/about.json, read by the touch and native
+    interfaces): each patch's and drum set's few words (variation_desc), each
+    effect's, organ stop's, speaker's and pickup's line (ui_words), the drum
+    keys a set borrows -- what each thing IS, never how it was made: the
+    ratings and the fitting notes stay on this page. Refuses to write a patch
+    without its words, or words that name a source. And THE CREDITS
+    (ui/credits.json beside it): every source an open licence asks us to
+    name, by the voice it made. Written by --about[=PATH]."""
     import json
-    progs = {"%d.0" % p: [r, note] for p, (r, note) in RATED.items()}
-    for p, v, name, cls, r, note in variations():
-        if cls:
-            progs["%d.%d" % (p, v)] = [r, note]
+    import re
+    import percussion_map as PM
+    import patch_map as PMC
+    import variation_desc as VD
+    import ui_words as UW
+    # every patch the engine lists: the capitals, the variations, the MT-32's and CM-32P's banks
+    keys = [(p, 0) for p in range(128)] + sorted(k for k in dict.keys(PMC.VARIATIONS))
+    keys += [(i, 127) for i in range(len(PMC.MT32_SET))] + [(i, 126) for i in range(len(PMC.CM32P_SET))]
+    desc, missing = {}, []
+    for p, v in keys:
+        d = VD.patch_desc(p, v)
+        if d:
+            desc["%d.%d" % (p, v)] = d
+        elif not (v and PMC.variation_class(p, v) is None and (p, v) not in VD.derived()):
+            missing.append((p, v))
+    kit_desc = {str(k): VD.kit_desc(k) for k in PM.DRUM_SETS if VD.kit_desc(k)}
+    # ...the drum keys a set borrows from another, said so (a pad's name says the rest)
+    def borrowed(note):
+        m = re.search(r"(Standard|set (\d+))'s key (\d+)(, played backwards)?( -- the nearest we have)?", note)
+        if not m:
+            return None
+        kit = int(m.group(2)) if m.group(2) else 0
+        w = "%s kit's %s" % (VD._kit_name(kit), VD._drum_name(int(m.group(3)), kit))
+        w += ", backwards" if m.group(4) else ""
+        return ("stand-in: " + w) if m.group(5) else ("plays the " + w)
+    kits = {}
+    for k, ks in KIT_RATED.items():
+        if k < 128:
+            kk = {str(n): borrowed(note) for n, (r, note) in ks.items() if borrowed(note)}
+            if kk:
+                kits[str(k)] = kk
+    perc = {str(k): borrowed(note) for k, (r, note) in PERC_RATED.items() if borrowed(note)}
+    # ...the organs' stops
     stop_notes = {}
     for ps, panel, rows, controls in stops():
         for p in ps:
-            stop_notes[str(p)] = {"panel": panel, "stops": {n: [r, note] for bit, n, r, note in rows}}
-    # ...and each drum's: Standard's keys (PERC_RATED), a set's own over them
-    # (KIT_RATED; a set in KIT_ONLY plays nothing on the keys it lacks)
-    import percussion_map as PM
-    perc = {str(k): [r, note] for k, (r, note) in PERC_RATED.items()}
-    kits = {str(k): {str(n): [r, note] for n, (r, note) in ks.items()} for k, ks in KIT_RATED.items() if k < 128}
-    # ...and each patch's few words, the pickers' (variation_desc: what a
-    # variation changes; what a capital is modelled on -- "Hammond")
-    import variation_desc as VD
-    desc = {"%d.0" % p: VD.patch_desc(p) for p in range(128) if VD.patch_desc(p)}
-    desc.update({"%d.%d" % k: d for k, d in VD.VARIATION_DESC.items()})
-    # ...and THE CABINETS the cards offer (patch_map.CAB_CHOICES, by index):
-    # each one's label and what it is -- with the voice's own named, by program
-    import patch_map as PMC
-    cabs = [[PMC.CAB_LABELS[c], PMC.CAB_ABOUT[c]] for c in PMC.CAB_CHOICES]
+            words = UW.HARPSICHORD_STOP if p == 6 else UW.STOP_ABOUT
+            stop_notes[str(p)] = {"panel": UW.STOPS_PANEL.get(p, panel.split(" (")[0]),
+                                  "stops": {n: words.get(n, "") for bit, n, r, note in rows}}
+    # ...the speakers, by patch_map.CAB_CHOICES' index, with the voice's own named, by program
+    cabs = [[PMC.CAB_LABELS[c], UW.CAB_ABOUT.get(c, "")] for c in PMC.CAB_CHOICES]
     own = {}
     for p in range(128):
         for v in [0] + sorted(vv for (pp, vv) in dict.keys(PMC.VARIATIONS) if pp == p):
@@ -2212,7 +2235,7 @@ def about_json(path):
     # with each voice's family and its own choice (else the nearest), by program
     pk_order = {"strat": [1, 2, 3, 4, 5], "ibanez": [1, 2, 6, 4, 5], "jbass": [1, 6, 5], "clav": [1, 5, 6, 7]}
     pickups = {f: {"name": d["name"], "switch": d["switch"], "order": pk_order[f],
-                   "choices": {str(c): [e["label"], e["about"], list(e.get("points", ()))]
+                   "choices": {str(c): [e["label"], UW.plain(e["about"]), list(e.get("points", ()))]
                                for c, e in d.items() if isinstance(c, int)}}
                for f, d in PMC.PICKUP_FAMILIES.items()}
     pk_own = {}
@@ -2222,16 +2245,98 @@ def about_json(path):
             c0 = c0 if isinstance(c0, type) or c0 is None else c0(60)
             if c0 is not None and PMC.pk_choices(c0):
                 pk_own["%d.%d" % (p, v)] = [c0.pickup_family, PMC.pk_near(c0)]
-    doc = {"levels": [LEVEL[k] for k in range(5)], "programs": progs, "desc": desc,
-           "cabinets": cabs, "cab_own": own, "pickups": pickups, "pk_own": pk_own, "stops": stop_notes, "perc": perc,
-           "kits": kits, "kit_only": sorted(k for k in getattr(PM, "KIT_ONLY", ()) if k < 128),
-           "efx": {k: [r, note] for k, (r, note) in EFX_RATED.items()},
-           "effects": {k: [r, note] for k, r, note in EFFECTS_RATED}}
+    efx = {k: UW.EFX_ABOUT.get(k, "") for k in EFX_RATED}
+    effects = {k: UW.EFFECTS_ABOUT.get(k, UW.EFFECTS_ABOUT.get(k.split(" (")[0], "")) for k, r, note in EFFECTS_RATED}
+    doc = {"desc": desc, "kit_desc": kit_desc, "cabinets": cabs, "cab_own": own, "pickups": pickups,
+           "pk_own": pk_own, "stops": stop_notes, "perc": perc, "kits": kits,
+           "kit_only": sorted(k for k in getattr(PM, "KIT_ONLY", ()) if k < 128), "efx": efx, "effects": effects}
+    # THE CHECKS: every patch said, and nothing that says where a sound came from
+    words = []
+
+    def walk(x):
+        if isinstance(x, str):
+            words.append(x)
+        elif isinstance(x, dict):
+            for v in x.values():
+                walk(v)
+        elif isinstance(x, list):
+            for v in x:
+                walk(v)
+    walk(doc)
+    bad = sorted({w for w in words if UW.has_provenance(w)})
+    blank = [k for k, v in list(efx.items()) + list(effects.items()) if not v]
+    if missing or bad or blank:
+        for p, v in missing:
+            print("no words for patch %d.%d" % (p, v))
+        for w in bad:
+            print("names a source: %s" % w)
+        for k in blank:
+            print("no words for effect %s" % k)
+        return 1
     with open(path, "w") as f:
         json.dump(doc, f, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
         f.write("\n")
-    print("%s: %d programs and variations, %d descriptions, %d organs' stops, %d drum sets"
-          % (path, len(progs), len(desc), len(stop_notes), len(kits)))
+    credits = credits_json(os.path.join(os.path.dirname(path), "credits.json"))
+    print("%s: %d patches' words, %d drum sets', %d organs' stops, %d effects; %s: %d sources credited"
+          % (path, len(desc), len(kit_desc), len(stop_notes), len(efx) + len(effects),
+             os.path.basename(credits[0]), credits[1]))
+    return 0
+
+
+# (a source an open licence asks to be named: its licence, and its maker's words around it)
+_LICENCE = re.compile(r"(CC BY(?:-SA|-NC)?(?: \d\.\d)?|CC0|public domain|Public Domain)")
+
+
+_ACRONYMS = {"VCSL", "VSCO", "NYU", "IDMT", "SMT", "CC", "II", "III", "CE", "SC", "GM", "GS", "UNT", "CR", "TR", "BD",
+              "SD", "PARADISEC", "HDF", "ELA", "DRS", "MKS", "JX", "OB", "SH", "TB", "LP", "EP", "FM", "B3", "L102"}
+
+
+def credits_json(path):
+    """THE CREDITS (ui/credits.json): each voice's sources as its notes name
+    them -- the parenthesis or clause that holds a licence -- with the
+    examples/ paths and our own remarks taken out. CC BY and CC BY-SA ask to
+    be named; CC0 sources are listed too, as thanks."""
+    import json
+    seen, out = set(), []
+
+    def take(what, note):
+        for m in re.finditer(r"\(([^()]*)\)", note):
+            t = m.group(1)
+            if not _LICENCE.search(t):
+                continue
+            t = re.sub(r";?\s*examples/[^;,)]*", "", t)
+            t = re.sub(r";?\s*[a-z_]+\.py[^;,)]*", "", t).strip(" ;,")
+            # (what the parenthesis is about: the clause before it, which names the take and its maker)
+            pre = note[:m.start()]
+            for sep in ("; ", ": ", ". ", " -- ", "("):
+                pre = pre.split(sep)[-1]
+            pre = re.sub(r"^(an? |the )?(fitted|refitted|refit|measured)( as a difference from GM \d+)? (to|on) ",
+                         "", pre.strip(), flags=re.I).strip(" ,")
+            # (a shouted name, as the notes write a voice's subject, said plainly)
+            pre = re.sub(r"\b([A-Z]{2,})('S)?\b", lambda w: w.group(1)[0] + w.group(1)[1:].lower() +
+                         ("'s" if w.group(2) else "") if w.group(1) not in _ACRONYMS else w.group(0), pre)
+            if pre and pre.lower() not in t.lower():
+                t = "%s (%s)" % (pre, t)
+            if t and (what, t) not in seen:
+                seen.add((what, t))
+                out.append({"voice": what, "source": t, "licence": _LICENCE.search(t).group(1)})
+    for p, (r, note) in sorted(RATED.items()):
+        take("%03d %s" % (p, GM[p]), note)
+    for p, v, name, cls, r, note in variations():
+        if cls:
+            take("%03d.%d %s" % (p, v, name), note)
+    for k, ks in sorted(KIT_RATED.items()):
+        for n, (r, note) in sorted(ks.items()):
+            take("drum set %d, key %d" % (k, n), note)
+    for k, (r, note) in sorted(PERC_RATED.items()):
+        take("drum key %d" % k, note)
+    for ps, panel, rows, controls in stops():
+        for bit, n, r, note in rows:
+            take("stop %s" % n, note)
+    with open(path, "w") as f:
+        json.dump(out, f, ensure_ascii=False, indent=0)
+        f.write("\n")
+    return path, len(out)
 
 
 def main(argv):

@@ -153,7 +153,7 @@ inline void draw_stops(App &a)
 
     const J *drive = T.st.get("drive");
     const bool has_drive = drive && drive->is(J::ARR) && drive->a.size() >= 3;
-    const float aboutH = IP ? 84 : 140, DW = IP ? 220 : 350, JX1 = has_drive ? X1 - DW - 14 : X1, JY0 = Y0_, JY1 = Y1_ - aboutH - (IP ? 8 : 14);
+    const float aboutH = IP ? 30 : 44, DW = IP ? 220 : 350, JX1 = has_drive ? X1 - DW - 14 : X1, JY0 = Y0_, JY1 = Y1_ - aboutH - (IP ? 8 : 14);
     const float LH = a.lh(14) + (IP ? 3 : 4);
     const J *rows = T.st.get("rows");
     const int nrows = rows && rows->is(J::ARR) ? (int)rows->a.size() : 0;
@@ -298,43 +298,26 @@ inline void draw_stops(App &a)
         }
     }
 
-    // WHAT IT IS: the stop last touched, else the organ's patch and a hint
+    // WHAT IT IS: the stop last touched, else the organ's own words and a hint -- a line
     const float ay = Y1_ - aboutH, aw = X1 - X0;
     look::tray(a, X0, ay, aw, aboutH, 8);
     const J *org = nullptr;
     if (const J *ss = L.about.get("stops"))
         org = ss->get(std::to_string(prog).c_str());
-    std::string title, body, hint;
-    const J *e = nullptr;
-    if (org && T.touched >= 0 && T.touched_prog == prog && T.touched < (int)names.size())
+    std::string title, body;
+    if (org && T.touched >= 0 && T.touched_prog == prog && T.touched < (int)names.size()) {
+        title = names[(size_t)T.touched];
         if (const J *os = org->get("stops"))
-            if ((e = os->get(names[(size_t)T.touched].c_str())))
-                title = names[(size_t)T.touched];
-    if (!e) {
-        const J *p = part(a, a.row);
+            body = str(os, names[(size_t)T.touched].c_str());
+    } else {
         title = part_name;
-        if (const J *pr = L.about.get("programs"); pr && p)
-            e = pr->get((std::to_string((int)num(p, "program")) + "." + std::to_string((int)num(p, "variation"))).c_str());
+        body = patch_desc(a, part(a, a.row));
         if (org)
-            hint = str(org, "panel") + ": touch a stop for what it is.";
+            body += (body.empty() ? "" : ". ") + std::string("Touch a stop for what it is.");
     }
-    text(a, a.bold, 14, X0 + 12, ay + (IP ? 6 : 10), SILK, fit(a, a.bold, 14, title, aw - 420));
-    int lines_from = 0;
-    if (e && e->is(J::ARR) && e->a.size() >= 2) {
-        const int r = (int)e->a[0].d();
-        const J *lv = L.about.get("levels");
-        const std::string rt = std::to_string(r) + " \xc2\xb7 " +
-                               (lv && lv->is(J::ARR) && r >= 0 && r < (int)lv->a.size() && lv->a[(size_t)r].is(J::STR) ? lv->a[(size_t)r].s : "");
-        text(a, a.font, 14, X1 - 12 - text_w(a, a.font, 14, rt), ay + (IP ? 6 : 10), LCD, rt);
-        body = e->a[1].is(J::STR) ? e->a[1].s : "";
-    }
-    auto lines = wrap(a, a.font, 14, body, aw - 24);
-    const size_t maxl = hint.empty() ? 5 : 4;
-    for (size_t i = 0; i < lines.size() && i < maxl; i++, lines_from++)
-        text(a, a.font, 14, X0 + 12, ay + (IP ? 10 : 14) + (i + 1) * LH, SILK_DIM,
-             i + 1 == maxl && lines.size() > maxl ? fit(a, a.font, 14, lines[i] + " \xe2\x80\xa6", aw - 24) : lines[i]);
-    if (!hint.empty())
-        text(a, a.font, 14, X0 + 12, ay + (IP ? 10 : 14) + (lines_from + 1) * LH, LCD_DIM, fit(a, a.font, 14, hint, aw - 24));
+    const float tx = X0 + 12 + text_w(a, a.bold, 14, title) + 14;
+    text(a, a.bold, 14, X0 + 12, ay + (aboutH - a.lh(14)) / 2, SILK, title);
+    text(a, a.font, 14, tx, ay + (aboutH - a.lh(14)) / 2, SILK_DIM, body);
 }
 
 }  // namespace nui

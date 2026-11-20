@@ -5,7 +5,7 @@
 // favourites. The tiles scroll under a finger (a drag scrolls, a tap
 // picks); the search has its own keys (a touch screen has no keyboard),
 // and a keyboard's typing reaches it too. Under them, what the patch is
-// and what it was fitted to (ui/about.json, the coverage notes).
+// in a few words (ui/about.json's, from variation_desc.py).
 #pragma once
 
 #include <set>
@@ -292,31 +292,8 @@ inline void draw_library(App &a)
     text(a, a.font, 14, MX + SW + 16, SY + 16, SILK_DIM, info_);
     heading(a, MX + SW + 16 + text_w(a, a.font, 14, info_) + 4, SY + 16, "", "library");   // (the card's ?)
 
-    // THE NOTES on the part's patch (about.json: its rating, what it was fitted to)
-    const float aboutH = T ? 86 : 150, TY = T ? 270 : 410, TB = (L.typing ? Y1 - 5 * 56 - 24 : Y1 - aboutH - 10);
-    const float LH = a.lh(14) + (T ? 3 : 4);       // (a line of notes)
-    const size_t ML = T ? 4 : 6;
-    if (!L.typing && cur && !flag(cur, "drums")) {
-        const std::string key = std::to_string((int)num(cur, "program")) + "." + std::to_string((int)num(cur, "variation"));
-        const J *pr = L.about.get("programs");
-        const J *e = pr ? pr->get(key) : nullptr;
-        if (e && e->is(J::ARR) && e->a.size() >= 2) {
-            const int r = (int)e->a[0].d();
-            const J *lv = L.about.get("levels");
-            const std::string lvl = lv && lv->is(J::ARR) && r >= 0 && r < (int)lv->a.size() && lv->a[(size_t)r].is(J::STR)
-                                        ? lv->a[(size_t)r].s : "";
-            const float ay = Y1 - aboutH;
-            look::tray(a, MX, ay, MW, aboutH, 8);
-            const std::string pd = patch_desc(a, cur);
-            text(a, a.bold, 14, MX + 12, ay + 8, SILK, fit(a, a.bold, 14, str(cur, "name") + (pd.empty() ? "" : " \xc2\xb7 " + pd), MW - 400));
-            const std::string rt = std::to_string(r) + " \xc2\xb7 " + lvl;
-            text(a, a.font, 14, MX + MW - 12 - text_w(a, a.font, 14, rt), ay + 8, LCD, rt);
-            const auto lines = wrap(a, a.font, 14, e->a[1].is(J::STR) ? e->a[1].s : "", MW - 24);
-            for (size_t i = 0; i < lines.size() && i < ML; i++)
-                text(a, a.font, 14, MX + 12, ay + 12 + LH * (i + 1), SILK_DIM,
-                     i + 1 == ML && lines.size() > ML ? fit(a, a.font, 14, lines[i] + " \xe2\x80\xa6", MW - 24) : lines[i]);
-        }
-    }
+    // (the patch's words are on its tile and on the display: the grid takes the card)
+    const float TY = T ? 270 : 410, TB = L.typing ? Y1 - 5 * 56 - 24 : Y1;
 
     // THE TILES: a grid that scrolls under a finger
     // (three across, a line taller than the names alone: each patch's few words, whole, on two lines under its name)

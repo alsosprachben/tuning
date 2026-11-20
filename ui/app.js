@@ -1142,7 +1142,7 @@ function drawDrumAbout() {
   let kit = d.kit, key = k;
   if (d.user !== undefined) { if (!e || e[3] < 0) { el.innerHTML = ''; return; } kit = e[2]; key = e[3]; }
   const rn = drumNote(kit, key);
-  el.innerHTML = rn ? aboutHtml(`${noteName(k)} ${e ? e[1] : ''}`, rn) : `<p class="ab-hint">${esc(e ? e[1] : '')}: no notes for this one.</p>`;
+  el.innerHTML = rn ? aboutHtml(`${noteName(k)} ${e ? e[1] : ''}`, rn) : `<p class="ab-hint">${esc(e ? e[1] : '')}: its own sound.</p>`;
 }
 // A USER SET's key: the set its sound comes from, then that set's key
 function drawUkey() {
@@ -1308,7 +1308,7 @@ function drawFxAbout(of) {
   const w = FX.aboutOf || 'efx';
   if (w === 'efx') {
     const x = FX.e.efx, type = FX.t.types.find(y => y[1] === x.msb && y[2] === x.lsb);
-    el.innerHTML = type ? (a.efx[type[3]] ? aboutHtml(type[3], a.efx[type[3]]) : `<p class="ab-hint">${esc(type[3])}: no notes yet.</p>`)
+    el.innerHTML = type ? (a.efx[type[3]] ? aboutHtml(type[3], a.efx[type[3]]) : '')
       : '<p class="ab-hint">Touch a knob or a type for what it is.</p>';
   } else el.innerHTML = aboutHtml(FX_NOTE[w].replace(' (system)', ''), a.effects[FX_NOTE[w]]);
 }
@@ -1360,7 +1360,7 @@ function drawMatrix() {
   $('mxGm2').textContent = m.gm2.length ? 'Set by a file\'s GM2 messages (shown, not changed here): ' +
     m.gm2.map(([cc, d, txt]) => `CC${cc} → ${MX_DEST[d].join(' ').trim()} ${txt}`).join(' · ') : '';
   const a = S.about, k = a && a.effects && Object.keys(a.effects).find(x => x.startsWith('Controller matrix'));
-  $('mxAbout').innerHTML = k ? aboutHtml('Controller matrix', a.effects[k]) : '';
+  $('mxAbout').innerHTML = '';
 }
 Kit.press($('mx'), async b => {
   const which = +b.dataset.which, on = MX.m && MX.m.learning === which;
@@ -1923,27 +1923,26 @@ Kit.press($('flRStop'), async () => { const r = await Wire.call('file_render_sto
 Kit.press($('flAsk'), b => flRender(b.dataset.ask === 'whole' ? 'best' : 'heard', b.dataset.ask === 'whole'), '.hb');
 
 // ---------------------------------------------------------------- THE NOTES
-// What each program and stop is, and what it was fitted to (about.json:
-// examples/gm_coverage.py --about, the coverage page's own words)
+// What each patch, stop, effect and drum key is, in a line (about.json:
+// examples/gm_coverage.py --about, from variation_desc.py and ui_words.py)
 fetch('about.json').then(r => (r.ok ? r.json() : null)).then(a => { S.about = a; drawAbout(); drawDisplay(); drawTiles(true); }).catch(() => {});
-function aboutHtml(title, rn) {
-  if (!rn) return '';
-  const [r, note] = rn, lv = S.about.levels[r] || '';
-  return `<div class="ab-head"><b>${esc(title)}</b><span class="ab-r r${r}">${r} · ${esc(lv)}</span></div><p>${esc(note)}</p>`;
+// the credits help topic's sources (credits.json, beside about.json)
+fetch('credits.json').then(r => (r.ok ? r.json() : null)).then(c => { if (c && HELP.credits) HELP.credits.terms = c.map(x => [x.voice, x.source]); }).catch(() => {});
+function aboutHtml(title, line) {
+  if (!line) return '';
+  return `<div class="ab-head"><b>${esc(title)}</b></div><p>${esc(line)}</p>`;
 }
 // a patch's few words, the pickers' (about.json's desc: "Hammond", "Moog: two saws, ladder")
 function patchDesc(p) {
   return (S.about && S.about.desc && !p.drums && S.about.desc[p.program + '.' + p.variation]) || '';
 }
 function patchAbout(p) {
-  if (!S.about || !p || p.drums) return null;
-  return S.about.programs[p.program + '.' + p.variation] || null;
+  return (p && patchDesc(p)) || null;
 }
 function drawAbout() {
   const p = cur();
-  const pd = p && patchDesc(p) ? ' · ' + patchDesc(p) : '';
-  $('libAbout').innerHTML = p && patchAbout(p) ? aboutHtml(p.name + pd, patchAbout(p)) : '';
-  $('pianoAbout').innerHTML = p && patchAbout(p) ? aboutHtml(p.name, patchAbout(p)) : '';
+  $('libAbout').innerHTML = '';
+  $('pianoAbout').innerHTML = '';
   const st = S.stops, el = $('stopAbout');
   if (!st || st.program < 0 || !S.about) { el.innerHTML = ''; return; }
   const org = S.about.stops[String(st.program)];

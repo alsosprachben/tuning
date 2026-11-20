@@ -1,0 +1,1147 @@
+[
+{
+"voice": "000 Acoustic Grand Piano",
+"source": "A Steinway B (VCSL, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "004 Electric Piano 1",
+"source": "Learman's 1977 Mark I off the harp connector (jRhodes3d, CC BY-NC, measured only)",
+"licence": "CC BY-NC"
+},
+{
+"voice": "006 Harpsichord",
+"source": "VCSL'S Harpsichords (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "008 Celesta",
+"source": "Macsat-Rd's Celesta (Freesound, CC0; twelve notes A4-G#5)",
+"licence": "CC0"
+},
+{
+"voice": "010 Music Box",
+"source": "Two Boxes (Freesound, CC0: folkman's in D, 16 teeth, and rbnuser's 13)",
+"licence": "CC0"
+},
+{
+"voice": "014 Tubular Bells",
+"source": "VSCO 2 CE's chimes (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "016 Drawbar Organ",
+"source": "hammondman's tonewheel organ through a Leslie, two packs (freesound 18844, 15120, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "019 Church Organ",
+"source": "Pitea's Pipes (Lars Palo's set of the Gronlund organ, CC BY-SA 2.5)",
+"licence": "CC BY-SA 2.5"
+},
+{
+"voice": "020 Reed Organ",
+"source": "donyaquick's harmonium (freesound 330410, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "021 Accordion",
+"source": "hammondman's Hohner on musette (freesound pack 18842, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "022 Harmonica",
+"source": "VCSL Hohner Special 20s and Super 64 (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "025 Acoustic Guitar (steel)",
+"source": "NYU's GuitarSet (CC BY 4.0)",
+"licence": "CC BY 4.0"
+},
+{
+"voice": "026 Electric Guitar (jazz)",
+"source": "Fraunhofer IDMT-SMT-Guitar (CC BY-NC-ND, measured only)",
+"licence": "CC BY-NC"
+},
+{
+"voice": "033 Electric Bass (finger)",
+"source": "Fraunhofer IDMT-SMT-Bass (CC BY-NC-ND, measured only)",
+"licence": "CC BY-NC"
+},
+{
+"voice": "035 Fretless Bass",
+"source": "two fretless basses on Freesound (FaireDesVagues' stopped notes, CC BY 3.0; mrforfs' flatwound open strings, CC0)",
+"licence": "CC BY 3.0"
+},
+{
+"voice": "046 Orchestral Harp",
+"source": "VSCO 2 CE's harp (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "047 Timpani",
+"source": "VSCO 2 CE's timpani (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "052 Choir Aahs",
+"source": "Vocalset's Long Tones (CC BY 4.0, measured only)",
+"licence": "CC BY 4.0"
+},
+{
+"voice": "074 Recorder",
+"source": "VCSL baroque soprano, alto and tenor recorders (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "075 Pan Flute",
+"source": "Freesound pan pipes (mrshoes CC BY 3.0, j008b and PanPiper5 CC0)",
+"licence": "CC BY 3.0"
+},
+{
+"voice": "077 Shakuhachi",
+"source": "Freesound shakuhachi (UncleSigmund CC BY 3.0, gonzooka CC0)",
+"licence": "CC BY 3.0"
+},
+{
+"voice": "078 Whistle",
+"source": "Freesound whistling (nbild, oscarboyle CC0)",
+"licence": "CC0"
+},
+{
+"voice": "079 Ocarina",
+"source": "VCSL typical and small ocarinas (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "104 Sitar",
+"source": "a Ma string struck four times (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "104 Sitar",
+"source": "CC0) and chinpen's D4 strokes (CC BY 3.0)",
+"licence": "CC0"
+},
+{
+"voice": "105 Banjo",
+"source": "the Windsor banjo SoundFont's open-string plucks (public domain)",
+"licence": "public domain"
+},
+{
+"voice": "106 Shamisen",
+"source": "RTB45's Ueno festival take (freesound 195521, CC BY 4.0)",
+"licence": "CC BY 4.0"
+},
+{
+"voice": "107 Koto",
+"source": "VCSL Dan Tranh (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "108 Kalimba",
+"source": "VCSL kalimba (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "109 Bag pipe",
+"source": "Freesound IowaSpaceWizard chanter, its nine notes, and the drones (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "109 Bag pipe",
+"source": "CC0) with iainmccurdy's (CC BY 4.0)",
+"licence": "CC0"
+},
+{
+"voice": "111 Shanai",
+"source": "cdrk's Turkish zurna (freesound 18661, CC BY 4.0; no open shehnai recording)",
+"licence": "CC BY 4.0"
+},
+{
+"voice": "113 Agogo",
+"source": "VSCO-2 CE (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "116 Taiko Drum",
+"source": "VSCO-2 CE (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "121 Breath Noise",
+"source": "Two Takes Of Breathing (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "122 Seashore",
+"source": "VCSL's ocean drum (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "123 Bird Tweet",
+"source": "Three Birds (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "124 Telephone Ring",
+"source": "Bell Telephones (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "125 Helicopter",
+"source": "Three Passes (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "126 Applause",
+"source": "Three Audiences (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "127 Gunshot",
+"source": "examples/gunshot_fit.py) to a 9 mm at 15 m (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "012.16 Barafon",
+"source": "the West African balafon, fitted to marini24's 17 strikes (CC BY 4.0)",
+"licence": "CC BY 4.0"
+},
+{
+"voice": "012.24 Log Drum",
+"source": "a slit drum, fitted to VSCO 2's log drum (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "016.25 D-50 Organ",
+"source": "its partials' 15-cent detune measured on agerven's D-50 (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "016.26 JUNO Organ",
+"source": "the Juno fitted to a Juno-6's notes (sc88_synth.JUNO,, CC0, the PW Pluck C2-C6 over its whole pluck)",
+"licence": "CC0"
+},
+{
+"voice": "038.1 Syn.Bass101",
+"source": "the SH-101 as the Juno-6's fitted voice without its chorus (sc88_synth.SH101: the same IR3109 and VCO section; no clean SH-101 note exists under CC0 -- the refs are a bassline with its knobs moving and resonance sweeps)",
+"licence": "CC0"
+},
+{
+"voice": "038.2 CS Bass",
+"source": "the Cs fitted to a Yamaha Cs-30L's bass (sc88_synth.CS,, CC0; 5.0 dB on the harmonics, 0.31 octave on the contour; the 2-pole by design, the takes agreeing)",
+"licence": "CC0"
+},
+{
+"voice": "038.11 TB303 Bass 2",
+"source": "the TB-303 fitted to a TB-303's note (sc88_synth.TB303,, CC0, its resonant peak through the pluck 0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader peak left)",
+"licence": "CC0"
+},
+{
+"voice": "038.12 Kicked TB303",
+"source": "the TB-303 fitted to a TB-303's note (sc88_synth.TB303,, CC0, its resonant peak through the pluck 0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader peak left)",
+"licence": "CC0"
+},
+{
+"voice": "038.13 TB303 Saw Bs",
+"source": "the TB-303 fitted to a TB-303's note (sc88_synth.TB303,, CC0, its resonant peak through the pluck 0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader peak left)",
+"licence": "CC0"
+},
+{
+"voice": "038.14 Rubber303 Bs",
+"source": "the TB-303 fitted to a TB-303's note (sc88_synth.TB303,, CC0, its resonant peak through the pluck 0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader peak left)",
+"licence": "CC0"
+},
+{
+"voice": "038.15 Reso 303 Bs",
+"source": "the TB-303 fitted to a TB-303's note (sc88_synth.TB303,, CC0, its resonant peak through the pluck 0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader peak left)",
+"licence": "CC0"
+},
+{
+"voice": "038.16 Reso SHBass",
+"source": "the SH-101 as the Juno-6's fitted voice without its chorus (sc88_synth.SH101: the same IR3109 and VCO section; no clean SH-101 note exists under CC0 -- the refs are a bassline with its knobs moving and resonance sweeps)",
+"licence": "CC0"
+},
+{
+"voice": "038.17 303 Sqr Bs",
+"source": "the TB-303 fitted to a TB-303's note (sc88_synth.TB303,, CC0, its resonant peak through the pluck 0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader peak left)",
+"licence": "CC0"
+},
+{
+"voice": "038.18 TB303 DistBs",
+"source": "the TB-303 fitted to a TB-303's note (sc88_synth.TB303,, CC0, its resonant peak through the pluck 0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader peak left)",
+"licence": "CC0"
+},
+{
+"voice": "039.4 MG Bass",
+"source": "the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG,, CC0, C1 and C4, 3 dB rms rendered)",
+"licence": "CC0"
+},
+{
+"voice": "039.6 MG Oct Bass2",
+"source": "the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG,, CC0, C1 and C4, 3 dB rms rendered)",
+"licence": "CC0"
+},
+{
+"voice": "039.7 MG Blip Bs:",
+"source": "the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG,, CC0, C1 and C4, 3 dB rms rendered)",
+"licence": "CC0"
+},
+{
+"voice": "039.17 SH101Bass 1",
+"source": "the SH-101 as the Juno-6's fitted voice without its chorus (sc88_synth.SH101: the same IR3109 and VCO section; no clean SH-101 note exists under CC0 -- the refs are a bassline with its knobs moving and resonance sweeps)",
+"licence": "CC0"
+},
+{
+"voice": "039.18 SH101Bass 2",
+"source": "the SH-101 as the Juno-6's fitted voice without its chorus (sc88_synth.SH101: the same IR3109 and VCO section; no clean SH-101 note exists under CC0 -- the refs are a bassline with its knobs moving and resonance sweeps)",
+"licence": "CC0"
+},
+{
+"voice": "039.20 SH101 Bass 3",
+"source": "the SH-101 as the Juno-6's fitted voice without its chorus (sc88_synth.SH101: the same IR3109 and VCO section; no clean SH-101 note exists under CC0 -- the refs are a bassline with its knobs moving and resonance sweeps)",
+"licence": "CC0"
+},
+{
+"voice": "039.25 MG 5th Bass",
+"source": "the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG,, CC0, C1 and C4, 3 dB rms rendered)",
+"licence": "CC0"
+},
+{
+"voice": "039.27 WowMG Bass",
+"source": "the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG,, CC0, C1 and C4, 3 dB rms rendered)",
+"licence": "CC0"
+},
+{
+"voice": "050.24 Tron Strings",
+"source": "the string section, three players, its colour Fitted to menegass' Mellotron violin notes (Freesound 6815, CC0, 12 notes C4-B4: miss 4.98 -> 2.08 dB)",
+"licence": "CC0"
+},
+{
+"voice": "051.2 JUNO Strings",
+"source": "the Juno fitted to a Juno-6's notes (sc88_synth.JUNO,, CC0, the PW Pluck C2-C6 over its whole pluck)",
+"licence": "CC0"
+},
+{
+"voice": "062.3 SH-5 Brass",
+"source": "the SH-5 Read, not fitted, from xanthorp's sample-and-hold patterns (sc88_synth.SH5,, 9 dB rms -- no held SH-5 note under CC0)",
+"licence": "CC0"
+},
+{
+"voice": "063.9 OB Brass",
+"source": "the Oberheim fitted to an OB-8's held chords (sc88_synth.OBERHEIM,, CC0, ten four-note chords, 3.2 dB rms rendered)",
+"licence": "CC0"
+},
+{
+"voice": "066.8 BreathyTnr.",
+"source": "the tenor played airy, fitted on GM 66 to cemorse100's 'soft, airy' C5 (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "075.8 Kawala",
+"source": "EKVelika's Balkan kaval and aliaref's Turkish ney (both CC0, 22 held notes G#3-E5)",
+"licence": "CC0"
+},
+{
+"voice": "080.17 OB Square",
+"source": "the Oberheim fitted to an OB-8's held chords (sc88_synth.OBERHEIM,, CC0, ten four-note chords, 3.2 dB rms rendered)",
+"licence": "CC0"
+},
+{
+"voice": "080.27 MG Reso. Pls",
+"source": "the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG,, CC0, C1 and C4, 3 dB rms rendered)",
+"licence": "CC0"
+},
+{
+"voice": "081.11 D-50 Fat Saw",
+"source": "its partials' 15-cent detune measured on agerven's D-50 (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "081.18 CS Saw Lead",
+"source": "the Cs fitted to a Yamaha Cs-30L's bass (sc88_synth.CS,, CC0; 5.0 dB on the harmonics, 0.31 octave on the contour; the 2-pole by design, the takes agreeing)",
+"licence": "CC0"
+},
+{
+"voice": "081.24 MG Saw 1",
+"source": "the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG,, CC0, C1 and C4, 3 dB rms rendered)",
+"licence": "CC0"
+},
+{
+"voice": "081.25 MG Saw 2",
+"source": "the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG,, CC0, C1 and C4, 3 dB rms rendered)",
+"licence": "CC0"
+},
+{
+"voice": "081.26 OB Saw 1",
+"source": "the Oberheim fitted to an OB-8's held chords (sc88_synth.OBERHEIM,, CC0, ten four-note chords, 3.2 dB rms rendered)",
+"licence": "CC0"
+},
+{
+"voice": "081.27 OB Saw 2",
+"source": "the Oberheim fitted to an OB-8's held chords (sc88_synth.OBERHEIM,, CC0, ten four-note chords, 3.2 dB rms rendered)",
+"licence": "CC0"
+},
+{
+"voice": "081.28 D-50 Saw",
+"source": "its partials' 15-cent detune measured on agerven's D-50 (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "081.29 SH-101 Saw",
+"source": "the SH-101 as the Juno-6's fitted voice without its chorus (sc88_synth.SH101: the same IR3109 and VCO section; no clean SH-101 note exists under CC0 -- the refs are a bassline with its knobs moving and resonance sweeps)",
+"licence": "CC0"
+},
+{
+"voice": "081.30 CS Saw",
+"source": "the Cs fitted to a Yamaha Cs-30L's bass (sc88_synth.CS,, CC0; 5.0 dB on the harmonics, 0.31 octave on the contour; the 2-pole by design, the takes agreeing)",
+"licence": "CC0"
+},
+{
+"voice": "081.31 MG Saw Lead",
+"source": "the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG,, CC0, C1 and C4, 3 dB rms rendered)",
+"licence": "CC0"
+},
+{
+"voice": "081.32 OB Saw Lead",
+"source": "the Oberheim fitted to an OB-8's held chords (sc88_synth.OBERHEIM,, CC0, ten four-note chords, 3.2 dB rms rendered)",
+"licence": "CC0"
+},
+{
+"voice": "081.34 MG unison",
+"source": "the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG,, CC0, C1 and C4, 3 dB rms rendered)",
+"licence": "CC0"
+},
+{
+"voice": "083.1 TB Lead",
+"source": "the TB-303 fitted to a TB-303's note (sc88_synth.TB303,, CC0, its resonant peak through the pluck 0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader peak left)",
+"licence": "CC0"
+},
+{
+"voice": "084.9 Acid Guitar1",
+"source": "the TB-303 fitted to a TB-303's note (sc88_synth.TB303,, CC0, its resonant peak through the pluck 0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader peak left)",
+"licence": "CC0"
+},
+{
+"voice": "084.10 Acid Guitar2",
+"source": "the TB-303 fitted to a TB-303's note (sc88_synth.TB303,, CC0, its resonant peak through the pluck 0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader peak left)",
+"licence": "CC0"
+},
+{
+"voice": "084.24 JUNO Sub Osc",
+"source": "the Juno fitted to a Juno-6's notes (sc88_synth.JUNO,, CC0, the PW Pluck C2-C6 over its whole pluck)",
+"licence": "CC0"
+},
+{
+"voice": "087.6 SH-5 Bs.Lead",
+"source": "the SH-5 Read, not fitted, from xanthorp's sample-and-hold patterns (sc88_synth.SH5,, 9 dB rms -- no held SH-5 note under CC0)",
+"licence": "CC0"
+},
+{
+"voice": "098.20 JUNO Bell",
+"source": "the Juno fitted to a Juno-6's notes (sc88_synth.JUNO,, CC0, the PW Pluck C2-C6 over its whole pluck)",
+"licence": "CC0"
+},
+{
+"voice": "104.8 Tambra",
+"source": "ours is the same tanpura with its jawari Set Another Way, fitted to sankalp's take 1 (CC BY 4.0)",
+"licence": "CC BY 4.0"
+},
+{
+"voice": "104.16 Tamboura",
+"source": "the tanpura, fitted to sankalp's drone takes (Freesound pack 9571, CC BY 4.0)",
+"licence": "CC BY 4.0"
+},
+{
+"voice": "105.8 Rabab",
+"source": "the only open rubab found is the 2 s solo opening belamalta10's '3 continents' (Freesound 513846, CC0 as uploaded -- GarageBand's loop, so measure only)",
+"licence": "CC0"
+},
+{
+"voice": "105.24 Oud",
+"source": "Jordan's notes (Commons, CC BY-SA 3.0)",
+"licence": "CC BY-SA 3.0"
+},
+{
+"voice": "105.24 Oud",
+"source": "Commons, CC By-Sa 3.0) and hammondman's (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "107.16 Kanoon",
+"source": "courses of three strings over a wooden box, Fitted to Baris Bozkurt's isolated notes (Freesound 211133, CC0, 28 notes)",
+"licence": "CC0"
+},
+{
+"voice": "108.9 Bodhran",
+"source": "the Bodhran fitted to Teh_Bucket's 27 open strokes (freesound 521586, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "109.9 Uillean Pipe",
+"source": "the Uilleann Pipes measured on luis_audp's practice set (freesound 268816, CC BY: measurement only)",
+"licence": "CC BY"
+},
+{
+"voice": "111.8 Pungi",
+"source": "the snake charmer's pungi, its melody pipe fitted to Nick Mariette's snake charmers in Bhaktapur (Wikimedia Commons, CC BY 2.5)",
+"licence": "CC BY 2.5"
+},
+{
+"voice": "111.16 Hichiriki",
+"source": "gagaku's double reed, fitted to gaijinbuzz's shrine wedding (Freesound 680565, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "112.8 Bonang",
+"source": "the Javanese kettle gongs, fitted to Casa da Musica's bonang barung and panerus (CC BY 3.0)",
+"licence": "CC BY 3.0"
+},
+{
+"voice": "112.9 Gender",
+"source": "the gamelan's metallophone, fitted to UNT's Balinese gangsa (cpolcyn, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "112.10 GamelanGong",
+"source": "the gong ageng, fitted to UNT's big gong (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "112.16 RAMA Cymbal",
+"source": "a plate from the crash Fitted to the UNT gamelan Bwana Kumala's single ringing strikes (Freesound pack 12954, CC0, 4.8 dB on the grid)",
+"licence": "CC0"
+},
+{
+"voice": "116.8 Concert BD",
+"source": "GeneralUser GS's Orchestra bass drum picks VCSL's \"Bass Drum 1\" (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "120.1 Gt. Cut Noise",
+"source": "a muted strum on steel strings (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "120.2 String Slap",
+"source": "a hand slapping an upright's strings (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "120.12 Biwa Stroke",
+"source": "a wooden-bodied lute from the shamisen's struck-silk numbers, Fitted to Hugh de Ferranti's satsuma biwa (PARADISEC HDF1-SB33, CC BY-NC-SA 4.0 data: the fitted numbers derive from it; sources.md)",
+"licence": "CC BY-NC"
+},
+{
+"voice": "121.1 Fl. Key Click",
+"source": "a saxophone's (Freesound, CC0; no CC0 flute key clicks exist)",
+"licence": "CC0"
+},
+{
+"voice": "122.1 Rain",
+"source": "Rain fitted to a Freesound recording (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "122.2 Thunder",
+"source": "Thunder fitted to a Freesound strike (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "122.3 Wind",
+"source": "Wind fitted to a Freesound howl (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "122.4 Stream",
+"source": "Stream fitted to a Freesound brook (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "122.5 Bubble",
+"source": "Bubbles set from a Freesound recording's own events (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "123.1 Dog",
+"source": "pulses at the six Freesound dogs' near-level contour (CC0; ~540 Hz, up 0.8 semitone, down 1.5)",
+"licence": "CC0"
+},
+{
+"voice": "123.4 Kitty",
+"source": "peridactyloptrix's five meows (Freesound 214759, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "123.5 Growl",
+"source": "qubodup's (Freesound 122183, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "124.2 Door Creaking",
+"source": "GeneralUser GS's gesture) over the hinge's noise, fitted to a Freesound cupboard door (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "124.3 Door",
+"source": "a wooden door slammed (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "124.5 Windchime",
+"source": "a metal chime tube struck, ringing out (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "124.10 Phono Noise",
+"source": "tonelib.PhonoNoiseProperties), Fitted to nervousneal's blank groove (a 1961 MGM test pressing, Freesound 586430, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "125.1 Car-Engine",
+"source": "Car Engine fitted to a Freesound idle (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "125.2 Car-Stop",
+"source": "Car Skid fitted to a Freesound handbrake turn (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "125.3 Car-Pass",
+"source": "Car Pass fitted to a Freesound pass on a wet road (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "125.4 Car-Crash",
+"source": "Car Crash fitted to a Freesound crash with glass (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "125.6 Train",
+"source": "Train fitted to a Freesound freight train (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "125.7 Jetplane",
+"source": "Jetplane fitted to a Freesound jet (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "126.1 Laughing",
+"source": "a throat pulsed as a Freesound Santa says it (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "126.2 Screaming",
+"source": "a girl's scream (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "126.3 Punch",
+"source": "a fist on a body (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "126.5 Footstep",
+"source": "a hard shoe on stone (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "127.1 Machinegun",
+"source": "72) fired every 69 ms, 0.69 s of them, as a Freesound M16A1 burst measures (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "127.2 Lasergun",
+"source": "a square wave swept down from 12x its note with a 0.1 s time constant, held and cut, as a Freesound blaster (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "127.3 Explosion",
+"source": "a dynamite blast (Freesound, CC0; weather_fit: 0.4 dB)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 24, key 36",
+"source": "GeneralUser GS's Elec BD picks the closest of tarane468's real Simmons hits (Freesound, CC0; hit 30)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 27, key 36",
+"source": "a bridged-T at 59 Hz, fitted to Bjornmossa's real CR-78 (CC BY)",
+"licence": "CC BY"
+},
+{
+"voice": "drum set 27, key 60",
+"source": "a bridged-T at 601 Hz (wikter's CC0 take)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 28, key 40",
+"source": "the snare Accented (bdu's CC0 take)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 32, key 36",
+"source": "the ~71 Hz drum of soneproject's kit in a jazz bar (Freesound 25895, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 40, key 38",
+"source": "a brush Tapped, Measured on Karoryfer's Swirly Drums (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 48, key 36",
+"source": "GeneralUser GS's Orchestra bass drum picks VCSL's \"Bass Drum 1\" (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 48, key 38",
+"source": "VCSL's legacy concert snare drum1 (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 48, key 57",
+"source": "a Clashed pair, VCSL's \"Clash Cymbals 2\" (CC0, the pair both GM sets pick)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 40",
+"source": "a palm slap, fitted to Freesound slaps (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 41",
+"source": "a turntable's groove (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 43",
+"source": "hickory sticks clicked (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 48",
+"source": "a muted strum on steel strings (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 49",
+"source": "a hollowbody's bright muted strum (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 50",
+"source": "a hand slapping an upright's strings (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 51",
+"source": "a saxophone's (Freesound, CC0; no CC0 flute key clicks exist)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 52",
+"source": "a throat pulsed as a Freesound Santa says it (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 53",
+"source": "a girl's scream (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 54",
+"source": "a fist on a body (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 56",
+"source": "a hard shoe on stone (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 59",
+"source": "GeneralUser GS's gesture) over the hinge's noise, fitted to a Freesound cupboard door (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 60",
+"source": "a wooden door slammed (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 62",
+"source": "a metal chime tube struck, ringing out (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 63",
+"source": "Car Engine fitted to a Freesound idle (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 64",
+"source": "Car Skid fitted to a Freesound handbrake turn (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 65",
+"source": "Car Pass fitted to a Freesound pass on a wet road (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 66",
+"source": "Car Crash fitted to a Freesound crash with glass (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 67",
+"source": "Siren from a Freesound fire engine (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 68",
+"source": "Train fitted to a Freesound freight train (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 69",
+"source": "Jetplane fitted to a Freesound jet (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 73",
+"source": "72) fired every 69 ms, 0.69 s of them, as a Freesound M16A1 burst measures (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 74",
+"source": "a square wave swept down from 12x its note with a 0.1 s time constant, held and cut, as a Freesound blaster (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 75",
+"source": "a dynamite blast (Freesound, CC0; weather_fit: 0.4 dB)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 76",
+"source": "pulses at the six Freesound dogs' near-level contour (CC0; ~540 Hz, up 0.8 semitone, down 1.5)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 79",
+"source": "Rain fitted to a Freesound recording (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 80",
+"source": "Thunder fitted to a Freesound strike (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 81",
+"source": "Wind fitted to a Freesound howl (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 83",
+"source": "Stream fitted to a Freesound brook (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 84",
+"source": "Bubbles set from a Freesound recording's own events (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 85",
+"source": "peridactyloptrix's five meows (Freesound 214759, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 56, key 87",
+"source": "qubodup's (Freesound 122183, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 39",
+"source": "VCSL claps (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 56",
+"source": "VSCO-2 CE (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 60",
+"source": "VSCO-2 CE (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 62",
+"source": "VSCO-2 CE (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 63",
+"source": "VSCO-2 CE (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 64",
+"source": "VSCO-2 CE (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 65",
+"source": "hello_flowers' timbales (freesound 41196, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 67",
+"source": "VSCO-2 CE (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 68",
+"source": "VSCO-2 CE (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 69",
+"source": "VSCO-2 CE (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 70",
+"source": "VSCO-2 CE (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 71",
+"source": "VCSL ball whistle, short blast (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 73",
+"source": "VSCO-2 CE (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 76",
+"source": "a throat pulsed as a Freesound Santa says it (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 77",
+"source": "a girl's scream (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 78",
+"source": "a fist on a body (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 80",
+"source": "a hard shoe on stone (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 83",
+"source": "GeneralUser GS's gesture) over the hinge's noise, fitted to a Freesound cupboard door (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 84",
+"source": "a wooden door slammed (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 86",
+"source": "a metal chime tube struck, ringing out (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 87",
+"source": "Car Engine fitted to a Freesound idle (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 88",
+"source": "Car Skid fitted to a Freesound handbrake turn (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 89",
+"source": "Car Pass fitted to a Freesound pass on a wet road (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 90",
+"source": "Car Crash fitted to a Freesound crash with glass (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 91",
+"source": "Siren from a Freesound fire engine (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 92",
+"source": "Train fitted to a Freesound freight train (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 93",
+"source": "Jetplane fitted to a Freesound jet (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 97",
+"source": "72) fired every 69 ms, 0.69 s of them, as a Freesound M16A1 burst measures (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 98",
+"source": "a square wave swept down from 12x its note with a 0.1 s time constant, held and cut, as a Freesound blaster (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 99",
+"source": "a dynamite blast (Freesound, CC0; weather_fit: 0.4 dB)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 100",
+"source": "pulses at the six Freesound dogs' near-level contour (CC0; ~540 Hz, up 0.8 semitone, down 1.5)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 103",
+"source": "Rain fitted to a Freesound recording (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 104",
+"source": "Thunder fitted to a Freesound strike (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 105",
+"source": "Wind fitted to a Freesound howl (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 107",
+"source": "Stream fitted to a Freesound brook (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum set 127, key 108",
+"source": "Bubbles set from a Freesound recording's own events (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum key 28",
+"source": "a palm slap, fitted to Freesound slaps (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum key 29",
+"source": "a turntable's groove (Freesound, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum key 31",
+"source": "two drumsticks clicked (Freesound, CC0; perc_fit sfx_sticks)",
+"licence": "CC0"
+},
+{
+"voice": "drum key 39",
+"source": "VCSL claps (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum key 40",
+"source": "VCSL's Modern 1 (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum key 56",
+"source": "VSCO-2 CE (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum key 58",
+"source": "VSCO-2 CE (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum key 60",
+"source": "VSCO-2 CE (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum key 62",
+"source": "VSCO-2 CE (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum key 63",
+"source": "VSCO-2 CE (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum key 64",
+"source": "VSCO-2 CE (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum key 65",
+"source": "hello_flowers' timbales (freesound 41196, CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum key 67",
+"source": "VSCO-2 CE (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum key 68",
+"source": "VSCO-2 CE (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum key 69",
+"source": "VSCO-2 CE (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum key 70",
+"source": "VSCO-2 CE (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum key 71",
+"source": "VCSL ball whistle, short blast (CC0)",
+"licence": "CC0"
+},
+{
+"voice": "drum key 82",
+"source": "the Shaker as shaped noise, fitted to Camo's shaker in VSCO 2 CE (eight single shakes, CC0, 10.4 -> 2.6 dB)",
+"licence": "CC0"
+},
+{
+"voice": "drum key 87",
+"source": "plotzki's samba surdo (freesound 36127, CC0)",
+"licence": "CC0"
+}
+]
