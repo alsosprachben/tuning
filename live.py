@@ -3440,8 +3440,7 @@ class Patch:
         # THE CHEST'S WIND (wind.py): a pipe organ's class, or None -- a voice
         # whose pipes answer a shared pressure (Live._wind_block)
         self.wind_pc = (pc if pc is not None and getattr(pc, "registerable", False)
-                        and getattr(pc, "wind_skirt_db", None) is not None
-                        and getattr(pc, "wind_pitch_exp", 0.0) else None)
+                        and T.organ_wind(pc) else None)
         self.percussion_attack_s = float(getattr(pc, "percussion_attack_s", 0.0)) if pc else 0.0
         # Where this voice's stop word lives: CC11/43 on the pipe organ and the
         # harpsichord, CC43/44 on the harmonium (its CC11 is the bellows).

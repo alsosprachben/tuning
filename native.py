@@ -3259,7 +3259,7 @@ def organ(cls):
     _sc = T.sound_controls_of(cls)
     o.snd_mask = (1 if 'attack' in _sc else 0) | (2 if 'release' in _sc else 0) | (4 if 'decay' in _sc else 0)
     o.trem_class_depth = float(getattr(cls, 'tremulant_depth', 0.0) or 0.0)
-    if getattr(cls, 'wind_skirt_db', None) is not None and getattr(cls, 'wind_pitch_exp', 0.0):
+    if T.organ_wind(cls):
         import wind as WND
         o.wind = 1
         o.wsc = float(BR.wind_scale_for(cls))

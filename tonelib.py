@@ -6442,6 +6442,7 @@ class DividerTabProperties(StoppedPipeProperties):
     only because a measured table by register is what a pipe's spectrum is,
     here and in the engine (native.pipe_voice): nothing of a pipe's speech is
     borrowed, the host's envelope is the rank's."""
+    wind_skirt_db = None            # (no air: the vibrato is the organ's, rank_wind_class the host)
     touch_sensitive = False
     max_harmonic = 32
     octave_gain = 0.0
@@ -6925,10 +6926,27 @@ class DividerOrganProperties(TonewheelProperties):
         ("Kinura 8'", 1.0, 1.0, DividerKinura8Properties),
         ("Quint 5-1/3'", 1.498307, 1.0, DividerQuint513Properties),
         ("Clarinet 4'", 2.0, 1.0, DividerClarinet4Properties),
+        ("tremulant", None, 0.0),
     ]
     crescendo_order = ["Flute 8'", "Diapason 8'", "Tibia 16'", "Clarinet 8'", "Quint 5-1/3'", "Clarinet 4'",
                        "Trombone 16'", "Trumpet 8'", "Bass Clarinet 16'", "String 8'", "Oboe 8'", "Kinura 8'"]
     default_stops = 0b000000001000          # the Flute 8'
+    # THE VIBRATO (the 4500's tab: Ben's take 5, the Flute 8' at C4 -- 5.00 Hz, 26.4
+    # cents peak to peak at its normal depth): an oscillator sweeping the twelve
+    # master oscillators' bias, so every note of every division swings together,
+    # in phase, in pitch alone. The engine's chest wind carries it (wind.py's
+    # tremulant, wind_vibrato: no air, no wander, no sag) -- its pitch exponent 1,
+    # its level exponent 0, its depth the pressure swing that is 13.2 cents. The
+    # stop the engines know as "tremulant" (the church organ's), at the end of the
+    # tabs; on the card it reads as the vibrato it is (ui_words).
+    wind_vibrato = True
+    wind_pitch_exp = 1.0
+    wind_level_exp = 0.0
+    tremulant_hz = 5.0
+    # (15.1 cents peak: what renders as the take's 26.4 read the same way, the 5-95 %
+    #  spread of a pitch track -- examples/wurlitzer_survey.modulation)
+    tremulant_depth = 2.0 ** (15.1 / 1200.0) - 1.0
+    tremulant_tau = 0.05                    # (the oscillator runs on: the tab switches it in at once)
     # TWO AMPLIFIERS, TWO SIDES (the amplifier system schematic, 504590/504591: an Upper
     # and a Lower amplifier, each its own speakers; Ben, at his console: "Lower is right.
     # Upper is left."). The upper division sounds from the left of the cabinet, the lower
@@ -6941,7 +6959,7 @@ class DividerOrganProperties(TonewheelProperties):
     # THE CARD (live.stop_rows), as the console's rail groups its tabs: the 16's,
     # the 8' flues, the reeds, the mutations ("|" a break, not a stop)
     stop_rows = [["Tibia 16'", "Bass Clarinet 16'", "Trombone 16'", "|", "Flute 8'", "Diapason 8'", "String 8'",
-                  "Clarinet 8'", "|", "Oboe 8'", "Trumpet 8'", "Kinura 8'", "|", "Quint 5-1/3'", "Clarinet 4'"]]
+                  "Clarinet 8'", "|", "Oboe 8'", "Trumpet 8'", "Kinura 8'", "|", "Quint 5-1/3'", "Clarinet 4'", "|", "tremulant"]]
 
     # THE COUPLERS (Upper to Upper 16', 4', 2'): each keys the octave below or
     # above as well, so every drawn tab sounds again there -- its own colour at
@@ -7075,9 +7093,10 @@ class DividerPedalProperties(DividerOrganProperties):
         ("Principal 16'", 0.5, 1.0, DividerPrincipal16Properties),
         ("Flute 8'", 1.0, 1.0, DividerPedalFlute8Properties),
         ("String Bass 8'", 1.0, 1.0, DividerStringBass8Properties),
+        ("tremulant", None, 0.0),
     ]
     crescendo_order = ["Bourdon 16'", "Flute 8'", "Principal 16'", "String Bass 8'"]
-    stop_rows = [["Bourdon 16'", "Principal 16'", "|", "Flute 8'", "String Bass 8'"]]
+    stop_rows = [["Bourdon 16'", "Principal 16'", "|", "Flute 8'", "String Bass 8'", "|", "tremulant"]]
     default_stops = 0b0101                  # the Bourdon 16' and Flute 8'
     seat_pan = 0.0                          # (both amplifiers: the middle)
     # HELD where Organ Bass's drawbars (16' 8') stood, so the bank's trims stand
@@ -7347,11 +7366,12 @@ class DividerLowerProperties(DividerOrganProperties):
         ("Vox Humana 8'", 1.0, _LOWER_GAIN, DividerVoxHumana8Properties),
         ("Cornet 8'", 1.0, _LOWER_GAIN, DividerCornet8Properties),
         ("Quint 5-1/3'", 1.498307, _LOWER_GAIN, DividerLowerQuint513Properties),
+        ("tremulant", None, 0.0),
     ]
     crescendo_order = ["Melodia 8'", "Geigen Diapason 8'", "Trombone 8'", "Viole 8'", "Cornet 8'",
                        "Quint 5-1/3'", "Vox Humana 8'"]
     stop_rows = [["Melodia 8'", "Geigen Diapason 8'", "Viole 8'", "|", "Trombone 8'", "Vox Humana 8'",
-                  "Cornet 8'", "|", "Quint 5-1/3'"]]
+                  "Cornet 8'", "|", "Quint 5-1/3'", "|", "tremulant"]]
     default_stops = 0b0001001              # Preset I: the Melodia and Trombone
     seat_pan = 0.5                          # (the lower amplifier: the right)
 
@@ -7360,7 +7380,8 @@ class DividerLowerProperties(DividerOrganProperties):
 # ...AND A SPEAKER SPREADS NO WIDER BY PITCH than its cone: the tabs placed as the organ
 for _div in (DividerOrganProperties, DividerPedalProperties, DividerLowerProperties):
     for _r in _div.stop_ranks:
-        _r[3].octave_width = 0.0
+        if _r[1] is not None:
+            _r[3].octave_width = 0.0
 del _div, _r
 
 def divider_registration(tabs, couplers=()):
@@ -7375,7 +7396,7 @@ def divider_registration(tabs, couplers=()):
     for t in tabs:
         bits |= 1 << names.index(t)
     for c in couplers:
-        cr, cg = D.COUPLERS[c]
+        cr, cg = D.COUPLERS[c]   # (each tab drawn copied; the vibrato is no tab to copy)
         for t in tabs:
             r = D.stop_ranks[names.index(t)]
             bits |= 1 << len(ranks)
@@ -8528,6 +8549,15 @@ ReedOrganFreeProperties.stop_rows = [
 # that Expression puts the pressure under the feet; the slope is this model's
 # own gate-to-brightness ratio, halved to stay inside one register's voicing.
 HARMONIUM_EXPRESSION_TILT = 0.8
+
+
+def organ_wind(cls):
+    """Does this organ have a chest's wind (wind.py) for its ranks' pitch and level:
+    a pipe organ's (its skirt's level set), or one whose WIND IS ONLY ITS VIBRATO
+    (wind_vibrato: the divider organ's oscillators swept as one, no air, no
+    skirts) -- both renderers ask this."""
+    return ((getattr(cls, 'wind_skirt_db', None) is not None or getattr(cls, 'wind_vibrato', False))
+            and bool(getattr(cls, 'wind_pitch_exp', 0.0)))
 
 
 def rank_wind_class(host, rank):

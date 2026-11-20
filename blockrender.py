@@ -2885,8 +2885,8 @@ def _prep_chest_wind(Grows, ch_progs, grow_of, nblk, notes, rankev_of):
                    if getattr(c, 'registerable', False)), None)
         if pc is None:
             continue
-        if getattr(pc, 'wind_skirt_db', None) is None or not getattr(pc, 'wind_pitch_exp', 0.0):
-            continue                            # not a pipe organ
+        if not T.organ_wind(pc):
+            continue                            # not a pipe organ (nor a divider organ's vibrato)
         _wk = (ch, organ_family(pc))
         _tr = rankev_of[_wk].get('tremulant', ())
         _trem_on = any(tg >= 0.5 for _t, tg in _tr) and pc.tremulant_depth > 0.0
