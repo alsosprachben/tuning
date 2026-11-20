@@ -9506,7 +9506,7 @@ class Live:
         jobs = {}
         for p in here:
             for r in roles[p.pid]:
-                if T.WHEEL_CC.get(r, 1) != 1 and not (r == 'drive' and p.patch.leslie):
+                if T.WHEEL_CC.get(r, 1) != 1 and not (r == 'drive' and (p.patch.leslie or p.patch.wheel_swell)):
                     jobs.setdefault(r, []).append(p)
         for r, ps in jobs.items():
             self._wheel_job(r, ch, ps, v, n0, held=ps)
@@ -9627,7 +9627,7 @@ class Live:
         r = []
         if self._drive(part) > 0.0:
             r.append('drive')
-        if part.organ and not pt.leslie and pt.cres_order:
+        if part.organ and not pt.leslie and not pt.wheel_swell and pt.cres_order:
             r.append('crescendo')
         if pt.tremolo_depth > 0.0:
             r.append('tremolo')
@@ -9654,7 +9654,10 @@ class Live:
         # ON A TONEWHEEL ORGAN IT IS THE SWELL, its drive or not: the drive is
         # the panel's knob and CC12's (Part.drive), never the wheel's route
         # (Ben: "have drive be a default per organ ... then mod can do level")
-        if (not r or pt.leslie) and pt.wheel_swell:
+        # -- with a Leslie or without: GM 16 and 17 lost theirs for a
+        # Hammond's own speaker and a valve (4c0aee4), and their wheel had
+        # become the drive and the crescendo
+        if pt.wheel_swell:
             r.append('swell')
         # ON A MOOG WHOSE LFO 2 GOES SOMEWHERE IT IS LFO 2's DEPTH, as the
         # Messenger's MOD wheel is (moog.lfo2_mods), in place of the vibrato
@@ -9690,7 +9693,7 @@ class Live:
         """CC1 on this part, in words, with any route on it; None if nothing."""
         if part.drums:
             return None
-        r = [k for k in self.wheel_roles(part) if not (k == 'drive' and part.patch.leslie)]
+        r = [k for k in self.wheel_roles(part) if not (k == 'drive' and (part.patch.leslie or part.patch.wheel_swell))]
         what = ", ".join(self.WHEEL_MEANING[k] for k in r) or None
         return self._with_routes(what, self._routes_from(part, "cc", 1))
 

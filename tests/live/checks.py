@@ -144,6 +144,9 @@ CHECKS = [
     ("user_set_part", "nvlive_check.py", ["@userdrums.mid", "4", "--drums", "--program=64"], {}),
     ("drum_delay", "nvlive_check.py", ["@drumdelay.mid", "5", "--drums", "--program=0", "--programs"], {}),
     ("rhythm_part", "nvlive_check.py", ["@rhythmpart.mid", "3", "--beside", "--program=0", "--programs"], {}),
+    # a valve's chord let go by a GS Reset (its products recomputed: live._all_off's _amp_touch)
+    ("valve_reset_gt", "nvlive_check.py", ["@valve_reset.mid", "3", "--program=29", "--programs"], {}),
+    ("valve_reset_org", "nvlive_check.py", ["@valve_reset.mid", "3", "--program=18", "--programs"], {}),
     ("pk_reset_live", "nvlive_check.py", ["@pk_reset.mid", "4", "--program=0", "--programs"], {}),
     ("msgr_mode_live", "nvlive_check.py", ["@msgr_mode.mid", "3", "--program=0", "--programs"], {}),
     ("setup_moog_live", "nvlive_check.py", ["@setup_moog.mid", "4", "--program=0", "--programs"], {}),

@@ -3,10 +3,11 @@
 nv_host_set_tuner, nv_host_eastern, nv_host_set_eastern -- the app's Tuning):
 python3 tests/live/tuning_check.py
 
-The host on the piano at the export's tuner (live's hybrid, A=415): the list
-of tuners whole (the panel's), the tuner in force read back; an A4 held and
-its pitch measured; hybrid440 asked for, built -- read back, and the same A4
-up by 440/415 (+101 cents); an Eastern tuning set, built, read back; off.
+The host on the piano at the export's tuner (live's default, gm2: equal at
+A=440 -- 0c0ac19): the list of tuners whole (the panel's), the tuner in
+force read back; an A4 held and its pitch measured; hybrid (A=415) asked
+for, built -- read back, and the same A4 down by 440/415 (-101 cents); an
+Eastern tuning set, built, read back; off.
 Exits 1 if any check fails.
 """
 import ctypes
@@ -101,14 +102,14 @@ def main():
           len(names) > 20 and "hybrid440" in names and "hybrid" in names)
     now = text(d.nv_host_tuner, h)
     f0 = pitch()
-    check("the tuner in force: %s, an A4 at %.2f Hz" % (now, f0), now == "hybrid" and 400 < f0 < 430)
-    d.nv_host_set_tuner(h, b"hybrid440")
+    check("the tuner in force: %s, an A4 at %.2f Hz" % (now, f0), now == "gm2" and 435 < f0 < 445)
+    d.nv_host_set_tuner(h, b"hybrid")
     n = settle()
     now2 = text(d.nv_host_tuner, h)
     f1 = pitch()
     c = 1200 * math.log2(f1 / f0)
-    check("hybrid440 asked, built in %d blocks: read back %s" % (n, now2), n >= 0 and now2 == "hybrid440")
-    check("...the A4 up by 440/415 (+101.2 cents)", abs(c - 1200 * math.log2(440 / 415)) < 3,
+    check("hybrid asked, built in %d blocks: read back %s" % (n, now2), n >= 0 and now2 == "hybrid")
+    check("...the A4 down by 440/415 (-101.2 cents)", abs(c + 1200 * math.log2(440 / 415)) < 3,
           "%.2f Hz, %+.1f cents" % (f1, c))
     sysn = d.nv_raga_system_name(0)
     check("the Eastern tuning's systems listed (first: %s)" % (sysn.decode() if sysn else None), bool(sysn))

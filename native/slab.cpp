@@ -9792,6 +9792,8 @@ struct Part {
         pedalled.clear();
         cutting.clear();
         open_ring.clear();
+        for (size_t pi = 0; pi < patches.size(); pi++)
+            amp_touch((int)pi);                 // (each part's valve: its chord let go -- live's _amp_touch)
     }
 
     // CC120, ALL SOUND OFF (live's): the channel stopped now, pedal or no
@@ -9909,7 +9911,7 @@ struct Part {
             for (const Patch &p : patches) {
                 if (!(p.leslie || p.wheel_swell || p.amp > 0.0) || !(p.channel < 0 || p.channel == pc(ch)))
                     continue;
-                if (p.wheel_swell && (!(p.amp > 0.0) || p.leslie) && swell != 1.0) {
+                if (p.wheel_swell && swell != 1.0) {
                     const double was = swell;
                     swell = 1.0;
                     S.channel_gain(sounding_tone(ch, p.pid, p.cache, false), 1.0 / was);
@@ -11109,7 +11111,7 @@ struct Part {
                     continue;                       // (CC12 the drive's: the swell is the wheel's route alone)
                 // A TONEWHEEL ORGAN's WHEEL IS ITS SWELL, its drive or not: the
                 // drive CC12's and the panel's knob (live's wheel_roles, _wheel_route)
-                if (p.amp > 0.0 && !(cc == 1 && p.leslie && p.wheel_swell)) {
+                if (p.amp > 0.0 && !(cc == 1 && p.wheel_swell)) {
                     int step = (int)nearbyint(v / 127.0 * LIVE_DRIVE_STEPS);
                     auto it = drive_step.find(p.pid);
                     if (it == drive_step.end() || it->second != step) {

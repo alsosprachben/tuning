@@ -145,15 +145,18 @@ def child(nvx, case):
         aside(lambda: d.nv_host_drive(h, 0, dv))
         check("its drive set to 1.5: read back", abs(dv[0] - 1.5) < 1e-9 and abs(dv[2] - 1.5) < 1e-9, "%.2f" % dv[0])
     else:
+        # (15: the held note's stand-in time came last, global 14 -- 3335da3)
         cnt = d.nv_host_global_count()
-        check("the globals counted", cnt == 14, "%d" % cnt)
+        check("the globals counted", cnt == 15, "%d" % cnt)
         d.nv_host_set_global(h, 3, 12.0)
         d.nv_host_set_global(h, 10, 96.0)
+        d.nv_host_set_global(h, 14, 50.0)
         run(40)
-        check("the bend range 12, the metronome 96 bpm: read back",
-              d.nv_host_global(h, 3) == 12.0 and d.nv_host_global(h, 10) == 96.0,
-              "%.1f st, %.0f bpm" % (d.nv_host_global(h, 3), d.nv_host_global(h, 10)))
+        check("the bend range 12, the metronome 96 bpm, the stand-in 50 ms: read back",
+              d.nv_host_global(h, 3) == 12.0 and d.nv_host_global(h, 10) == 96.0 and d.nv_host_global(h, 14) == 50.0,
+              "%.1f st, %.0f bpm, %.0f ms" % (d.nv_host_global(h, 3), d.nv_host_global(h, 10), d.nv_host_global(h, 14)))
         d.nv_host_set_global(h, 10, 0.0)
+        d.nv_host_set_global(h, 14, 20.0)
 
         # A PART's PAN AND SENDS: set on every channel, read back; panned hard left, its right side quiet
         def lr():

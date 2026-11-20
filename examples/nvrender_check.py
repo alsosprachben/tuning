@@ -17,6 +17,8 @@ that cache (nvlive_check.cached_export): a file at a time costs one export,
 not one a file.
 --tuner: both at that tuner -- nvrender computing it (native/tuner.cpp),
 blockrender's CLI taking it by name -- and --a at that reference pitch.
+--keep=DIR: a differing file's two renders (and their room.json, send and
+display files) copied there.
 --state=PATH: each file's word appended there as it comes (FILE<TAB>word),
 and a file it already holds not run again -- so a run killed (the machine
 short of memory) loses at most the file it was on, and the next resumes;
@@ -135,6 +137,11 @@ def main(argv):
             same += 1
             print("  %s: identical (%d bytes)" % (name, os.path.getsize(nv)), flush=True)
             word(path, "identical")
+        if opt.get("keep") and bad:         # (--keep=DIR: a differing file's two renders kept there)
+            os.makedirs(opt["keep"], exist_ok=True)
+            for f in (nv, py, jn, jp, dn, dp, sn, sp):
+                if os.path.exists(f):
+                    shutil.copy(f, opt["keep"])
         for f in (nv, py, jn, jp, dn, dp):
             if os.path.exists(f):
                 os.remove(f)
