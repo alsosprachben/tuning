@@ -13,7 +13,10 @@ parts on one channel, a GS variation and a map's tone, a cabinet and a
 pickup, a muted part, a level above unity (clamped), a pan, the scene's
 controls and a controller matrix exclusive, a name outside ASCII; organs'
 stops -- the church organ's 28-bit word with old rank names, the
-harmonium's CC43-45, a drawbar variation, the harpsichord, none drawn.
+harmonium's CC43-45, a drawbar variation, the harpsichord, none drawn;
+Moog panels -- CC86's Messenger mode and the chart's CCs, the part's own
+knobs over the voice's (a switch, a foot, a mode, the voice's own touch),
+knobs in older units left as the voice's, knobs on a piano ignored.
 """
 import ctypes
 import json
@@ -62,6 +65,17 @@ TEST = {
                  drawn=["8", "4"]),
             dict(program=19, drums=False, channel=None, lo=0, hi=127, transpose=0, level_db=0.0, muted=False,
                  drawn=[]),
+        ],
+    },
+    "moog": {
+        "parts": [
+            dict(program=81, drums=False, channel=None, lo=0, hi=127, transpose=0, level_db=0.0, muted=False,
+                 cabinet="guitar12", synth=dict(cutoff=0.31, resonance=0.62, sync=True, osc1_octave=16,
+                                                mode=2, a_vel=-1.0), synth_units=6),
+            dict(program=80, drums=False, channel=None, lo=0, hi=127, transpose=0, level_db=0.0, muted=False,
+                 synth=dict(cutoff=0.9), synth_units=5),
+            dict(program=0, drums=False, channel=None, lo=0, hi=127, transpose=0, level_db=0.0, muted=False,
+                 synth=dict(cutoff=0.2), synth_units=6),
         ],
     },
     "empty": {},

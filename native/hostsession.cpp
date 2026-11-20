@@ -139,6 +139,27 @@ const OrganSpec *nv_host::organ_of(int prog, int var) const
     return (size_t)prog < E.prog_organ.size() && E.prog_organ[prog] >= 0 ? &E.organs[E.prog_organ[prog]] : nullptr;
 }
 
+// THE MOOG a program plays under a GS variation (live._moog_class): its
+// first layer's panel into pn (NV_MK_N), false if it is not one
+bool nv_host::moog_pn_of(int prog, int var, double *pn) const
+{
+    if (prog < 0 || prog > 127)
+        return false;
+    long long q = 128LL * prog + 60;
+    const int msb = var & 127, mp = var >> 7;
+    if (msb && !E.vgs.empty()) {
+        const int en = E.vgs[((size_t)(mp >= 1 && mp <= 4 ? mp : 0) * 128 + prog) * 128 + msb];
+        if (en > 0 && !E.vents[en].ls.empty() && E.vents[en].ls[0][0] >= 0)
+            q = NV_K_VAR + 128LL * E.vents[en].ls[0][0] + 60;
+    }
+    const NoteClass *k = q >= 0 && q < (long long)K.size() ? K[q] : nullptr;
+    if (!k || k->moog.n_layer < 1)
+        return false;
+    for (int i = 0; i < NV_MK_N; i++)
+        pn[i] = k->moog.L[0].pn[i];
+    return true;
+}
+
 std::string nv_host::presets_path() const { return beside(session_path, "presets.json"); }
 std::string nv_host::scenes_path() const { return beside(session_path, "scenes.json"); }
 
@@ -1364,6 +1385,30 @@ std::string preset_smf(const sess::J &p, const std::string &name, const nv_host 
                             w |= 1LL << r;
                 for (int j = 0; j < og->n_wccs; j++)
                     o.msg(t, 0xB0 | ch, og->wccs[j] & 127, (int)((w >> (7 * j)) & 0x7F));
+            }
+            // ...A MOOG's PANEL (live.preset_midi): CC86's Messenger mode,
+            // then the chart's CCs in its order, coarse halves first -- the
+            // voice's knobs, the part's own over them (in synth_units 6;
+            // older ones left as the voice's, as a session's load leaves them)
+            double pn[NV_MK_N];
+            if (h && h->moog_pn_of(prog & 127, (int)num(x, "bank", 0) & 4095, pn)) {
+                const sess::J *su = x->get("synth_units"), *sy = x->get("synth");
+                if (su && su->is(sess::J::NUM) && su->i() >= 6 && sy && sy->is(sess::J::OBJ))
+                    for (const auto &kv : sy->o) {
+                        const int mk = panel::mk_index(kv.first.c_str());
+                        if (mk >= 0 && (kv.second.is(sess::J::NUM) || kv.second.is(sess::J::BOOL)))
+                            pn[mk] = kv.second.d();
+                    }
+                o.msg(t, 0xB0 | ch, 86, 127);
+                for (int cc = 0; cc < 128; cc++) {
+                    int k, kind, lo;
+                    nv_msgr_chart(cc, 0, &k, &kind);
+                    if (k < 0 || (k == NV_MK_A_VEL && pn[k] < 0.0))
+                        continue;
+                    o.msg(t, 0xB0 | ch, cc, nv_msgr_cc_value(kind, pn[k], &lo));
+                    if (lo >= 0)
+                        o.msg(t, 0xB0 | ch, cc + 32, lo);
+                }
             }
         }
         const int vol = num(x, "muted", 0.0) != 0.0 ? 0

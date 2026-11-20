@@ -674,6 +674,13 @@ def parse(path):
     _cabsel = {}             # its cabinet (CC83, tonelib.CABINET_CC): at once, put back by a program change
     _pksel = {}              # ...its pickup (CC85, tonelib.PICKUP_CC), the same
     _vbase = {}              # ...and the variation its program change chose, under them
+    # THE MESSENGER MODE (tonelib.MESSENGER_MODE_CC, CC86): the channels reading
+    # a Messenger's chart, each one's knob timeline [(t, seq, knob, value)]
+    # (knob None: back to the voice's own -- a new tone, a reset) and its
+    # 14-bit knobs' coarse halves (live._messenger_cc's msg_msb)
+    _msgr_on = set()
+    msgrev = {}
+    _msgr_msb = {}
     # THE DRUM INSTRUMENTS' OWN SETTINGS (GS): per channel, [(t, seq, key,
     # param, value)] from the drum NRPNs (18-1F rr) and the drum setup SysEx
     # (41 m p rr), key None with 'reset' where a drum set change or a reset
@@ -775,6 +782,38 @@ def parse(path):
         # any other bank plays the capital tone, as a Sound Canvas does
         v = _var.get(ch, 0)
         return VariationProgram(p, v) if v and ((p & 0x7F), v) in VARIATIONS else p
+    import patch_map as _PMC0
+    import moog as _MGC
+    _MCHART, _MLSB = _MGC.messenger_chart('1.0.7+')
+
+    def _msgr_take(t, msg):
+        # A CC ON A CHANNEL IN MESSENGER MODE (live._messenger_cc): a knob of
+        # its chart -- the fine half of a 14-bit one after its coarse -- set
+        # on the channel's panel for the notes after it, and True; False, a
+        # CC the chart has not (CC1, 7, 11, 64 ...), General MIDI's. (HOLD,
+        # CC73, is the sustain pedal: rewritten before it comes here.) On a voice that is not a Moog the knobs
+        # are taken and do nothing (live turns those with a GM counterpart).
+        c, v = msg.control, msg.value
+        if c in _MLSB:
+            hi = _MLSB[c]
+            msb = _msgr_msb.get((msg.channel, hi))
+            if msb is None:
+                return True
+            knob, kind = _MCHART[hi]
+            val = _MGC.messenger_value(kind, msb, v)
+        elif c in _MCHART:
+            ent = _MCHART[c]
+            if ent is None:
+                return True     # the panel's, not modelled yet
+            knob, kind = ent
+            if kind in _MGC.FOURTEEN:
+                _msgr_msb[(msg.channel, c)] = v
+            val = _MGC.messenger_value(kind, v)
+        else:
+            return False
+        msgrev.setdefault(msg.channel, []).append((t, _seq, knob, float(val)))
+        return True
+
     def _rechoose(ch):
         # A CHANNEL's CC83 or CC85 (tonelib.CABINET_CC): its variation through
         # the cabinet and the pickup chosen, each where its voice offers it
@@ -878,7 +917,11 @@ def parse(path):
                     continue
                 if msg.control not in _MPE_NOT_FANNED:
                     _inj.extend(msg.copy(channel=_m2, time=0) for _m2 in _mpe.members(_mc))
+        if (msg.type == 'control_change' and msg.control == 73 and msg.channel in _msgr_on):
+            # HOLD, in Messenger mode: the sustain pedal (live._messenger_cc)
+            msg = msg.copy(control=64, value=127 if msg.value >= 64 else 0)
         if msg.type == 'program_change':
+            _was_tone = (ch_prog.get(msg.channel, 0), _var.get(msg.channel, 0) & _PMC0.CAB_MASK)
             _dr, _pr, _var_ = T.resolve_patch(_bmsb.get(msg.channel, 0),
                                              _map_of(msg.channel), msg.program,
                                              _is_drums(msg.channel), _rxbank[0])
@@ -895,6 +938,11 @@ def parse(path):
             _pksel.pop(msg.channel, None)
             _vbase[msg.channel] = 0 if _dr else _var_
             _var[msg.channel] = 0 if _dr else _var_
+            if (msg.channel in msgrev
+                    and (_pr, _var[msg.channel] & _PMC0.CAB_MASK) != _was_tone):
+                # ...A NEW TONE's KNOBS ARE ITS OWN (live: a Part's new patch,
+                # as a Messenger recalling one sets every knob)
+                msgrev[msg.channel].append((t, _seq, None, None))
             if _dr and msg.channel in dedit:
                 # "When the Drum Set is changed, DRUM SETUP PARAMETER values
                 # will all be initialized" (VE-GS Pro MIDI Implementation)
@@ -904,6 +952,14 @@ def parse(path):
             # drum channel as a Drawbar Organ.
             if not _dr:
                 ch_progs.setdefault(msg.channel, []).append(_cur_prog(msg.channel))
+        elif msg.type == 'control_change' and msg.control == T.MESSENGER_MODE_CC:
+            # THE MESSENGER MODE on the channel, or off (live.msgr_ch)
+            if msg.value >= 64:
+                _msgr_on.add(msg.channel)
+            else:
+                _msgr_on.discard(msg.channel)
+        elif msg.type == 'control_change' and msg.channel in _msgr_on and _msgr_take(t, msg):
+            pass                # a knob on the channel's panel (_msgr_take)
         elif msg.type == 'control_change':
             ccs.setdefault(msg.channel, []).append((t, msg.control, msg.value))
             if 1 <= msg.control <= 95:
@@ -1066,6 +1122,9 @@ def parse(path):
                 # goes to 0, as live's does; this renderer kept them.
                 _rxbank[0] = _lvl != 1
                 _bmsb.clear(); _blsb.clear(); _drums.clear(); ch_prog.clear(); _var.clear(); _cabsel.clear(); _pksel.clear(); _vbase.clear()
+                _msgr_on.clear()        # (General MIDI's again, every knob its voice's: CC86 off)
+                for _mgc in msgrev:
+                    msgrev[_mgc].append((t, _seq, None, None))
                 _map0.clear()           # "When GS Reset is received ... 00: SELECTED"
                 _rmap.clear()
                 efxev.append((t, ('reset',)))
@@ -1222,7 +1281,7 @@ def parse(path):
             ch_progs.setdefault(_c, []).append(_p)
     return (ch_prog, ch_progs, notes, ccs, t, _legato_ticks(mid), pws,
             (ats, pts, sotas, dict(rpns=rpns, master=master, gmon=gmon,
-                                   pwseq=_pwseq, mts=mtsev, snd=sndev, pn=pn, single=single,
+                                   pwseq=_pwseq, mts=mtsev, snd=sndev, pn=pn, single=single, msgr=msgrev,
                                    mpe=mpe_ev, dedit=dedit, uset=uset, efx=efxev, cmx=cmx)))
 
 
@@ -5623,8 +5682,18 @@ def _note_moog(em, props, nt, A, _CBW, _CMXEV, _MF104, _MOOG_FT, _MOOG_KN, _MOOG
         # the whole note again for each panel, each with its own rows, the
         # two summed. A live template stays ONE knob-neutral set, which
         # live stamps once per layer (live.py, Slab.stamp's layer).
+        # ...AND THE CHANNEL's MESSENGER KNOBS at its onset (CC86's mode:
+        # blockrender's msgr), on the first layer's panel -- the one Messenger
+        _mko = {} if MOOG_NEUTRAL else dict(getattr(em, 'msgr_knobs', None) or {})
+
+        def _panel(_l):
+            _p0 = _MG.panel_of(props, layer=_l)
+            if _l == 'a' and _mko:
+                _p0 = dict(_p0)
+                _p0.update(_mko)
+            return _p0
         for _lay in (('a',) if MOOG_NEUTRAL else _MG.layers_of(props)):
-            _pan = _MG.apply_gm(_MG.panel_of(props, layer=_lay), _sd)
+            _pan = _MG.apply_gm(_panel(_lay), _sd)
             _knr = tuple(_MG.kn_row(_pan))
             _kkey = (nt.ch, _knr)
             if not MOOG_NEUTRAL and _mmgr is None and _kn_moves(nt.ch):
@@ -5632,9 +5701,9 @@ def _note_moog(em, props, nt, A, _CBW, _CMXEV, _MF104, _MOOG_FT, _MOOG_KN, _MOOG
                 # this voice on it, its knobs as the channel's sound
                 # controllers stand at each change (the note's own filter
                 # of them, as at its onset: what the class grants, its bias)
-                _kkey = (nt.ch, 'moves', nt.pc.__name__, _lay)
+                _kkey = (nt.ch, 'moves', nt.pc.__name__, _lay, tuple(sorted(_mko.items())) if _lay == 'a' else ())
                 if _kkey not in _MOOG_KROW:
-                    _kbase = _MG.panel_of(props, layer=_lay)
+                    _kbase = _panel(_lay)
 
                     def _kn_at(_t):
                         _d = _snd_d(nt.ch, _t)
@@ -5712,7 +5781,8 @@ def _note_moog(em, props, nt, A, _CBW, _CMXEV, _MF104, _MOOG_FT, _MOOG_KN, _MOOG
             _vb0 = (_VB[0], _VB[1], _VB[2])
             # ...FROM C where the engine has this voice (moog_spec), its
             # unison's voices drawn there as moog.unison draws them
-            _mnat = (_moog_native(em, props, nt, ('a', 'b').index(_lay), _mre, _sd)
+            _mnat = (_moog_native(em, props, nt, ('a', 'b').index(_lay), _mre, _sd,
+                                  _mko if _lay == 'a' else None)
                      if (NATIVE_TONE != 'off' and not MOOG_NEUTRAL) else None)
             if _mnat is not None and NATIVE_TONE == 'on':
                 NATIVE_STATS[0] += 1
@@ -5778,7 +5848,7 @@ def _note_moog(em, props, nt, A, _CBW, _CMXEV, _MF104, _MOOG_FT, _MOOG_KN, _MOOG
     return stops
 
 
-def _moog_native(em, props, nt, layer, mre, sd=None):
+def _moog_native(em, props, nt, layer, mre, sd=None, over=None):
     """A Moog layer's partials from C (native/tone.c nv_moog_tone): (rows,
     qacc, azimuth), or None (Python plays them). The emitter as _note_moog
     leaves it before them: the note's filter row set, no key, no FM."""
@@ -5806,12 +5876,19 @@ def _moog_native(em, props, nt, layer, mre, sd=None):
     qacc = np.array([v for pr in em._QACC for v in pr], np.float64)
     az = ctypes.c_double(em.azimuth)
     lay = spec.L[layer]
+    if over:
+        # ...ITS CHANNEL's MESSENGER KNOBS (blockrender's msgr): the layer
+        # built from its panel with them set (native.moog_layer_over)
+        lay = _NV.moog_layer_over(type(props), layer, over)
+        if lay is None:
+            return None
     if sd:
         # ...ITS KNOBS AS GM's SOUND CONTROLLERS TURN THEM (moog.apply_gm): sd
         # as CC71-78's offsets, in T.SOUND_CC's order
         dd = np.ascontiguousarray([float(sd.get(T.SOUND_CC[c], 0.0)) for c in sorted(T.SOUND_CC)], np.float64)
+        _lin = lay
         lay = _NV.MoogLayer()
-        d.nv_moog_apply(ctypes.byref(spec.L[layer]), dd.ctypes.data, ctypes.byref(lay))
+        d.nv_moog_apply(ctypes.byref(_lin), dd.ctypes.data, ctypes.byref(lay))
     n = d.nv_moog_tone(ctypes.byref(snap), ctypes.byref(t), ctypes.byref(lay), float(em.moog_filter_row),
                        float(mre), len(imgs), nsurf.ctypes.data, surf.ctypes.data, img.ctypes.data,
                        mir.ctypes.data, rows.ctypes.data, cap, qacc.ctypes.data, ctypes.byref(az))
@@ -7755,6 +7832,20 @@ def _prepare(path, tuner='hybrid440', sink=None):
     _DAMP_TRACKS = []           # (row0, row1, f0, first block, its track, its rows' onsets)
 
     (_SND_TL, _snd_d) = _prep_sound_controls(_CMXEV, _cmx_at, _sys, gmon)
+    # A MESSENGER-MODE CHANNEL's KNOBS AT AN ONSET (CC86: parse's msgr): each
+    # set since the last back-to-its-own (a new tone, a reset), as _snd_d reads
+    _MSGR_TL = {_c: sorted(_ev, key=lambda e: (e[0], e[1])) for _c, _ev in _sys.get('msgr', {}).items()}
+
+    def _msgr_at(_c, _t):
+        _st = {}
+        for _et, _q, _k, _v in _MSGR_TL.get(_c, ()):
+            if _et > _t + 1e-9:
+                break
+            if _k is None:
+                _st = {}
+            else:
+                _st[_k] = _v
+        return _st
 
     def _F(_c, _t):
         """This channel's 128-key table at time _t: FREQ unless under gm2."""
@@ -9333,6 +9424,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 em.htrem_pending = len(A['om'])
                 em.htrem_cfg = _HTREM_CH[em.channel]    # (this note's own: _HT_ROWS keeps it)
         transverse = []   # (freq, raw gain, decay dbps) of the main partials, for phantom pairing
+        em.msgr_knobs = _msgr_at(nt.ch, nt.on)     # (a Messenger-mode channel's knobs: CC86)
         stops = _note_moog(em, props, nt, A, _CBW, _CMXEV, _MF104, _MOOG_FT, _MOOG_KN, _MOOG_KROW,
                 _MOOG_KVAR, _MOOG_MKI, _MOOG_MPC, _MOOG_MPI, _MOOG_MPK, _MOOG_MPKN, _MOOG_MPR,
                 _SND_TL, _VB, _kn_moves, _mmgr, _sbias, _sctl, _snd_d, emit_partial, stops)

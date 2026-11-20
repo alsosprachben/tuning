@@ -23424,6 +23424,19 @@ ROTARY_CC = 82
 # unused by GS and GM 2.
 CABINET_CC = 83
 
+# THE MESSENGER MODE (Ben, 2026-11-19): CC86 >= 64 -- the channel reads a
+# Moog Messenger's own CC chart (moog.MESSENGER_CC, the 1.0.7+ firmware's)
+# from here on, as a part set to read one does (Part.cc_map "messenger"):
+# its knobs are the voice's panel, at the notes after them, and those numbers
+# lose their General MIDI meanings (CC10 is TUNE, not pan); < 64 General
+# MIDI again. A GM System On or GS Reset turns it off; a program change
+# keeps it (it says what is on the channel), the new voice's knobs its own.
+# In a file a note plays the knobs as they stand at its onset; live turns
+# the notes sounding too, and holds knobs sent while the channel's new voice
+# is still being built until it is in (Live._msgr_flush).
+# Free in General MIDI, GS, the Messenger's chart (fine halves too) and ours.
+MESSENGER_MODE_CC = 86
+
 # THE PICKUP (patch_map.PICKUP_CHOICES, Ben 2026-11-19): CC85, the same way --
 # its value a choice's index (0 the voice's own, 1 neck, 2 neck+middle, 3
 # middle, 4 middle+bridge, 5 bridge, 6 neck+bridge, 7 anti-phase), what each

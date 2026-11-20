@@ -606,6 +606,7 @@ struct Export {
     std::vector<VarEnt> vents;
     std::vector<int> vgs, vgm2;
     std::vector<double> cabt;             // the cabinet choices' speakers (VARS' last): 36 a choice, native.cab_terms
+    std::vector<double> mtab;             // MTAB: moog.py's tables by knob position (a Messenger-mode knob's)
 };
 
 static bool read_export(const char *path, Export &E)
@@ -797,6 +798,19 @@ static bool read_export(const char *path, Export &E)
                 E.kit_spar.insert(E.kit_spar.end(), spar.begin(), spar.end());
             } else {
                 fseek(f, mp, SEEK_SET);
+            }
+        }
+        // MTAB: moog.py's tables by knob position (nv_moog_tables), what a
+        // file's Messenger-mode knobs are built from (an older export: none)
+        {
+            long tp = ftell(f);
+            char tt[4];
+            int tl = 0;
+            if (ok && fread(tt, 1, 4, f) == 4 && !memcmp(tt, "MTAB", 4) && fread(&tl, 4, 1, f) == 1 && tl >= 0) {
+                E.mtab.resize((size_t)tl / 8);
+                ok = fread(E.mtab.data(), 8, E.mtab.size(), f) == E.mtab.size();
+            } else {
+                fseek(f, tp, SEEK_SET);
             }
         }
         } else {
@@ -2059,6 +2073,56 @@ static int run(int argc, char **argv)
             x.made[std::make_pair(q, c)] = r;
             return r;
         }, &cx);
+    }
+    // ...AND A MESSENGER-MODE CHANNEL's KNOBS (CC86): each Moog note's class
+    // with them set on its first layer's panel (blockrender's _note_moog:
+    // native.moog_layer_over, nv_moog_build), put in K past its end
+    std::vector<std::unique_ptr<NoteClass>> msgr_made;
+    {
+        struct Mx {
+            std::vector<const NoteClass *> *K;
+            std::vector<std::unique_ptr<NoteClass>> *own;
+            std::map<std::pair<int, std::vector<std::pair<int, double>>>, int> made;
+            const Export *E;
+            void *kh;
+        } mx{&K, &msgr_made, {}, &E, nullptr};
+        const int rc = nv_song_msgr_resolve(song, [](void *ctx, int q, int n, const int *ks, const double *vs) {
+            Mx &x = *(Mx *)ctx;
+            if (q < 0 || q >= (int)x.K->size() || !(*x.K)[q] || (*x.K)[q]->moog.n_layer < 1)
+                return q;                       // (not a Moog: its knobs do nothing)
+            std::vector<std::pair<int, double>> key;
+            for (int j = 0; j < n; j++)
+                key.push_back(std::make_pair(ks[j], vs[j]));
+            auto it = x.made.find(std::make_pair(q, key));
+            if (it != x.made.end())
+                return it->second;
+            if (x.E->mtab.size() < 2)
+                return -1;
+            if (!x.kh) {                        // (the tables, and a synced OSC 2's coefficients: the kernel's)
+                nv_moog_tables(x.E->mtab.data());
+                x.kh = nv::klib_open(x.E->libs[0]);
+                nv_moog_coeff(x.kh ? nv::klib_sym(x.kh, "moog_coeff_rows") : nullptr);
+            }
+            const NoteClass *k0 = (*x.K)[q];
+            double pn[NV_MK_N];
+            for (int i = 0; i < NV_MK_N; i++)
+                pn[i] = k0->moog.L[0].pn[i];
+            for (int j = 0; j < n; j++)
+                if (ks[j] >= 0 && ks[j] < NV_MK_N)
+                    pn[ks[j]] = vs[j];
+            std::unique_ptr<NoteClass> d(new NoteClass(*k0));
+            if (nv_moog_build(pn, &k0->moog.L[0], &d->moog.L[0]) != 0)
+                return -1;
+            x.K->push_back(d.get());
+            x.own->push_back(std::move(d));
+            const int r = (int)x.K->size() - 1;
+            x.made[std::make_pair(q, key)] = r;
+            return r;
+        }, &mx);
+        if (rc < 0) {
+            fprintf(stderr, "nvrender: refused: a Messenger panel the engine cannot build (SYNC, or a turn under the MF-104M)\n");
+            return 2;
+        }
     }
     nv_song_strokes_k(song, K.data(), E.kit_skind.data(), E.kit_spar.data());   // (a gesture's strokes, _prep_strokes)
     // ...and A USER DRUM SET's keys (user_drum: GS's sets 65 and 66, programs

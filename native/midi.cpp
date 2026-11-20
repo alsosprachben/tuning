@@ -371,6 +371,15 @@ struct Parsed {
     std::vector<Efx> efx;
     std::vector<std::array<int, 3>> legato;    // _legato_ticks: (channel, key, k) slurred
     std::vector<CCEv> snd;      // sndev: CC71-78, and gmon (channel -1, cc -1), in message order
+    // msgrev: a Messenger-mode channel's knobs (CC86, tonelib.MESSENGER_MODE_CC),
+    // knob an NV_MK_* (-1: back to the voice's own; channel -1 every one's)
+    struct MsgrEv {
+        int ch;
+        double t;
+        int knob;
+        double v;
+    };
+    std::vector<MsgrEv> msgr;
     std::vector<std::pair<int, int>> chprogs;  // ch_progs: a melodic channel's program changes, in message order
     std::vector<int> chbsel;    // ...each one's bank (Note.bsel)
     std::map<int, int> parts;   // _voice_parts: a channel's voice part, by its track's name (nv_voice_body)
@@ -1348,6 +1357,8 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
     std::map<int, int> cabsel;      // ...each channel's cabinet (CC83, tonelib.CABINET_CC): at once, put back by a program change
     std::map<int, int> pksel;       // ...and its pickup (CC85, tonelib.PICKUP_CC), the same
     std::map<int, int> bbase;       // ...and the bank its program change chose, under them
+    std::set<int> msgr_on, msgr_used;               // the channels in Messenger mode (CC86); with knobs set
+    std::map<std::pair<int, int>, int> msgr_msb;    // ...a 14-bit knob's coarse half (live's msg_msb)
     // the map CC32 0 reads its bank in (blockrender.DEFAULT_MAP: TUNING_MAP)
     const char *tmap = nv_env("TUNING_MAP");
     const int default_map = tmap && *tmap ? atoi(tmap) : 0;
@@ -1928,6 +1939,8 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             cabsel.clear();
             pksel.clear();
             bbase.clear();
+            msgr_on.clear();                    // (General MIDI's again, every knob its voice's: CC86 off)
+            P.msgr.push_back(Parsed::MsgrEv{-1, t, -1, 0.0});
             P.mvol.push_back(std::make_tuple(t, seq, 1.0));      // (the master volume back to full)
             P.events.push_back(LiveEv{t, 6, -1, (int)P.sysex.size(), 0});     // (the live part's too)
             P.sysex.push_back(d);
@@ -1961,7 +1974,34 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             auto it = drums.find(c);
             return it != drums.end() ? it->second != 0 : (c % 16 == PERCUSSION_CHANNEL);
         };
+        // A CC ON A CHANNEL IN MESSENGER MODE (blockrender's _msgr_take): a
+        // knob of its chart (the fine half of a 14-bit one after its coarse)
+        // on the channel's panel, true; false, one the chart has not
+        auto msgr_take = [&](int c, int cc, int v, double tt) {
+            int knob, k2;
+            nv_msgr_chart(cc - 32, 0, &knob, &k2);
+            double val;
+            if (cc >= 32 && knob >= 0 && (k2 == 0 || k2 == 1)) {
+                auto mi = msgr_msb.find(std::make_pair(c, cc - 32));
+                if (mi == msgr_msb.end())
+                    return true;
+                val = nv_msgr_value(k2, mi->second, v);
+            } else {
+                nv_msgr_chart(cc, 0, &knob, &k2);
+                if (knob == -1)
+                    return false;
+                if (knob == -2)
+                    return true;            // (the panel's, not modelled yet)
+                if (k2 == 0 || k2 == 1)
+                    msgr_msb[std::make_pair(c, cc)] = v;
+                val = nv_msgr_value(k2, v, -1);
+            }
+            P.msgr.push_back(Parsed::MsgrEv{c, tt, knob, val});
+            msgr_used.insert(c);
+            return true;
+        };
         if (kind == 0xC0) {
+            const std::pair<int, int> was_tone(prog.count(ch) ? prog[ch] : 0, (bsel.count(ch) ? bsel[ch] : 0) & 0xFFFF);
             // THE BANK (tonelib.resolve_patch): ignored after GM 1's System On;
             // MSB 120 a drum set, 121 GM 2's tone by its LSB; a drum channel
             // stays one; else GS's variation, read in the map CC32 names
@@ -2016,13 +2056,32 @@ static int parse(const uint8_t *buf, long long len, Parsed &P)
             }
             if (live_ev)
                 P.events.push_back(LiveEv{t, 5, ch, m.d0, 0});
+            if (msgr_used.count(ch) && std::make_pair(prog[ch], bsel[ch] & 0xFFFF) != was_tone)
+                P.msgr.push_back(Parsed::MsgrEv{ch, t, -1, 0.0});   // (a new tone's knobs its own: blockrender's)
+        } else if (kind == 0xB0 && (m.d0 == 86 || (msgr_on.count(ch) && m.d0 != 73 && msgr_take(ch, m.d0, m.d1, t)))) {
+            // THE MESSENGER MODE (CC86) on the channel or off, or a knob of its
+            // chart on a channel in it (blockrender's _msgr_take): not General
+            // MIDI's -- live hears it as it came
+            if (m.d0 == 86) {
+                if (m.d1 >= 64)
+                    msgr_on.insert(ch);
+                else
+                    msgr_on.erase(ch);
+            }
+            if (live_ev)
+                P.events.push_back(LiveEv{t, 2, ch, m.d0, m.d1});
         } else if (kind == 0xB0) {
             int cc = m.d0, v = m.d1;
+            const int lcc = cc, lv = v;
+            if (cc == 73 && msgr_on.count(ch)) {    // (HOLD, in Messenger mode: the sustain pedal)
+                cc = 64;
+                v = v >= 64 ? 127 : 0;
+            }
             P.ccs.push_back(CCEv{ch, t, cc, v});
             if (cc >= 1 && cc <= 95)
                 efx_cv(t, ch, cc, v);
             if (live_ev)
-                P.events.push_back(LiveEv{t, 2, ch, cc, v});
+                P.events.push_back(LiveEv{t, 2, ch, lcc, lv});
             if (cc >= 71 && cc <= 78)
                 P.snd.push_back(CCEv{ch, t, cc, v});
             if (cc == 0)
@@ -2793,6 +2852,8 @@ void nv_midi_song(void *p, void *song, const double *trim)
         nv_song_legato(song, l[0], l[1], l[2]);
     for (const nv::CCEv &e : P->snd)
         nv_song_snd(song, e.ch, e.t, e.cc, e.v);
+    for (const auto &e : P->msgr)
+        nv_song_msgr(song, e.ch, e.t, e.knob, e.v);
     for (const auto &pt : P->parts)
         nv_song_set_part(song, pt.first, pt.second);
     for (const auto &s : P->single)

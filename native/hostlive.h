@@ -1141,14 +1141,17 @@ struct nv_host {
         pats[i].want_dr = dr;
         pats[i].want_var = v;
         reqs.push_back(Req{i, prog, dr, v});
+        nv_part_pending(part, pats[i].pi, 1, 0);   // (live's patch_want: a Messenger's knobs wait for it)
     }
     // a request done (swapped in, or not native): the part wants nothing more
     // if it was the last asked
     void answered(size_t i, int prog, bool dr, int v)
     {
         PartAt &pa = pats[i];
-        if (pa.want == prog && pa.want_dr == dr && pa.want_var == v)
+        if (pa.want == prog && pa.want_dr == dr && pa.want_var == v) {
             pa.want = -1;
+            nv_part_pending(part, pa.pi, 0, 0);     // (posted after its swap: its held Messenger knobs then played)
+        }
     }
     struct Req {
         size_t i;
@@ -1814,6 +1817,7 @@ struct nv_host {
     int scene_recall(const std::vector<std::string> &events);
     std::string presets_path() const, scenes_path() const;
     const OrganSpec *organ_of(int prog, int var) const;      // (live._organ_class)
+    bool moog_pn_of(int prog, int var, double *pn) const;    // (live._moog_class)
     std::vector<std::string> pending_drawn; // a preset's stops (names), for its organ once it is swapped in
     int pending_drawn_prog = -1;
     bool pending_drawn_in = false;          // ...and whether that organ has come in yet

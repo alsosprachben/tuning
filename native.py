@@ -525,6 +525,7 @@ def _load():
             ('nv_moog_apply', None, [ctypes.POINTER(MoogLayer), ctypes.c_void_p, ctypes.POINTER(MoogLayer)]),
             ('nv_moog_tables', None, [ctypes.c_void_p]),
             ('nv_moog_build', I, [ctypes.c_void_p, ctypes.POINTER(MoogLayer), ctypes.POINTER(MoogLayer)]),
+            ('nv_moog_coeff', None, [ctypes.c_void_p]),
             ('nv_moog_tone', I, [P, ctypes.POINTER(ToneIn), ctypes.POINTER(MoogLayer), C, C, I, ctypes.c_void_p,
                                  ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_void_p, I,
                                  ctypes.c_void_p, D]),
@@ -1627,6 +1628,37 @@ MOOG_KNOBS = ('osc1_octave', 'osc1_wave', 'osc2_octave', 'osc2_wave', 'osc2_freq
               'lfo1_dest', 'lfo1_reset', 'mod_amount', 'mod_dest', 'mf104_on', 'mf104_time', 'mf104_range',
               'mf104_feedback', 'mf104_mix', 'mf104_rate', 'mf104_amount', 'mf104_wave', 'a_vel',
               'lfo2_rate', 'lfo2_pitch', 'lfo2_cut', 'lfo2_amp', 'f_loop', 'a_loop', 'f_vel', 'multitrig')
+
+
+_MOOG_OVER = {}
+_MOOG_TAB = []
+
+
+def moog_layer_over(cls, layer, over):
+    """A Moog class's LAYER with knobs OVER (moog.PANEL names -> values) set on
+    its panel -- a file's Messenger-mode knobs (blockrender's msgr) -- built
+    as a knob turned live builds one (tone.c nv_moog_build, which nvrender
+    calls the same way): a MoogLayer, or None where it cannot be (the class
+    not the engine's, or a turn under the MF-104M)."""
+    import numpy as np
+    spec = moog_spec(cls)
+    if spec is None or layer >= spec.n_layer:
+        return None
+    key = (cls, layer, tuple(sorted(over.items())), id(spec))
+    if key in _MOOG_OVER:
+        return _MOOG_OVER[key]
+    d = lib()
+    if not _MOOG_TAB:
+        import blockrender as BR
+        _MOOG_TAB.append(np.ascontiguousarray(moog_tables(), np.float64))    # (kept: tone.c holds the pointer)
+        d.nv_moog_tables(_MOOG_TAB[0].ctypes.data)
+        d.nv_moog_coeff(ctypes.cast(BR.ensure_lib().moog_coeff_rows, ctypes.c_void_p).value)
+    base = spec.L[layer]
+    pn = np.array([float(over.get(k, base.pn[i])) for i, k in enumerate(MOOG_KNOBS)], np.float64)
+    out = MoogLayer()
+    got = out if d.nv_moog_build(pn.ctypes.data, ctypes.byref(base), ctypes.byref(out)) == 0 else None
+    _MOOG_OVER[key] = got
+    return got
 
 
 def moog_tables():

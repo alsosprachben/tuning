@@ -367,6 +367,15 @@ struct Song {
     };
     std::vector<Snd> snd;
     std::vector<long long> mix;     // each note's mix channel (nv_song_mix), made at the first ask
+    // A MESSENGER-MODE CHANNEL's KNOBS (CC86: the reader's msgr), in message
+    // order: (channel, t, NV_MK_* knob or -1 back to its own, value)
+    struct Msgr {
+        long long ch;
+        double t;
+        int knob;
+        double v;
+    };
+    std::vector<Msgr> msgr;
     // ITS MOOGS' ROWS (_MOOG_FT, _MOOG_KN, _MOOG_KROW): each layer of each
     // Moog note its filter row, in the notes' order; the knob rows, one a
     // channel and panel (a row's slot 9 its index)
@@ -3032,6 +3041,55 @@ void nv_song_cab_resolve(void *s, int (*cb)(void *, int, int, int *), void *ctx)
             e.cab = r != q ? ec : 0;
             g->mix.clear();
         }
+}
+
+void nv_song_msgr(void *s, long long ch, double t, int knob, double v)
+{
+    ((nv::Song *)s)->msgr.push_back(nv::Song::Msgr{ch, t, knob, v});
+}
+
+// EACH NOTE ON A MESSENGER-MODE CHANNEL (CC86): the knobs set on it by its
+// onset since it was last its voice's own (blockrender's _msgr_at: in time
+// order, a tie in message order, t + 1e-9 counted) -- cb(ctx, its class,
+// their count, the knobs, their values) the class it plays them on, -1 none
+// the engine can build (returned: the file refused), else 0
+int nv_song_msgr_resolve(void *s, int (*cb)(void *, int, int, const int *, const double *), void *ctx)
+{
+    nv::Song *g = (nv::Song *)s;
+    if (g->msgr.empty())
+        return 0;
+    std::vector<nv::Song::Msgr> tl = g->msgr;
+    std::stable_sort(tl.begin(), tl.end(), [](const nv::Song::Msgr &a, const nv::Song::Msgr &b) { return a.t < b.t; });
+    for (auto &e : g->notes) {
+        if (e.drum)
+            continue;
+        std::map<int, double> st;
+        for (const auto &m : tl) {
+            if (m.ch != e.ch && m.ch != -1)
+                continue;
+            if (m.t > e.on + 1e-9)
+                break;
+            if (m.knob < 0)
+                st.clear();
+            else
+                st[m.knob] = m.v;
+        }
+        if (st.empty())
+            continue;
+        std::vector<int> ks;
+        std::vector<double> vs;
+        for (const auto &kv : st) {
+            ks.push_back(kv.first);
+            vs.push_back(kv.second);
+        }
+        const int q = e.kidx(), r = cb(ctx, q, (int)ks.size(), ks.data(), vs.data());
+        if (r < 0)
+            return -1;
+        if (r != q)
+            e.kover = r;
+    }
+    g->mix.clear();
+    return 0;
 }
 
 int nv_song_kidx(void *s, int i) { return ((nv::Song *)s)->notes[i].kidx(); }

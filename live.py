@@ -4521,6 +4521,8 @@ class Live:
         self.lfo2_w = {}
         self.lfo2_pr = {}
         self.msg_msb = {}               # (channel, CC) -> a Messenger knob's coarse half
+        self.msgr_ch = set()            # the channels a file's CC86 put in Messenger mode (T.MESSENGER_MODE_CC)
+        self.msgr_defer = {}            # channel -> its chart's CCs held while a part on it waits for its voice
         # A MESSENGER TO SET: the output it is on (None: none), the firmware
         # whose chart it reads (moog.FIRMWARES), and what is on its way to it --
         # sent from a thread of its own, never the audio thread's
@@ -6215,6 +6217,13 @@ class Live:
                 self._cmx_upd(ch, n0, parts)
             for slots, tilt in self._press_groups(ch, note=msg.note):
                 self.slab.press(slots, msg.value / 127.0, self.press_db, tilt)
+        elif msg.type == "control_change" and msg.control == T.MESSENGER_MODE_CC:
+            # THE MESSENGER MODE (CC86): the channel's parts read the
+            # Messenger's chart from here on (_messenger_cc), or no longer
+            if msg.value >= 64:
+                self.msgr_ch.add(ch)
+            else:
+                self.msgr_ch.discard(ch)
         elif msg.type == "control_change" and self._messenger_cc(ch, msg.control, msg.value, n0):
             pass            # a Messenger's panel, on a part that reads its chart
         elif msg.type == "control_change":
@@ -9385,6 +9394,17 @@ class Live:
                     sl.kn_ag[r] = ag
                     sl.set_knobs(r, sl.kn_base[r])
 
+    def _msgr_flush(self, n0):
+        """A channel's chart CCs held for a voice on its way (_messenger_cc),
+        played once no part that reads them still waits for one."""
+        for ch in list(self.msgr_defer):
+            if any(p.pid in self.patch_want for p in self.parts
+                   if (p.cc_map == "messenger" or ch in self.msgr_ch)
+                   and (p.channel is None or p.channel == ch)):
+                continue
+            for cc, v in self.msgr_defer.pop(ch):
+                self._messenger_cc(ch, cc, v, n0)
+
     def _messenger_cc(self, ch, cc, value, n0=0):
         """A CC on a channel where a part reads the Messenger's chart
         (moog.MESSENGER_CC): turn that part's knob and say so, or leave the
@@ -9397,7 +9417,7 @@ class Live:
         (moog.MESSENGER_GM) turn that sound controller instead -- CUTOFF is
         CC74, whatever brightness means on the instrument -- and the rest of
         the chart is still taken, so a Messenger's TUNE does not pan a piano."""
-        hears = [p for p in self.parts if p.cc_map == "messenger"
+        hears = [p for p in self.parts if (p.cc_map == "messenger" or ch in self.msgr_ch)
                  and (p.channel is None or p.channel == ch)]
         if not hears:
             return False
@@ -9405,6 +9425,12 @@ class Live:
         gm = any(p.moog() is None for p in hears)
         # the chart of the firmware the Messenger runs (moog.messenger_chart)
         chart, lsbs = _MG.messenger_chart(self.messenger_firmware)
+        # A VOICE ON ITS WAY: a part on the channel asked for a program not in
+        # yet (a file's program change, then its knobs, in one block) -- the
+        # knobs are the new voice's, held until it comes in (_msgr_flush)
+        if cc != 73 and (cc in chart or cc in lsbs) and any(p.pid in self.patch_want for p in hears):
+            self.msgr_defer.setdefault(ch, []).append((cc, value))
+            return True
         if cc == 73 and cc in chart:
             # HOLD holds both contours at sustain after the key goes up, and
             # off lets them go (examples/messenger_perf.py hold): the sustain
@@ -11273,6 +11299,8 @@ class Live:
         self.slab.send = [1.0] * 256           # every channel back to the nominal distance
         self.bank_msb.clear()
         self.bank_lsb.clear()
+        self.msgr_ch.clear()                    # (every channel General MIDI's: CC86 off)
+        self.msgr_defer.clear()
         self.map0.clear()
         self.ch_drums.clear()
         # ...and the device-level state, BEFORE the per-channel loop re-pitches
@@ -11632,11 +11660,23 @@ class Live:
             del self.wind_st[part.pid]
             self.wind_spent.extend(st["rows"].values())
         had = any(q.patch.leslie for q in self.parts)
+        _had_knobs = bool(part.synth or part.synth_b)
         part.set_patch(patch)
+        if _had_knobs and not (part.synth or part.synth_b) and part.moog() is not None:
+            # A NEW VOICE's KNOBS ARE ITS OWN -- and so are the knob rows its
+            # notes read: the turned values stayed in them (a Messenger's
+            # knobs, then a program change, played the next voice through
+            # the last one's cutoff)
+            for _kk, _kr in list(self.slab.kn_of.items()):
+                if _kk[0] == part.pid:
+                    _kp = self._moog_panel_for(part.pid, _kk[1], _kk[2] if len(_kk) > 2 else 'a')
+                    if _kp is not None:
+                        self.slab.set_knobs(_kr, _MG.kn_row(_kp))
         if patch.leslie and (patch.program, patch.variation) != (old.program, old.variation):
             self._rotor_own(patch, not had)     # (a new organ's rotors at its own speed)
         if self.patch_want.get(part.pid) == patch.key:
             del self.patch_want[part.pid]       # (what it asked for last: arrived)
+            self._msgr_flush(n0)
         # ...AND OTHER STRINGS, ITS OWN FREE ONES (_reg_forget)
         self._reg_forget(part, old, n0)
         # A MOOG PROGRAM SETS THE MESSENGER to it (queued, so the audio thread
@@ -13119,7 +13159,8 @@ def efx_recall(live, d):
 # channels' controls the preset keeps (its scene: chanstate), then each part
 # on a channel of its own: its bank (CC0, CC32), its program, its cabinet
 # (CC83) and pickup (CC85) after the program change that puts them back, an
-# organ's drawn stops (its stop word), its level (CC7) and pan (CC10). A part with no channel takes the first one free
+# organ's drawn stops (its stop word), a Moog's panel (CC86's Messenger mode,
+# then the Messenger's own CCs), its level (CC7) and pan (CC10). A part with no channel takes the first one free
 # (a drum part channel 10), a drum part elsewhere is made one by GS's Use For
 # Rhythm Part. What MIDI has no word for -- a part's key range and
 # transpose, its tuner, its knobs -- the presets keep; a text event names
@@ -13149,6 +13190,15 @@ def _organ_class(program, variation):
     v = variation if variation and ((program & 0x7F), variation) in _PM.VARIATIONS else 0
     pc = _PM.property_class_for_program(_PM.VariationProgram(program, v) if v else program)
     return pc if pc is not None and getattr(pc, "registerable", False) else None
+
+
+def _moog_class(program, variation):
+    """The Moog voice PROGRAM under VARIATION plays (_organ_class's way), None
+    if it is not one."""
+    _PM = __import__("patch_map")
+    v = variation if variation and ((program & 0x7F), variation) in _PM.VARIATIONS else 0
+    pc = _PM.property_class_for_program(_PM.VariationProgram(program, v) if v else program)
+    return pc if pc is not None and getattr(pc, "moog", False) else None
 
 
 def preset_midi(preset, name=""):
@@ -13221,6 +13271,18 @@ def preset_midi(preset, name=""):
                 _w = sum(1 << j for j, r in enumerate(_nm) if r in _dn)
                 for j, c in enumerate(tuple(getattr(_pc, "stop_word_ccs", (11, 43)))):
                     out.append((t, M("control_change", channel=ch, control=c, value=(_w >> (7 * j)) & 0x7F)))
+            # ...A MOOG's PANEL, as the Messenger's own CCs after CC86 puts the
+            # channel in Messenger mode (T.MESSENGER_MODE_CC) -- every knob
+            # its chart carries (moog.messenger_messages), the voice's with
+            # the part's own over them; knobs saved in older units (before
+            # synth_units 6, which live converts on load) left as the voice's
+            _mpc = _moog_class(prog, int(p.get("bank", 0)) & _PM.CAB_MASK)
+            if _mpc is not None:
+                _own = ({k: v for k, v in (p.get("synth") or {}).items() if k in _MG.PANEL}
+                        if int(p.get("synth_units", 1)) >= 6 else {})
+                out.append((t, M("control_change", channel=ch, control=T.MESSENGER_MODE_CC, value=127)))
+                for c, v in _MG.messenger_messages(_MG.panel_of(_mpc, _own), '1.0.7+'):
+                    out.append((t, M("control_change", channel=ch, control=c, value=v)))
         vol = 0 if p.get("muted") else max(0, min(127, int(round(127.0 * 10.0 ** (float(p.get("level_db", 0.0)) / 40.0)))))
         out.append((t, M("control_change", channel=ch, control=7, value=vol)))
         if p.get("pan") is not None:

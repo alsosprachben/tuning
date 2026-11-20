@@ -68,6 +68,13 @@ CHECKS = [
                                             "@m2_organ.midi2", "@mpe_organ.mid"], {}),
     ("assign_files", "nvrender_check.py", ["@assign_mode.mid", "18"], {}),
     ("moog_cmx", "nvrender_check.py", ["@moog_cmx.mid"], {}),
+    # a part's speaker and pickup (CC83, CC85: after the program change that
+    # puts them back), a channel's Messenger mode (CC86), presets' setup measures
+    ("choices_files", "nvrender_check.py", ["@pk_reset.mid", "@pk_strat_bridge.mid", "@pk_clav_anti.mid",
+                                            "@pk_ibanez_inside.mid", "@cab_gt412.mid", "@cab_org16les.mid",
+                                            "@msgr_mode.mid", "@setup_guitar_rig.mid", "@setup_organ_full.mid",
+                                            "@setup_moog.mid", "4"], {}),
+    ("preset_midi", "preset_midi_check.py", [], {}),
     ("mpe_files", "nvrender_check.py", ["@mpe_zone.mid", "@mpe/a_plain.mid", "@mpe/b_bends.mid",
                                         "@mpe/c_mvol.mid", "@mpe/d_press.mid", "@mpe/e_mgrbend.mid",
                                         "@mpe/f_m3neg.mid", "@mpe/g_mcc74.mid", "@mpe/h_mgrat.mid",
@@ -137,6 +144,10 @@ CHECKS = [
     ("user_set_part", "nvlive_check.py", ["@userdrums.mid", "4", "--drums", "--program=64"], {}),
     ("drum_delay", "nvlive_check.py", ["@drumdelay.mid", "5", "--drums", "--program=0", "--programs"], {}),
     ("rhythm_part", "nvlive_check.py", ["@rhythmpart.mid", "3", "--beside", "--program=0", "--programs"], {}),
+    ("pk_reset_live", "nvlive_check.py", ["@pk_reset.mid", "4", "--program=0", "--programs"], {}),
+    ("msgr_mode_live", "nvlive_check.py", ["@msgr_mode.mid", "3", "--program=0", "--programs"], {}),
+    ("setup_moog_live", "nvlive_check.py", ["@setup_moog.mid", "4", "--program=0", "--programs"], {}),
+    ("setup_rig_live", "nvlive_check.py", ["@setup_guitar_rig.mid", "4", "--program=0", "--programs"], {}),
 ]
 
 

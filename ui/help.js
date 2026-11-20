@@ -115,6 +115,7 @@ const HELP = {
       ['N CHANGED · BACK TO THE PATCH', 'How many controls you have changed; tap to put them all back. AS THE PATCH when none are.'],
       ['CONTROLS TEST', 'Opens a page of every kind of control, to try them.'],
       ['Orange', 'Changed from the patch. Double-tap a knob, or a switch\'s name, to put it back.'],
+      ['IN A MIDI FILE', 'CC86 at 64 or more puts a channel in Messenger mode: from there on it reads the Moog Messenger\'s own CC chart, so a file (or a sequencer) sets these knobs with the Messenger\'s numbers -- CC19 the cutoff, CC21 the resonance, and so on, the fine half of a knob 32 above it -- and a real Messenger on that channel follows the same file. Those numbers stop meaning what General MIDI says (CC10 is the Messenger\'s TUNE, not pan); volume, sustain, the reverb send and the mod wheel keep theirs. Below 64 it is General MIDI again; a GM System On or GS Reset turns it off. A program change keeps the mode and puts the knobs back to the new voice\'s own. In a file each note plays the knobs as they are when it starts; played live, turning one moves the notes sounding too.'],
     ],
   },
   'synth:LFO 1': {
@@ -515,7 +516,7 @@ const HELP = {
       ['LOAD', 'Brings that setup back.'],
       ['SAVE OVER', 'Saves the setup now in its place.'],
       ['DELETE', 'Takes it away.'],
-      ['AS MIDI', 'Writes what a MIDI file can say of it as a one-bar MIDI file, setups/NAME.mid in the music folder (the Files card): a GS Reset, the scene, then each part on a channel -- its bank, program, speaker (CC83), pickup (CC85), level and pan. Paste it at the top of a song so the song plays on this setup. A part\'s key range, transpose, tuner and knobs have no MIDI word: the preset keeps them, and the file names each part\'s keys in a text event.'],
+      ['AS MIDI', 'Writes what a MIDI file can say of it as a one-bar MIDI file, setups/NAME.mid in the music folder (the Files card): a GS Reset, the scene, then each part on a channel -- its bank, program, speaker (CC83), pickup (CC85), an organ\'s drawn stops, a synth\'s whole panel (CC86\'s Messenger mode, then the Messenger\'s own CCs), level and pan. Paste it at the top of a song so the song plays on this setup. A part\'s key range, transpose, tuner and knobs have no MIDI word: the preset keeps them, and the file names each part\'s keys in a text event.'],
       ['SAVE THIS SETUP AS…', 'Name a new preset on the screen\'s keys and save the setup now.'],
     ],
   },

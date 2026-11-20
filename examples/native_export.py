@@ -485,6 +485,11 @@ def main(argv):
         mb += struct.pack("<%di" % len(mk_map), *mk_map)
         mb += bytes(mk_f0) + bytes(mk_seat) + bytes(mk_choke) + bytes(mk_skind) + bytes(mk_spar)
         f.write(b"MKIT" + struct.pack("<i", len(mb)) + mb)
+        # MTAB: moog.py's spectra by knob position and its laws' constants
+        # (native.moog_tables), what a knob turned is built from -- live's,
+        # and a file's Messenger-mode knobs (nvrender), right after MKIT
+        mt = N.moog_tables().astype("<f8").tobytes()
+        f.write(b"MTAB" + struct.pack("<i", len(mt)) + mt)
         # MKNM: their names (percussion_map.drum_set_name), for nvlive's panel
         _nb = b"".join(struct.pack("<i", len(_s)) + _s
                        for _s in (PCM.drum_set_name(_k).encode("utf-8") for _k in mk_ids))
@@ -551,10 +556,6 @@ def main(argv):
                 vd.append(struct.pack("<12i", _p, _dv, *(rec + [0] * (10 - len(rec)))[:10]))
             vb4 = struct.pack("<i", len(vd)) + b"".join(vd)
             f.write(b"VDRN" + struct.pack("<i", len(vb4)) + vb4)
-            # MTAB: moog.py's spectra by knob position and its laws' constants
-            # (native.moog_tables), what a knob turned live is built from
-            mt = N.moog_tables().astype("<f8").tobytes()
-            f.write(b"MTAB" + struct.pack("<i", len(mt)) + mt)
             # EFXU: the panel's insertion effect (livetui.pick_efx): Roland's
             # numbered types and families, each type's parameters -- name,
             # its controller's mark, whether the model reads it, the value in

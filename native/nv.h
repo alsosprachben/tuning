@@ -689,6 +689,14 @@ void nv_moog_tables(const double *t);
 int nv_moog_build(const double *pn, const MoogLayer *base, MoogLayer *out);
 /* the kernel library's moog_coeff_rows, for a synced OSC 2 in nv_moog_build */
 void nv_moog_coeff(void *fn);
+/* slab.cpp: THE MESSENGER's CHART (moog.MESSENGER_CC; pre107 its firmware
+   before 1.0.7): CC -> knob (NV_MK_*; -2 one not modelled, -1 not the
+   chart's) and kind (0 '14', 1 'tune', 2 '7', 3 'foot', 4 'track', 5 'mode',
+   6 'onoff'); and a value as the knob's (moog.messenger_value; lsb -1 none) */
+void nv_msgr_chart(int cc, int pre107, int *knob, int *kind);
+double nv_msgr_value(int kind, int msb, int lsb);
+int nv_msgr_cc_value(int kind, double v, int *lo);
+void nv_part_pending(void *h, int pi, int on, long long n0);
 /* moog.unison: a note's voices at key f0 (9 a voice into uv, up to 16; *umid
    the one nearest unison), their count -- 1 none */
 int nv_moog_unison(const MoogLayer *L, double f0, double *uv, int *umid);
@@ -1523,6 +1531,8 @@ int nv_song_n_notes(void *s);
    tone on its part (_TONE_SEGS) */
 void nv_song_vars(void *s, int nent, const int *nls, const int *ls, const double *trim, const int *gs, const int *gm2);
 void nv_song_cab_resolve(void *s, int (*cb)(void *, int, int, int *), void *ctx);
+void nv_song_msgr(void *s, long long ch, double t, int knob, double v);
+int nv_song_msgr_resolve(void *s, int (*cb)(void *, int, int, const int *, const double *), void *ctx);
 void nv_cab_terms(int n, const double *terms);
 const NoteClass *nv_cab_variant(const NoteClass *k, int c);
 const NoteClass *nv_pk_variant(const NoteClass *k, int p);

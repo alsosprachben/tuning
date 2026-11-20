@@ -2964,6 +2964,7 @@ struct Part {
         std::shared_ptr<MoogLayer> mb_b;
         std::map<int, double> syn_kept[2];      // (a session's knobs the engine refused: kept, saved back, not heard)
         bool msgr = false;
+        bool pending = false;                   // a program asked for and not in yet (live.patch_want: the host's)
     };
     std::vector<Patch> patches;
     // THE MODULE's INSERTION EFFECT (live.efx: efxchain.cpp's), its export
@@ -7238,7 +7239,7 @@ struct Part {
     // the patch then in use, a change of program between them its own)
     struct Swap;
     struct Post {
-        int kind;                           // 0 the stops, 1 a patch change, 2 a Moog's knob (set_synth), 4 a drive knob
+        int kind;                           // 0 the stops, 1 a patch change, 2 a Moog's knob (set_synth), 4 a drive knob, 5 a program in
         std::vector<std::string> names;
         std::shared_ptr<Swap> swap;
         long long pid = 0;
@@ -7365,6 +7366,8 @@ struct Part {
         // over bit 12) or built again in another room keeps them
         const bool same_voice = !w.drums && !p.drums && w.program == p.program && p.cache && w.cache
                                 && (nv_tcache_var(w.cache) & 4095) == (nv_tcache_var(p.cache) & 4095);
+        const bool knobs_back = !same_voice && (w.program != p.program || w.cache != p.cache)
+                                && (!p.syn.empty() || !p.syn_b.empty());
         if (!same_voice && (w.program != p.program || w.cache != p.cache)) {
             p.syn.clear();
             p.mb.reset();
@@ -7418,6 +7421,14 @@ struct Part {
         clav_step.erase(ppid);
         amp_dirty.erase(ppid);
         messenger_sync(p);                  // A MOOG PROGRAM SETS THE MESSENGER to it (queued)
+        if (knobs_back)                     // (its knob rows back to the new voice's panel: live's _swap_patch)
+            for (auto &kk : S.kn_of)
+                if (std::get<0>(kk.first) == p.pid) {
+                    MoogLayer La;
+                    const MoogLayer *L = moog_panel(p, (int)std::get<1>(kk.first), La, std::get<2>(kk.first));
+                    if (L)
+                        S.set_knobs(kk.second, L->kn, true);
+                }
         Use u(*this, w.pi);
         amp_touch(w.pi);
     }
@@ -7555,6 +7566,12 @@ struct Part {
             }
             if (q.kind == 2) {
                 synth_post(q, n0);
+                continue;
+            }
+            if (q.kind == 5) {                  // (a program asked for, in: the Messenger CCs held for it)
+                if (q.pi >= 0 && q.pi < (int)patches.size())
+                    patches[q.pi].pending = false;
+                msgr_flush(n0);
                 continue;
             }
             if (q.kind == 4) {                  // (a session's drive knob, after its swap)
@@ -8021,6 +8038,9 @@ struct Part {
             S.send[c] = 1.0;                    // every channel at the nominal distance
         master_fine = master_coarse = 0.0;
         master_vol = 1.0;
+        for (int c = 0; c < 256; c++)
+            msgr_ch[c] = false;                 // (every channel General MIDI's: CC86 off)
+        msgr_defer.clear();
         for (int c = 0; c < 16; c++) {
             mono[c] = false;
             mono_stack[c].clear();
@@ -10534,6 +10554,8 @@ struct Part {
     // began (live.moog_glide: (pid, 'b') a layered voice's second Messenger)
     std::vector<std::pair<std::pair<long long, int>, std::map<int, double>>> moog_glide;
     bool msgr_all = false;                  // --messenger: every part reads the chart
+    bool msgr_ch[256] = {};                 // ...and the channels a file's CC86 put in Messenger mode (live.msgr_ch)
+    std::map<int, std::vector<std::pair<int, int>>> msgr_defer;    // ...its chart's CCs held for a voice on its way
     bool msgr_pre107 = false;               // ...a Messenger on firmware before 1.0.7 (moog.messenger_chart)
     bool msgr_said = false;
     std::map<std::pair<int, int>, int> msg_msb;     // (channel, CC) -> a knob's coarse half
@@ -10681,58 +10703,9 @@ struct Part {
             moog_refresh(*p, n0);
         }
     }
-    // moog.messenger_value: a Messenger CC's value as the panel knob's
-    // (kind 0 '14', 1 'tune', 2 '7', 3 'foot', 4 'track', 5 'mode', 6 'onoff')
-    static double msgr_value(int kind, int msb, int lsb)
-    {
-        switch (kind) {
-        case 0: return lsb >= 0 ? ((msb << 7) | lsb) / 16383.0 : msb / 127.0;
-        case 1: return msgr_value(0, msb, lsb) + 28.3 / (2.0 * 7.0 * 100.0);
-        case 2: return msb / 127.0;
-        case 3: { static const int F[4] = {32, 16, 8, 4}; return F[std::min(3, msb / 32)]; }
-        case 4: return msb < 64 ? 0.0 : 1.0;
-        case 5: return std::min(3, msb / 32);
-        }
-        return msb >= 64 ? 1.0 : 0.0;
-    }
-    // moog.MESSENGER_CC (its manual's Appendix A; MESSENGER_CC_PRE107 before
-    // 1.0.7: SUB WAVE on CC11, 14-bit): CC -> (knob, kind), knob -2 one the
-    // simulator does not model (taken all the same), -1 not the chart's
-    void msgr_chart(int cc, int *knob, int *kind) const
-    {
-        struct E { int cc, knob, kind; };
-        static const E C[] = {
-            {9, NV_MK_OSC1_WAVE, 0}, {14, NV_MK_OSC2_WAVE, 0}, {10, NV_MK_TUNE, 1}, {12, NV_MK_OSC2_FREQ, 0},
-            {15, NV_MK_OSC1_LEVEL, 0}, {16, NV_MK_OSC2_LEVEL, 0}, {17, NV_MK_SUB_LEVEL, 0},
-            {8, NV_MK_NOISE_LEVEL, 0}, {19, NV_MK_CUTOFF, 0}, {21, NV_MK_RESONANCE, 0},
-            {22, NV_MK_EG_AMOUNT, 0}, {23, NV_MK_F_ATTACK, 0}, {24, NV_MK_F_DECAY, 0}, {25, NV_MK_F_SUSTAIN, 0},
-            {26, NV_MK_F_RELEASE, 0}, {28, NV_MK_A_ATTACK, 0}, {29, NV_MK_A_DECAY, 0}, {30, NV_MK_A_SUSTAIN, 0},
-            {31, NV_MK_A_RELEASE, 0}, {71, NV_MK_SUB_WAVE, 2}, {75, NV_MK_OSC1_OCTAVE, 3},
-            {76, NV_MK_OSC2_OCTAVE, 3}, {78, NV_MK_KB_TRACK, 4}, {79, NV_MK_RES_BASS, 6}, {109, NV_MK_MODE, 5},
-            {13, NV_MK_MOD_AMOUNT, 0}, {72, NV_MK_MOD_DEST, 5}, {77, NV_MK_SYNC, 6}, {3, NV_MK_LFO1_RATE, 0},
-            {4, NV_MK_LFO1_DEPTH, 0}, {83, NV_MK_LFO1_SHAPE, 5}, {85, NV_MK_LFO1_DEST, 5},
-            {93, NV_MK_LFO1_RESET, 6}, {5, NV_MK_GLIDE, 0}, {81, NV_MK_A_VEL, 6},
-            {27, NV_MK_LFO2_RATE, 0}, {116, NV_MK_LFO2_PITCH, 6}, {117, NV_MK_LFO2_CUT, 6},
-            {118, NV_MK_LFO2_AMP, 6}, {112, NV_MK_F_LOOP, 6}, {113, NV_MK_A_LOOP, 6}, {80, NV_MK_F_VEL, 6},
-            {114, NV_MK_MULTITRIG, 6},
-            {2, -2, 0}, {18, -2, 0}, {20, -2, 0}, {73, -2, 0}, {89, -2, 0},
-            {102, -2, 0}, {107, -2, 0}, {108, -2, 0},
-        };
-        *knob = -1;
-        *kind = 0;
-        if (msgr_pre107 && cc == 71)
-            return;
-        if (msgr_pre107 && cc == 11) {
-            *knob = NV_MK_SUB_WAVE;
-            return;
-        }
-        for (const E &e : C)
-            if (e.cc == cc) {
-                *knob = e.knob;
-                *kind = e.kind;
-                return;
-            }
-    }
+    // moog.messenger_value, moog.MESSENGER_CC: nv_msgr_value, nv_msgr_chart
+    static double msgr_value(int kind, int msb, int lsb) { return nv_msgr_value(kind, msb, lsb); }
+    void msgr_chart(int cc, int *knob, int *kind) const { nv_msgr_chart(cc, msgr_pre107, knob, kind); }
     // ---- A MESSENGER TO SET (live.open_messenger's queue): what is sent,
     // through msgr_send (nvlive's: its thread writes it, the audio thread
     // never waits); the pitch-bend range it is set to; the note each of its
@@ -10748,24 +10721,7 @@ struct Part {
     }
     // moog.messenger_cc_value: a knob's value as the Messenger's CC, *lo -1
     // where it has no fine half
-    static int msgr_cc_value(int kind, double v, int *lo)
-    {
-        *lo = -1;
-        auto clip = [](double x) { double y = x < 1.0 ? x : 1.0; return y > 0.0 ? y : 0.0; };
-        switch (kind) {
-        case 0: {
-            int x = (int)nearbyint(clip(v) * 16383);
-            *lo = x & 0x7F;
-            return x >> 7;
-        }
-        case 1: return msgr_cc_value(0, v - 28.3 / (2.0 * 7.0 * 100.0), lo);
-        case 2: return (int)nearbyint(clip(v) * 127);
-        case 3: { int f = (int)v; return (f == 32 ? 0 : f == 16 ? 1 : f == 8 ? 2 : 3) * 32 + 16; }
-        case 4: return v < 0.5 ? 32 : 96;
-        case 5: return (int)v * 32 + 16;
-        }
-        return v != 0.0 ? 127 : 0;
-    }
+    static int msgr_cc_value(int kind, double v, int *lo) { return nv_msgr_cc_value(kind, v, lo); }
     // live.messenger_sync: a Moog part's panel (its patch's, its own knobs
     // over it) as the chart's CCs on its channel, coarse halves first, in
     // the chart's order -- or just one knob (knob >= 0)
@@ -10836,11 +10792,13 @@ struct Part {
     {
         std::vector<int> mine;
         bool hears = false, gm = false;
+        bool pend = false;
         for (size_t i = 0; i < patches.size(); i++) {
             const Patch &p = patches[i];
-            if (!(p.msgr || msgr_all) || !(p.channel < 0 || p.channel == pc(ch)))
+            if (!(p.msgr || msgr_all || msgr_ch[ch & 255]) || !(p.channel < 0 || p.channel == pc(ch)))
                 continue;
             hears = true;
+            pend = pend || p.pending;
             if (!p.drums && p.moog)
                 mine.push_back((int)i);
             else
@@ -10848,6 +10806,18 @@ struct Part {
         }
         if (!hears)
             return false;
+        if (cc != 73 && pend) {
+            // A VOICE ON ITS WAY (live._messenger_cc): the chart's CCs held
+            // until it comes in (msgr_flush)
+            int k1, d1, k2 = -1, d2 = 0;
+            msgr_chart(cc, &k1, &d1);
+            if (cc >= 32)
+                msgr_chart(cc - 32, &k2, &d2);
+            if (k1 != -1 || (k2 >= 0 && (d2 == 0 || d2 == 1))) {
+                msgr_defer[ch].push_back(std::make_pair(cc, v));
+                return true;
+            }
+        }
         if (cc == 73) {
             // HOLD holds both contours at sustain after the key goes up: the
             // sustain pedal, which on a synth holds the gate
@@ -10892,8 +10862,34 @@ struct Part {
         return true;
     }
 
+    // live._msgr_flush: the held CCs of each channel no part reading them
+    // still waits on, played
+    void msgr_flush(long long n0)
+    {
+        for (auto it = msgr_defer.begin(); it != msgr_defer.end();) {
+            bool pend = false;
+            for (const Patch &p : patches)
+                if ((p.msgr || msgr_all || msgr_ch[it->first & 255]) && (p.channel < 0 || p.channel == pc(it->first)))
+                    pend = pend || p.pending;
+            if (pend) {
+                ++it;
+                continue;
+            }
+            const int ch = it->first;
+            std::vector<std::pair<int, int>> q;
+            q.swap(it->second);
+            it = msgr_defer.erase(it);
+            for (auto &e : q)
+                messenger_cc(ch, e.first, e.second, n0);
+        }
+    }
+
     void control(int ch, int cc, int v, long long n0)
     {
+        if (cc == 86) {                             // THE MESSENGER MODE (tonelib.MESSENGER_MODE_CC): live's
+            msgr_ch[ch & 255] = v >= 64;
+            return;
+        }
         if (messenger_cc(ch, cc, v, n0))
             return;                                 // a Messenger's panel, on a part that reads its chart
         if (ch >= 0 && ch < 16 && cc >= 0 && cc < 128) {   // (the controller matrix's sources: live's ccv)
@@ -15150,3 +15146,97 @@ long nv_slab_free_list(void *h, long *out, long cap)
 }
 
 }  // extern "C"
+
+// moog.messenger_value: a Messenger CC's value as the panel knob's
+// (kind 0 '14', 1 'tune', 2 '7', 3 'foot', 4 'track', 5 'mode', 6 'onoff')
+double nv_msgr_value(int kind, int msb, int lsb)
+{
+    switch (kind) {
+    case 0: return lsb >= 0 ? ((msb << 7) | lsb) / 16383.0 : msb / 127.0;
+    case 1: return nv_msgr_value(0, msb, lsb) + 28.3 / (2.0 * 7.0 * 100.0);
+    case 2: return msb / 127.0;
+    case 3: { static const int F[4] = {32, 16, 8, 4}; return F[std::min(3, msb / 32)]; }
+    case 4: return msb < 64 ? 0.0 : 1.0;
+    case 5: return std::min(3, msb / 32);
+    }
+    return msb >= 64 ? 1.0 : 0.0;
+}
+
+// moog.MESSENGER_CC (its manual's Appendix A; MESSENGER_CC_PRE107 before
+// 1.0.7: SUB WAVE on CC11, 14-bit): CC -> (knob, kind), knob -2 one the
+// simulator does not model (taken all the same), -1 not the chart's -- the
+// live engine's (a part reading the chart) and the file reader's (CC86)
+void nv_msgr_chart(int cc, int pre107, int *knob, int *kind)
+{
+    struct E { int cc, knob, kind; };
+    static const E C[] = {
+        {9, NV_MK_OSC1_WAVE, 0}, {14, NV_MK_OSC2_WAVE, 0}, {10, NV_MK_TUNE, 1}, {12, NV_MK_OSC2_FREQ, 0},
+        {15, NV_MK_OSC1_LEVEL, 0}, {16, NV_MK_OSC2_LEVEL, 0}, {17, NV_MK_SUB_LEVEL, 0},
+        {8, NV_MK_NOISE_LEVEL, 0}, {19, NV_MK_CUTOFF, 0}, {21, NV_MK_RESONANCE, 0},
+        {22, NV_MK_EG_AMOUNT, 0}, {23, NV_MK_F_ATTACK, 0}, {24, NV_MK_F_DECAY, 0}, {25, NV_MK_F_SUSTAIN, 0},
+        {26, NV_MK_F_RELEASE, 0}, {28, NV_MK_A_ATTACK, 0}, {29, NV_MK_A_DECAY, 0}, {30, NV_MK_A_SUSTAIN, 0},
+        {31, NV_MK_A_RELEASE, 0}, {71, NV_MK_SUB_WAVE, 2}, {75, NV_MK_OSC1_OCTAVE, 3},
+        {76, NV_MK_OSC2_OCTAVE, 3}, {78, NV_MK_KB_TRACK, 4}, {79, NV_MK_RES_BASS, 6}, {109, NV_MK_MODE, 5},
+        {13, NV_MK_MOD_AMOUNT, 0}, {72, NV_MK_MOD_DEST, 5}, {77, NV_MK_SYNC, 6}, {3, NV_MK_LFO1_RATE, 0},
+        {4, NV_MK_LFO1_DEPTH, 0}, {83, NV_MK_LFO1_SHAPE, 5}, {85, NV_MK_LFO1_DEST, 5},
+        {93, NV_MK_LFO1_RESET, 6}, {5, NV_MK_GLIDE, 0}, {81, NV_MK_A_VEL, 6},
+        {27, NV_MK_LFO2_RATE, 0}, {116, NV_MK_LFO2_PITCH, 6}, {117, NV_MK_LFO2_CUT, 6},
+        {118, NV_MK_LFO2_AMP, 6}, {112, NV_MK_F_LOOP, 6}, {113, NV_MK_A_LOOP, 6}, {80, NV_MK_F_VEL, 6},
+        {114, NV_MK_MULTITRIG, 6},
+        {2, -2, 0}, {18, -2, 0}, {20, -2, 0}, {73, -2, 0}, {89, -2, 0},
+        {102, -2, 0}, {107, -2, 0}, {108, -2, 0},
+    };
+    *knob = -1;
+    *kind = 0;
+    if (pre107 && cc == 71)
+        return;
+    if (pre107 && cc == 11) {
+        *knob = NV_MK_SUB_WAVE;
+        return;
+    }
+    for (const E &e : C)
+        if (e.cc == cc) {
+            *knob = e.knob;
+            *kind = e.kind;
+            return;
+        }
+}
+
+// moog.messenger_cc_value: a knob's value as the Messenger's CC, *lo -1 where
+// it has no fine half (the live engine's sync, a preset's setup measure)
+int nv_msgr_cc_value(int kind, double v, int *lo)
+{
+    *lo = -1;
+    auto clip = [](double x) { double y = x < 1.0 ? x : 1.0; return y > 0.0 ? y : 0.0; };
+    switch (kind) {
+    case 0: {
+        int x = (int)nearbyint(clip(v) * 16383);
+        *lo = x & 0x7F;
+        return x >> 7;
+    }
+    case 1: return nv_msgr_cc_value(0, v - 28.3 / (2.0 * 7.0 * 100.0), lo);
+    case 2: return (int)nearbyint(clip(v) * 127);
+    case 3: { int f = (int)v; return (f == 32 ? 0 : f == 16 ? 1 : f == 8 ? 2 : 3) * 32 + 16; }
+    case 4: return v < 0.5 ? 32 : 96;
+    case 5: return (int)v * 32 + 16;
+    }
+    return v != 0.0 ? 127 : 0;
+}
+
+// A PART's PROGRAM ON ITS WAY (live.patch_want): the host's asked (now), or
+// come in or never coming (posted after its swap) -- then the Messenger CCs
+// held for it are played
+void nv_part_pending(void *h, int pi, int on, long long n0)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (pi < 0 || pi >= (int)P->patches.size())
+        return;
+    if (on) {
+        P->patches[pi].pending = true;
+        return;
+    }
+    nv::slab::Part::Post q{5, {}, nullptr};   // (come in: after the swap posted before it, as live's
+    q.pi = pi;                                 //  _swap_patch clears patch_want, then _msgr_flush)
+    P->posts.push_back(std::move(q));
+    (void)n0;
+}
