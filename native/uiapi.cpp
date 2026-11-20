@@ -1595,7 +1595,7 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
                 fn += isalnum(c) || c == ' ' || c == '-' || c == '_' || c == '.' ? (char)c : '_';
             const std::string dir = fileplay::music_root() + "/setups";
             mkdir(dir.c_str(), 0755);
-            rc = nv_preset_midi_file(h->presets_path().c_str(), name.c_str(), (dir + "/" + fn + ".mid").c_str());
+            rc = nv_preset_midi_file(h, h->presets_path().c_str(), name.c_str(), (dir + "/" + fn + ".mid").c_str());
             snprintf(msg, sizeof msg, rc ? "could not write setups/%s.mid" : "written: setups/%s.mid, on the Files card",
                      fn.c_str());
         } else if (call == "scene_save") {

@@ -1813,8 +1813,10 @@ struct nv_host {
     void udrum_queue(int s, int key, int code, int v);
     int scene_recall(const std::vector<std::string> &events);
     std::string presets_path() const, scenes_path() const;
+    const OrganSpec *organ_of(int prog, int var) const;      // (live._organ_class)
     std::vector<std::string> pending_drawn; // a preset's stops (names), for its organ once it is swapped in
     int pending_drawn_prog = -1;
+    bool pending_drawn_in = false;          // ...and whether that organ has come in yet
     std::vector<std::array<int, 7>> routes_replaced;     // (a preset's routes, for the panel's copy)
     sess::J session_state(const std::vector<std::array<int, 7>> &routes);
     bool session_save(const std::vector<std::array<int, 7>> &routes);

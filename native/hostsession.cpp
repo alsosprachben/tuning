@@ -104,11 +104,41 @@ static int pk_index(const std::string &s)
     return -1;
 }
 
+// RENAMED RANKS (tonelib.RANK_RENAMES, rank_rename): a preset's or a
+// session's old name as the voice with ranks NAMES calls it today -- only
+// where the new name is one of its ranks and the old one is not
+static std::string rank_rename(const std::string &name, const std::vector<std::string> &names)
+{
+    static const char *const R[][2] = {{"16", "principal 16"}, {"8", "principal 8"}, {"4", "octave 4"},
+                                       {"2", "super octave 2"}, {"2-2/3", "quint 2-2/3"}, {"5-1/3", "quint 5-1/3"},
+                                       {"flute", "flute 8"}, {"mixture", "mixture III"}, {"trumpet", "trumpet 8"}};
+    auto has = [&](const std::string &n) { return std::find(names.begin(), names.end(), n) != names.end(); };
+    for (const auto &r : R)
+        if (name == r[0])
+            return has(r[1]) && !has(name) ? r[1] : name;
+    return name;
+}
+
 static std::string beside(const std::string &path, const char *name)
 {
     size_t k = path.rfind('/');
     return (k == std::string::npos ? std::string(".") : path.substr(0, k)) + "/" + name;
 }
+// THE ORGAN a program plays under a GS variation (live._organ_class): the
+// variation's entry's where it has one, else the program's; null none
+const OrganSpec *nv_host::organ_of(int prog, int var) const
+{
+    if (prog < 0 || prog > 127)
+        return nullptr;
+    const int msb = var & 127, mp = var >> 7;
+    if (msb && !E.vgs.empty()) {
+        const int en = E.vgs[((size_t)(mp >= 1 && mp <= 4 ? mp : 0) * 128 + prog) * 128 + msb];
+        if (en > 0 && E.vents[en].pcls >= 0 && E.cls_organ[E.vents[en].pcls] >= 0)
+            return &E.organs[E.cls_organ[E.vents[en].pcls]];
+    }
+    return (size_t)prog < E.prog_organ.size() && E.prog_organ[prog] >= 0 ? &E.organs[E.prog_organ[prog]] : nullptr;
+}
+
 std::string nv_host::presets_path() const { return beside(session_path, "presets.json"); }
 std::string nv_host::scenes_path() const { return beside(session_path, "scenes.json"); }
 
@@ -651,10 +681,15 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
             if (sp.drums)
                 sp.var = 0;
             if (const sess::J *dn = sp.drums ? nullptr : pd.get("drawn"))     // (its stops: once its organ is in)
-                if (dn->is(sess::J::ARR))
+                if (dn->is(sess::J::ARR)) {
+                    std::vector<std::string> rk;    // (its ranks' names today: an old name renamed, rank_rename)
+                    if (const OrganSpec *og = organ_of(sp.program & 127, sp.var & 4095))
+                        for (int r = 0; r < og->n_rank; r++)
+                            rk.push_back(og->rank[r].key);
                     for (const sess::J &n : dn->a)
                         if (n.is(sess::J::STR))
-                            sp.drawn.push_back(n.s);
+                            sp.drawn.push_back(rank_rename(n.s, rk));
+                }
             part_add(sp);
         }
     // THE ORGAN's STOPS: drawn as the part's were (parts[0].drawn, by name) --
@@ -667,7 +702,7 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
             std::vector<char> want(names.size(), 0);
             for (size_t ri = 0; ri < names.size(); ri++)
                 for (const sess::J &n : dn->a)
-                    want[ri] = want[ri] || (n.is(sess::J::STR) && n.s == names[ri]);
+                    want[ri] = want[ri] || (n.is(sess::J::STR) && rank_rename(n.s, names) == names[ri]);   // (old names too)
             if (want_p == shown_program)
                 post([this, want](long long) { nv_part_set_drawn(part, 0, want.data(), (int)want.size()); });
             if (!at_start || want_p != shown_program) {
@@ -678,6 +713,7 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
                 post([this, w, want_p](long long) {     // (the swap reads it, on this thread)
                     pending_drawn = w;
                     pending_drawn_prog = want_p;
+                    pending_drawn_in = false;
                 });
             }
         }
@@ -1213,7 +1249,8 @@ static std::vector<uint8_t> gs_dt1(int a0, int a1, int a2, int v)
     return {0x41, 0x10, 0x42, 0x12, (uint8_t)a0, (uint8_t)a1, (uint8_t)a2, (uint8_t)v, (uint8_t)((128 - sum % 128) % 128)};
 }
 
-std::string preset_smf(const sess::J &p, const std::string &name)
+// (h: the engine whose organs' stops the parts draw -- their stop words; null none)
+std::string preset_smf(const sess::J &p, const std::string &name, const nv_host *h)
 {
     const long long GAP = 48, END = 1920;      // (live's SETUP_GAP_TICKS, SETUP_END_TICKS)
     SmfOut o;
@@ -1311,6 +1348,23 @@ std::string preset_smf(const sess::J &p, const std::string &name)
                 o.msg(t, 0xB0 | ch, 83, cab);
             if (pk > 0)
                 o.msg(t, 0xB0 | ch, 85, pk);
+            // ...AN ORGAN's STOPS: its drawn ranks as the voice's stop word
+            // (live._organ_class: the variation's organ where it has one)
+            const sess::J *dn = x->get("drawn");
+            const OrganSpec *og = h && dn && dn->is(sess::J::ARR) ? h->organ_of(prog & 127, (int)num(x, "bank", 0) & 4095)
+                                                                 : nullptr;
+            if (og) {
+                std::vector<std::string> names;
+                for (int r = 0; r < og->n_rank; r++)
+                    names.push_back(og->rank[r].key);
+                long long w = 0;
+                for (int r = 0; r < og->n_rank; r++)
+                    for (const sess::J &nm : dn->a)
+                        if (nm.is(sess::J::STR) && rank_rename(nm.s, names) == names[(size_t)r])     // (its old names too)
+                            w |= 1LL << r;
+                for (int j = 0; j < og->n_wccs; j++)
+                    o.msg(t, 0xB0 | ch, og->wccs[j] & 127, (int)((w >> (7 * j)) & 0x7F));
+            }
         }
         const int vol = num(x, "muted", 0.0) != 0.0 ? 0
                         : (int)std::max(0.0, std::min(127.0, std::nearbyint(127.0 * pow(10.0, num(x, "level_db", 0.0) / 40.0))));
@@ -1330,15 +1384,15 @@ std::string preset_smf(const sess::J &p, const std::string &name)
     return f;
 }
 
-// A PRESET's SETUP MEASURE written to OUT (live.preset_midi): 0, or -1 (no
-// such preset, or not written)
-extern "C" int nv_preset_midi_file(const char *presets_path, const char *name, const char *out)
+// A PRESET's SETUP MEASURE written to OUT (live.preset_midi), its organs'
+// stops H's (null: none): 0, or -1 (no such preset, or not written)
+extern "C" int nv_preset_midi_file(const nv_host *h, const char *presets_path, const char *name, const char *out)
 {
     sess::J d;
     const sess::J *p = presets_path && name && sess::load(presets_path, d) ? d.get(name) : nullptr;
     if (!p || !p->is(sess::J::OBJ) || !out)
         return -1;
-    const std::string f = preset_smf(*p, name);
+    const std::string f = preset_smf(*p, name, h);
     FILE *fh = fopen(out, "wb");
     if (!fh)
         return -1;

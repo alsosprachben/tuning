@@ -13118,8 +13118,8 @@ def efx_recall(live, d):
 # into the rig. A GS Reset, then (50 ms on, as a module wants after one) the
 # channels' controls the preset keeps (its scene: chanstate), then each part
 # on a channel of its own: its bank (CC0, CC32), its program, its cabinet
-# (CC83) and pickup (CC85) after the program change that puts them back, its
-# level (CC7) and pan (CC10). A part with no channel takes the first one free
+# (CC83) and pickup (CC85) after the program change that puts them back, an
+# organ's drawn stops (its stop word), its level (CC7) and pan (CC10). A part with no channel takes the first one free
 # (a drum part channel 10), a drum part elsewhere is made one by GS's Use For
 # Rhythm Part. What MIDI has no word for -- a part's key range and
 # transpose, its tuner, its knobs -- the presets keep; a text event names
@@ -13140,6 +13140,15 @@ def _gs_sysex(addr, data):
     """A GS data set (DT1) to ADDR, its Roland checksum."""
     body = list(addr) + list(data)
     return [0x41, 0x10, 0x42, 0x12] + body + [(128 - sum(body) % 128) % 128]
+
+
+def _organ_class(program, variation):
+    """The registered organ PROGRAM under VARIATION plays (Patch's pc: the
+    variation's class where there is one), None if it is not an organ."""
+    _PM = __import__("patch_map")
+    v = variation if variation and ((program & 0x7F), variation) in _PM.VARIATIONS else 0
+    pc = _PM.property_class_for_program(_PM.VariationProgram(program, v) if v else program)
+    return pc if pc is not None and getattr(pc, "registerable", False) else None
 
 
 def preset_midi(preset, name=""):
@@ -13203,6 +13212,15 @@ def preset_midi(preset, name=""):
                 out.append((t, M("control_change", channel=ch, control=T.CABINET_CC, value=cab)))
             if pk:
                 out.append((t, M("control_change", channel=ch, control=T.PICKUP_CC, value=pk)))
+            # ...AN ORGAN's STOPS: its drawn ranks as the voice's stop word
+            # (registration_blocks: seven bits a controller, the ranks' order)
+            _pc = _organ_class(prog, int(p.get("bank", 0)) & _PM.CAB_MASK)
+            if _pc is not None and isinstance(p.get("drawn"), list):
+                _nm = [r[0] for r in _pc.stop_ranks]
+                _dn = {T.rank_rename(r, _nm) for r in p["drawn"] if isinstance(r, str)}  # (its old names too)
+                _w = sum(1 << j for j, r in enumerate(_nm) if r in _dn)
+                for j, c in enumerate(tuple(getattr(_pc, "stop_word_ccs", (11, 43)))):
+                    out.append((t, M("control_change", channel=ch, control=c, value=(_w >> (7 * j)) & 0x7F)))
         vol = 0 if p.get("muted") else max(0, min(127, int(round(127.0 * 10.0 ** (float(p.get("level_db", 0.0)) / 40.0)))))
         out.append((t, M("control_change", channel=ch, control=7, value=vol)))
         if p.get("pan") is not None:

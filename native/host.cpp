@@ -1685,12 +1685,16 @@ int nv_host::open(int argc, char **argv)
         // A PRESET's STOPS, for this organ -- again at each swap of it (the
         // preset's tuner rebuilds it after its program: live builds the two
         // as one patch), until another program or a stop drawn by hand
+        // (a swap BEFORE the organ's -- the old program rebuilt for the
+        // preset's tuner, on its way already -- leaves them waiting: only one
+        // after the organ has come in is "another program")
         if (pa.pi == 0 && !dr && prog == pending_drawn_prog) {
             std::vector<const char *> nm;
             for (const auto &x : pending_drawn)
                 nm.push_back(x.c_str());
             nv_part_set_drawn_names(part, 0, nm.data(), (int)nm.size());
-        } else if (pa.pi == 0) {
+            pending_drawn_in = true;
+        } else if (pa.pi == 0 && pending_drawn_in) {
             pending_drawn_prog = -1;
         }
         pa.posted = dr ? prog : prog & 127;

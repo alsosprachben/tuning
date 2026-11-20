@@ -11,7 +11,9 @@ cover what the writer decides: a part with no channel taking the first free
 one, a drum part on channel 10 and one made a rhythm part elsewhere, two
 parts on one channel, a GS variation and a map's tone, a cabinet and a
 pickup, a muted part, a level above unity (clamped), a pan, the scene's
-controls and a controller matrix exclusive, a name outside ASCII.
+controls and a controller matrix exclusive, a name outside ASCII; organs'
+stops -- the church organ's 28-bit word with old rank names, the
+harmonium's CC43-45, a drawbar variation, the harpsichord, none drawn.
 """
 import ctypes
 import json
@@ -21,6 +23,7 @@ import tempfile
 
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
+sys.path.insert(0, os.path.join(HERE, "examples"))
 
 TEST = {
     "guitar rig": {
@@ -47,6 +50,20 @@ TEST = {
                  muted=False, pan=100, bank=3 * 128 + 1),
         ],
     },
+    "organs": {
+        "parts": [
+            dict(program=19, drums=False, channel=None, lo=36, hi=96, transpose=0, level_db=0.0, muted=False,
+                 drawn=["principal 8", "mixture", "4", "trompette 8", "vox humana 8"]),
+            dict(program=20, drums=False, channel=None, lo=0, hi=127, transpose=0, level_db=-2.0, muted=False,
+                 drawn=["cor anglais 1", "musette", "expression"]),
+            dict(program=16, drums=False, channel=None, lo=0, hi=127, transpose=0, level_db=0.0, muted=False,
+                 bank=127, drawn=["16", "8", "4", "perc 3rd B3"]),
+            dict(program=6, drums=False, channel=None, lo=0, hi=127, transpose=0, level_db=0.0, muted=False,
+                 drawn=["8", "4"]),
+            dict(program=19, drums=False, channel=None, lo=0, hi=127, transpose=0, level_db=0.0, muted=False,
+                 drawn=[]),
+        ],
+    },
     "empty": {},
 }
 
@@ -60,7 +77,15 @@ def main(argv):
     import blockrender as B
     import native as N
     so = N.lib()
-    so.nv_preset_midi_file.argtypes = [ctypes.c_char_p] * 3
+    so.nv_preset_midi_file.argtypes = [ctypes.c_void_p] + [ctypes.c_char_p] * 3
+    # AN ENGINE for its organs' stops (host_api_check's way: opened, not started)
+    from nvlive_check import cached_export
+    nvx = cached_export(tempfile.mkdtemp(prefix="presetmidi_x"), None, True)      # (a live export)
+    so.nv_host_open_args.restype = ctypes.c_void_p
+    so.nv_host_open_args.argtypes = [ctypes.c_int, ctypes.POINTER(ctypes.c_char_p), ctypes.c_char_p, ctypes.c_int]
+    av = [b"nvlive", nvx.encode(), b"--program=0", b"--cpu", b"--no-pipeline", b"--no-register", b"--no-drums"]
+    host = so.nv_host_open_args(len(av), (ctypes.c_char_p * len(av))(*av), ctypes.create_string_buffer(256), 256)
+    assert host, "the host refused"
     so.nv_preset_midi_file.restype = ctypes.c_int
     tmp = opt.get("keep") or tempfile.mkdtemp(prefix="presetmidi")
     os.makedirs(tmp, exist_ok=True)
@@ -81,7 +106,7 @@ def main(argv):
             py = os.path.join(tmp, "py_%d.mid" % k)
             nv = os.path.join(tmp, "nv_%d.mid" % k)
             L.preset_midi(pre, name).save(py)
-            rc = so.nv_preset_midi_file(path.encode(), name.encode("utf-8"), nv.encode())
+            rc = so.nv_preset_midi_file(host, path.encode(), name.encode("utf-8"), nv.encode())
             a = open(py, "rb").read()
             b = open(nv, "rb").read() if rc == 0 else b""
             word = "identical" if a == b else ("native refused" if rc else "DIFFER at byte %d"
