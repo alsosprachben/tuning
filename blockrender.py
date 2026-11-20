@@ -5241,6 +5241,9 @@ def _note_class_and_pitch(nt, FREQ, FREQ_E, _BTUN, _DRONE_PC, _F, _MEEND_AT, _MP
         _kps = getattr(nt.pc, 'key_pan_spread', 0.0)
         if _kps:
             _seat = _kps * (nt.note - 60) / 30.0   # within the instrument: a seat
+        # ...OR THE VOICE'S OWN SIDE (seat_pan: the divider organ's upper amplifier left,
+        # its lower right), the part's pan turning it
+        _seat += getattr(nt.pc, 'seat_pan', 0.0) or 0.0
         nt.organ = getattr(nt.pc,'registerable',False)
         nt.organ_key = (nt.ch, organ_family(nt.pc)) if nt.organ else None   # its registration tables' key
         # An organ's CC7 is its swell shutter and its CC11 half the stop

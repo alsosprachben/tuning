@@ -970,8 +970,8 @@ int nv_song_play(void *song, const NoteClass *K, NoteIn *n, PyRandom *rs,
         }
         if (r == 2)
             n->seat = pl[5];            // a drum: its seat in its set
-        else if (K->key_pan_spread != 0.0)
-            n->seat = K->key_pan_spread * (n->note - 60) / 30.0;   // a wide voice: its key's seat in the instrument
+        else if (K->key_pan_spread != 0.0 || K->seat_pan != 0.0)
+            n->seat = K->key_pan_spread * (n->note - 60) / 30.0 + K->seat_pan;   // a wide voice: its key's seat; or its own side
     }
     if (K->one_shot && K->gate_time > 0.0)  // ...unless it is gated: it stops where the gate closes
         n->key_off = K->held_texture ? nv::pymax(n->key_off, n->on + K->gate_time) : n->on + K->gate_time;

@@ -271,7 +271,7 @@ class NoteClass(ctypes.Structure):
                    ('ring_n', I), ('ring_hz', C * 48), ('ring_db', C * 48), ('ring_dps', C * 48),
                    ('ring_skip', C), ('ring_nown', I), ('ring_own', C * 16), ('indian', I),
                    ('sym_tonic', I), ('sym_g', C), ('sym_wmin', C), ('meend', I),
-                   ('meend_range', C), ('meend_strength', C), ('meend_tonic', I), ('key_pan_spread', C),
+                   ('meend_range', C), ('meend_strength', C), ('meend_tonic', I), ('key_pan_spread', C), ('seat_pan', C),
                    ('n_grain', I), ('grain', (C * 9) * 8),
                    ('pulse', I), ('pulse_lo_ms', C), ('pulse_hi_ms', C), ('pulse_peak', C), ('pulse_fmax', C),
                    ('pulse_taper', C), ('sounding_oct', C), ('xf', C), ('sfx_prog', I), ('sfx_key', I),
@@ -3740,6 +3740,7 @@ def note_class(cls):
         k.meend_strength = float(getattr(cls, 'meend_strength', 0.6))
         k.meend_tonic = int(getattr(cls, 'sympathetic_tonic', 60))
         k.key_pan_spread = float(getattr(cls, 'key_pan_spread', 0.0) or 0.0)     # (a wide voice's seats)
+        k.seat_pan = float(getattr(cls, 'seat_pan', 0.0) or 0.0)               # (...or its own side)
         sc = getattr(cls, 'scale_cents', None)        # (its own scale: _note_class_and_pitch's)
         st = getattr(cls, 'scale_tonic_note', None)
         if sc and st is not None:

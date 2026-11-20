@@ -6929,6 +6929,15 @@ class DividerOrganProperties(TonewheelProperties):
     crescendo_order = ["Flute 8'", "Diapason 8'", "Tibia 16'", "Clarinet 8'", "Quint 5-1/3'", "Clarinet 4'",
                        "Trombone 16'", "Trumpet 8'", "Bass Clarinet 16'", "String 8'", "Oboe 8'", "Kinura 8'"]
     default_stops = 0b000000001000          # the Flute 8'
+    # TWO AMPLIFIERS, TWO SIDES (the amplifier system schematic, 504590/504591: an Upper
+    # and a Lower amplifier, each its own speakers; Ben, at his console: "Lower is right.
+    # Upper is left."). The upper division sounds from the left of the cabinet, the lower
+    # from the right, the pedals -- fed to both amplifiers -- from the middle; a speaker,
+    # so no spread by pitch as a soundboard or a rank of pipes has. seat_pan: a pan
+    # (-1..1, as CC10) the voice sits at inside the part, its amplifier's side, half
+    # way out -- the part's pan turns the console, the sides and all.
+    seat_pan = -0.5
+    octave_width = 0.0
     # THE CARD (live.stop_rows), as the console's rail groups its tabs: the 16's,
     # the 8' flues, the reeds, the mutations ("|" a break, not a stop)
     stop_rows = [["Tibia 16'", "Bass Clarinet 16'", "Trombone 16'", "|", "Flute 8'", "Diapason 8'", "String 8'",
@@ -7070,6 +7079,7 @@ class DividerPedalProperties(DividerOrganProperties):
     crescendo_order = ["Bourdon 16'", "Flute 8'", "Principal 16'", "String Bass 8'"]
     stop_rows = [["Bourdon 16'", "Principal 16'", "|", "Flute 8'", "String Bass 8'"]]
     default_stops = 0b0101                  # the Bourdon 16' and Flute 8'
+    seat_pan = 0.0                          # (both amplifiers: the middle)
     # HELD where Organ Bass's drawbars (16' 8') stood, so the bank's trims stand
     initial_gain = 0.00015 * 10 ** (-1.8 / 20.0)
 
@@ -7343,7 +7353,15 @@ class DividerLowerProperties(DividerOrganProperties):
     stop_rows = [["Melodia 8'", "Geigen Diapason 8'", "Viole 8'", "|", "Trombone 8'", "Vox Humana 8'",
                   "Cornet 8'", "|", "Quint 5-1/3'"]]
     default_stops = 0b0001001              # Preset I: the Melodia and Trombone
+    seat_pan = 0.5                          # (the lower amplifier: the right)
 
+
+
+# ...AND A SPEAKER SPREADS NO WIDER BY PITCH than its cone: the tabs placed as the organ
+for _div in (DividerOrganProperties, DividerPedalProperties, DividerLowerProperties):
+    for _r in _div.stop_ranks:
+        _r[3].octave_width = 0.0
+del _div, _r
 
 def divider_registration(tabs, couplers=()):
     """A divider organ's registration as a variation's settings: its TABS drawn

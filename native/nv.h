@@ -1023,6 +1023,7 @@ typedef struct NoteClass {
     double meend_range, meend_strength;
     int meend_tonic;
     double key_pan_spread;          // a wide voice (GS's "w" tones): its keys' seats, +-this 30 keys from middle C
+    double seat_pan;                // ...or the voice's own side (a pan, -1..1): the divider organ's amplifiers
     // GRAINS (grains): each row lo Hz, hi Hz, a second (negative: a clock),
     // dB, its scatter dB, dB/s, a glide's rise (0 none) and time, a cluster's sines
     int n_grain;
