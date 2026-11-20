@@ -150,7 +150,7 @@ static void draw(App &a)
     matrix_card(a, a.card == "matrix");
     tuning_card(a, a.card == "tuning");
     control_card(a, a.card == "control");
-    scenes_card(a, a.card == "scenes");
+    scenes_card(a, a.card == "scenes" || a.card == "control");   // (the metronome is on the Control card)
     files_card(a, a.card == "files");
     setup_card(a, a.card == "setup");
     // (on the iPad, a card not yet laid out for it says so)

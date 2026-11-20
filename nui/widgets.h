@@ -108,8 +108,9 @@ inline int fader(App &a, const char *id, float cx, float y, float h, float &v, f
     const float cy = y + h - (v - lo) / (hi - lo) * h;
     look::fader_cap(a, cx, cy, f & K_ACTIVE, f & K_ACTIVE ? OWN : LCD);
     // (below the cap's reach: at the bottom it hangs 14 past the slot)
-    text_c(a, a.font, 14, cx, y + h + 17, f & K_ACTIVE ? OWN : LCD, value);
-    text_c(a, a.bold, 14, cx, y + h + 19 + a.lh(14), SILK_DIM, label);
+    // (its label, then its value under it -- as every knob's)
+    text_c(a, a.bold, 14, cx, y + h + 17, SILK_DIM, label);
+    text_c(a, a.font, 14, cx, y + h + 19 + a.lh(14), f & K_ACTIVE ? OWN : LCD, value);
     if (f & K_ACTIVE)
         bubble(a, label + " " + value);
     return f;

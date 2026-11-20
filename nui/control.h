@@ -82,6 +82,7 @@ inline void ct_flush(App &a)
 }
 inline void ct_refresh(App &a) { ct_take(call(a, "{\"call\":\"control\"}")); }
 
+inline void draw_metro_gs(App &a, float x, float y, float w, float y1);     // (scenes.h)
 inline void draw_control(App &a)
 {
     ControlUi &C = g_ct;
@@ -94,11 +95,18 @@ inline void draw_control(App &a)
     const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 266 : 394, Y1 = card_y1(a), HY = IP ? 224 : 356;
     const float TX = heading(a, X0, HY, "CONTROL", "control");
     if (IP)
-        for (int pg = 0; pg < 2; pg++) {
+        for (int pg = 0; pg < 3; pg++) {
+            static const char *PG[3] = {"CONTROLS", "ROUTES", "METRONOME"};
             const std::string id = "ctpage" + std::to_string(pg);
-            if (button(a, id.c_str(), 300 + pg * 196, 216, 190, 44, pg ? "ROUTES" : "CONTROLS", page == pg, true, 21))
+            if (button(a, id.c_str(), 300 + pg * 196, 216, 190, 44, PG[pg], page == pg, true, 21))
                 page = pg;
         }
+    // THE METRONOME AND THE GS RESET: under the on-screen controls (the iPad's a page of its own)
+    const float MH = IP ? 0 : 190;
+    if (IP && page == 2) {
+        draw_metro_gs(a, X0, Y0, X1 - X0, Y0 + 200);
+        return;
+    }
     const J *p = part(a, a.row);
     if (p)
         text(a, a.font, 14, TX, HY + 1, OWN, fit(a, a.font, 14, "part " + pad2(a.row + 1) + " \xc2\xb7 " + str(p, "name"), IP ? 160 : 900));
@@ -111,9 +119,11 @@ inline void draw_control(App &a)
     // THE ON-SCREEN CONTROLS
     const float LW = IP ? X1 - X0 : 900;
     if (!IP || page == 0) {
-    look::tray(a, X0, Y0, LW, Y1 - Y0, 9);
+    if (!IP)
+        draw_metro_gs(a, X0, Y1 - MH, LW, Y1);
+    look::tray(a, X0, Y0, LW, Y1 - MH - 10 - Y0, 9);
     text(a, a.font, 14, heading(a, X0 + 12, Y0 + 10, "ON-SCREEN CONTROLS", "ct:strip"), Y0 + 11, LCD, "sent straight to the engine");
-    const float cw = IP ? 124 : 136, cy0 = Y0 + 40, ch_ = C.adding ? (IP ? 214 : 300) : Y1 - Y0 - 52;
+    const float cw = IP ? 124 : 136, cy0 = Y0 + 40, ch_ = C.adding ? (IP ? 214 : 250) : Y1 - MH - 10 - Y0 - 52;
     float x = X0 + 12;
     static const int SCAN_V[7] = {0, 18, 37, 55, 73, 91, 110};
     static const std::vector<std::string> SCAN_N = {"off", "V1", "V2", "V3", "C1", "C2", "C3"};
@@ -257,7 +267,10 @@ inline void draw_control(App &a)
         std::vector<int> keys;
         for (const CtKind &k : C.kinds)
             if (k.key >= 0 || k.key == -3) {
-                w.push_back(k.label);
+                std::string up = k.label;       // (in capitals, as the FROM row's)
+                for (char &c : up)
+                    c = (char)toupper((unsigned char)c);
+                w.push_back(up);
                 lit.push_back(C.dst == k.key);
                 keys.push_back(k.key);
             }

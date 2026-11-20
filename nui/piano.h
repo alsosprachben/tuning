@@ -171,6 +171,21 @@ inline void draw_piano(App &a)
     // THE DAMPERS: each one's rest on its strings, over the keyboard (88 keys, A0 to C8)
     const float dx = X0 + c1 + gap;
     const float dsx = col(dx, c2, "DAMPERS", "piano:dampers");
+    // (a part that is not a piano: its pedals still reach its channel; no strings to show)
+    const J *pp = part(a, a.row);
+    const bool is_piano = pp && !flag(pp, "drums") && (int)num(pp, "program") < 8;
+    if (!is_piano) {
+        float my = Y0 + (IP ? 40 : 50);
+        for (const auto &l : wrap(a, a.font, 21, (pp ? str(pp, "name") : std::string("This part")) + " is not a piano.", c2 - 24)) {
+            text(a, a.font, 21, dx + 12, my, SILK_DIM, l);
+            my += a.lh(21) + 4;
+        }
+        for (const auto &l : wrap(a, a.font, 14, "The pedals still go to its channel; the dampers are drawn for a piano's strings.", c2 - 24)) {
+            text(a, a.font, 14, dx + 12, my + 6, SILK_DIM, l);
+            my += LH;
+        }
+        (void)dsx;
+    } else {
     const J *ct = N.pn.get("contact");
     const int n = ct && ct->is(J::ARR) ? (int)ct->a.size() : 0;
     int on_ = 0, off_ = 0;
@@ -225,6 +240,8 @@ inline void draw_piano(App &a)
                                                  ". The bass dampers are heavier and leave later.", W);
         for (size_t i = 0; i < ls.size(); i++)
             text(a, a.font, 14, sx, kbY + 96 * s + (IP ? 14 : 16) + (i + 1) * LH, SILK_DIM, ls[i]);
+    }
+
     }
 
     // THE PEDAL KEY: keys held as the sustain pedal

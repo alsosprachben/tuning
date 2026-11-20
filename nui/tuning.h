@@ -22,6 +22,31 @@ struct TuningUi {
 };
 static TuningUi g_tn;
 
+// A TUNING's NAME AND LINE as a person reads them (about.json's tuners), else the engine's key and words
+inline std::pair<std::string, std::string> tuner_words(const std::string &key, const std::string &engine_words)
+{
+    LibUi &L = g_lib;
+    if (const J *ts = L.about.get("tuners"))
+        if (const J *e = ts->get(key.c_str()); e && e->is(J::ARR) && e->a.size() >= 2)
+            return {e->a[0].s, e->a[1].s};
+    return {key, engine_words};
+}
+// an Eastern system's name: "Todi", "Yaman Kalyan" (its measured raga's)
+inline std::string eastern_name(const std::string &k)
+{
+    static const std::map<std::string, std::string> M = {{"bel_todi", "Todi"}, {"et", "Equal"}, {"just5", "Just"}, {"pythagorean", "Pythagorean"}};
+    if (auto it = M.find(k); it != M.end())
+        return it->second;
+    std::string s = k.rfind("saraga_", 0) == 0 ? k.substr(7) : k;
+    bool up = true;
+    for (char &c : s) {
+        if (c == '_')
+            c = ' ';
+        c = up ? (char)toupper((unsigned char)c) : c;
+        up = c == ' ';
+    }
+    return s;
+}
 inline void tn_take(const J &r)
 {
     TuningUi &T = g_tn;
@@ -178,7 +203,8 @@ inline void draw_tuning(App &a)
     if (T.pending == tuner)
         T.pending.clear();
     const bool building = tuner != now;
-    const std::string info = building ? "building the patches in " + tuner + "\xe2\x80\xa6" : "playing " + now;
+    const std::string info = building ? "building the patches in " + tuner_words(tuner, "").first + "\xe2\x80\xa6"
+                                      : "playing " + tuner_words(now, "").first;
     const std::string info_ = fit(a, a.font, 14, info, IP ? 300 : 900);
     text(a, a.font, 14, X1 - text_w(a, a.font, 14, info_), HY + 1, building ? OWN : SILK_DIM, info_);
     if (building)
@@ -250,11 +276,11 @@ inline void draw_tuning(App &a)
         look::chip(a, x, y, tw, th, cur);
         if (pend)
             frame(a, x, y, tw, th, LCD, 8, 2.0f);
-        text(a, a.font, 14, x + 10, y + (IP ? 6 : 8), cur ? LCD_BG : LCD, fit(a, a.font, 14, t.t->first, tw - 20));
-        const auto ls = wrap(a, a.font, 14, t.t->second, tw - 20);
-        for (size_t i = 0; i < ls.size() && i < 2; i++)
-            text(a, a.font, 14, x + 10, y + (IP ? 9 : 11) + (i + 1) * LH, cur ? LCD_BG : SILK_DIM,
-                 i == 1 && ls.size() > 2 ? fit(a, a.font, 14, ls[i] + "\xe2\x80\xa6", tw - 20) : ls[i]);
+        const auto nm = tuner_words(t.t->first, t.t->second);
+        text(a, a.font, 14, x + 10, y + (IP ? 6 : 8), cur ? LCD_BG : LCD, fit(a, a.font, 14, nm.first, tw - 20));
+        const auto ls = wrap_max(a, a.font, 14, nm.second, tw - 20, 2);
+        for (size_t i = 0; i < ls.size(); i++)
+            text(a, a.font, 14, x + 10, y + (IP ? 9 : 11) + (i + 1) * LH, cur ? LCD_BG : SILK_DIM, ls[i]);
     }
     dl()->PopClipRect();
 
@@ -266,7 +292,7 @@ inline void draw_tuning(App &a)
     const float tsx = heading(a, SX + 12, Y0 + 10, "THE TUNING", "tn:shape");
     const J *shape = T.t.get("shape");
     const double a4 = num(shape, "a4");
-    text(a, a.font, 14, tsx, Y0 + 11, LCD, tuner + (a4 > 0 ? " \xc2\xb7 A4 = " + jnum(a4) + " Hz" : ""));
+    text(a, a.font, 14, tsx, Y0 + 11, LCD, tuner_words(tuner, "").first + (a4 > 0 ? " \xc2\xb7 A4 = " + jnum(a4) + " Hz" : ""));
     const J *cents = shape ? shape->get("cents") : nullptr;
     auto cv = [&](int n, double &v) {
         if (!cents || !cents->is(J::ARR) || n >= (int)cents->a.size() || !cents->a[(size_t)n].is(J::NUM))
@@ -294,15 +320,16 @@ inline void draw_tuning(App &a)
             }
             text_c(a, a.font, 14, x + bw / 2, top + h1 + 4, SILK_DIM, NN[i]);
         }
-        const float top2 = top + h1 + 50, h2 = 90, mid2 = top2 + h2 / 2, sc2 = (h2 / 2) / 40;
+        // (the stretch's scale in a margin of its own at the right, clear of the octaves' names)
+        const float top2 = top + h1 + 50, h2 = 90, mid2 = top2 + h2 / 2, sc2 = (h2 / 2) / 40, gw2 = gw - text_w(a, a.font, 14, "+40") - 12;
         text(a, a.font, 14, gx, top2 - 22, SILK_DIM, "A0 to C8: each octave's stretch from 2:1, in cents");
-        rect(a, gx, mid2, gw, 1, IM_COL32(0x3a, 0x3f, 0x45, 255), 0);
+        rect(a, gx, mid2, gw2, 1, IM_COL32(0x3a, 0x3f, 0x45, 255), 0);
         dl()->PathClear();
         for (int n = 21; n <= 108; n++) {
             double v, b;
             if (!cv(n, v) || !cv(60 + n % 12, b))
                 continue;
-            const float x = gx + (n - 21) / 87.0f * gw, yy = mid2 - std::max(-h2 / 2, std::min(h2 / 2, (float)(v - b) * sc2));
+            const float x = gx + (n - 21) / 87.0f * gw2, yy = mid2 - std::max(-h2 / 2, std::min(h2 / 2, (float)(v - b) * sc2));
             dl()->PathLineTo(P(a, x, yy));
             if (n % 12 == 0)
                 text_c(a, a.font, 14, x, top2 + h2 + 2, SILK_DIM, "C" + std::to_string(n / 12 - 1));
@@ -333,7 +360,7 @@ inline void draw_tuning(App &a)
         for (const auto &s : T.systems)
             if (s.rfind("saraga_", 0) != 0) {
                 sys.push_back(s);
-                w.push_back(s);
+                w.push_back(eastern_name(s));
                 lit.push_back(s == p.system);
             }
         w.push_back("measured ragas\xe2\x80\xa6");
@@ -357,9 +384,7 @@ inline void draw_tuning(App &a)
         std::vector<bool> lit;
         for (const auto &s : T.systems)
             if (s.rfind("saraga_", 0) == 0) {
-                std::string n = s.substr(7);
-                std::replace(n.begin(), n.end(), '_', ' ');
-                w.push_back(n);
+                w.push_back(eastern_name(s));
                 sys.push_back(s);
                 lit.push_back(s == p.system);
             }

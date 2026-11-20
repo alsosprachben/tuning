@@ -59,16 +59,17 @@ inline void fx_tables(const J &t)
             for (const J &p : kv.second.a) {
                 FxParam q;
                 q.n = (int)p.a[0].d();
+                // (Roland's name; its manual's +/# marks for the effect controls left off,
+                //  and "Hi" said as the EQ box says it)
                 q.name = p.a[1].s;
-                const std::string mark = p.a[2].is(J::STR) ? p.a[2].s : "";
-                if (!mark.empty() && mark != "-")
-                    q.name += " " + mark;
+                if (q.name.rfind("Hi ", 0) == 0)
+                    q.name = "High " + q.name.substr(3);
                 q.fresh = (int)p.a[3].d();
                 for (const J &x : p.a[4].a)
                     q.vals.push_back((int)x.d());
                 if (p.a.size() > 5 && p.a[5].is(J::ARR))
                     for (const J &x : p.a[5].a)
-                        q.shown.push_back(x.is(J::STR) ? x.s : "");
+                        q.shown.push_back(x.is(J::STR) ? (x.s.rfind("+0 ", 0) == 0 || x.s == "+0" ? x.s.substr(1) : x.s) : "");
                 v.push_back(q);
             }
             F.params[kv.first] = v;

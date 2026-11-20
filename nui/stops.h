@@ -98,7 +98,7 @@ inline void draw_stops(App &a)
     // NO ORGAN: the organs, a tap puts one on the part
     if (prog < 0) {
         text(a, a.font, 21, X0, Y0_ + 6, SILK_DIM, (part_name.empty() ? std::string("This part") : part_name) +
-                                                    " has no stops. Put an organ on part " + pad2(a.row + 1) + ":");
+                                                    " has no stops. Pick one with stops for part " + pad2(a.row + 1) + ":");
         int i = 0;
         if (T.organs.is(J::ARR))
             for (const J &pg : T.organs.a)
@@ -192,8 +192,11 @@ inline void draw_stops(App &a)
                 look::chip(a, x, ty, tw, th, on, held);
                 const auto np = stop_parts(r < (int)names.size() ? names[(size_t)r] : std::to_string(r), feet);
                 const auto ls = wrap(a, a.bold, 14, np.first, tw - 14);
-                for (size_t li = 0; li < ls.size() && li < 3; li++)
-                    text_c(a, a.bold, 14, x + tw / 2, ty + (IP ? 6 : 10) + li * LH, on ? LCD_BG : SILK, ls[li]);
+                const size_t nl = std::min<size_t>(3, ls.size());
+                // (a name alone centred in its tab, as a drawbar's footage is; above its footage otherwise)
+                const float ly0 = np.second.empty() ? ty + (th - nl * LH) / 2 : ty + (IP ? 6 : 10);
+                for (size_t li = 0; li < nl; li++)
+                    text_c(a, a.bold, 14, x + tw / 2, ly0 + li * LH, on ? LCD_BG : SILK, ls[li]);
                 if (!np.second.empty()) {   // (the footage; a drawbar's alone, big where it fits, centred)
                     const float fs = np.first.empty() && text_w(a, a.font, 35, np.second) <= tw - 14 ? 35 : 21;
                     text_c(a, a.font, fs, x + tw / 2, np.first.empty() ? ty + (th - a.lh(fs)) / 2 : ty + th - a.lh(21) - (IP ? 6 : 10),
@@ -217,7 +220,7 @@ inline void draw_stops(App &a)
     }
 
     // A TONEWHEEL ORGAN's DRIVE (the wheel is its swell): the valve before the rotors, 0 to 3
-    const float RH = IP ? 140 : 170, RG = IP ? 8 : 14;    // (the rotary's tray under it)
+    const float RH = IP ? 170 : 250, RG = IP ? 8 : 14;    // (the rotary's tray under it: room for its SPREAD knob)
     const float CH = 0;                                    // (the cabinet: the AMP card's)
     if (has_drive) {
         const float dx = X1 - DW, dy = JY0, dw = DW, dh = JY1 - JY0 - RH - RG - CH;
@@ -250,7 +253,7 @@ inline void draw_stops(App &a)
         for (size_t i = 0; !IP && i < note.size() && i < 2; i++)     // (the iPad's: no room)
             text(a, a.font, 14, bx_, ky - KS / 2 - 4 + i * LH, SILK_DIM, note[i]);
         char bt[48];
-        snprintf(bt, sizeof bt, own ? "BACK TO %.2f" : "AS THE VOICE (%.2f)", voice);
+        snprintf(bt, sizeof bt, own ? "BACK TO THE PATCH'S %.2f" : "AS THE PATCH (%.2f)", voice);
         if (button(a, "driveback", bx_, IP ? ky - bh_ / 2 : ky + KS / 2 - bh_ + 6, bw_, bh_, bt, false, own))
             back();
         // THE ROTARY HEARD: the cabinet in the room (an organ's way: its

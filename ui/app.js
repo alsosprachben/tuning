@@ -738,7 +738,7 @@ function drawAmp() {
       onChange: v => { const d = Math.round(v * AMP.top * 100) / 100; ampHold('drive', d, 600); send(d); },
       onReset: back });
     // (what SOUNDS: the drive with the mod wheel's scale on it -- display only, put back each poll)
-    AMP.sound = Kit.knob(el.querySelector('.amp-sound'), { label: 'Sounding', value: 0, size: 'big',
+    AMP.sound = Kit.knob(el.querySelector('.amp-sound'), { label: 'With the wheel', value: 0, size: 'big',
       fmt: v => (v * AMP.top).toFixed(2), onChange: () => drawAmp(), onReset: () => drawAmp() });
     Kit.press(el.querySelector('.amp-back'), back);
     el.querySelectorAll('.amp-cab').forEach(b => Kit.press(b, () => {
@@ -764,7 +764,7 @@ function drawAmp() {
       el.querySelector('.amp-pkstr').innerHTML = pkStringSvg(all, ch(lit)[2]);
       const mine = pkv[0] > 0 && pkv[0] !== own;
       const bk = el.querySelector('.amp-pkback');
-      bk.textContent = mine ? `BACK TO THE VOICE'S ${ch(own)[0]}` : `AS THE VOICE · ${ch(own)[0]}`;
+      bk.textContent = mine ? `BACK TO THE PATCH'S ${ch(own)[0]}` : `AS THE PATCH · ${ch(own)[0]}`;
       bk.disabled = !mine;
       el.querySelector('.amp-pkabout').textContent = ch(lit)[1] + (kind ? '' : ' No amplifier of its own: it is heard straight from its pickups.');
     }
@@ -782,20 +782,20 @@ function drawAmp() {
   AMP.knob.set(base / AMP.top, base.toFixed(2), mine);
   AMP.sound.set(sounds / AMP.top, sounds.toFixed(2), false);
   const bk = el.querySelector('.amp-back');
-  bk.textContent = mine ? `BACK TO THE VOICE'S ${dvoice.toFixed(2)}` : `AS THE VOICE (${dvoice.toFixed(2)})`;
+  bk.textContent = mine ? `BACK TO THE PATCH'S ${dvoice.toFixed(2)}` : `AS THE PATCH (${dvoice.toFixed(2)})`;
   bk.disabled = !mine;
   el.querySelector('.amp-vnote').textContent = (dvoice > 0 || dnow > 0
     ? 'A triode stage before the speaker: clean at 0, the edge of breakup at 1, a clip past it. Its distortion is mostly the notes mixing: a chord thickens where one note barely would.'
     : 'No valve of its own: turned up, it gains one, a triode stage before the speaker, the edge of breakup at 1.') +
-    (organ ? ' The mod wheel is the swell.' : ` SOUNDING is the drive with the mod wheel's scale on it (now ×${wheel.toFixed(2)}).`);
+    (organ ? ' The mod wheel is the swell.' : ` WITH THE WHEEL is the drive as the mod wheel scales it (now ×${wheel.toFixed(2)}).`);
   // THE SPEAKER
   const now = ampHeld('cab', cv[0] > 0 ? cv[0] : cv[1]);
   el.querySelectorAll('.amp-cab').forEach(b => {
     const c = +b.dataset.c;
-    b.textContent = c ? lab(c) : `OWN · ${own !== undefined ? lab(own) : ''}`;
+    b.textContent = c ? lab(c) : `PATCH'S OWN · ${own !== undefined ? lab(own) : ''}`;
     b.classList.toggle('on', c === now);
   });
-  el.querySelector('.amp-now').textContent = now ? lab(now) : `OWN · ${own !== undefined ? lab(own) : ''}`;
+  el.querySelector('.amp-now').textContent = now ? lab(now) : `PATCH'S OWN · ${own !== undefined ? lab(own) : ''}`;
   el.querySelector('.amp-about').textContent = about(now || own || 0);
   // THE LESLIE
   if (!organ) return;
@@ -839,7 +839,7 @@ function drawDrive(st) {
     const el = $('organDrive');
     el.innerHTML = '<section class="og-box"><h3 data-help="drive">Drive</h3><div class="og-knob"></div>' +
       '<p class="pn-note">The valve before the rotors: clean at 0, a growl as it turns up. The mod wheel is the swell.</p>' +
-      '<button class="hb" data-kit="1">AS THE VOICE</button></section>';
+      '<button class="hb" data-kit="1">AS THE PATCH</button></section>';
     const send = Wire.throttled(v => Wire.call('drive_set', { row: S.row, v }));
     const back = () => { fxMine('drive', -1); Wire.call('drive_set', { row: S.row, v: -1 }); };
     OG.knob = Kit.knob(el.querySelector('.og-knob'), { label: 'Drive', value: 0, size: 'big',
@@ -853,7 +853,7 @@ function drawDrive(st) {
   const v = held === null ? now : held < 0 ? voice : held;
   const own = held === null ? mine >= 0 : held >= 0;
   OG.knob.set(v / DRIVE_MAX, v.toFixed(2), own);
-  OG.back.textContent = own ? `BACK TO THE VOICE'S ${voice.toFixed(2)}` : `AS THE VOICE (${voice.toFixed(2)})`;
+  OG.back.textContent = own ? `BACK TO THE PATCH'S ${voice.toFixed(2)}` : `AS THE PATCH (${voice.toFixed(2)})`;
   OG.back.disabled = !own;
 }
 async function refreshSynth() { const s = await Wire.call('synth', { row: S.row, layer: S.layer }); if (s.synth && s.synth.row === S.row) { S.synth = s.synth; if (card === 'synth') drawSynth(); } }
@@ -900,7 +900,7 @@ function drawStops(force) {
     stopsSig = '';
     const orgs = S.organs.map(pg => S.patches.find(p => !p.drums && p.program === pg && p.variation === 0)).filter(Boolean);
     $('stopsInfo').textContent = '';
-    el.innerHTML = `<p class="empty">${esc(st.part || 'This part')} has no stops. Put an organ on part ${pad(st.row + 1, 2)}:</p>` +
+    el.innerHTML = `<p class="empty">${esc(st.part || 'This part')} has no stops. Pick one with stops for part ${pad(st.row + 1, 2)}:</p>` +
       `<div class="organs">${orgs.map(p => `<button class="tile" data-kit="1" data-pick="${p.pick}"><span class="pn">${pad(p.program, 3)}</span>` +
         `<span class="nm">${esc(p.name)}</span><span></span></button>`).join('')}</div>`;
     return;

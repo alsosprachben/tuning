@@ -2,7 +2,7 @@
 // scenes (each channel's controls), kept beside the session and shared with
 // live.py and the apps: a tap chooses one, LOAD or RECALL brings it, SAVE
 // OVER keeps the present one in it, DELETE takes it out; a new one named on
-// the screen's own keys. The metronome, and the GS reset (a second tap).
+// the screen's own keys. (The metronome and the GS reset, drawn here, sit on the Control card.)
 #pragma once
 
 #include "app.h"
@@ -161,7 +161,7 @@ inline void draw_scenes(App &a)
     }
 
     // THE PRESETS: the whole setup
-    const float PW = IP ? 440 : 720, SW = IP ? 340 : 600, gap = IP ? 6 : 10, SX = X0 + PW + gap, MX = SX + SW + gap, MW = X1 - MX;
+    const float gap = IP ? 6 : 10, PW = (X1 - X0 - gap) / 2, SW = X1 - X0 - gap - PW, SX = X0 + PW + gap;
     look::tray(a, X0, Y0, PW, Y1 - Y0, 9);
     text(a, a.font, 14, heading(a, X0 + 12, Y0 + 10, "PRESETS", "sc:presets"), Y0 + 11, LCD,
          "the whole setup: parts, routes, tuning, effects");
@@ -203,9 +203,20 @@ inline void draw_scenes(App &a)
         C.naming = "scene_save";
         C.name.clear();
     }
+}
 
+// THE METRONOME AND THE GS RESET (on the Control card: things you play
+// with), in the box MX..MX+MW, Y0..Y1: the metronome on the left, the reset beside it
+inline void draw_metro_gs(App &a, float MX, float Y0, float MW, float Y1)
+{
+    ScenesUi &C = g_sc;
+    const bool IP = a.tab;
+    const float LH = a.lh(14) + (IP ? 3 : 4);
+    if (!C.s.is(J::OBJ))
+        sc_take(call(a, "{\"call\":\"scenes\",\"open\":1}"));
     // THE METRONOME: the globals 10 (bpm, 0 off), 11 (its bell every n beats), 12 (its level)
     look::tray(a, MX, Y0, MW, Y1 - Y0, 9);
+    const float half = (MW - 24) / 2;
     heading(a, MX + 12, Y0 + 10, "METRONOME", "sc:metro");
     const J *m = C.s.get("metro");
     auto mv = [&](size_t i) { return m && m->is(J::ARR) && i < m->a.size() ? m->a[i].d() : 0.0; };
@@ -219,7 +230,7 @@ inline void draw_scenes(App &a)
             mm.a[(size_t)(i - 10)] = sess::integer(v);
     };
     {
-        const float cw = (MW - 24) / 4, ky = Y0 + (IP ? 80 : 90);
+        const float cw = half / 4, ky = Y0 + (IP ? 80 : 90);
         const bool on = bpm > 0;
         look::switch_(a, MX + 12 + cw / 2, ky, on);
         ImGui::SetCursorScreenPos(P(a, MX + 12, ky - 30));
@@ -248,19 +259,20 @@ inline void draw_scenes(App &a)
         if (picked != db)
             gset(12, picked);
     }
-    // THE GS RESET: a second tap within 3 s sends it
-    float gy = Y0 + (IP ? 200 : 220);
-    rect(a, MX + 12, gy - 12, MW - 24, 1, IM_COL32(0x33, 0x36, 0x3a, 255), 0);
-    heading(a, MX + 12, gy, "GS RESET", "sc:gs");
+    // THE GS RESET: a second tap within 3 s sends it (beside the metronome)
+    const float GX = MX + 12 + half + 12, GW = half - 12;
+    float gy = Y0 + 10;
+    rect(a, GX - 12, Y0 + 10, 1, Y1 - Y0 - 20, IM_COL32(0x33, 0x36, 0x3a, 255), 0);
+    heading(a, GX, gy, "GS RESET", "sc:gs");
     gy += IP ? 22 : 24;
-    for (const auto &l : wrap(a, a.font, 14, "Every part back to program 1, the controllers, effects and receive settings to power-on, as a sequencer's GS Reset.", MW - 24)) {
-        text(a, a.font, 14, MX + 12, gy, SILK_DIM, l);
+    for (const auto &l : wrap(a, a.font, 14, "Every part back to program 000, the controllers, effects and receive settings to power-on, as a sequencer's GS Reset.", GW)) {
+        text(a, a.font, 14, GX, gy, SILK_DIM, l);
         gy += LH;
     }
     const bool armed = ImGui::GetTime() < C.reset_armed;
     if (armed)
         a.animate = true;
-    if (button(a, "gsreset", MX + 12, gy + 10, MW - 24, IP ? 44 : 46, armed ? "TAP AGAIN TO RESET" : "GS RESET",
+    if (button(a, "gsreset", GX, gy + 10, GW, IP ? 44 : 46, armed ? "TAP AGAIN TO RESET" : "GS RESET",
                armed && std::fmod(ImGui::GetTime(), 0.8) < 0.4, true, IP ? 21 : 14)) {
         if (armed) {
             C.reset_armed = 0;

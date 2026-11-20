@@ -321,6 +321,16 @@ inline std::vector<std::string> wrap(App &a, ImFont *f, float size, const std::s
     return lines;
 }
 
+// WORDS WRAPPED to at most n lines: more than n is a cut, which the audit records
+inline std::vector<std::string> wrap_max(App &a, ImFont *f, float size, const std::string &s, float w, size_t n)
+{
+    auto ls = wrap(a, f, size, s, w);
+    if (ls.size() > n) {
+        ls.resize(n);
+        ls.back() = fit(a, f, size, ls.back() + " " + s, w);    // (fit() records it)
+    }
+    return ls;
+}
 inline void rect(App &a, float x, float y, float w, float h, ImU32 col, float r = 6.0f)
 {
     dl()->AddRectFilled(P(a, x, y), P(a, x + w, y + h), col, r * a.k);

@@ -2247,7 +2247,9 @@ def about_json(path):
                 pk_own["%d.%d" % (p, v)] = [c0.pickup_family, PMC.pk_near(c0)]
     efx = {k: UW.EFX_ABOUT.get(k, "") for k in EFX_RATED}
     effects = {k: UW.EFFECTS_ABOUT.get(k, UW.EFFECTS_ABOUT.get(k.split(" (")[0], "")) for k, r, note in EFFECTS_RATED}
-    doc = {"desc": desc, "kit_desc": kit_desc, "cabinets": cabs, "cab_own": own, "pickups": pickups,
+    # ...the tunings', their systems' and the rooms' names (the engine keeps its keys)
+    tuners = {k: list(v) for k, v in UW.TUNERS.items()}
+    doc = {"desc": desc, "kit_desc": kit_desc, "tuners": tuners, "cabinets": cabs, "cab_own": own, "pickups": pickups,
            "pk_own": pk_own, "stops": stop_notes, "perc": perc, "kits": kits,
            "kit_only": sorted(k for k in getattr(PM, "KIT_ONLY", ()) if k < 128), "efx": efx, "effects": effects}
     # THE CHECKS: every patch said, and nothing that says where a sound came from

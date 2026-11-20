@@ -2,7 +2,7 @@
 // or off, merged), playing as a module (the input read as a sound module
 // reads it, your parts set aside and put back), the Messenger, the globals
 // every part plays through (livetui's GLOBALS), the room, how program
-// changes are read, and rubato's borrowed time. QUIT in the head.
+// changes are read, and rubato's borrowed time. (QUIT is the front panel's.)
 #pragma once
 
 #include "app.h"
@@ -65,24 +65,12 @@ inline void draw_setup(App &a)
     const double rate = num(&U.s, "rate"), block = num(&U.s, "block");
     char inf[96];
     snprintf(inf, sizeof inf, "%.0f Hz \xc2\xb7 %.0f frames a block (%.2f ms)", rate, block, rate > 0 ? 1000 * block / rate : 0.0);
-    if (IP) {                           // (shorter, between the pages and QUIT)
+    if (IP) {                           // (shorter, beside the pages)
         char sh[48];
         snprintf(sh, sizeof sh, "%.0f Hz \xc2\xb7 %.0f frames", rate, block);
         text(a, a.font, 14, 700, HY + 1, SILK_DIM, sh);
     } else
         text(a, a.font, 14, TX, HY + 1, SILK_DIM, inf);
-    // QUIT (a second tap within 3 s, as the panel's)
-    const double now = ImGui::GetTime();
-    const bool armed = now - a.quit_armed < 3.0;
-    if (armed)
-        a.animate = true;
-    if (button(a, "suquit", X1 - 250, IP ? 216 : 346, 250, IP ? 44 : 38, armed ? "TAP AGAIN TO QUIT" : "QUIT CLAVITONE", armed, true,
-               IP ? 21 : 14)) {
-        if (armed)
-            a.quit = true;
-        else
-            a.quit_armed = now;
-    }
     const J *g = U.s.get("globals");
     auto gv = [&](size_t i) { return g && g->is(J::ARR) && i < g->a.size() ? g->a[i].d() : 0.0; };
     auto gset = [&](int i, double v) {
@@ -146,7 +134,7 @@ inline void draw_setup(App &a)
     {
         static const std::vector<std::pair<std::string, std::string>> MODS = {
             {"off", "OFF: MY PARTS"}, {"auto", "AUTO"}, {"gm", "GM"}, {"ours", "GS: OURS"}, {"sc55", "GS: SC-55"}, {"sc88", "GS: SC-88"},
-            {"sc88pro", "GS: SC-88PRO"}, {"sc8850", "GS: SC-8850"}, {"cm64", "GS: INIT CM-64"}, {"mt32", "MT-32"}, {"cm64u", "CM-64"}};
+            {"sc88pro", "GS: SC-88Pro"}, {"sc8850", "GS: SC-8850"}, {"cm64", "GS: INIT CM-64"}, {"mt32", "MT-32"}, {"cm64u", "CM-64"}};
         const std::string mode = U.mod.is(J::OBJ) ? str(&U.mod, "mode") : "off", eff = str(&U.mod, "eff"), stage = str(&U.mod, "stage");
         const bool busy = flag(&U.mod, "busy");
         std::vector<std::string> w;
@@ -260,7 +248,12 @@ inline void draw_setup(App &a)
         std::vector<bool> lit;
         for (const auto &r : U.rooms)
             lit.push_back(r == str(&U.s, "room"));
-        const int h = flow_buttons(a, "suroom", BX + 12, y, BW - 24, U.rooms, lit, 30, IP ? 14 : 0);
+        std::vector<std::string> rn;     // (their names as said: "large chamber")
+        for (std::string r : U.rooms) {
+            std::replace(r.begin(), r.end(), '_', ' ');
+            rn.push_back(r);
+        }
+        const int h = flow_buttons(a, "suroom", BX + 12, y, BW - 24, rn, lit, 30, IP ? 14 : 0);
         if (h >= 0) {
             gset(8, h);
             U.s.o["room"] = sess::str(U.rooms[(size_t)h]);
@@ -270,7 +263,7 @@ inline void draw_setup(App &a)
     text(a, a.bold, 14, BX + 12, y, SILK, "PROGRAM CHANGES READ AS");
     y += IP ? 18 : 24;
     {
-        static const std::vector<std::string> STDS = {"ours", "SC-55", "SC-88", "SC-88Pro", "SC-8850"};
+        static const std::vector<std::string> STDS = {"OURS", "SC-55", "SC-88", "SC-88Pro", "SC-8850"};
         std::vector<bool> lit;
         for (int i = 0; i < 5; i++)
             lit.push_back((int)std::lround(gv(13)) == i);

@@ -352,7 +352,7 @@ inline void draw_amp(App &a)
         }
         const bool mine = pk_chosen > 0 && pk_chosen != own;
         if (button(a, "amppkown", x + 14, ty, PW - 28, IP ? 40 : 40,
-                   mine ? "BACK TO THE VOICE'S " + lab(own) : "AS THE VOICE \xc2\xb7 " + lab(own), false, mine)) {
+                   mine ? "BACK TO THE PATCH'S " + lab(own) : "AS THE PATCH \xc2\xb7 " + lab(own), false, mine)) {
             a.hold["pickup"] = {(double)own, ImGui::GetTime() + 0.8};
             call(a, "{\"call\":\"pickup_set\",\"row\":" + std::to_string(a.row) + ",\"choice\":-1}");
         }
@@ -394,7 +394,7 @@ inline void draw_amp(App &a)
         snprintf(st_, sizeof st_, "%.2f", sounds);
         const float KS = IP ? 80 : 120, ky = y + (IP ? 110 : 150);
         const int f = knob(a, "ampdrive", x + VW * 0.28f, ky, KS, v01, "DRIVE", vt, false, {}, 0, own);
-        knob(a, "ampsounds", x + VW * 0.72f, ky, KS, s01, "SOUNDING", st_, false, {}, 0, false);    // (display only)
+        knob(a, "ampsounds", x + VW * 0.72f, ky, KS, s01, "WITH THE WHEEL", st_, false, {}, 0, false);    // (display only)
         if (f & K_CHANGED) {
             const double d = std::round(v01 * top * 100) / 100;
             a.hold["drive"] = {d, ImGui::GetTime() + 0.6};
@@ -407,18 +407,18 @@ inline void draw_amp(App &a)
         if (f & K_RESET)
             back();
         char bt[48];
-        snprintf(bt, sizeof bt, own ? "BACK TO THE VOICE'S %.2f" : "AS THE VOICE (%.2f)", voice);
+        snprintf(bt, sizeof bt, own ? "BACK TO THE PATCH'S %.2f" : "AS THE PATCH (%.2f)", voice);
         const float by = ky + KS / 2 + (IP ? 44 : 58);
         if (button(a, "ampdriveback", x + 14, by, VW - 28, IP ? 44 : 40, bt, false, own))
             back();
         const std::string note = voice > 0.0 || now > 0.0
                                      ? "A triode stage before the speaker: clean at 0, the edge of breakup at 1, "
-                                       "a clip past it. Its distortion is mostly the notes mixing -- a chord "
+                                       "a clip past it. Its distortion is mostly the notes mixing: a chord "
                                        "thickens where one note barely would."
-                                     : "No valve of its own: turned up, it gains one -- a triode stage before "
+                                     : "No valve of its own: turned up, it gains one, a triode stage before "
                                        "the speaker, the edge of breakup at 1.";
         char wn[96];
-        snprintf(wn, sizeof wn, " SOUNDING is the drive with the mod wheel's scale on it (now x%.2f).", wheel);
+        snprintf(wn, sizeof wn, " WITH THE WHEEL is the drive as the mod wheel scales it (now x%.2f).", wheel);
         const auto ls = wrap(a, a.font, 14, note + (organ ? " The mod wheel is the swell." : std::string(wn)), VW - 28);
         for (size_t i = 0; i < ls.size(); i++)
             text(a, a.font, 14, x + 14, by + (IP ? 56 : 54) + i * LH, SILK_DIM, ls[i]);
@@ -460,15 +460,18 @@ inline void draw_amp(App &a)
             const J *o = owns->get(std::to_string((int)num(p, "program")) + "." + std::to_string((int)num(p, "variation")));
             own = o ? (int)o->d() : 0;
         }
+        // (the patch's own first, named; the same speaker not offered again beside it)
         std::vector<int> ring = {0};
-        ring.insert(ring.end(), offer.begin(), offer.end());
+        for (int c : offer)
+            if (c != own)
+                ring.push_back(c);
         const int cols = IP ? 2 : 3;
         const float bg = IP ? 6 : 8, bw = (SW - 28 - bg * (cols - 1)) / cols, bh = IP ? 44 : 46;
         for (size_t i = 0; i < ring.size(); i++) {
             const int c = ring[i];
             const float bx = x + 14 + (i % cols) * (bw + bg), by = y + (IP ? 40 : 46) + (i / cols) * (bh + bg);
             const std::string id = "ampcab" + std::to_string(c);
-            const std::string lb = c ? label(c) : "OWN \xc2\xb7 " + label(own);
+            const std::string lb = c ? label(c) : "PATCH'S OWN \xc2\xb7 " + label(own);
             if (button(a, id.c_str(), bx, by, bw, bh, lb, c == now)) {
                 a.hold["cabinet"] = {(double)c, ImGui::GetTime() + 0.8};
                 call(a, "{\"call\":\"cabinet_set\",\"row\":" + std::to_string(a.row) + ",\"choice\":"
@@ -478,7 +481,7 @@ inline void draw_amp(App &a)
         const int rows = ((int)ring.size() + cols - 1) / cols;
         const float ay = y + (IP ? 40 : 46) + rows * (bh + bg) + (IP ? 12 : 18);
         const int shown = now ? now : own;
-        text(a, a.bold, 14, x + 14, ay, SILK, now ? label(now) : "OWN \xc2\xb7 " + label(own));
+        text(a, a.bold, 14, x + 14, ay, SILK, now ? label(now) : "PATCH'S OWN \xc2\xb7 " + label(own));
         const auto ls = wrap(a, a.font, 14, about(shown), SW - 28);
         for (size_t i = 0; i < ls.size(); i++)
             text(a, a.font, 14, x + 14, ay + LH * (i + 1) + 4, SILK_DIM, ls[i]);

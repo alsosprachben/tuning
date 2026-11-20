@@ -24,7 +24,7 @@ struct FilesUi {
 static FilesUi g_fl;
 
 static const std::vector<std::pair<std::string, std::string>> FL_MODES = {
-    {"auto", "AUTO"}, {"gm", "GM"}, {"ours", "GS: OURS"}, {"sc55", "GS: SC-55"}, {"sc88", "GS: SC-88"}, {"sc88pro", "GS: SC-88PRO"},
+    {"auto", "AUTO"}, {"gm", "GM"}, {"ours", "GS: OURS"}, {"sc55", "GS: SC-55"}, {"sc88", "GS: SC-88"}, {"sc88pro", "GS: SC-88Pro"},
     {"sc8850", "GS: SC-8850"}, {"cm64", "GS: INIT CM-64"}, {"mt32", "MT-32"}, {"cm64u", "CM-64"}, {"names", "ORCHESTRA BY NAMES"}};
 inline std::string fl_mode_label(const std::string &k)
 {
@@ -70,7 +70,7 @@ extern "C" int nui_pick_take(char *path, int cap);
 #if defined(__APPLE__) && TARGET_OS_IPHONE
 static const char *FL_NO_EXPORT = "Best quality needs the file render's data: file-export.nvx in Clavitone's Documents.";
 #else
-static const char *FL_NO_EXPORT = "Best quality needs nvlive started with --file-export.";
+static const char *FL_NO_EXPORT = "Best quality needs the file render's data (file-export.nvx beside the live data); see Help: Files.";
 #endif
 inline void fl_take(const J &r)
 {
@@ -424,8 +424,9 @@ inline void draw_files(App &a)
             }
         }
     }
-    const auto warn = wrap(a, a.font, 14, "Rendering while you play can cause dropouts, since both use the processors; a render that needs more memory than is free beside the engine is stopped.", PW - 24);
-    float wy = Y1 - 12 - warn.size() * LH;
+    // (the caution under the render buttons and what they said, not at the card's foot)
+    const auto warn = wrap(a, a.font, 14, "Rendering while you play can cause dropouts: both use the processors. A render that needs more memory than is free is stopped.", PW - 24);
+    float wy = std::min(py + 12, Y1 - 12 - warn.size() * LH);
     for (const auto &l : warn) {
         text(a, a.font, 14, PX + 8, wy, LCD_DIM, l);
         wy += LH;

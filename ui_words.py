@@ -197,3 +197,53 @@ def plain(text):
 def has_provenance(text):
     import re
     return any((re.search(r"\b%s\b" % m, text) if m.isalpha() else m in text) for m in PROVENANCE)
+
+
+# THE TUNINGS the Tuning card offers (their engine keys): a name, and a line
+TUNERS = {
+    "hybrid440": ("Hybrid, A=440", "our hybrid temperament at concert pitch"),
+    "hybrid": ("Hybrid, A=415", "the hybrid temperament at baroque pitch"),
+    "hybridharm": ("Hybrid, pure octaves", "pure 2:1 octaves: right for organ pipes, A=415"),
+    "hybridharm440": ("Hybrid, pure octaves, 440", "pure 2:1 octaves at concert pitch"),
+    "hybridmean": ("Hybrid mean", "the hybrid's chains joined by a mean third: no wolf"),
+    "hybridmeanpiano": ("Hybrid mean, piano", "hybrid mean on a piano's stretched octaves, A=440"),
+    "stretchedhelmholtz": ("Stretched Helmholtz", "two pure-fifth chains joined by stretched octaves"),
+    "gm2": ("GM2 standard", "the default: equal at A=440, or a file's own"),
+    "even": ("Equal", "equal temperament, A=440"),
+    "stretch": ("Stretched fifths", "pure fifths; the comma goes into the octaves"),
+    "werckmeister": ("Werckmeister III", "a baroque well temperament, A=415"),
+    "sankey": ("Sankey", "a Scarlatti tuning found by consonance, A=415"),
+    "meantone": ("Meantone", "quarter-comma meantone, A=415"),
+    "just": ("Just", "pure ratios from the tonic"),
+    "pyth": ("Pythagorean", "pure fifths"),
+    "well": ("Well", "a circulating well temperament"),
+    "linear": ("Linear", "linear in cents"),
+    "linear5": ("Linear, five fifths", "linear over five fifths"),
+    "linearwell": ("Linear well", "a linear well temperament"),
+    "bechstein": ("Bechstein", "a Bechstein grand's tuning"),
+    "spiral": ("Spiral of fifths", "the spiral of fifths, unclosed"),
+    "semi": ("Semitones", "semitone-based"),
+    "dynamic": ("Dynamic", "solved once over the keyboard"),
+    "path": ("Path", "follows a written path of notes"),
+    "raga:et@c#": ("Raga, equal", "Indian, Sa on C#: equal, nearest sung Hindustani"),
+    "raga:just5@c#": ("Raga, just", "Indian, Sa on C#: 5-limit just intonation"),
+    "raga:pythagorean@c#": ("Raga, Pythagorean", "Indian, Sa on C#: Pythagorean"),
+    "raga:bel_todi/todi@c#": ("Raga Todi", "Indian, Sa on C#: Todi as sung, near Pythagorean"),
+}
+
+# THE EASTERN TUNINGS' systems (the Tuning card's buttons): a name each; the
+# measured ragas ("saraga_yaman_kalyan") by their raga's name
+EASTERN = {"bel_todi": "Todi", "et": "Equal", "just5": "Just", "pythagorean": "Pythagorean"}
+
+
+def eastern_name(key):
+    if key in EASTERN:
+        return EASTERN[key]
+    if key.startswith("saraga_"):
+        return key[len("saraga_"):].replace("_", " ").title()
+    return key.replace("_", " ")
+
+
+# THE ROOMS (Setup's): their names as a person says them
+def room_name(key):
+    return key.replace("_", " ")

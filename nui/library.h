@@ -343,13 +343,13 @@ inline void draw_library(App &a)
             if (p.desc.empty())
                 text(a, a.font, 14, x + name_x, y + (th - h14) / 2, isc ? LCD_BG : SILK, fit(a, a.font, 14, p.name, nw));
             else {
-                const auto dl2 = wrap(a, a.font, 14, p.desc, nw);
-                const size_t n = std::min<size_t>(2, dl2.size());
+                const auto dl2 = wrap_max(a, a.font, 14, p.desc, nw, 2);
+                const size_t n = dl2.size();
                 const float y0 = y + (th - (1 + n) * h14 - 2 * n) / 2;
                 text(a, a.font, 14, x + name_x, y0, isc ? LCD_BG : SILK, fit(a, a.font, 14, p.name, nw));
                 for (size_t i = 0; i < n; i++)
                     text(a, a.font, 14, x + name_x, y0 + (h14 + 2) * (i + 1), isc ? LCD_BG : SILK_DIM,
-                         i + 1 == n && dl2.size() > n ? fit(a, a.font, 14, dl2[i] + " \xe2\x80\xa6", nw) : dl2[i]);
+                         dl2[i]);
             }
             look::star(a, x + tw - star / 2, y + th / 2, h21 * 0.5f, fav ? (isc ? LCD_BG : LCD) : (isc ? LCD_DIM : SILK_DIM), fav);
         }
