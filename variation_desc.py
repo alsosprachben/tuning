@@ -96,6 +96,7 @@ VARIATION_DESC = {
     (16, 17): "Wurlitzer console: Flute 8', 4' and 2'",
     (16, 18): "Wurlitzer: Flute, Diapason, Quint, octaves",
     (16, 40): "Wurlitzer pedals: Bourdon 16' and Flute 8'",
+    (16, 41): "Wurlitzer lower manual: Melodia and Trombone",
     (16, 32): "all nine drawbars",
     (16, 33): "even drawbars: 16 8 4 2 1",
     (17, 1): "16 5-1/3 8, perc 2nd",

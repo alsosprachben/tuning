@@ -11,7 +11,7 @@ and editing this table -- the dispatch stays data-driven.
 """
 
 from tonelib import (
-    DividerOrganProperties, DividerPedalProperties, divider_registration,
+    DividerOrganProperties, DividerPedalProperties, DividerLowerProperties, divider_registration,
     TaikoProperties,
     MelodicAgogoHighProperties,
     MelodicAgogoLowProperties,
@@ -1251,6 +1251,12 @@ def routed_variation(program, name, **attrs):
 # pair (chorus._pair), +-4 cents half left and right -- MuseScore's 61.8, its
 # section twice, +-4, panned apart: the brass made wider
 VARIATIONS[(61, 8)] = routed_variation(61, "brass2", detuned_pair=(-4.0, 4.0))
+
+# THE DIVIDER ORGAN'S LOWER MANUAL, a tone of our own map (no GS map has a slot for
+# it): beside Organ Bass, the pedals, at 16.40 -- the 4500's three divisions as three
+# programs, as a console is played over MIDI
+VARIATIONS[(16, 41)] = type("DividerLowerProperties_ours", (DividerLowerProperties,), {})
+VARIATION_NAMES[(16, 41)] = "Wurlitzer Lower"
 
 # A LAYERED VARIATION: one key, two (or more) voices -- each routed by its
 # own program at its own transposition and level. blockrender expands such a

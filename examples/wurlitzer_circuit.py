@@ -396,8 +396,133 @@ def pedal_tables(levels, r, nh=32):
     return out
 
 
+
+# THE LOWER MANUAL (straf lower 653543, traced: schematics/straf_lower_653543.md): each tab
+# a network from its source to the sum before TR1 (the lower keyboard signal pre-amp).
+# Its flute is its own five range filters (#6-#10), resonating:
+LOW_FLUTE_RANGES = ((25, (221.0, 221.0)), (37, (271.0, 329.0)), (49, (857.0, 857.0)), (61, (876.0, 1300.0)),
+                    (72, (2664.0, 3824.0)))
+LOW_NETS = {
+    "Melodia 8'": [("R", "s", "o", 5.6 * K)],
+    "Geigen Diapason 8'": [("R", "s", "a", 6.8 * K), ("C", "a", "g", 0.082 * U), ("R", "a", "o", 56 * K)],
+    "Viole 8'": [("R", "s", "a", 18 * K), ("C", "a", "b", 0.0082 * U), ("R", "b", "o", 39 * K),
+                 ("R", "b", "g", 33 * K), ("C", "b", "g", 0.02 * U)],
+    "Lower Trombone 8'": [("R", "s", "y", 4.7 * K), ("C", "y", "g", 0.047 * U), ("L", "y", "t", 3.5),
+                          ("C", "t", "g", 0.039 * U), ("R", "t", "o", 47 * K)],
+    "Vox Humana 8'": [("R", "s", "a", 1.5 * K), ("C", "a", "v", 0.039 * U), ("C", "v", "g", 0.22 * U),
+                      ("L", "v", "g", 0.075), ("R", "v", "o", 39 * K)],
+    "Cornet 8'": [("R", "s", "y", 1.5 * K), ("C", "y", "g", 0.039 * U), ("L", "y", "r", 0.415),
+                  ("C", "r", "g", 0.027 * U), ("R", "r", "o", 68 * K)],
+    "Lower Quint 5-1/3'": [("R", "s", "a", 5.6 * K), ("C", "a", "g", 0.068 * U), ("R", "a", "b", 6.8 * K),
+                           ("C", "b", "g", 0.047 * U), ("R", "b", "o", 15 * K)],
+}
+LOW_FOOT = {k: (1.5 if "Quint" in k else 1.0) for k in LOW_NETS}
+# THE SECOND SECTIONS: the two-pole tabs' other switch contact, a resistor from the
+# source straight to the sum (Geigen's 27K is in its net; the Vox's 22K, the Cornet's
+# 22K, the Viole's 10K, the Trombone's 39K): its share against the drawn value fitted
+# per tab (0-2), the wiring to it being the one thing the photos could not settle
+LOW_DIRECT = {"Vox Humana 8'": 22 * K, "Cornet 8'": 22 * K, "Viole 8'": 10 * K, "Lower Trombone 8'": 39 * K}
+LOW_MIX = {}
+# ...the Geigen's other section (27K) is on the FLUTE, not the complex: searched over every
+# pair of sources and its share, 5.3 dB rms against 11.7 with one source
+GEIGEN_FLUTE = (27 * K, 0.5)
+LOW_RLOAD = 3.0 * K        # (TR1's input: 39K / 3.3K bias, 470 Ohm and its emitter)
+
+
+def low_source(kind, key_hz, f, n, w):
+    if kind == "sq":
+        return square(n).astype(complex)
+    src = complex_series(n, w).astype(complex)
+    if kind == "flute":
+        note = int(round(12 * math.log2(key_hz / 32.703))) + 1
+        fr = next((r for top, r in LOW_FLUTE_RANGES if note <= top), LOW_FLUTE_RANGES[-1][1])
+        for fc in fr:
+            s_ = 1j * f / fc
+            src = src / (1 + s_ / 0.7 + s_ * s_)
+    return src
+
+
+def low_series(name, key_hz, n, w, kind, mix=None):
+    f = key_hz * LOW_FOOT[name] * np.arange(1, n + 1)
+    mix = LOW_MIX.get(name, 0.0) if mix is None else mix
+    h = transfer(LOW_NETS[name], f, rload=LOW_RLOAD)
+    if name in LOW_DIRECT and mix:
+        h = h + mix * transfer([("R", "s", "o", LOW_DIRECT[name])], f, rload=LOW_RLOAD)
+    v = low_source(kind, key_hz, f, n, w) * h
+    if name == "Geigen Diapason 8'":
+        v = v + GEIGEN_FLUTE[1] * low_source("flute", key_hz, f, n, w) * transfer(
+            [("R", "s", "o", GEIGEN_FLUTE[0])], f, rload=LOW_RLOAD)
+    return f, v
+
+
+def low_measured(nh=24):
+    import wurlitzer_fit as WF
+    import wurlitzer_survey as WS
+    x = WS.load("8", WS.REF)
+    out = []
+    for name, take, (a, b), fac, man in WS.TABS:
+        if man != "lower" or name not in LOW_NETS:
+            continue
+        notes = WS.runs(x, a, b)
+        for (s, e), kh in zip(notes, [WS.C3 * m * 0.981 for m in (1, 2, 4)]):
+            seg = x[int((s + 0.3) * WS.SR):int((e - 0.12) * WS.SR)]
+            f0, _ = WS.spectrum(seg, kh * fac)
+            out.append((name, kh, f0, np.array(WF.table(seg, f0)[:nh])))
+    return out
+
+
+def low_main():
+    fit_ = json.load(open(os.path.expanduser("~/Documents/refs/wurlitzer_ben/circuit_fit.json")))
+    r = np.array(fit_["response_db"])
+    DUTY[0] = fit_.get("duty", 0.5)
+    w = tuple(fit_["complex_weights"])
+    data = low_measured()
+    chosen, lv = {}, {}
+    for name in LOW_NETS:
+        rows = [d for d in data if d[0] == name]
+        best = None
+        for kind, mix in [(k, m) for k in (("flute", "cx", "sq") if "Quint" not in name else ("sq",))
+                          for m in ((0.0, 0.25, 0.5, 1.0, 1.5, 2.0) if name in LOW_DIRECT else (0.0,))]:
+            es, ls = [], []
+            for _, kh, f0, tb in rows:
+                f, v = low_series(name, kh, 24, w, kind, mix)
+                model = 20 * np.log10(np.abs(v) + 1e-12) + response_db(f, r)
+                m = tb > 0
+                meas = 20 * np.log10(tb[m])
+                keep = meas > meas.max() - 45
+                e = (model[m][keep] - model[m].max()) - (meas[keep] - meas.max())
+                es.append(float(np.sqrt(np.mean(e ** 2))))
+                ls.append(float(meas.max() - model[m].max()))
+            if best is None or np.mean(es) < best[0]:
+                best = (float(np.mean(es)), kind, float(np.mean(ls)), es, mix)
+        chosen[name] = best[1]
+        LOW_MIX[name] = best[4]
+        lv[name] = best[2]
+        print("%-20s source %-5s second section x%.2f  rms %4.1f dB  (by key %s)" % (
+            name, best[1], best[4], best[0], " ".join("%.1f" % e for e in best[3])))
+    return chosen, lv, r, w
+
+
+def low_tables(chosen, levels, r, w, nh=32):
+    out = {}
+    for name in LOW_NETS:
+        rows = []
+        for kh in ANCHOR_KEYS:
+            f, v = low_series(name, kh, nh, w, chosen[name])
+            a = np.abs(v) * 10 ** ((response_db(f, r) + levels[name]) / 20)
+            a[f > 16000] = 0.0
+            rows.append((float(f[0]), a))
+        out[name] = rows
+    return out
+
+
 if __name__ == "__main__":
-    if "--pedal" in sys.argv:
+    if "--lower" in sys.argv:
+        ch, lv, r, w = low_main()
+        if "--py" in sys.argv:
+            with open(os.path.expanduser("~/Documents/refs/wurlitzer_ben/lower_tables.py.txt"), "w") as fh:
+                fh.write(emit_py(low_tables(ch, lv, r, w)) + "\n")
+    elif "--pedal" in sys.argv:
         lv, r = pedal_main()
         if "--py" in sys.argv:
             tb = pedal_tables(lv, r)

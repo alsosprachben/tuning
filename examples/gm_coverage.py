@@ -1243,6 +1243,11 @@ def stops():
 # rated here as a program is. Every key of patch_map.VARIATIONS must be rated
 # and nothing else may be -- checked when the page is built, as STOP_RATED is.
 VAR_RATED = {
+    (16, 41): (4, "the DIVIDER ORGAN'S LOWER MANUAL (tonelib.DividerLowerProperties), a tone of our own map: Ben's "
+                  "Wurlitzer 4500's lower STRAF board as its circuit (its 1965 schematic: each tab's network, its own "
+                  "flute filters; examples/wurlitzer_circuit.py --lower), each tab's source searched and its level "
+                  "fitted to his recordings (4.0-8.3 dB rms, takes made in a garage); the console's Preset I, "
+                  "Melodia 8' and Trombone 8'"),
     (107, 16): (4, "the KANUN (tonelib.KanunProperties): courses of three strings over a wooden box, FITTED to Baris Bozkurt's isolated notes (Freesound 211133, CC0; examples/pluck_fit.py --voice=kanun, 28 notes): its inharmonicity measured (B 7.9e-5, 13x the koto's -- Ben: 'looser ... like a guitar'), its decay set on the whole note's level curve, its body within ~3 dB 250 Hz-13 kHz. Ben: 'Sounds great now'"),
     (112, 16): (4, "the Balinese CENG-CENG (tonelib.CengCengProperties): a plate from the crash FITTED to the UNT gamelan Bwana Kumala's single ringing strikes (Freesound pack 12954, CC0; examples/rama_fit.py: multi-strike files rejected, 4.8 dB on the grid), with each strike's chatter of the stand's plates (14-17 sub-hits in 120 ms) as strike_flam bursts at +10 dB by Ben's ear"),
     (124, 10): (4, "a RECORD'S SURFACE as a voice (tonelib.PhonoNoiseProperties), FITTED to nervousneal's blank groove (a 1961 MGM test pressing, Freesound 586430, CC0; examples/phono_fit.py): the hiss flat 300 Hz-12 kHz with its rumble (not brown: RIAA flattens it), clicks 34/s over 12 dB against the take's 36.7, their level spread and bright spectrum the take's, one timeline for the record with each click randomly placed in the balance (Ben) and 11.5% recurring a revolution on. Not modelled: the hiss's L/R anti-correlation, clicks of opposite polarity. Ben: 'Sounds great now'"),
