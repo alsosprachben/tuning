@@ -126,7 +126,7 @@ def track(edges, pedal_at, key, level_db, top=89):
     return dc, full
 
 
-def weight(nf, f0):
+def weight(nf, f0, beta=None):
     """dB of damping at frequency nf per dB at the fundamental f0, as the
     natural-log factor the kernel multiplies by (gain = exp(-weight * DC))."""
     # x ** BETA as libm's pow (native.xpow): numpy's SIMD power is a last bit
@@ -134,9 +134,9 @@ def weight(nf, f0):
     x = np.maximum(np.asarray(nf, float), 1e-6) / np.maximum(np.asarray(f0, float), 1e-6)
     try:
         import native as _NV
-        p = _NV.xpow(x, BETA)
+        p = _NV.xpow(x, BETA if beta is None else beta)
     except ImportError:
-        p = x ** BETA
+        p = x ** (BETA if beta is None else beta)
     return LN10_20 * p
 
 
@@ -149,6 +149,8 @@ class Tracks:
         self.r0 = np.array([t[0] for t in tracks], np.int64)
         self.r1 = np.array([t[1] for t in tracks], np.int64)
         self.f0 = np.array([t[2] for t in tracks], float)
+        # (a track's own BETA, its 7th field: an organ's sustain takes every partial alike, 0)
+        self.beta = np.array([t[6] if len(t) > 6 else BETA for t in tracks], float)
         self.b0 = np.array([t[3] for t in tracks], np.int64)
         self.non = np.concatenate([np.asarray(t[5], np.int64) for t in tracks])
         self.noff = np.concatenate(([0], np.cumsum(self.r1 - self.r0)[:-1])).astype(np.int64)
@@ -185,7 +187,7 @@ def onto_tracks(T, root, own, non, nf, blk):
     loc = np.asarray(loc).reshape(-1)
     dk[m] = loc
     dg = np.zeros(len(root), np.float32)
-    dg[m] = weight(np.asarray(nf)[m], T.f0[t])
+    dg[m] = weight(np.asarray(nf)[m], T.f0[t], T.beta[t])
     n = np.array([len(T.tr[u][4]) for u in used[:, 0]], np.int64)
     return dict(dk=dk.astype(np.int32), dg=dg,
                 DM=np.ascontiguousarray(np.concatenate([T.tr[u][4] for u in used[:, 0]])),

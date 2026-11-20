@@ -4369,6 +4369,12 @@ def _prep_damper_helpers(A, _DAMP_OPEN, _DAMP_TRACKS, _PEDV_CH, _PED_CH, _SOFF_C
         _b0 = int(_d['off'] * SR) // BLK
         _b1 = min(nblk, int(math.ceil(_d['land'] * SR / BLK)))
         _edges = (np.arange(_b0, _b1 + 1) * BLK) / float(SR)
+        if 'organ_t60' in _d:
+            # AN ORGAN'S SUSTAIN: 60 dB in its T60 from the key-up, every partial alike
+            _dc = (60.0 / _d['organ_t60']) * np.maximum(_edges - _d['off'], 0.0)
+            _DAMP_TRACKS.append((_r0, _r1, _f0, _b0, _dc.astype(np.float32),
+                                 np.asarray(A['non'][_r0:_r1], np.int64), 0.0))
+            return
         _dc, _full = _DMP.track(_edges, lambda _tt: _pedal_at(_d['ch'], _tt), _d['key'], _lvl, _d['top'])
         _DAMP_TRACKS.append((_r0, _r1, _f0, _b0, _dc.astype(np.float32),
                              np.asarray(A['non'][_r0:_r1], np.int64)))
@@ -8988,6 +8994,22 @@ def _prepare(path, tuner='hybrid440', sink=None):
         _off_key = nt.off
         _mcut = (nt.ch, nt.note, nt.on) in _MONO_CUT
         _note_pedal(nt, _DAMP_OPEN, _PEDV_CH, _damper_falls, _damper_lands, _mcut, _nx)
+        # ...OR AN ORGAN'S SUSTAIN (tonelib sustain_stops: the divider organ's, a tab):
+        # a note let go with one drawn decays from the key-up as an exponential,
+        # every partial alike, on a damper track of its own (damper.py), until 70 dB
+        # down -- then its release, as any note's
+        _sus = getattr(nt.pc, 'sustain_stops', None) if nt.organ else None
+        if _sus and not _mcut and _DAMP_OPEN[0] is None:
+            _rev = rankev_of.get(nt.organ_key, {})
+            _t60 = max([_v for _k, _v in _sus.items() if T.stop_drawn_at(_rev.get(_k, ()), nt.off)] or [0.0])
+            if _t60 > 0.0:
+                _land = nt.off + _t60 * 70.0 / 60.0
+                if _nx is not None:
+                    _land = min(_land, max(nt.off, _nx - RETRIGGER_FADE))
+                if _land > nt.off:
+                    _DAMP_OPEN[0] = dict(ch=nt.ch, key=nt.note, on=nt.on, off=nt.off, land=_land, vel=nt.vel,
+                                         top=128, row0=nt.row0, organ_t60=_t60)
+                    nt.off = _land
         # ...AND THE SOSTENUTO PEDAL, which caught this note only if its key
         # was already down when the pedal went down. Same clamp as the damper:
         # a string re-struck is a string re-damped whatever any pedal is doing.
@@ -9700,7 +9722,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                                 _root == np.arange(P), prep['non'], prep['nf'], BLK)
         if _got is not None:
             prep.update(_got[0])
-            print("  half-pedal: %d released notes damped through the band%s"
+            print("  damper tracks: %d released notes (the half-pedal's band, an organ's sustain)%s"
                   % (len(_DAMP_TRACKS), (", %d copied rows with them" % _got[1]) if _got[1] else ""))
     # THE LESLIE'S LOBE (leslie.lobe_columns): each row's rotor and lobe, and
     # the rotors' angles on the grid -- the kernel swings the level

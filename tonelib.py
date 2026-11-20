@@ -6927,6 +6927,9 @@ class DividerOrganProperties(TonewheelProperties):
         ("Quint 5-1/3'", 1.498307, 1.0, DividerQuint513Properties),
         ("Clarinet 4'", 2.0, 1.0, DividerClarinet4Properties),
         ("tremulant", None, 0.0),
+        ("sustain short", None, 0.0),
+        ("sustain medium", None, 0.0),
+        ("sustain long", None, 0.0),
     ]
     crescendo_order = ["Flute 8'", "Diapason 8'", "Tibia 16'", "Clarinet 8'", "Quint 5-1/3'", "Clarinet 4'",
                        "Trombone 16'", "Trumpet 8'", "Bass Clarinet 16'", "String 8'", "Oboe 8'", "Kinura 8'"]
@@ -6947,6 +6950,15 @@ class DividerOrganProperties(TonewheelProperties):
     #  spread of a pitch track -- examples/wurlitzer_survey.modulation)
     tremulant_depth = 2.0 ** (15.1 / 1200.0) - 1.0
     tremulant_tau = 0.05                    # (the oscillator runs on: the tab switches it in at once)
+    # THE SUSTAIN (the 4500's rockers: on each note's keyer a 0.39 uF capacitor, its
+    # bias -30 V off, -19 short, -7 medium, 0 long -- typical keying 653544): a key
+    # let go, the note DISCHARGES, an exponential at the whole note's level. T60s
+    # measured on Ben's take 3 (the Flute 8' at C4): Short 0.7 s, Medium 2.4 s; his
+    # Long decays as his Medium (a fault), so its 4.2 s is the pedal's Long against
+    # its On (1.95 against 1.1) applied to the Medium: an estimate. Tabs, as the
+    # console's (pipeless stops; drawn together, the longest), carried by the
+    # damper's tracks (damper.py: exponential, every partial alike).
+    sustain_stops = {"sustain short": 0.7, "sustain medium": 2.4, "sustain long": 4.2}
     # TWO AMPLIFIERS, TWO SIDES (the amplifier system schematic, 504590/504591: an Upper
     # and a Lower amplifier, each its own speakers; Ben, at his console: "Lower is right.
     # Upper is left."). The upper division sounds from the left of the cabinet, the lower
@@ -6959,7 +6971,8 @@ class DividerOrganProperties(TonewheelProperties):
     # THE CARD (live.stop_rows), as the console's rail groups its tabs: the 16's,
     # the 8' flues, the reeds, the mutations ("|" a break, not a stop)
     stop_rows = [["Tibia 16'", "Bass Clarinet 16'", "Trombone 16'", "|", "Flute 8'", "Diapason 8'", "String 8'",
-                  "Clarinet 8'", "|", "Oboe 8'", "Trumpet 8'", "Kinura 8'", "|", "Quint 5-1/3'", "Clarinet 4'", "|", "tremulant"]]
+                  "Clarinet 8'", "|", "Oboe 8'", "Trumpet 8'", "Kinura 8'", "|", "Quint 5-1/3'", "Clarinet 4'", "|", "tremulant",
+                  "sustain short", "sustain medium", "sustain long"]]
 
     # THE COUPLERS (Upper to Upper 16', 4', 2'): each keys the octave below or
     # above as well, so every drawn tab sounds again there -- its own colour at
@@ -7094,9 +7107,14 @@ class DividerPedalProperties(DividerOrganProperties):
         ("Flute 8'", 1.0, 1.0, DividerPedalFlute8Properties),
         ("String Bass 8'", 1.0, 1.0, DividerStringBass8Properties),
         ("tremulant", None, 0.0),
+        ("sustain", None, 0.0),
+        ("sustain long", None, 0.0),
     ]
     crescendo_order = ["Bourdon 16'", "Flute 8'", "Principal 16'", "String Bass 8'"]
-    stop_rows = [["Bourdon 16'", "Principal 16'", "|", "Flute 8'", "String Bass 8'", "|", "tremulant"]]
+    stop_rows = [["Bourdon 16'", "Principal 16'", "|", "Flute 8'", "String Bass 8'", "|", "tremulant",
+                  "sustain", "sustain long"]]
+    # (the pedal sustain, take 3 and 4b: On 1.1 s, Long 1.95 s to 60 dB)
+    sustain_stops = {"sustain": 1.1, "sustain long": 1.95}
     default_stops = 0b0101                  # the Bourdon 16' and Flute 8'
     seat_pan = 0.0                          # (both amplifiers: the middle)
     # HELD where Organ Bass's drawbars (16' 8') stood, so the bank's trims stand
@@ -7367,11 +7385,14 @@ class DividerLowerProperties(DividerOrganProperties):
         ("Cornet 8'", 1.0, _LOWER_GAIN, DividerCornet8Properties),
         ("Quint 5-1/3'", 1.498307, _LOWER_GAIN, DividerLowerQuint513Properties),
         ("tremulant", None, 0.0),
+        ("sustain", None, 0.0),
     ]
     crescendo_order = ["Melodia 8'", "Geigen Diapason 8'", "Trombone 8'", "Viole 8'", "Cornet 8'",
                        "Quint 5-1/3'", "Vox Humana 8'"]
     stop_rows = [["Melodia 8'", "Geigen Diapason 8'", "Viole 8'", "|", "Trombone 8'", "Vox Humana 8'",
-                  "Cornet 8'", "|", "Quint 5-1/3'", "|", "tremulant"]]
+                  "Cornet 8'", "|", "Quint 5-1/3'", "|", "tremulant", "sustain"]]
+    # (the lower sustain, take 4b: the Melodia at C4, 2.4 s to 60 dB)
+    sustain_stops = {"sustain": 2.4}
     default_stops = 0b0001001              # Preset I: the Melodia and Trombone
     seat_pan = 0.5                          # (the lower amplifier: the right)
 
