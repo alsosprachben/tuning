@@ -7320,26 +7320,29 @@ class DividerLowerQuint513Properties(DividerTabProperties):
     mode_gains = mode_gains_points[-1][1]
 
 
+# HELD at 60's Organ 1's level (the upper manual), as the console balances them: the
+# ranks' gain, the level being the tab spectra's
+_LOWER_GAIN = 10 ** (11.9 / 20.0)
+
+
 class DividerLowerProperties(DividerOrganProperties):
     """THE DIVIDER ORGAN'S LOWER MANUAL (Wurlitzer Lower): the 4500's lower division
     as a program of its own -- its seven tabs, the same keying and speakers. Its
     default the console's own Preset I (Melodia 8' and Trombone 8')."""
     stop_ranks = [
-        ("Melodia 8'", 1.0, 1.0, DividerMelodia8Properties),
-        ("Geigen Diapason 8'", 1.0, 1.0, DividerGeigen8Properties),
-        ("Viole 8'", 1.0, 1.0, DividerViole8Properties),
-        ("Trombone 8'", 1.0, 1.0, DividerLowerTrombone8Properties),
-        ("Vox Humana 8'", 1.0, 1.0, DividerVoxHumana8Properties),
-        ("Cornet 8'", 1.0, 1.0, DividerCornet8Properties),
-        ("Quint 5-1/3'", 1.498307, 1.0, DividerLowerQuint513Properties),
+        ("Melodia 8'", 1.0, _LOWER_GAIN, DividerMelodia8Properties),
+        ("Geigen Diapason 8'", 1.0, _LOWER_GAIN, DividerGeigen8Properties),
+        ("Viole 8'", 1.0, _LOWER_GAIN, DividerViole8Properties),
+        ("Trombone 8'", 1.0, _LOWER_GAIN, DividerLowerTrombone8Properties),
+        ("Vox Humana 8'", 1.0, _LOWER_GAIN, DividerVoxHumana8Properties),
+        ("Cornet 8'", 1.0, _LOWER_GAIN, DividerCornet8Properties),
+        ("Quint 5-1/3'", 1.498307, _LOWER_GAIN, DividerLowerQuint513Properties),
     ]
     crescendo_order = ["Melodia 8'", "Geigen Diapason 8'", "Trombone 8'", "Viole 8'", "Cornet 8'",
                        "Quint 5-1/3'", "Vox Humana 8'"]
     stop_rows = [["Melodia 8'", "Geigen Diapason 8'", "Viole 8'", "|", "Trombone 8'", "Vox Humana 8'",
                   "Cornet 8'", "|", "Quint 5-1/3'"]]
     default_stops = 0b0001001              # Preset I: the Melodia and Trombone
-    # HELD at 60's Organ 1's level (its upper manual), as the console balances them
-    initial_gain = 0.00015 * 10 ** (11.9 / 20.0)
 
 
 def divider_registration(tabs, couplers=()):
