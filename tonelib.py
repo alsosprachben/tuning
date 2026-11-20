@@ -7525,7 +7525,7 @@ def divider_registration(tabs, couplers=()):
             r = D.stop_ranks[names.index(t)]
             bits |= 1 << len(ranks)
             ranks.append(("%s, %s coupler" % (t, c), r[1] * cr, r[2] * cg, r[3]))
-    rows = [list(D.stop_rows[0])]
+    rows = [list(r) for r in D.stop_rows]                         # (the tabs', and the Solo and Accent row)
     if len(ranks) > len(D.stop_ranks):
         rows.append([r[0] for r in ranks[len(D.stop_ranks):]])     # (the couplers' copies: a row of their own)
     out = dict(stop_ranks=ranks, default_stops=bits, stop_rows=rows)
