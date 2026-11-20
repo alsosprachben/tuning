@@ -15,6 +15,9 @@ are what ship, so a source's licence still matters:
   forbid commercial use or analysis**: these BLOCK A SALE while their numbers
   are in the build. Each is an issue below, with what to do about it.
 
+The full findings behind each issue's alternatives (every link, licence quote
+and rejection) are in `licence_research/`.
+
 The register of every source is `credits.py`; `examples/gm_coverage.py
 --about` writes the Credits page from it, and fails if a voice's notes name a
 source the register doesn't hold.
@@ -87,6 +90,14 @@ store build.
   Wikimedia Commons, CC BY 3.0), enough to check the sawari buzz, not to fit
   decays. Freesound, archive.org and Europeana hold none under an open licence.
   The way out is a new recording: single plucks by a player, released CC0.
+- **Second search (2026-11-20):** CC BY biwa playing on YouTube: a two-hour
+  Kumamoto event with satsuma, chikuzen and higo biwa in chapters; players'
+  own channels (Tetsuya Shimokawa, chikuzen; Takahisa Suda, satsuma); a
+  satsuma concert on Mexico's national museum channel (INAH), the best
+  provenance; and the full concert behind the Commons clip. Japan's National
+  Diet Library has 1920s Nagata Kinshin satsuma-biwa records marked public
+  domain ("may be reused freely"): narrow-band 78s with voice. Lossy YouTube
+  audio fits below ~15 kHz; strokes between the singing are fittable.
 
 ### L5. The 27 measured raga tunings: Saraga 1.5 Hindustani — CC BY-NC-SA 4.0
 
@@ -123,6 +134,10 @@ store build.
   (Take 2)" (CC BY-SA 3.0, Jamendo) needs a listen to say what it is; the
   "CC0" uploads of Ustad Shaida are archival recordings a third party can't
   release. The way out is a new recording, as for the biwa.
+- **Second search (2026-11-20):** CC BY on YouTube: Rich Ermlick's six-minute
+  solo Afghan rubab (some street noise), Manzoor Jan's four-minute solo
+  (uploaded by a third party), Khaled Arman with the Geneva Camerata (with an
+  ensemble). Ermlick's is the cleanest; its licence is the uploader's own.
 
 ### L7. Fourteen Pianobook libraries — Pianobook's terms forbid it
 
@@ -147,8 +162,56 @@ store build.
   - Flugel Horn (Dusty Flugelhorn);
   - Guitar Feedback (Gretsch Feedback and Feedbacker).
 - **Status:** open, and the largest issue by count. Each samplist can grant
-  permission; otherwise each voice needs another source. Alternatives not yet
-  researched.
+  permission; otherwise each voice needs another source.
+- **Alternatives (checked 2026-11-20; Freesound licenses each sound, so check
+  every file before fitting it):**
+  - **Wurlitzer:** Greg Sullivan's "Wurlitzer EP200" (an EP203W;
+    github sfzinstruments/GregSullivan.E-Pianos), CC BY 4.0 on his own site
+    (the README says 3.0: credit him either way): 42 notes A1-A6, four
+    velocities, 2-6 s. Velocity behaviour. Plus OldBassMan's "Wurlitzer 200a"
+    (Freesound pack 5726, CC BY 4.0): 13 notes D3-D7, ~7 s, through a
+    transformer and tube preamp, so DI-like. Tone and decay.
+  - **Electric Grand:** Greg Sullivan's CP80 (same licence): 81 notes D#1-C#7,
+    four velocities, long (D3 ff 22.8 s), with the unison beating. A CP-80,
+    not a CP-70; no open CP-70 exists.
+  - **Dulcimer:** weak. iternetcone's "Multi-sampled Hammered Dulcimer"
+    (Freesound pack 19445, CC BY 4.0): ~8 single notes over an octave and a
+    half, one dynamic. batchku's santoor (CC0) is rolls on contact mics.
+  - **Harpsichord lute stop:** VCSL's English harpsichord has its own Lute
+    row (CC0), beside the Normal row we already fit. A direct replacement.
+    **Upper 8':** VCSL's Flemish harpsichord has High and Low rows at the same
+    pitch, probably its two 8' choirs (undocumented). **4':** no open
+    recording anywhere; model it as a separately scaled string set.
+  - **Church Bell:** Notre-Dame's bourdon Emmanuel (Commons, CC0, 189 s,
+    lossy; swung or struck to check by ear); the 25-tonne Bucharest cathedral
+    bell (Commons, CC BY-SA 4.0, 24-bit WAV, close); HMTSCCSound's "bec low
+    bell solo" (Freesound, CC0, one strike, full ring-out, a smaller bell).
+  - **Tonewheel drawbars and speaker:** see L9.
+  - **Taisho Koto:** a direct replacement. msx2plus's "multisampled
+    taishogoto" (Freesound, CC0): every note, 48 kHz. Also RutgerMuller's
+    improvisation (CC0, 96 kHz, with the drone string).
+  - **Hawaiian Guitar:** no lap-steel multisample. Eagledj's pedal-steel clips
+    (Commons, CC0/PD: all ten open strings plucked singly, and bar slides) and
+    Make Noise's "Drop of Sun" pedal-steel reel (Freesound, CC0). The string,
+    bar and pickup physics are a lap steel's.
+  - **12-string Guitar:** no per-note set. Kuzmanović's solo piece (Commons,
+    CC BY-SA 4.0) for the paired-course detune and pick order, on top of the
+    six-string fit.
+  - **Mandolin:** no open per-note set. lucasgonze's "Homestyle Mandolin"
+    (Freesound, CC0: 11 solo cues on a 1900 roundback). Philharmonia's single
+    notes are under its own terms: free for commercial use, not to be "sold or
+    made available 'as is'"; fitted numbers look compatible, your call.
+  - **Gopichant (ektara):** nothing clean. A 29 s one-string solo (YouTube,
+    CC BY) and Baul gopichand playing with its swoops, mixed with voices
+    (YouTube CC BY, Commons CC BY-SA): fit a single pluck, take the bend law
+    from the swoops.
+  - **Flugel Horn:** no open multisample anywhere. Fit it as a difference from
+    the Iowa trumpet: one player's flugelhorn and trumpet takes of one tune
+    (Commons, CC BY-SA 4.0); a "Taps" take (Freesound, CC0) for held notes.
+  - **Guitar Feedback:** good. SpeedY's note blooming into feedback (Freesound,
+    CC0, 23 s, lossless), airlynx99's six feedback takes (Freesound, CC0), a
+    Commons take with its chain documented (CC BY 4.0); Karoryfer's "Black And
+    Green Guitars" (CC0, 430 notes of a Gretsch) for the body.
 
 ### L8. Choir (GM 52, 53): Dagstuhl ChoirSet — CC BY-NC-SA 4.0
 
@@ -158,7 +221,22 @@ store build.
 - **What derives from it:** the choir section's spread, each singer's detune
   and vibrato. The voice itself is fitted to VocalSet (CC BY 4.0), which is
   fine.
-- **Status:** open. Alternatives not yet researched.
+- **Status:** open.
+- **Alternatives (checked 2026-11-20):**
+  1. Choral Singing Dataset **v3** (Zenodo 1286570, CC BY 4.0; v2, 1286487,
+     the same): 16 singers of the Anton Bruckner Choir, four per section
+     singing together, each on a close cardioid mic, three pieces, f0 and note
+     annotations. Exactly the section spread we measure. TRAP: v5 (1286485,
+     2649950) was relicensed NC and the DOI's "latest" link resolves to it;
+     fetch v3 by its record id (md5 f7b33b763187be309631a65d09402c99) and keep
+     a snapshot of the record page. Check bleed per track.
+  2. Cantoría (record 5851070 only, CC BY 4.0; 5878677 is NC): an SATB quartet
+     recorded one singer at a time. Per-singer vibrato, no section spread.
+  - Citable spread: Ternström 2002, 20-30 cents typical; Jers & Ternström
+    2005, 25-30; Cuesta 2018, ~20 (sopranos) to ~26 (basses); Chandna 2020,
+    mean ~20 cents and onsets spread ~0.1 s.
+  - Rejected: ESMUC (NC), MedleyVox (NC-SA), Cambridge-MT (education only),
+    jaCappella (research only).
 
 ### L9. Percussive Organ (GM 17): Indiginus Real Rotor Organ — EULA
 
@@ -166,6 +244,17 @@ store build.
   distribute any other sample pack or product."
 - **What derives from it:** the B3 percussion tap's 2nd and 3rd harmonic decay.
 - **Status:** open.
+- **Alternatives (checked 2026-11-20):** no open isolated-percussion or
+  single-drawbar takes exist (the free HamOrg library has them under a
+  restrictive licence). Fallback: the Hammond service manual (HSM495) gives
+  the percussion circuit (fast decay puts R57 across the slow resistor R58 to
+  discharge C31 sooner, the level raised "about 50%"), so the decay constants
+  follow from its RC values; setBfree's defaults (1.0 s fast, 4.0 s slow) as a
+  check. Or record a B-3: a short session.
+- **The speaker cabinet** (also from the L102, L7): Wikimedia Commons
+  "LeslieCabinetSlowFastSlow.ogg", released into the public domain by its
+  recordist: 26 s of a chord, slow to fast to slow, enough for the rotors'
+  speeds and their acceleration.
 
 ### L10. No licence stated (all rights reserved by default)
 
@@ -177,12 +266,42 @@ store build.
 - **TR-808** (Fischer's set): "ABSOLUTELY FREE", but no licence. The TR-808
   kit, and the 808 voices other sets borrow.
 - **TR-707** (hyperreal): an anonymous uploader's "public domain".
+- **Alternatives for the clavinet (checked 2026-11-20):** only Markus
+  Ruffing's "Hohner Clavinet D6.ogg" (Commons; "allows anyone to use it for
+  any purpose"): 101 s of playing across the pickup settings, lossy. A check
+  on pickup combinations, not a fit. Keep the published DAFx/ICMC geometry,
+  ask Aalto to release their examples under CC BY, or record a D6.
+- **Alternatives for the drum machines (checked 2026-11-20):** no real 808 or
+  909 set exists under an open licence given by its own recordist.
+  - **TR-808:** only Siassios's pattern clips (Commons, CC BY-SA 3.0, lossy,
+    overlapping): a listening check. MckAudio's MckSamplePacks (CC0, his own
+    recordings) has every 808, 909, 707 and 606 voice, but from a Roland TR-8,
+    Roland's digital model, which is a question for the no-Roland-sounds rule.
+    Best route: ask Michael Fischer for a written licence for his set.
+  - **TR-707:** hesed23's "7X7 Free Samples" (Freesound, CC BY 4.0, one hit
+    per voice) is from his circuit-bent 707: listen first. Emily Schmanks's
+    two cymbals (Commons, CC0) for the cymbal envelope.
+  - **TR-606:** o-toener's Behringer RD-6 (Freesound, CC0, every voice) and
+    MckAudio's RD-6 (CC0): a circuit clone of the 606. Real but modified 606s:
+    oceansonmars's "Modified 606" (CC0, 40 one-shots).
+- **Alternatives for the harmonium (checked 2026-11-20):** no openly licensed
+  French harmonium with separate registers exists (Grabowski's free Emil
+  Müller set records the stops separately but is "All Rights Reserved").
+  Open but single-register: donyaquick's harmonium (Freesound, CC0, already
+  used for GM 20), elankford's Yamaha pump organ (CC BY 3.0, black keys).
+  Best: ask Silvestre (or Grabowski) for a written grant for fitted numbers;
+  else fit the registers from their documented layouts with the CC0 reeds.
 - **Status:** open. Low risk for measured numbers, but a written yes is
   cheap to ask for.
 
 ### L11. TR-909 (Rob Roy / Jason Baker set) — "not for profit, no modification"
 
 - **What derives from it:** the TR-909 kit, its cymbals by the ROM cymbal fit.
+- **Alternatives (checked 2026-11-20):** altemark's "TR-909 JGB pack"
+  (Freesound, CC BY 4.0, 224 sounds) is Janne G:son Berg's own 909, but
+  re-uploaded; his own terms say only "use the samples for whatever you like".
+  Ask Berg to confirm CC BY and it becomes the best 909 source. Otherwise
+  only the TR-8 model (above) and two short Commons pattern clips.
 - **Status:** open.
 
 ### L12. Smaller questions
@@ -190,15 +309,32 @@ store build.
 - **Ross harpsichord voicing** (`ross.sf2`, John Sankey): no licence for the
   soundfont. It feeds an optional voicing (`TUNING_HARPSI=ross`); leave it out
   of the store build or ask.
+  Open alternative: pjcohen's "Harpsichord" (Freesound, CC0, 60 notes
+  D1-G#5, overhead mics, maker unstated).
 - **TimGM6mb** (GPL-2): one of the references in the Orchestra Hit fit. Fitted
   numbers are unlikely to be a derivative work; easy to drop from the fit.
+  An open replacement: the US Marine Band's "Infernal Dance" from the
+  Firebird (Commons, public domain as a US government recording), the passage
+  the original Fairlight stab came from, though a wind-band arrangement; or a
+  tutti chord chopped from the Marine Chamber Orchestra's Beethoven 1 (public
+  domain, strings included).
 - **GeneralUser GS**: its licence says some samples' origins are unknown. It
   sets levels (fine); where a voice was fitted to one of its samples (the
   Orchestra Hit, the Simmons hit picks) check that sample.
-- **VSCO 2 CE's upright piano** (Ivy Audio): its Info.txt grants
-  redistribution through Versilian rather than restating CC0. Credit both.
+- **VSCO 2 CE's upright piano** (Ivy Audio): CC0 through Versilian's grant
+  (the repo's LICENSE is CC0; Info.txt: "Bearer is granted right to
+  redistribute this sample set by Versilian Studios LLC"; Readme: "permitted
+  to use these samples for ANY purpose. We ask that you do not sell the
+  samples directly"). Fitted numbers aren't the samples: fine. Credit both.
+  Versilian's own "Upright Nr1" is the fallback with no third party.
 - **CC BY-SA** (the Piteå organ, the oud and traverso Commons files): see the
   share-alike question above.
+
+## About YouTube sources
+
+A CC BY licence on YouTube is set by the uploader, who isn't always the
+performer (the note says when). Downloading is also subject to YouTube's own
+terms, and the audio is lossy, so fit below about 15 kHz.
 
 ## Corrections to the notes
 
