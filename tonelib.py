@@ -7383,7 +7383,13 @@ def divider_registration(tabs, couplers=()):
     rows = [list(D.stop_rows[0])]
     if len(ranks) > len(D.stop_ranks):
         rows.append([r[0] for r in ranks[len(D.stop_ranks):]])     # (the couplers' copies: a row of their own)
-    return dict(stop_ranks=ranks, default_stops=bits, stop_rows=rows)
+    out = dict(stop_ranks=ranks, default_stops=bits, stop_rows=rows)
+    if len(ranks) > 14:
+        # (past bit 13 the stop word needs its third and fourth controllers, CC44 and
+        #  CC45, as the church organ's recorded ranks do: without them 60's Organ 3's
+        #  2' couplers and its Quint's 4' never sounded)
+        out["stop_word_ccs"] = (11, 43, 44, 45)
+    return out
 
 
 class OrganProperties(StoppedPipeProperties):
