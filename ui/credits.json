@@ -1,1147 +1,2463 @@
 [
 {
-"voice": "000 Acoustic Grand Piano",
-"source": "A Steinway B (VCSL, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "004 Electric Piano 1",
-"source": "Learman's 1977 Mark I off the harp connector (jRhodes3d, CC BY-NC, measured only)",
-"licence": "CC BY-NC"
-},
-{
-"voice": "006 Harpsichord",
-"source": "VCSL'S Harpsichords (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "008 Celesta",
-"source": "Macsat-Rd's Celesta (Freesound, CC0; twelve notes A4-G#5)",
-"licence": "CC0"
-},
-{
-"voice": "010 Music Box",
-"source": "Two Boxes (Freesound, CC0: folkman's in D, 16 teeth, and rbnuser's 13)",
-"licence": "CC0"
-},
-{
-"voice": "014 Tubular Bells",
-"source": "VSCO 2 CE's chimes (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "016 Drawbar Organ",
-"source": "hammondman's tonewheel organ through a Leslie, two packs (freesound 18844, 15120, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "019 Church Organ",
-"source": "Pitea's Pipes (Lars Palo's set of the Gronlund organ, CC BY-SA 2.5)",
-"licence": "CC BY-SA 2.5"
-},
-{
-"voice": "020 Reed Organ",
-"source": "donyaquick's harmonium (freesound 330410, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "021 Accordion",
-"source": "hammondman's Hohner on musette (freesound pack 18842, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "022 Harmonica",
-"source": "VCSL Hohner Special 20s and Super 64 (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "025 Acoustic Guitar (steel)",
-"source": "NYU's GuitarSet (CC BY 4.0)",
-"licence": "CC BY 4.0"
-},
-{
-"voice": "026 Electric Guitar (jazz)",
-"source": "Fraunhofer IDMT-SMT-Guitar (CC BY-NC-ND, measured only)",
-"licence": "CC BY-NC"
-},
-{
-"voice": "033 Electric Bass (finger)",
-"source": "Fraunhofer IDMT-SMT-Bass (CC BY-NC-ND, measured only)",
-"licence": "CC BY-NC"
-},
-{
-"voice": "035 Fretless Bass",
-"source": "two fretless basses on Freesound (FaireDesVagues' stopped notes, CC BY 3.0; mrforfs' flatwound open strings, CC0)",
-"licence": "CC BY 3.0"
-},
-{
-"voice": "046 Orchestral Harp",
-"source": "VSCO 2 CE's harp (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "047 Timpani",
-"source": "VSCO 2 CE's timpani (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "052 Choir Aahs",
-"source": "Vocalset's Long Tones (CC BY 4.0, measured only)",
-"licence": "CC BY 4.0"
-},
-{
-"voice": "074 Recorder",
-"source": "VCSL baroque soprano, alto and tenor recorders (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "075 Pan Flute",
-"source": "Freesound pan pipes (mrshoes CC BY 3.0, j008b and PanPiper5 CC0)",
-"licence": "CC BY 3.0"
-},
-{
-"voice": "077 Shakuhachi",
-"source": "Freesound shakuhachi (UncleSigmund CC BY 3.0, gonzooka CC0)",
-"licence": "CC BY 3.0"
-},
-{
-"voice": "078 Whistle",
-"source": "Freesound whistling (nbild, oscarboyle CC0)",
-"licence": "CC0"
-},
-{
-"voice": "079 Ocarina",
-"source": "VCSL typical and small ocarinas (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "104 Sitar",
-"source": "a Ma string struck four times (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "104 Sitar",
-"source": "CC0) and chinpen's D4 strokes (CC BY 3.0)",
-"licence": "CC0"
-},
-{
-"voice": "105 Banjo",
-"source": "the Windsor banjo SoundFont's open-string plucks (public domain)",
-"licence": "public domain"
-},
-{
-"voice": "106 Shamisen",
-"source": "RTB45's Ueno festival take (freesound 195521, CC BY 4.0)",
-"licence": "CC BY 4.0"
-},
-{
-"voice": "107 Koto",
-"source": "VCSL Dan Tranh (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "108 Kalimba",
-"source": "VCSL kalimba (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "109 Bag pipe",
-"source": "Freesound IowaSpaceWizard chanter, its nine notes, and the drones (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "109 Bag pipe",
-"source": "CC0) with iainmccurdy's (CC BY 4.0)",
-"licence": "CC0"
-},
-{
-"voice": "111 Shanai",
-"source": "cdrk's Turkish zurna (freesound 18661, CC BY 4.0; no open shehnai recording)",
-"licence": "CC BY 4.0"
-},
-{
-"voice": "113 Agogo",
-"source": "VSCO-2 CE (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "116 Taiko Drum",
-"source": "VSCO-2 CE (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "121 Breath Noise",
-"source": "Two Takes Of Breathing (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "122 Seashore",
-"source": "VCSL's ocean drum (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "123 Bird Tweet",
-"source": "Three Birds (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "124 Telephone Ring",
-"source": "Bell Telephones (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "125 Helicopter",
-"source": "Three Passes (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "126 Applause",
-"source": "Three Audiences (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "127 Gunshot",
-"source": "examples/gunshot_fit.py) to a 9 mm at 15 m (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "012.16 Barafon",
-"source": "the West African balafon, fitted to marini24's 17 strikes (CC BY 4.0)",
-"licence": "CC BY 4.0"
-},
-{
-"voice": "012.24 Log Drum",
-"source": "a slit drum, fitted to VSCO 2's log drum (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "016.25 D-50 Organ",
-"source": "its partials' 15-cent detune measured on agerven's D-50 (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "016.26 JUNO Organ",
-"source": "the Juno fitted to a Juno-6's notes (sc88_synth.JUNO,, CC0, the PW Pluck C2-C6 over its whole pluck)",
-"licence": "CC0"
-},
-{
-"voice": "038.1 Syn.Bass101",
-"source": "the SH-101 as the Juno-6's fitted voice without its chorus (sc88_synth.SH101: the same IR3109 and VCO section; no clean SH-101 note exists under CC0 -- the refs are a bassline with its knobs moving and resonance sweeps)",
-"licence": "CC0"
-},
-{
-"voice": "038.2 CS Bass",
-"source": "the Cs fitted to a Yamaha Cs-30L's bass (sc88_synth.CS,, CC0; 5.0 dB on the harmonics, 0.31 octave on the contour; the 2-pole by design, the takes agreeing)",
-"licence": "CC0"
-},
-{
-"voice": "038.11 TB303 Bass 2",
-"source": "the TB-303 fitted to a TB-303's note (sc88_synth.TB303,, CC0, its resonant peak through the pluck 0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader peak left)",
-"licence": "CC0"
-},
-{
-"voice": "038.12 Kicked TB303",
-"source": "the TB-303 fitted to a TB-303's note (sc88_synth.TB303,, CC0, its resonant peak through the pluck 0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader peak left)",
-"licence": "CC0"
-},
-{
-"voice": "038.13 TB303 Saw Bs",
-"source": "the TB-303 fitted to a TB-303's note (sc88_synth.TB303,, CC0, its resonant peak through the pluck 0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader peak left)",
-"licence": "CC0"
-},
-{
-"voice": "038.14 Rubber303 Bs",
-"source": "the TB-303 fitted to a TB-303's note (sc88_synth.TB303,, CC0, its resonant peak through the pluck 0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader peak left)",
-"licence": "CC0"
-},
-{
-"voice": "038.15 Reso 303 Bs",
-"source": "the TB-303 fitted to a TB-303's note (sc88_synth.TB303,, CC0, its resonant peak through the pluck 0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader peak left)",
-"licence": "CC0"
-},
-{
-"voice": "038.16 Reso SHBass",
-"source": "the SH-101 as the Juno-6's fitted voice without its chorus (sc88_synth.SH101: the same IR3109 and VCO section; no clean SH-101 note exists under CC0 -- the refs are a bassline with its knobs moving and resonance sweeps)",
-"licence": "CC0"
-},
-{
-"voice": "038.17 303 Sqr Bs",
-"source": "the TB-303 fitted to a TB-303's note (sc88_synth.TB303,, CC0, its resonant peak through the pluck 0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader peak left)",
-"licence": "CC0"
-},
-{
-"voice": "038.18 TB303 DistBs",
-"source": "the TB-303 fitted to a TB-303's note (sc88_synth.TB303,, CC0, its resonant peak through the pluck 0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader peak left)",
-"licence": "CC0"
-},
-{
-"voice": "039.4 MG Bass",
-"source": "the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG,, CC0, C1 and C4, 3 dB rms rendered)",
-"licence": "CC0"
-},
-{
-"voice": "039.6 MG Oct Bass2",
-"source": "the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG,, CC0, C1 and C4, 3 dB rms rendered)",
-"licence": "CC0"
-},
-{
-"voice": "039.7 MG Blip Bs:",
-"source": "the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG,, CC0, C1 and C4, 3 dB rms rendered)",
-"licence": "CC0"
-},
-{
-"voice": "039.17 SH101Bass 1",
-"source": "the SH-101 as the Juno-6's fitted voice without its chorus (sc88_synth.SH101: the same IR3109 and VCO section; no clean SH-101 note exists under CC0 -- the refs are a bassline with its knobs moving and resonance sweeps)",
-"licence": "CC0"
-},
-{
-"voice": "039.18 SH101Bass 2",
-"source": "the SH-101 as the Juno-6's fitted voice without its chorus (sc88_synth.SH101: the same IR3109 and VCO section; no clean SH-101 note exists under CC0 -- the refs are a bassline with its knobs moving and resonance sweeps)",
-"licence": "CC0"
-},
-{
-"voice": "039.20 SH101 Bass 3",
-"source": "the SH-101 as the Juno-6's fitted voice without its chorus (sc88_synth.SH101: the same IR3109 and VCO section; no clean SH-101 note exists under CC0 -- the refs are a bassline with its knobs moving and resonance sweeps)",
-"licence": "CC0"
-},
-{
-"voice": "039.25 MG 5th Bass",
-"source": "the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG,, CC0, C1 and C4, 3 dB rms rendered)",
-"licence": "CC0"
-},
-{
-"voice": "039.27 WowMG Bass",
-"source": "the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG,, CC0, C1 and C4, 3 dB rms rendered)",
-"licence": "CC0"
-},
-{
-"voice": "050.24 Tron Strings",
-"source": "the string section, three players, its colour Fitted to menegass' Mellotron violin notes (Freesound 6815, CC0, 12 notes C4-B4: miss 4.98 -> 2.08 dB)",
-"licence": "CC0"
-},
-{
-"voice": "051.2 JUNO Strings",
-"source": "the Juno fitted to a Juno-6's notes (sc88_synth.JUNO,, CC0, the PW Pluck C2-C6 over its whole pluck)",
-"licence": "CC0"
-},
-{
-"voice": "062.3 SH-5 Brass",
-"source": "the SH-5 Read, not fitted, from xanthorp's sample-and-hold patterns (sc88_synth.SH5,, 9 dB rms -- no held SH-5 note under CC0)",
-"licence": "CC0"
-},
-{
-"voice": "063.9 OB Brass",
-"source": "the Oberheim fitted to an OB-8's held chords (sc88_synth.OBERHEIM,, CC0, ten four-note chords, 3.2 dB rms rendered)",
-"licence": "CC0"
-},
-{
-"voice": "066.8 BreathyTnr.",
-"source": "the tenor played airy, fitted on GM 66 to cemorse100's 'soft, airy' C5 (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "075.8 Kawala",
-"source": "EKVelika's Balkan kaval and aliaref's Turkish ney (both CC0, 22 held notes G#3-E5)",
-"licence": "CC0"
-},
-{
-"voice": "080.17 OB Square",
-"source": "the Oberheim fitted to an OB-8's held chords (sc88_synth.OBERHEIM,, CC0, ten four-note chords, 3.2 dB rms rendered)",
-"licence": "CC0"
-},
-{
-"voice": "080.27 MG Reso. Pls",
-"source": "the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG,, CC0, C1 and C4, 3 dB rms rendered)",
-"licence": "CC0"
-},
-{
-"voice": "081.11 D-50 Fat Saw",
-"source": "its partials' 15-cent detune measured on agerven's D-50 (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "081.18 CS Saw Lead",
-"source": "the Cs fitted to a Yamaha Cs-30L's bass (sc88_synth.CS,, CC0; 5.0 dB on the harmonics, 0.31 octave on the contour; the 2-pole by design, the takes agreeing)",
-"licence": "CC0"
-},
-{
-"voice": "081.24 MG Saw 1",
-"source": "the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG,, CC0, C1 and C4, 3 dB rms rendered)",
-"licence": "CC0"
-},
-{
-"voice": "081.25 MG Saw 2",
-"source": "the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG,, CC0, C1 and C4, 3 dB rms rendered)",
-"licence": "CC0"
-},
-{
-"voice": "081.26 OB Saw 1",
-"source": "the Oberheim fitted to an OB-8's held chords (sc88_synth.OBERHEIM,, CC0, ten four-note chords, 3.2 dB rms rendered)",
-"licence": "CC0"
-},
-{
-"voice": "081.27 OB Saw 2",
-"source": "the Oberheim fitted to an OB-8's held chords (sc88_synth.OBERHEIM,, CC0, ten four-note chords, 3.2 dB rms rendered)",
-"licence": "CC0"
-},
-{
-"voice": "081.28 D-50 Saw",
-"source": "its partials' 15-cent detune measured on agerven's D-50 (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "081.29 SH-101 Saw",
-"source": "the SH-101 as the Juno-6's fitted voice without its chorus (sc88_synth.SH101: the same IR3109 and VCO section; no clean SH-101 note exists under CC0 -- the refs are a bassline with its knobs moving and resonance sweeps)",
-"licence": "CC0"
-},
-{
-"voice": "081.30 CS Saw",
-"source": "the Cs fitted to a Yamaha Cs-30L's bass (sc88_synth.CS,, CC0; 5.0 dB on the harmonics, 0.31 octave on the contour; the 2-pole by design, the takes agreeing)",
-"licence": "CC0"
-},
-{
-"voice": "081.31 MG Saw Lead",
-"source": "the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG,, CC0, C1 and C4, 3 dB rms rendered)",
-"licence": "CC0"
-},
-{
-"voice": "081.32 OB Saw Lead",
-"source": "the Oberheim fitted to an OB-8's held chords (sc88_synth.OBERHEIM,, CC0, ten four-note chords, 3.2 dB rms rendered)",
-"licence": "CC0"
-},
-{
-"voice": "081.34 MG unison",
-"source": "the Minimoog fitted to a Model D's held bass (sc88_synth.MINIMOOG,, CC0, C1 and C4, 3 dB rms rendered)",
-"licence": "CC0"
-},
-{
-"voice": "083.1 TB Lead",
-"source": "the TB-303 fitted to a TB-303's note (sc88_synth.TB303,, CC0, its resonant peak through the pluck 0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader peak left)",
-"licence": "CC0"
-},
-{
-"voice": "084.9 Acid Guitar1",
-"source": "the TB-303 fitted to a TB-303's note (sc88_synth.TB303,, CC0, its resonant peak through the pluck 0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader peak left)",
-"licence": "CC0"
-},
-{
-"voice": "084.10 Acid Guitar2",
-"source": "the TB-303 fitted to a TB-303's note (sc88_synth.TB303,, CC0, its resonant peak through the pluck 0.07 octave rms rendered; the held tone 4.1 dB, the diode ladder's broader peak left)",
-"licence": "CC0"
-},
-{
-"voice": "084.24 JUNO Sub Osc",
-"source": "the Juno fitted to a Juno-6's notes (sc88_synth.JUNO,, CC0, the PW Pluck C2-C6 over its whole pluck)",
-"licence": "CC0"
-},
-{
-"voice": "087.6 SH-5 Bs.Lead",
-"source": "the SH-5 Read, not fitted, from xanthorp's sample-and-hold patterns (sc88_synth.SH5,, 9 dB rms -- no held SH-5 note under CC0)",
-"licence": "CC0"
-},
-{
-"voice": "098.20 JUNO Bell",
-"source": "the Juno fitted to a Juno-6's notes (sc88_synth.JUNO,, CC0, the PW Pluck C2-C6 over its whole pluck)",
-"licence": "CC0"
-},
-{
-"voice": "104.8 Tambra",
-"source": "ours is the same tanpura with its jawari Set Another Way, fitted to sankalp's take 1 (CC BY 4.0)",
-"licence": "CC BY 4.0"
-},
-{
-"voice": "104.16 Tamboura",
-"source": "the tanpura, fitted to sankalp's drone takes (Freesound pack 9571, CC BY 4.0)",
-"licence": "CC BY 4.0"
-},
-{
-"voice": "105.8 Rabab",
-"source": "the only open rubab found is the 2 s solo opening belamalta10's '3 continents' (Freesound 513846, CC0 as uploaded -- GarageBand's loop, so measure only)",
-"licence": "CC0"
-},
-{
-"voice": "105.24 Oud",
-"source": "Jordan's notes (Commons, CC BY-SA 3.0)",
-"licence": "CC BY-SA 3.0"
-},
-{
-"voice": "105.24 Oud",
-"source": "Commons, CC By-Sa 3.0) and hammondman's (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "107.16 Kanoon",
-"source": "courses of three strings over a wooden box, Fitted to Baris Bozkurt's isolated notes (Freesound 211133, CC0, 28 notes)",
-"licence": "CC0"
-},
-{
-"voice": "108.9 Bodhran",
-"source": "the Bodhran fitted to Teh_Bucket's 27 open strokes (freesound 521586, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "109.9 Uillean Pipe",
-"source": "the Uilleann Pipes measured on luis_audp's practice set (freesound 268816, CC BY: measurement only)",
-"licence": "CC BY"
-},
-{
-"voice": "111.8 Pungi",
-"source": "the snake charmer's pungi, its melody pipe fitted to Nick Mariette's snake charmers in Bhaktapur (Wikimedia Commons, CC BY 2.5)",
-"licence": "CC BY 2.5"
-},
-{
-"voice": "111.16 Hichiriki",
-"source": "gagaku's double reed, fitted to gaijinbuzz's shrine wedding (Freesound 680565, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "112.8 Bonang",
-"source": "the Javanese kettle gongs, fitted to Casa da Musica's bonang barung and panerus (CC BY 3.0)",
-"licence": "CC BY 3.0"
-},
-{
-"voice": "112.9 Gender",
-"source": "the gamelan's metallophone, fitted to UNT's Balinese gangsa (cpolcyn, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "112.10 GamelanGong",
-"source": "the gong ageng, fitted to UNT's big gong (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "112.16 RAMA Cymbal",
-"source": "a plate from the crash Fitted to the UNT gamelan Bwana Kumala's single ringing strikes (Freesound pack 12954, CC0, 4.8 dB on the grid)",
-"licence": "CC0"
-},
-{
-"voice": "116.8 Concert BD",
-"source": "GeneralUser GS's Orchestra bass drum picks VCSL's \"Bass Drum 1\" (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "120.1 Gt. Cut Noise",
-"source": "a muted strum on steel strings (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "120.2 String Slap",
-"source": "a hand slapping an upright's strings (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "120.12 Biwa Stroke",
-"source": "a wooden-bodied lute from the shamisen's struck-silk numbers, Fitted to Hugh de Ferranti's satsuma biwa (PARADISEC HDF1-SB33, CC BY-NC-SA 4.0 data: the fitted numbers derive from it; sources.md)",
-"licence": "CC BY-NC"
-},
-{
-"voice": "121.1 Fl. Key Click",
-"source": "a saxophone's (Freesound, CC0; no CC0 flute key clicks exist)",
-"licence": "CC0"
-},
-{
-"voice": "122.1 Rain",
-"source": "Rain fitted to a Freesound recording (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "122.2 Thunder",
-"source": "Thunder fitted to a Freesound strike (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "122.3 Wind",
-"source": "Wind fitted to a Freesound howl (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "122.4 Stream",
-"source": "Stream fitted to a Freesound brook (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "122.5 Bubble",
-"source": "Bubbles set from a Freesound recording's own events (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "123.1 Dog",
-"source": "pulses at the six Freesound dogs' near-level contour (CC0; ~540 Hz, up 0.8 semitone, down 1.5)",
-"licence": "CC0"
-},
-{
-"voice": "123.4 Kitty",
-"source": "peridactyloptrix's five meows (Freesound 214759, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "123.5 Growl",
-"source": "qubodup's (Freesound 122183, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "124.2 Door Creaking",
-"source": "GeneralUser GS's gesture) over the hinge's noise, fitted to a Freesound cupboard door (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "124.3 Door",
-"source": "a wooden door slammed (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "124.5 Windchime",
-"source": "a metal chime tube struck, ringing out (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "124.10 Phono Noise",
-"source": "tonelib.PhonoNoiseProperties), Fitted to nervousneal's blank groove (a 1961 MGM test pressing, Freesound 586430, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "125.1 Car-Engine",
-"source": "Car Engine fitted to a Freesound idle (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "125.2 Car-Stop",
-"source": "Car Skid fitted to a Freesound handbrake turn (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "125.3 Car-Pass",
-"source": "Car Pass fitted to a Freesound pass on a wet road (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "125.4 Car-Crash",
-"source": "Car Crash fitted to a Freesound crash with glass (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "125.6 Train",
-"source": "Train fitted to a Freesound freight train (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "125.7 Jetplane",
-"source": "Jetplane fitted to a Freesound jet (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "126.1 Laughing",
-"source": "a throat pulsed as a Freesound Santa says it (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "126.2 Screaming",
-"source": "a girl's scream (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "126.3 Punch",
-"source": "a fist on a body (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "126.5 Footstep",
-"source": "a hard shoe on stone (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "127.1 Machinegun",
-"source": "72) fired every 69 ms, 0.69 s of them, as a Freesound M16A1 burst measures (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "127.2 Lasergun",
-"source": "a square wave swept down from 12x its note with a 0.1 s time constant, held and cut, as a Freesound blaster (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "127.3 Explosion",
-"source": "a dynamite blast (Freesound, CC0; weather_fit: 0.4 dB)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 24, key 36",
-"source": "GeneralUser GS's Elec BD picks the closest of tarane468's real Simmons hits (Freesound, CC0; hit 30)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 27, key 36",
-"source": "a bridged-T at 59 Hz, fitted to Bjornmossa's real CR-78 (CC BY)",
-"licence": "CC BY"
-},
-{
-"voice": "drum set 27, key 60",
-"source": "a bridged-T at 601 Hz (wikter's CC0 take)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 28, key 40",
-"source": "the snare Accented (bdu's CC0 take)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 32, key 36",
-"source": "the ~71 Hz drum of soneproject's kit in a jazz bar (Freesound 25895, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 40, key 38",
-"source": "a brush Tapped, Measured on Karoryfer's Swirly Drums (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 48, key 36",
-"source": "GeneralUser GS's Orchestra bass drum picks VCSL's \"Bass Drum 1\" (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 48, key 38",
-"source": "VCSL's legacy concert snare drum1 (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 48, key 57",
-"source": "a Clashed pair, VCSL's \"Clash Cymbals 2\" (CC0, the pair both GM sets pick)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 40",
-"source": "a palm slap, fitted to Freesound slaps (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 41",
-"source": "a turntable's groove (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 43",
-"source": "hickory sticks clicked (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 48",
-"source": "a muted strum on steel strings (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 49",
-"source": "a hollowbody's bright muted strum (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 50",
-"source": "a hand slapping an upright's strings (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 51",
-"source": "a saxophone's (Freesound, CC0; no CC0 flute key clicks exist)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 52",
-"source": "a throat pulsed as a Freesound Santa says it (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 53",
-"source": "a girl's scream (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 54",
-"source": "a fist on a body (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 56",
-"source": "a hard shoe on stone (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 59",
-"source": "GeneralUser GS's gesture) over the hinge's noise, fitted to a Freesound cupboard door (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 60",
-"source": "a wooden door slammed (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 62",
-"source": "a metal chime tube struck, ringing out (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 63",
-"source": "Car Engine fitted to a Freesound idle (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 64",
-"source": "Car Skid fitted to a Freesound handbrake turn (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 65",
-"source": "Car Pass fitted to a Freesound pass on a wet road (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 66",
-"source": "Car Crash fitted to a Freesound crash with glass (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 67",
-"source": "Siren from a Freesound fire engine (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 68",
-"source": "Train fitted to a Freesound freight train (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 69",
-"source": "Jetplane fitted to a Freesound jet (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 73",
-"source": "72) fired every 69 ms, 0.69 s of them, as a Freesound M16A1 burst measures (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 74",
-"source": "a square wave swept down from 12x its note with a 0.1 s time constant, held and cut, as a Freesound blaster (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 75",
-"source": "a dynamite blast (Freesound, CC0; weather_fit: 0.4 dB)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 76",
-"source": "pulses at the six Freesound dogs' near-level contour (CC0; ~540 Hz, up 0.8 semitone, down 1.5)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 79",
-"source": "Rain fitted to a Freesound recording (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 80",
-"source": "Thunder fitted to a Freesound strike (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 81",
-"source": "Wind fitted to a Freesound howl (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 83",
-"source": "Stream fitted to a Freesound brook (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 84",
-"source": "Bubbles set from a Freesound recording's own events (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 85",
-"source": "peridactyloptrix's five meows (Freesound 214759, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 56, key 87",
-"source": "qubodup's (Freesound 122183, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 39",
-"source": "VCSL claps (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 56",
-"source": "VSCO-2 CE (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 60",
-"source": "VSCO-2 CE (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 62",
-"source": "VSCO-2 CE (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 63",
-"source": "VSCO-2 CE (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 64",
-"source": "VSCO-2 CE (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 65",
-"source": "hello_flowers' timbales (freesound 41196, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 67",
-"source": "VSCO-2 CE (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 68",
-"source": "VSCO-2 CE (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 69",
-"source": "VSCO-2 CE (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 70",
-"source": "VSCO-2 CE (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 71",
-"source": "VCSL ball whistle, short blast (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 73",
-"source": "VSCO-2 CE (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 76",
-"source": "a throat pulsed as a Freesound Santa says it (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 77",
-"source": "a girl's scream (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 78",
-"source": "a fist on a body (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 80",
-"source": "a hard shoe on stone (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 83",
-"source": "GeneralUser GS's gesture) over the hinge's noise, fitted to a Freesound cupboard door (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 84",
-"source": "a wooden door slammed (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 86",
-"source": "a metal chime tube struck, ringing out (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 87",
-"source": "Car Engine fitted to a Freesound idle (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 88",
-"source": "Car Skid fitted to a Freesound handbrake turn (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 89",
-"source": "Car Pass fitted to a Freesound pass on a wet road (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 90",
-"source": "Car Crash fitted to a Freesound crash with glass (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 91",
-"source": "Siren from a Freesound fire engine (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 92",
-"source": "Train fitted to a Freesound freight train (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 93",
-"source": "Jetplane fitted to a Freesound jet (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 97",
-"source": "72) fired every 69 ms, 0.69 s of them, as a Freesound M16A1 burst measures (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 98",
-"source": "a square wave swept down from 12x its note with a 0.1 s time constant, held and cut, as a Freesound blaster (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 99",
-"source": "a dynamite blast (Freesound, CC0; weather_fit: 0.4 dB)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 100",
-"source": "pulses at the six Freesound dogs' near-level contour (CC0; ~540 Hz, up 0.8 semitone, down 1.5)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 103",
-"source": "Rain fitted to a Freesound recording (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 104",
-"source": "Thunder fitted to a Freesound strike (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 105",
-"source": "Wind fitted to a Freesound howl (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 107",
-"source": "Stream fitted to a Freesound brook (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum set 127, key 108",
-"source": "Bubbles set from a Freesound recording's own events (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum key 28",
-"source": "a palm slap, fitted to Freesound slaps (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum key 29",
-"source": "a turntable's groove (Freesound, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum key 31",
-"source": "two drumsticks clicked (Freesound, CC0; perc_fit sfx_sticks)",
-"licence": "CC0"
-},
-{
-"voice": "drum key 39",
-"source": "VCSL claps (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum key 40",
-"source": "VCSL's Modern 1 (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum key 56",
-"source": "VSCO-2 CE (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum key 58",
-"source": "VSCO-2 CE (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum key 60",
-"source": "VSCO-2 CE (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum key 62",
-"source": "VSCO-2 CE (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum key 63",
-"source": "VSCO-2 CE (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum key 64",
-"source": "VSCO-2 CE (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum key 65",
-"source": "hello_flowers' timbales (freesound 41196, CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum key 67",
-"source": "VSCO-2 CE (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum key 68",
-"source": "VSCO-2 CE (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum key 69",
-"source": "VSCO-2 CE (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum key 70",
-"source": "VSCO-2 CE (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum key 71",
-"source": "VCSL ball whistle, short blast (CC0)",
-"licence": "CC0"
-},
-{
-"voice": "drum key 82",
-"source": "the Shaker as shaped noise, fitted to Camo's shaker in VSCO 2 CE (eight single shakes, CC0, 10.4 -> 2.6 dB)",
-"licence": "CC0"
-},
-{
-"voice": "drum key 87",
-"source": "plotzki's samba surdo (freesound 36127, CC0)",
-"licence": "CC0"
+"group": "Sample libraries and sound banks",
+"title": "University of Iowa Musical Instrument Samples (MIS)",
+"author": "Lawrence Fritts, University of Iowa Electronic Music Studios",
+"url": "https://theremin.music.uiowa.edu/MIS.html",
+"licence": "free for any use",
+"licence_url": "https://theremin.music.uiowa.edu/MIS.html",
+"how": "fitted",
+"voices": "the orchestral strings, brass, saxophones, reeds, flutes, nylon guitar, mallets and much of the orchestral percussion"
+},
+{
+"group": "Sample libraries and sound banks",
+"title": "Versilian Community Sample Library (VCSL)",
+"author": "Versilian Studios (Sam Gossner) and contributors",
+"url": "https://github.com/sgossner/VCSL",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Acoustic Grand Piano (Steinway B), Harpsichord (English, Flemish; lute stop), Harmonica, Recorder, Ocarina, Kalimba, Koto (via Dan Tranh), Hand Clap, Snare Drum 2, Concert Bass Drum, Concert Snare, Concert Cymbals (clash), Seashore (ocean drum), Ball whistle, Siren whistle"
+},
+{
+"group": "Sample libraries and sound banks",
+"title": "VSCO 2 Community Edition",
+"author": "Versilian Studios (Sam Gossner)",
+"url": "https://github.com/sgossner/VSCO-2-CE",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Harp, Timpani, Tubular Bells, Tremolo Strings, String sections (vibrato), Muted Trumpet (harmon/straight), Cowbell, Agogo, Congas, Bongos, Maracas, Cabasa, Vibraslap, Shaker, Taiko (giant drum), Log Drum, Agogo (melodic)"
+},
+{
+"group": "Sample libraries and sound banks",
+"title": "Upright Piano (in VSCO 2 CE)",
+"author": "Simon Dalzell / Ivy Audio; Versilian Studios",
+"url": "https://github.com/sgossner/VSCO-2-CE/tree/master/Keys",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Bright Acoustic Piano / upright, Honky-tonk"
+},
+{
+"group": "Sample libraries and sound banks",
+"title": "GeneralUser GS v2.0.x",
+"author": "S. Christian Collins",
+"url": "https://github.com/mrbumpy409/GeneralUser-GS",
+"licence": "GeneralUser GS licence",
+"licence_url": "https://github.com/mrbumpy409/GeneralUser-GS/blob/main/documentation/LICENSE.txt",
+"how": "levels and references",
+"voices": "the bank balance and release times; hits picked for the Electronic, Orchestra and Room sets; the Orchestra Hit"
+},
+{
+"group": "Sample libraries and sound banks",
+"title": "MuseScore General SF2 v0.2",
+"author": "Frank Wen, Michael Cowgill, S. Christian Collins",
+"url": "https://ftp.osuosl.org/pub/musescore/soundfont/MuseScore_General/",
+"licence": "MIT",
+"licence_url": "https://opensource.org/license/mit",
+"how": "levels and references",
+"voices": "kit levels, note-off release consensus, Orchestra Hit reference"
+},
+{
+"group": "Sample libraries and sound banks",
+"title": "FluidR3_GM",
+"author": "Frank Wen",
+"url": "https://packages.debian.org/fluid-soundfont-gm",
+"licence": "MIT",
+"licence_url": "https://opensource.org/license/mit",
+"how": "levels and references",
+"voices": "kit levels, release times, the Orchestra Hit, timpani and concert snare picks"
+},
+{
+"group": "Sample libraries and sound banks",
+"title": "TimGM6mb",
+"author": "Tim Brechbill (2004), David Bolton (2010)",
+"url": "https://metadata.ftp-master.debian.org/changelogs//main/t/timgm6mb-soundfont/unstable_copyright",
+"licence": "GPL 2",
+"licence_url": "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html",
+"how": "levels and references",
+"voices": "the Orchestra Hit, release times, levels"
+},
+{
+"group": "Keyboards and bells",
+"title": "jRhodes3d",
+"author": "Jeff Learman",
+"url": "https://github.com/sfzinstruments/jlearman.jRhodes3d",
+"licence": "CC BY-NC 4.0",
+"licence_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+"how": "fitted",
+"voices": "Electric Piano 1 (Rhodes)"
+},
+{
+"group": "Keyboards and bells",
+"title": "BaltiWurli",
+"author": "Chester Gwazda",
+"url": "https://www.pianobook.co.uk/packs/baltiwurli/",
+"licence": "Pianobook terms",
+"licence_url": "https://www.pianobook.co.uk/terms-conditions/",
+"how": "fitted",
+"voices": "Electric Piano 2 (Wurlitzer 200A)"
+},
+{
+"group": "Keyboards and bells",
+"title": "David's CP70",
+"author": "Conner Sawchuk",
+"url": "https://www.pianobook.co.uk/packs/davids-cp70/",
+"licence": "Pianobook terms",
+"licence_url": "https://www.pianobook.co.uk/terms-conditions/",
+"how": "fitted",
+"voices": "Electric Grand Piano (CP-70)"
+},
+{
+"group": "Keyboards and bells",
+"title": "David's CP70 SFZ mapping",
+"author": "kinwie",
+"url": "https://www.pianobook.co.uk/packs/davids-cp70/",
+"licence": "CC BY 4.0",
+"licence_url": "https://creativecommons.org/licenses/by/4.0/",
+"how": "documentation",
+"voices": "Electric Grand (key map)"
+},
+{
+"group": "Keyboards and bells",
+"title": "Clavinet D6 sound examples (companion to Gabrielli, Valimaki & Bilbao, ICMC 2011)",
+"author": "Aalto University Acoustics Lab (L. Gabrielli, V. Valimaki, S. Bilbao)",
+"url": "http://research.spa.aalto.fi/publications/papers/icmc11-clavinet/",
+"licence": "no licence stated",
+"how": "fitted",
+"voices": "Clavinet"
+},
+{
+"group": "Keyboards and bells",
+"title": "Harpsimachord",
+"author": "Douglas Knisely",
+"url": "https://www.pianobook.co.uk/packs/harpsimachord/",
+"licence": "Pianobook terms",
+"licence_url": "https://www.pianobook.co.uk/terms-conditions/",
+"how": "fitted",
+"voices": "Harpsichord stops: upper 8', 4', lute/buff"
+},
+{
+"group": "Keyboards and bells",
+"title": "ross.sf2 (John Sankey's harpsichord soundfont)",
+"author": "John Sankey",
+"url": "http://www.johnsankey.ca/data/ross.sf2",
+"licence": "John Sankey's terms",
+"licence_url": "http://www.johnsankey.ca/copyright.html",
+"how": "fitted",
+"voices": "Harpsichord, Ross voicing"
+},
+{
+"group": "Keyboards and bells",
+"title": "Lite Hammered Dulcimer v1.1",
+"author": "Kevin Kemp",
+"url": "https://www.pianobook.co.uk/packs/lite-hammered-dulcimer/",
+"licence": "Pianobook terms",
+"licence_url": "https://www.pianobook.co.uk/terms-conditions/",
+"how": "fitted",
+"voices": "Dulcimer"
+},
+{
+"group": "Keyboards and bells",
+"title": "Celesta",
+"author": "Macsat-Rd",
+"url": "https://freesound.org/people/Macsat-Rd/packs/23781/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Celesta"
+},
+{
+"group": "Keyboards and bells",
+"title": "Music Box In the Key of D",
+"author": "folkman",
+"url": "https://freesound.org/people/folkman/packs/4540/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Music Box"
+},
+{
+"group": "Keyboards and bells",
+"title": "MusicalBoxSingleNotes",
+"author": "rbnuser",
+"url": "https://freesound.org/people/rbnuser/packs/19724/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Music Box"
+},
+{
+"group": "Keyboards and bells",
+"title": "St. Kathrin's Bell",
+"author": "Wiesental (Lutz Froembgen)",
+"url": "https://www.pianobook.co.uk/packs/st-kathrins-bell/",
+"licence": "Pianobook terms",
+"licence_url": "https://www.pianobook.co.uk/terms-conditions/",
+"how": "fitted",
+"voices": "Church Bell"
+},
+{
+"group": "Keyboards and bells",
+"title": "MELLOTRON VIOLIN",
+"author": "menegass",
+"url": "https://freesound.org/people/menegass/packs/6815/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Tron Strings / Tron Flute"
+},
+{
+"group": "Organs, harmoniums and accordions",
+"title": "Piteå School of Music (Grönlund organ) GrandOrgue sample set, v20250727",
+"author": "Lars Palo, Graham Goode, Panos Ghekas",
+"licence": "CC BY-SA 2.5 SE",
+"licence_url": "https://creativecommons.org/licenses/by-sa/2.5/se/",
+"how": "fitted",
+"voices": "Church Organ and every pipe stop, the organ wind and tremulant"
+},
+{
+"group": "Organs, harmoniums and accordions",
+"title": "Harmonium Debain (Original) Hauptwerk sample set",
+"author": "Jean-Pierre Silvestre",
+"url": "https://jepisi.re/harmoniums/debain-reunion",
+"licence": "no licence stated",
+"how": "fitted",
+"voices": "Reed Organ / harmonium registers"
+},
+{
+"group": "Organs, harmoniums and accordions",
+"title": "Real Rotor Organ (Decent Sampler)",
+"author": "Indiginus (A. Tracy Collins)",
+"url": "https://www.indiginus.com/real-rotor-organ",
+"licence": "Indiginus licence",
+"how": "fitted",
+"voices": "Percussive Organ B3 percussion tap: 2nd/3rd harmonic decay and level"
+},
+{
+"group": "Organs, harmoniums and accordions",
+"title": "Hammond L102",
+"author": "Peter Corbett",
+"url": "https://www.pianobook.co.uk/packs/hammond-l102/",
+"licence": "Pianobook terms",
+"licence_url": "https://www.pianobook.co.uk/terms-conditions/",
+"how": "fitted",
+"voices": "Tonewheel organ 16', 5-1/3', 1-3/5' drawbars, L102 percussion, organ speaker cabinet"
+},
+{
+"group": "Organs, harmoniums and accordions",
+"title": "tonewheel organ sound samples",
+"author": "hammondman",
+"url": "https://freesound.org/people/hammondman/packs/18844/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Drawbar Organ, Percussive Organ, Rock Organ: drawbars, Leslie slow, key click"
+},
+{
+"group": "Organs, harmoniums and accordions",
+"title": "Rok organ - Slow & Fast rotary notes",
+"author": "hammondman",
+"url": "https://freesound.org/people/hammondman/packs/15120/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Rock Organ, Leslie fast, overdrive"
+},
+{
+"group": "Organs, harmoniums and accordions",
+"title": "\"FX_HAMMOND_M100_FLUTE_C.wav\"",
+"author": "Olichite",
+"url": "https://freesound.org/s/244711/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the tonewheel key click"
+},
+{
+"group": "Organs, harmoniums and accordions",
+"title": "Accordion wav samples",
+"author": "hammondman",
+"url": "https://freesound.org/people/hammondman/packs/18842/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Accordion"
+},
+{
+"group": "Organs, harmoniums and accordions",
+"title": "\"Accordion Notes.wav\"",
+"author": "juskiddink",
+"url": "https://freesound.org/s/120715/",
+"licence": "CC BY 4.0",
+"licence_url": "https://creativecommons.org/licenses/by/4.0/",
+"how": "fitted",
+"voices": "Accordion It: reed detune"
+},
+{
+"group": "Organs, harmoniums and accordions",
+"title": "\"Harmonium Samples - All Keys and Drones\"",
+"author": "donyaquick",
+"url": "https://freesound.org/s/330410/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Reed Organ"
+},
+{
+"group": "Organs, harmoniums and accordions",
+"title": "\"Combo organ\"",
+"author": "Najvrtson",
+"url": "https://freesound.org/s/504950/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "measured",
+"voices": "CheeseOrgan"
+},
+{
+"group": "Organs, harmoniums and accordions",
+"title": "bandoneon_v2 SoundFont",
+"author": "Jörg Bleymehl",
+"url": "https://musescore.org/en/node/151276",
+"licence": "free for any use, including commercial",
+"how": "fitted",
+"voices": "Bandoneon"
+},
+{
+"group": "Guitars and basses",
+"title": "GuitarSet",
+"author": "Qingyang Xi, Rachel Bittner, Johan Pauwels, Xuzhou Ye, Juan P. Bello (NYU MARL)",
+"url": "https://zenodo.org/records/3371780",
+"licence": "CC BY 4.0",
+"licence_url": "https://creativecommons.org/licenses/by/4.0/",
+"how": "fitted",
+"voices": "Acoustic Guitar (steel)"
+},
+{
+"group": "Guitars and basses",
+"title": "IDMT-SMT-Guitar",
+"author": "Fraunhofer IDMT",
+"url": "https://zenodo.org/records/7544110",
+"licence": "CC BY-NC-ND 4.0",
+"licence_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+"how": "fitted",
+"voices": "Electric guitars (string, pickups, mute, harmonics)"
+},
+{
+"group": "Guitars and basses",
+"title": "IDMT-SMT-Bass",
+"author": "Fraunhofer IDMT",
+"url": "https://zenodo.org/records/7188892",
+"licence": "CC BY-NC-ND 4.0",
+"licence_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+"how": "fitted",
+"voices": "Electric basses"
+},
+{
+"group": "Guitars and basses",
+"title": "Lapsteel Articulations",
+"author": "Jack Brough (instrument lent by David Long)",
+"url": "https://www.pianobook.co.uk/packs/lap-steel-articulations/",
+"licence": "Pianobook terms",
+"licence_url": "https://www.pianobook.co.uk/terms-conditions/",
+"how": "fitted",
+"voices": "Hawaiian Guitar / lap steel"
+},
+{
+"group": "Guitars and basses",
+"title": "Gretsch Feedback (OMS-1)",
+"author": "Oberton Makes Samples",
+"url": "https://www.pianobook.co.uk/packs/gretsch-feedback/",
+"licence": "Pianobook terms",
+"licence_url": "https://www.pianobook.co.uk/terms-conditions/",
+"how": "fitted",
+"voices": "Guitar feedback"
+},
+{
+"group": "Guitars and basses",
+"title": "The Feedbacker",
+"author": "Michael Blake (per the Pianobook pack page)",
+"url": "https://www.pianobook.co.uk/packs/the-feedbacker/",
+"licence": "Pianobook terms",
+"licence_url": "https://www.pianobook.co.uk/terms-conditions/",
+"how": "fitted",
+"voices": "Guitar feedback"
+},
+{
+"group": "Guitars and basses",
+"title": "Fender 12 String",
+"author": "John Magner",
+"url": "https://www.pianobook.co.uk/packs/fender-12-string/",
+"licence": "Pianobook terms",
+"licence_url": "https://www.pianobook.co.uk/terms-conditions/",
+"how": "fitted",
+"voices": "12-string Guitar"
+},
+{
+"group": "Guitars and basses",
+"title": "Eclectic Mandolin",
+"author": "Joshua Meltzer",
+"url": "https://www.pianobook.co.uk/packs/eclectic-mandolin/",
+"licence": "Pianobook terms",
+"licence_url": "https://www.pianobook.co.uk/terms-conditions/",
+"how": "fitted",
+"voices": "Mandolin and plectrum courses"
+},
+{
+"group": "Guitars and basses",
+"title": "fretless_bass",
+"author": "FaireDesVagues",
+"url": "https://freesound.org/people/FaireDesVagues/packs/4498/",
+"licence": "CC BY 3.0",
+"licence_url": "https://creativecommons.org/licenses/by/3.0/",
+"how": "fitted",
+"voices": "Fretless Bass"
+},
+{
+"group": "Guitars and basses",
+"title": "Fretless Bass",
+"author": "mrforfs",
+"url": "https://freesound.org/people/mrforfs/packs/23201/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Fretless Bass and its neck/bridge pickup variations"
+},
+{
+"group": "Guitars and basses",
+"title": "\"Cabinet IR BG412S Even V30 SM57\"",
+"author": "jesterdyne",
+"url": "https://freesound.org/s/616702/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the 4x12 guitar cabinet (overdrive and distortion guitars)"
+},
+{
+"group": "Guitars and basses",
+"title": "\"Cabinet IR BG412S Brutal V30 SM57\"",
+"author": "jesterdyne",
+"url": "https://freesound.org/s/616704/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the 4x12 guitar cabinet (overdrive and distortion guitars)"
+},
+{
+"group": "Guitars and basses",
+"title": "\"Cabinet IR BG412S Balls V30 SM57\"",
+"author": "jesterdyne",
+"url": "https://freesound.org/s/616705/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the 4x12 guitar cabinet (overdrive and distortion guitars)"
+},
+{
+"group": "Guitars and basses",
+"title": "\"Dist_sng_G_3rd_str_pm.wav\"",
+"author": "SpeedY",
+"url": "https://freesound.org/s/12042/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Rock Rhythm soft layer"
+},
+{
+"group": "Guitars and basses",
+"title": "Windsor Banjo c1920-1930 (SF2)",
+"author": "Clive Nelson",
+"url": "https://www.polyphone.io/en/soundfonts/plucked-strings/444-windsor-banjo-c1920-1930",
+"licence": "public domain",
+"how": "fitted",
+"voices": "Banjo"
+},
+{
+"group": "Guitars and basses",
+"title": "Our own recording of a Luna concert ukulele",
+"licence": "our own recording",
+"how": "fitted",
+"voices": "Ukulele"
+},
+{
+"group": "Voices",
+"title": "VocalSet 1.1: A Singing Voice Dataset",
+"author": "Julia Wilkins, Prem Seetharaman, Alison Wahl, Bryan Pardo",
+"url": "https://zenodo.org/records/1442513",
+"licence": "CC BY 4.0",
+"licence_url": "https://creativecommons.org/licenses/by/4.0/",
+"how": "fitted",
+"voices": "Choir Aahs, Voice Oohs, Synth Voice (sung vowels), Pad 4 (choir), Lead 6 (voice)"
+},
+{
+"group": "Voices",
+"title": "Dagstuhl ChoirSet (V1.2)",
+"author": "Sebastian Rosenzweig, Helena Cuesta, Christof Weiss, Frank Scherbaum, Emilia Gomez, Meinard Mueller",
+"url": "https://zenodo.org/records/4618287",
+"licence": "CC BY-NC-SA 4.0",
+"licence_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+"how": "measured",
+"voices": "Choir Aahs / Voice Oohs section spread: per-singer detune and vibrato"
+},
+{
+"group": "Winds",
+"title": "Dusty Flugelhorn",
+"author": "Chris Cook",
+"url": "https://www.pianobook.co.uk/packs/dusty-flugelhorn/",
+"licence": "Pianobook terms",
+"licence_url": "https://www.pianobook.co.uk/terms-conditions/",
+"how": "fitted",
+"voices": "Flugel Horn"
+},
+{
+"group": "Winds",
+"title": "Short flugelhorn excerpt.ogg; Trumpet playing short excerpt for comparison with flugelhorn.ogg",
+"author": "Ovinus Real",
+"url": "https://commons.wikimedia.org/wiki/File:Short_flugelhorn_excerpt.ogg",
+"licence": "CC BY-SA 4.0",
+"licence_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+"how": "measured",
+"voices": "Flugel Horn (a check)"
+},
+{
+"group": "Winds",
+"title": "Bach - Partita For Solo Flute - Traverso - 3. Sarabande.ogg",
+"author": "Alex Murray (traverso)",
+"url": "https://commons.wikimedia.org/wiki/File:Bach_-_Partita_For_Solo_Flute_-_Traverso_-_3._Sarabande.ogg",
+"licence": "CC BY-SA 2.0",
+"licence_url": "https://creativecommons.org/licenses/by-sa/2.0/",
+"how": "fitted",
+"voices": "Flute Traverso"
+},
+{
+"group": "Winds",
+"title": "\"panflute scale octave and a half\"",
+"author": "mrshoes",
+"url": "https://freesound.org/s/278175/",
+"licence": "CC BY 4.0",
+"licence_url": "https://creativecommons.org/licenses/by/4.0/",
+"how": "fitted",
+"voices": "Pan Flute"
+},
+{
+"group": "Winds",
+"title": "\"Panflute_j008b.wav\"",
+"author": "j008b",
+"url": "https://freesound.org/s/84748/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Pan Flute"
+},
+{
+"group": "Winds",
+"title": "\"Zanka Note D.wav\"",
+"author": "PanPiper5",
+"url": "https://freesound.org/s/427080/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Pan Flute"
+},
+{
+"group": "Winds",
+"title": "\"beer-bottle-blowing-g4-ish-384hz.wav\"",
+"author": "Sadiquecat",
+"url": "https://freesound.org/s/845372/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Blown Bottle"
+},
+{
+"group": "Winds",
+"title": "\"beer-bottle-blowing-g3-ish-205hz-ish.wav\"",
+"author": "Sadiquecat",
+"url": "https://freesound.org/s/845371/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Blown Bottle"
+},
+{
+"group": "Winds",
+"title": "\"beer-bottle-blowing-f3.wav\"",
+"author": "Sadiquecat",
+"url": "https://freesound.org/s/845370/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Blown Bottle"
+},
+{
+"group": "Winds",
+"title": "\"beer-bottle-blowing-between-e4-f4-337hz.wav\"",
+"author": "Sadiquecat",
+"url": "https://freesound.org/s/845369/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Blown Bottle"
+},
+{
+"group": "Winds",
+"title": "\"beer-bottle-blowing-b3-ish-253h.wav\"",
+"author": "Sadiquecat",
+"url": "https://freesound.org/s/845368/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Blown Bottle"
+},
+{
+"group": "Winds",
+"title": "\"bottle-blown-05.wav\"",
+"author": "cabled_mess",
+"url": "https://freesound.org/s/352803/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Blown Bottle"
+},
+{
+"group": "Winds",
+"title": "\"bottle-blown-06.wav\"",
+"author": "cabled_mess",
+"url": "https://freesound.org/s/352802/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Blown Bottle"
+},
+{
+"group": "Winds",
+"title": "\"bottle-blown-01.wav\"",
+"author": "cabled_mess",
+"url": "https://freesound.org/s/352801/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Blown Bottle"
+},
+{
+"group": "Winds",
+"title": "\"bottle-blown-02.wav\"",
+"author": "cabled_mess",
+"url": "https://freesound.org/s/352800/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Blown Bottle"
+},
+{
+"group": "Winds",
+"title": "\"bottle-blown-03.wav\"",
+"author": "cabled_mess",
+"url": "https://freesound.org/s/352799/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Blown Bottle"
+},
+{
+"group": "Winds",
+"title": "\"bottle-blown-04.wav\"",
+"author": "cabled_mess",
+"url": "https://freesound.org/s/352798/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Blown Bottle"
+},
+{
+"group": "Winds",
+"title": "\"bottle-blown-11.wav\"",
+"author": "cabled_mess",
+"url": "https://freesound.org/s/352797/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Blown Bottle"
+},
+{
+"group": "Winds",
+"title": "\"bottle-blown-08.wav\"",
+"author": "cabled_mess",
+"url": "https://freesound.org/s/352796/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Blown Bottle"
+},
+{
+"group": "Winds",
+"title": "\"bottle-blown-07.wav\"",
+"author": "cabled_mess",
+"url": "https://freesound.org/s/352795/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Blown Bottle"
+},
+{
+"group": "Winds",
+"title": "\"bottle-blown-10.wav\"",
+"author": "cabled_mess",
+"url": "https://freesound.org/s/352794/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Blown Bottle"
+},
+{
+"group": "Winds",
+"title": "\"bottle-blown-09.wav\"",
+"author": "cabled_mess",
+"url": "https://freesound.org/s/352793/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Blown Bottle"
+},
+{
+"group": "Winds",
+"title": "\"Flute.wav\"",
+"author": "UncleSigmund",
+"url": "https://freesound.org/s/61498/",
+"licence": "CC BY 4.0",
+"licence_url": "https://creativecommons.org/licenses/by/4.0/",
+"how": "fitted",
+"voices": "Shakuhachi"
+},
+{
+"group": "Winds",
+"title": "\"Shakuhachi flute play\"",
+"author": "gonzooka",
+"url": "https://freesound.org/s/486487/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Shakuhachi"
+},
+{
+"group": "Winds",
+"title": "\"Whistle\"",
+"author": "nbild",
+"url": "https://freesound.org/s/233569/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Whistle"
+},
+{
+"group": "Winds",
+"title": "\"Whistling irish melody\"",
+"author": "oscarboyle",
+"url": "https://freesound.org/s/790454/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Whistle"
+},
+{
+"group": "Winds",
+"title": "\"airy-sax-c5.wav\"",
+"author": "cemorse100",
+"url": "https://freesound.org/s/660042/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "BreathyTnr."
+},
+{
+"group": "Winds",
+"title": "\"cb-sax-phrase.wav\"",
+"author": "cemorse100",
+"url": "https://freesound.org/s/660699/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "BreathyTnr."
+},
+{
+"group": "Winds",
+"title": "\"straight01.wav\"",
+"author": "rockwehrmann",
+"url": "https://freesound.org/s/72494/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "measured",
+"voices": "BreathyTnr."
+},
+{
+"group": "Winds",
+"title": "\"straight02.wav\"",
+"author": "rockwehrmann",
+"url": "https://freesound.org/s/72495/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "measured",
+"voices": "BreathyTnr."
+},
+{
+"group": "Winds",
+"title": "\"straight03.wav\"",
+"author": "rockwehrmann",
+"url": "https://freesound.org/s/72496/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "measured",
+"voices": "BreathyTnr."
+},
+{
+"group": "Winds",
+"title": "\"subtone01.wav\"",
+"author": "rockwehrmann",
+"url": "https://freesound.org/s/72497/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "measured",
+"voices": "BreathyTnr."
+},
+{
+"group": "Winds",
+"title": "\"subtone02.wav\"",
+"author": "rockwehrmann",
+"url": "https://freesound.org/s/72498/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "measured",
+"voices": "BreathyTnr."
+},
+{
+"group": "Winds",
+"title": "\"subtone03.wav\"",
+"author": "rockwehrmann",
+"url": "https://freesound.org/s/72499/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "measured",
+"voices": "BreathyTnr."
+},
+{
+"group": "Winds",
+"title": "Great Highland bagpipe samples",
+"author": "IowaSpaceWizard",
+"url": "https://freesound.org/people/IowaSpaceWizard/packs/29644/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Bag pipe: chanter and drones"
+},
+{
+"group": "Winds",
+"title": "\"Highland Bagpipes Drones\"",
+"author": "iainmccurdy",
+"url": "https://freesound.org/s/697813/",
+"licence": "CC BY 4.0",
+"licence_url": "https://creativecommons.org/licenses/by/4.0/",
+"how": "measured",
+"voices": "Bag pipe: drones"
+},
+{
+"group": "Winds",
+"title": "\"me practicing uilleann pipes\"",
+"author": "luis_audp",
+"url": "https://freesound.org/s/268816/",
+"licence": "CC BY 3.0",
+"licence_url": "https://creativecommons.org/licenses/by/3.0/",
+"how": "fitted",
+"voices": "Uilleann Pipe"
+},
+{
+"group": "Winds",
+"title": "\"Balkan Kaval solo\"",
+"author": "EKVelika",
+"url": "https://freesound.org/s/325111/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Kawala, by its family"
+},
+{
+"group": "Winds",
+"title": "\"Ankara-110-Amin - Ney.wav\"",
+"author": "aliaref",
+"url": "https://freesound.org/s/580759/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Kawala, by its family"
+},
+{
+"group": "Winds",
+"title": "\"zurna_0001_[turkish]_4_shots_mono.flac\"",
+"author": "cdrk",
+"url": "https://freesound.org/s/18661/",
+"licence": "CC BY 4.0",
+"licence_url": "https://creativecommons.org/licenses/by/4.0/",
+"how": "fitted",
+"voices": "Shanai"
+},
+{
+"group": "Winds",
+"title": "\"Hichiriki and sho at Japanese shrine\"",
+"author": "gaijinbuzz",
+"url": "https://freesound.org/s/680565/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Hichiriki"
+},
+{
+"group": "Winds",
+"title": "\"Didgeridoo\"",
+"author": "dethrok",
+"url": "https://freesound.org/s/272165/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Didgeridoo"
+},
+{
+"group": "Winds",
+"title": "\"Jimmie's Didgeridoo\"",
+"author": "qubodup",
+"url": "https://freesound.org/s/173923/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Didgeridoo"
+},
+{
+"group": "Winds",
+"title": "Snake charmers in Bhaktapur, Nepal (CC by).ogg",
+"author": "Nick Mariette",
+"url": "https://commons.wikimedia.org/wiki/File:Nick_Mariette_-_Snake_charmers_in_Bhaktapur,_Nepal_(CC_by).ogg",
+"licence": "CC BY 2.5",
+"licence_url": "https://creativecommons.org/licenses/by/2.5/",
+"how": "fitted",
+"voices": "Pungi"
+},
+{
+"group": "Strings from around the world",
+"title": "Biwa performances and lessons 1984-2000, item SB33",
+"author": "Hugh de Ferranti (depositor); PARADISEC",
+"url": "https://catalog.paradisec.org.au/collections/HDF1/items/SB33",
+"licence": "CC BY-NC-SA 4.0 and PARADISEC conditions",
+"licence_url": "https://www.paradisec.org.au/deposit/access-conditions/",
+"how": "fitted",
+"voices": "Biwa"
+},
+{
+"group": "Strings from around the world",
+"title": "\"SitarCStrokes.wav\"",
+"author": "chinpen",
+"url": "https://freesound.org/s/42268/",
+"licence": "CC BY 3.0",
+"licence_url": "https://creativecommons.org/licenses/by/3.0/",
+"how": "fitted",
+"voices": "Sitar"
+},
+{
+"group": "Strings from around the world",
+"title": "\"sitar01.flac\"",
+"author": "deleted_user_229898",
+"url": "https://freesound.org/s/42192/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Sitar"
+},
+{
+"group": "Strings from around the world",
+"title": "\"Ueno Shamisen - Japan\"",
+"author": "RTB45",
+"url": "https://freesound.org/s/195521/",
+"licence": "CC BY 4.0",
+"licence_url": "https://creativecommons.org/licenses/by/4.0/",
+"how": "fitted",
+"voices": "Shamisen"
+},
+{
+"group": "Strings from around the world",
+"title": "Acoustic Tanpura",
+"author": "sankalp",
+"url": "https://freesound.org/people/sankalp/packs/9571/",
+"licence": "CC BY 4.0",
+"licence_url": "https://creativecommons.org/licenses/by/4.0/",
+"how": "fitted",
+"voices": "Tamboura / Tambra"
+},
+{
+"group": "Strings from around the world",
+"title": "\"kanun_moderate_Chromatic_moreIsolated.mp3\"",
+"author": "barisbozkurt",
+"url": "https://freesound.org/s/211133/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Kanoon"
+},
+{
+"group": "Strings from around the world",
+"title": "\"g2.wav\"",
+"author": "hammondman",
+"url": "https://freesound.org/s/172682/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Oud"
+},
+{
+"group": "Strings from around the world",
+"title": "\"a2.wav\"",
+"author": "hammondman",
+"url": "https://freesound.org/s/172683/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Oud"
+},
+{
+"group": "Strings from around the world",
+"title": "\"c3.wav\"",
+"author": "hammondman",
+"url": "https://freesound.org/s/172684/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Oud"
+},
+{
+"group": "Strings from around the world",
+"title": "Oud music by Andy R. Jordan (1V2 long, 1V2 short, 2v2)",
+"author": "Andy R. Jordan",
+"url": "https://commons.wikimedia.org/wiki/File:Oud_music_by_Andy_R._Jordan_1V2_long.wav",
+"licence": "CC BY-SA 3.0",
+"licence_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+"how": "fitted",
+"voices": "Oud"
+},
+{
+"group": "Strings from around the world",
+"title": "Oud open Strings.ogg",
+"author": "User:Bottomline",
+"url": "https://commons.wikimedia.org/wiki/File:Oud_open_Strings.ogg",
+"licence": "CC BY-SA 3.0",
+"licence_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+"how": "fitted",
+"voices": "Oud"
+},
+{
+"group": "Strings from around the world",
+"title": "\"3 continents  - 16:04:2020, 09.36.wav\"",
+"author": "belamalta10",
+"url": "https://freesound.org/s/513846/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Rabab"
+},
+{
+"group": "Strings from around the world",
+"title": "Taishogoto",
+"author": "Arthur Chanson",
+"url": "https://www.pianobook.co.uk/packs/taishogoto/",
+"licence": "Pianobook terms",
+"licence_url": "https://www.pianobook.co.uk/terms-conditions/",
+"how": "fitted",
+"voices": "Taisho Koto"
+},
+{
+"group": "Strings from around the world",
+"title": "The Ektara",
+"author": "Rajobrata (xavier11)",
+"url": "https://www.pianobook.co.uk/packs/the-ektara/",
+"licence": "Pianobook terms",
+"licence_url": "https://www.pianobook.co.uk/terms-conditions/",
+"how": "fitted",
+"voices": "Gopichant / ektara"
+},
+{
+"group": "Drums and percussion",
+"title": "DRSKit 2.1 (DrumGizmo)",
+"author": "Jes Eiler (DRSDrums) and the DrumGizmo team",
+"url": "https://drumgizmo.org/wiki/doku.php?id=kits:drskit",
+"licence": "CC BY 4.0",
+"licence_url": "https://creativecommons.org/licenses/by/4.0/",
+"how": "fitted",
+"voices": "Standard kit: kicks, snare, side stick, toms, closed/open/half-open hats, crashes, ride edge, brushed crash; Brush set hats and toms; Room/Power sets (via Standard); Cymbal & Claps strokes"
+},
+{
+"group": "Drums and percussion",
+"title": "CrocellKit 1.1 (DrumGizmo)",
+"author": "Lars Muldjord (JBOSound), kit of the band Crocell",
+"url": "https://drumgizmo.org/kits/CrocellKit/CrocellKit1_1.zip",
+"licence": "CC BY 4.0",
+"licence_url": "https://creativecommons.org/licenses/by/4.0/",
+"how": "measured",
+"voices": "Side Stick (a check)"
+},
+{
+"group": "Drums and percussion",
+"title": "Swirly Drums 1.1",
+"author": "Karoryfer Samples",
+"url": "https://github.com/sfzinstruments/karoryfer.swirly-drums",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Brush set: Brush Tap, Brush Slap, Brush Swirl"
+},
+{
+"group": "Drums and percussion",
+"title": "Beijing Opera Percussion Instrument Dataset 1.0 (Freesound pack 14056)",
+"author": "ajaysm (Ajay Srinivasamurthy, MTG/CompMusic)",
+"url": "https://freesound.org/people/ajaysm/packs/14056/",
+"licence": "CC BY 3.0",
+"licence_url": "https://creativecommons.org/licenses/by/3.0/",
+"how": "fitted",
+"voices": "Asia/Rhythm FX sets: Daluo, Xiaoluo, Naobo, Bangu; opera gong"
+},
+{
+"group": "Drums and percussion",
+"title": "\"50 Timbales Hits.mp3\"",
+"author": "hello_flowers",
+"url": "https://freesound.org/s/41196/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Timbales"
+},
+{
+"group": "Drums and percussion",
+"title": "\"X Surdo 4Bar D.aiff\"",
+"author": "plotzki",
+"url": "https://freesound.org/s/36127/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Surdo"
+},
+{
+"group": "Drums and percussion",
+"title": "Cuica",
+"author": "reinsamba",
+"url": "https://freesound.org/people/reinsamba/packs/1339/",
+"licence": "CC BY 4.0",
+"licence_url": "https://creativecommons.org/licenses/by/4.0/",
+"how": "fitted",
+"voices": "Cuica"
+},
+{
+"group": "Drums and percussion",
+"title": "balafon",
+"author": "marini24",
+"url": "https://freesound.org/people/marini24/packs/6325/",
+"licence": "CC BY 4.0",
+"licence_url": "https://creativecommons.org/licenses/by/4.0/",
+"how": "fitted",
+"voices": "Barafon / Barafon 2"
+},
+{
+"group": "Drums and percussion",
+"title": "Bwana Kumala (12954; UNT Balinese gamelan)",
+"author": "cpolcyn",
+"url": "https://freesound.org/people/cpolcyn/packs/12954/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "RAMA Cymbal, Gamelan metallophone and gong, the gamelan tuning"
+},
+{
+"group": "Drums and percussion",
+"title": "CdM-Gamelan-Sample-Library",
+"author": "Digitopia_CdM",
+"url": "https://freesound.org/people/Digitopia_CdM/packs/16058/",
+"licence": "CC BY 3.0",
+"licence_url": "https://creativecommons.org/licenses/by/3.0/",
+"how": "fitted",
+"voices": "Bonang, Gamelan sets kendang strokes"
+},
+{
+"group": "Drums and percussion",
+"title": "\"bodhran hits.wav\"",
+"author": "Teh_Bucket",
+"url": "https://freesound.org/s/521586/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Bodhran / Bodhran Mute"
+},
+{
+"group": "Drums and percussion",
+"title": "\"Steel Drum\"",
+"author": "sciencewithmike",
+"url": "https://freesound.org/s/742254/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "measured",
+"voices": "Steel Drums (a check)"
+},
+{
+"group": "Drums and percussion",
+"title": "\"DHOLAK-085-01.wav\"",
+"author": "iyankc",
+"url": "https://freesound.org/s/479246/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Dholak (Asia set)"
+},
+{
+"group": "Drums and percussion",
+"title": "\"DHOLAK (BASS SKIN)\"",
+"author": "curesforbrokenhearts",
+"url": "https://freesound.org/s/536872/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Dholak (Asia set)"
+},
+{
+"group": "Drums and percussion",
+"title": "tabla bols",
+"author": "mmiron",
+"url": "https://freesound.org/people/mmiron/packs/8162/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Tabla strokes (Ethnic set)"
+},
+{
+"group": "Drums and percussion",
+"title": "acoustic-drumkit-1",
+"author": "soneproject",
+"url": "https://freesound.org/people/soneproject/packs/25895/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Jazz set: kicks, snares, toms, crash, ride"
+},
+{
+"group": "Drums and percussion",
+"title": "\"Snare roll\"",
+"author": "lucianodato",
+"url": "https://freesound.org/s/265179/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Snare Roll"
+},
+{
+"group": "Drums and percussion",
+"title": "\"Snaresd, Snares, Mix (9).wav\"",
+"author": "annannienann",
+"url": "https://freesound.org/s/13221/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Snare Roll"
+},
+{
+"group": "Drums and percussion",
+"title": "\"SL Snare Roll 01.wav\"",
+"author": "smileylovers",
+"url": "https://freesound.org/s/161427/",
+"licence": "CC BY 3.0",
+"licence_url": "https://creativecommons.org/licenses/by/3.0/",
+"how": "measured",
+"voices": "machine snare rolls"
+},
+{
+"group": "Drums and percussion",
+"title": "\"Snare Build.wav\"",
+"author": "deleted_user_5614036",
+"url": "https://freesound.org/s/347581/",
+"licence": "CC BY 3.0",
+"licence_url": "https://creativecommons.org/licenses/by/3.0/",
+"how": "measured",
+"voices": "machine snare rolls"
+},
+{
+"group": "Drums and percussion",
+"title": "\"Techno Snare Roll\"",
+"author": "ani_music",
+"url": "https://freesound.org/s/165330/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "measured",
+"voices": "machine snare rolls"
+},
+{
+"group": "Drums and percussion",
+"title": "\"Clear Finger Snap\"",
+"author": "Unicornaphobist",
+"url": "https://freesound.org/s/272174/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Finger Snap"
+},
+{
+"group": "Drums and percussion",
+"title": "\"Snapping fingers\"",
+"author": "dylanperitz",
+"url": "https://freesound.org/s/452356/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Finger Snap"
+},
+{
+"group": "Drums and percussion",
+"title": "\"HOO! HA! HEE HA!.wav\"",
+"author": "Reitanna",
+"url": "https://freesound.org/s/343968/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "High/Low Hoo (Dance set)"
+},
+{
+"group": "Drums and percussion",
+"title": "\"Video Game Count and More.wav\"",
+"author": "steprock",
+"url": "https://freesound.org/s/541622/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Voice One/Two/Three (Rhythm FX sets)"
+},
+{
+"group": "Drums and percussion",
+"title": "\"Small applause\"",
+"author": "Breviceps",
+"url": "https://freesound.org/s/462362/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Small Club claps (Dance set)"
+},
+{
+"group": "Drums and percussion",
+"title": "\"Medium Crowd Applause 01.wav\"",
+"author": "AudioSea",
+"url": "https://freesound.org/s/583130/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Small Club claps (Dance set)"
+},
+{
+"group": "Drums and percussion",
+"title": "\"Small Crowd Applause\"",
+"author": "miuziqa",
+"url": "https://freesound.org/s/858309/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Small Club claps (Dance set)"
+},
+{
+"group": "Drums and percussion",
+"title": "\"Solo Clap\"",
+"author": "OwlStorm",
+"url": "https://freesound.org/s/151219/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "measured",
+"voices": "Small Club claps"
+},
+{
+"group": "Drums and percussion",
+"title": "\"Single Hand Clapping - Klatschen einer Person\"",
+"author": "florianreichelt",
+"url": "https://freesound.org/s/405624/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "measured",
+"voices": "Small Club claps"
+},
+{
+"group": "Drums and percussion",
+"title": "\"HandClap1.wav\"",
+"author": "Landau00",
+"url": "https://freesound.org/s/463687/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "measured",
+"voices": "Small Club claps"
+},
+{
+"group": "Drums and percussion",
+"title": "\"Applause - One person solo\"",
+"author": "Vrymaa",
+"url": "https://freesound.org/s/734612/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "measured",
+"voices": "Small Club claps"
+},
+{
+"group": "Drum machines",
+"title": "Roland TR-808 Sound Sample Set 1.0.0",
+"author": "Michael Fischer (Technopolis)",
+"url": "http://machines.hyperreal.org/categories/drum-machines/TR-808/samples/",
+"licence": "free, no licence text",
+"how": "fitted",
+"voices": "the TR-808 kit, and the 808 sounds other sets borrow"
+},
+{
+"group": "Drum machines",
+"title": "Roland TR-909 Rhythm Composer Samples",
+"author": "Jason Baker, Rob Roy Recordings (Minneapolis)",
+"url": "http://machines.hyperreal.org/categories/drum-machines/TR-909/samples/",
+"licence": "free, not for profit",
+"how": "fitted",
+"voices": "the TR-909 kit and the Techno sets"
+},
+{
+"group": "Drum machines",
+"title": "TR-707 samples (tr707.zip)",
+"author": "anonymous uploader (hyperreal music machines)",
+"url": "http://machines.hyperreal.org/categories/drum-machines/TR-707/samples/",
+"licence": "public domain",
+"how": "fitted",
+"voices": "the TR-707 kit, and its clap and hats in other sets"
+},
+{
+"group": "Drum machines",
+"title": "TR606KIT.ZIP",
+"author": "Ed Vargo (May 1995)",
+"url": "http://machines.hyperreal.org/categories/drum-machines/TR-606/samples/",
+"licence": "no licence stated",
+"how": "fitted",
+"voices": "TR-606 kit (kick, snare 1, toms, hats, cymbal)"
+},
+{
+"group": "Drum machines",
+"title": "Roland TR606 sampleset",
+"author": "bdu",
+"url": "https://freesound.org/people/bdu/packs/49/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "TR-606 set (accented snare 2)"
+},
+{
+"group": "Drum machines",
+"title": "Roland CR-78",
+"author": "Bjornmossa",
+"url": "https://freesound.org/people/Bjornmossa/packs/36737/",
+"licence": "CC BY 4.0",
+"licence_url": "https://creativecommons.org/licenses/by/4.0/",
+"how": "fitted",
+"voices": "CR-78 set"
+},
+{
+"group": "Drum machines",
+"title": "Roland CR78 Sounds",
+"author": "wikter",
+"url": "https://freesound.org/people/wikter/packs/40417/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "CR-78 set (bongos, rim)"
+},
+{
+"group": "Drum machines",
+"title": "Simmons Drums",
+"author": "tarane468",
+"url": "https://freesound.org/people/tarane468/packs/26582/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Electronic set (Simmons SDS-V kick, snare, toms)"
+},
+{
+"group": "Drum machines",
+"title": "SDSV-DIY manual",
+"author": "syntherjack",
+"url": "https://syntherjack.net/wp-content/uploads/2014/04/SDSV-DIY-manual-syntherjack.pdf",
+"licence": "CC BY-SA 3.0",
+"licence_url": "https://creativecommons.org/licenses/by-sa/3.0/",
+"how": "documentation",
+"voices": "the Simmons SDS-V circuit (Electronic set)"
+},
+{
+"group": "Synthesizers",
+"title": "Roland Juno 6 packs 17475-17480",
+"author": "modularsamples",
+"url": "https://freesound.org/people/modularsamples/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the Juno-6 synth tones, and the SH-101 built on it"
+},
+{
+"group": "Synthesizers",
+"title": "Yamaha CS-30L packs 17620, 17663, 17665",
+"author": "modularsamples",
+"url": "https://freesound.org/people/modularsamples/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the Yamaha CS-30L synth tones"
+},
+{
+"group": "Synthesizers",
+"title": "\"minimoog_vibrating_g-4.wav\"",
+"author": "Garzul",
+"url": "https://freesound.org/s/266813/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the Minimoog bass and pad tones"
+},
+{
+"group": "Synthesizers",
+"title": "\"minimoog_vibrating_f-4.wav\"",
+"author": "Garzul",
+"url": "https://freesound.org/s/266812/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the Minimoog bass and pad tones"
+},
+{
+"group": "Synthesizers",
+"title": "\"minimoog_vibrating_g4.wav\"",
+"author": "Garzul",
+"url": "https://freesound.org/s/266811/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the Minimoog bass and pad tones"
+},
+{
+"group": "Synthesizers",
+"title": "\"minimoog_vibrating_e-4.wav\"",
+"author": "Garzul",
+"url": "https://freesound.org/s/266810/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the Minimoog bass and pad tones"
+},
+{
+"group": "Synthesizers",
+"title": "\"minimoog_vibrating_f4.wav\"",
+"author": "Garzul",
+"url": "https://freesound.org/s/266809/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the Minimoog bass and pad tones"
+},
+{
+"group": "Synthesizers",
+"title": "\"minimoog_vibrating_c-4.wav\"",
+"author": "Garzul",
+"url": "https://freesound.org/s/266808/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the Minimoog bass and pad tones"
+},
+{
+"group": "Synthesizers",
+"title": "\"minimoog_vibrating_c-5.wav\"",
+"author": "Garzul",
+"url": "https://freesound.org/s/266807/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the Minimoog bass and pad tones"
+},
+{
+"group": "Synthesizers",
+"title": "\"minimoog_vibrating_d4.wav\"",
+"author": "Garzul",
+"url": "https://freesound.org/s/266806/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the Minimoog bass and pad tones"
+},
+{
+"group": "Synthesizers",
+"title": "\"minimoog_vibrating_d-4.wav\"",
+"author": "Garzul",
+"url": "https://freesound.org/s/266805/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the Minimoog bass and pad tones"
+},
+{
+"group": "Synthesizers",
+"title": "\"minimoog_vibrating_a4.wav\"",
+"author": "Garzul",
+"url": "https://freesound.org/s/266804/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the Minimoog bass and pad tones"
+},
+{
+"group": "Synthesizers",
+"title": "\"minimoog_vibrating_a-4.wav\"",
+"author": "Garzul",
+"url": "https://freesound.org/s/266803/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the Minimoog bass and pad tones"
+},
+{
+"group": "Synthesizers",
+"title": "\"minimoog_vibrating_b-4.wav\"",
+"author": "Garzul",
+"url": "https://freesound.org/s/266802/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the Minimoog bass and pad tones"
+},
+{
+"group": "Synthesizers",
+"title": "\"minimoog_vibrating_c4.wav\"",
+"author": "Garzul",
+"url": "https://freesound.org/s/266801/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the Minimoog bass and pad tones"
+},
+{
+"group": "Synthesizers",
+"title": "\"Minimoog bass\"",
+"author": "Garzul",
+"url": "https://freesound.org/s/213656/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the Minimoog bass and pad tones"
+},
+{
+"group": "Synthesizers",
+"title": "\"Badass Minimoog bass C7\"",
+"author": "Garzul",
+"url": "https://freesound.org/s/213899/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the Minimoog bass and pad tones"
+},
+{
+"group": "Synthesizers",
+"title": "\"Badass Minimoog bass C4\"",
+"author": "Garzul",
+"url": "https://freesound.org/s/213900/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the Minimoog bass and pad tones"
+},
+{
+"group": "Synthesizers",
+"title": "Roland SH-5 Synthesizer",
+"author": "xanthorp",
+"url": "https://freesound.org/people/xanthorp/packs/3305/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the SH-5 synth tones"
+},
+{
+"group": "Synthesizers",
+"title": "\"Oberheim jungle pad.aif\"",
+"author": "Analogist",
+"url": "https://freesound.org/s/449909/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the Oberheim OB-8 pads and brass"
+},
+{
+"group": "Synthesizers",
+"title": "\"Oberheim Detuned Oscillators.aif\"",
+"author": "Analogist",
+"url": "https://freesound.org/s/453052/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the Oberheim OB-8 pads and brass"
+},
+{
+"group": "Synthesizers",
+"title": "\"Oberheim Filter Chords.aif\"",
+"author": "Analogist",
+"url": "https://freesound.org/s/453055/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the Oberheim OB-8 pads and brass"
+},
+{
+"group": "Synthesizers",
+"title": "\"Oberheim Panned Voices.aif\"",
+"author": "Analogist",
+"url": "https://freesound.org/s/453056/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the Oberheim OB-8 pads and brass"
+},
+{
+"group": "Synthesizers",
+"title": "\"Oberheim Gnarly Tones.aif\"",
+"author": "Analogist",
+"url": "https://freesound.org/s/453057/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the Oberheim OB-8 pads and brass"
+},
+{
+"group": "Synthesizers",
+"title": "\"303 C1 Wave.wav\"",
+"author": "DJMini",
+"url": "https://freesound.org/s/89075/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the TB-303 acid basses"
+},
+{
+"group": "Synthesizers",
+"title": "\"TD-3-TG zap x4.wav\"",
+"author": "laffik",
+"url": "https://freesound.org/s/583823/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the TB-303 acid basses"
+},
+{
+"group": "Synthesizers",
+"title": "\"lazer harpf - td-3-mo-am - 07.wav\"",
+"author": "laffik",
+"url": "https://freesound.org/s/690404/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the TB-303 acid basses"
+},
+{
+"group": "Synthesizers",
+"title": "\"TB303\"",
+"author": "XHALE303",
+"url": "https://freesound.org/s/569960/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the TB-303 acid basses"
+},
+{
+"group": "Synthesizers",
+"title": "\"roland analogue aceeed\"",
+"author": "druidbloke",
+"url": "https://freesound.org/s/167115/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "measured",
+"voices": "the SH-101 (a check)"
+},
+{
+"group": "Synthesizers",
+"title": "\"Resonance Sweeps - Roland SH-101 Synthesizer\"",
+"author": "freezegelman",
+"url": "https://freesound.org/s/418381/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "measured",
+"voices": "the SH-101 (a check)"
+},
+{
+"group": "Synthesizers",
+"title": "\"D50_supersquare1.wav\"",
+"author": "agerven",
+"url": "https://freesound.org/s/394083/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "measured",
+"voices": "the D-50 (detune)"
+},
+{
+"group": "Synthesizers",
+"title": "\"D50_supersquare.wav\"",
+"author": "agerven",
+"url": "https://freesound.org/s/388187/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "measured",
+"voices": "the D-50 (detune)"
+},
+{
+"group": "Synthesizers",
+"title": "\"Roland JP-8000 Initialized Synth Wave - Key of C\"",
+"author": "FadedShadows",
+"url": "https://freesound.org/s/275439/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "JP-8000 saw tones"
+},
+{
+"group": "Synthesizers",
+"title": "\"Roland Tekno Lead 1 C.wav\"",
+"author": "Sorinious_Genious",
+"url": "https://freesound.org/s/573045/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "the supersaw leads, pads and brass"
+},
+{
+"group": "Synthesizers",
+"title": "Our own recording of a Moog Messenger calibration and factory bank",
+"licence": "our own recording",
+"how": "measured",
+"voices": "every Moog Messenger patch"
+},
+{
+"group": "Sound effects",
+"title": "\"Vinyl Surface Noise 3 blank groove 22 minutes.wav\"",
+"author": "nervousneal",
+"url": "https://freesound.org/s/586430/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Phono Noise"
+},
+{
+"group": "Sound effects",
+"title": "\"relaxing-breath-inhale-exhale.wav\"",
+"author": "beerre",
+"url": "https://freesound.org/s/622601/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Breath Noise"
+},
+{
+"group": "Sound effects",
+"title": "\"inhale/exhale.wav\"",
+"author": "superEGsonic",
+"url": "https://freesound.org/s/273979/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Breath Noise"
+},
+{
+"group": "Sound effects",
+"title": "\"FXSaSc Sparrows Close Chirp Exterior Birds.wav\"",
+"author": "Profispiesser",
+"url": "https://freesound.org/s/543827/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Bird Tweet"
+},
+{
+"group": "Sound effects",
+"title": "\"White-crowned Sparrow Chirp\"",
+"author": "Zott820",
+"url": "https://freesound.org/s/695297/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Bird Tweet, SFX birds"
+},
+{
+"group": "Sound effects",
+"title": "\"Curious Bird Chirp\"",
+"author": "qubodup",
+"url": "https://freesound.org/s/812030/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Bird Tweet"
+},
+{
+"group": "Sound effects",
+"title": "\"Telephone bells, two tones separated, rotary dial phone (2012).wav\"",
+"author": "TRP",
+"url": "https://freesound.org/s/616849/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Telephone Ring"
+},
+{
+"group": "Sound effects",
+"title": "\"Stromberg Carlson 1543.wav\"",
+"author": "Hockinfinger",
+"url": "https://freesound.org/s/274436/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Telephone Ring"
+},
+{
+"group": "Sound effects",
+"title": "\"Old Rotary Phone Ringing - Western Electric Bell 500 phone\"",
+"author": "mycompasstv",
+"url": "https://freesound.org/s/456433/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Telephone Ring"
+},
+{
+"group": "Sound effects",
+"title": "\"Vehicle_Helicopter_Flyby_Close_Stereo.wav\"",
+"author": "Nox_Sound",
+"url": "https://freesound.org/s/546806/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Helicopter"
+},
+{
+"group": "Sound effects",
+"title": "\"Helicopter overhead pass pretty good 77mel 190404.flac\"",
+"author": "TRP",
+"url": "https://freesound.org/s/573941/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Helicopter"
+},
+{
+"group": "Sound effects",
+"title": "\"Helicopter good overhead pass 77mel 190918.flac\"",
+"author": "TRP",
+"url": "https://freesound.org/s/573942/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Helicopter"
+},
+{
+"group": "Sound effects",
+"title": "\"Concert audience applause 5\"",
+"author": "thaighaudio",
+"url": "https://freesound.org/s/478415/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Applause"
+},
+{
+"group": "Sound effects",
+"title": "\"100 applause.wav\"",
+"author": "leo153",
+"url": "https://freesound.org/s/338259/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Applause"
+},
+{
+"group": "Sound effects",
+"title": "\"Applause.wav\"",
+"author": "nervousneal",
+"url": "https://freesound.org/s/457295/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Applause"
+},
+{
+"group": "Sound effects",
+"title": "\"gun_9mm_15m_in_front_m10.wav\"",
+"author": "johanwestling",
+"url": "https://freesound.org/s/377789/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Gun Shot"
+},
+{
+"group": "Sound effects",
+"title": "\"Rain light 2 (rural)\"",
+"author": "jmbphilmes",
+"url": "https://freesound.org/s/200273/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Rain"
+},
+{
+"group": "Sound effects",
+"title": "\"Heavy Thunder Strike - no Rain - QUADRO.wav\"",
+"author": "BlueDelta",
+"url": "https://freesound.org/s/446753/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Thunder"
+},
+{
+"group": "Sound effects",
+"title": "\"wind_howl2_stereo.wav\"",
+"author": "swiftoid",
+"url": "https://freesound.org/s/117611/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Wind"
+},
+{
+"group": "Sound effects",
+"title": "\"Stream.wav\"",
+"author": "sterferny",
+"url": "https://freesound.org/s/382322/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Stream"
+},
+{
+"group": "Sound effects",
+"title": "\"Bubbles 001.wav\"",
+"author": "ristooooo1",
+"url": "https://freesound.org/s/539823/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Bubbles"
+},
+{
+"group": "Sound effects",
+"title": "\"Car Starting and Accelerating\"",
+"author": "jackthemurray",
+"url": "https://freesound.org/s/433584/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Car Engine"
+},
+{
+"group": "Sound effects",
+"title": "\"Nissan Maxima handbrake turn (04-25-2009).wav\"",
+"author": "audible-edge",
+"url": "https://freesound.org/s/71741/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Car Skid"
+},
+{
+"group": "Sound effects",
+"title": "\"Car Passing Winter Day Wet Road Doppler - Sound Devices 702 - Senn K6.WAV\"",
+"author": "lunchmoney",
+"url": "https://freesound.org/s/380207/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Car Pass"
+},
+{
+"group": "Sound effects",
+"title": "\"Car Crash (with Glass)\"",
+"author": "magnuswaker",
+"url": "https://freesound.org/s/592388/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Car Crash"
+},
+{
+"group": "Sound effects",
+"title": "\"Fire Truck Siren\"",
+"author": "sapperlapje",
+"url": "https://freesound.org/s/819369/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Siren (and siren rotor)"
+},
+{
+"group": "Sound effects",
+"title": "\"200614 Train starts, rumble, clacks, speeds up, passes 12pm.flac\"",
+"author": "TRP",
+"url": "https://freesound.org/s/567731/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Train"
+},
+{
+"group": "Sound effects",
+"title": "\"Jet Plane 8\"",
+"author": "clif_creates",
+"url": "https://freesound.org/s/251966/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Jetplane"
+},
+{
+"group": "Sound effects",
+"title": "\"Slap hit on the face or shoulder\"",
+"author": "khenshom",
+"url": "https://freesound.org/s/539163/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Slap"
+},
+{
+"group": "Sound effects",
+"title": "\"hand slaps.aif\"",
+"author": "jasonLON",
+"url": "https://freesound.org/s/125406/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Slap"
+},
+{
+"group": "Sound effects",
+"title": "\"Drumsticks [Pro Mark L.A. Special 2BN (hickory)] №4..wav\"",
+"author": "Theriavirra",
+"url": "https://freesound.org/s/319905/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Sticks"
+},
+{
+"group": "Sound effects",
+"title": "\"Perc_Stick_lo\"",
+"author": "LudwigMueller",
+"url": "https://freesound.org/s/548531/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Sticks"
+},
+{
+"group": "Sound effects",
+"title": "\"Scratch 4x.wav\"",
+"author": "LiftPizzas",
+"url": "https://freesound.org/s/610676/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Scratch Push/Pull"
+},
+{
+"group": "Sound effects",
+"title": "\"Arrgh scratch wicked!.wav\"",
+"author": "cityrocker",
+"url": "https://freesound.org/s/128645/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Scratch Push/Pull"
+},
+{
+"group": "Sound effects",
+"title": "\"Muted Guitar Strum\"",
+"author": "chiller345",
+"url": "https://freesound.org/s/353605/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Guitar Cutting Noise"
+},
+{
+"group": "Sound effects",
+"title": "\"Guitar Sounds.wav\"",
+"author": "bsumusictech",
+"url": "https://freesound.org/s/81403/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Guitar Cutting Noise"
+},
+{
+"group": "Sound effects",
+"title": "\"Standup_Bass_Effects_Slap1.wav\"",
+"author": "pjcohen",
+"url": "https://freesound.org/s/383621/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: String Slap"
+},
+{
+"group": "Sound effects",
+"title": "\"pok_sax_key.aif\"",
+"author": "joseph.larralde",
+"url": "https://freesound.org/s/352501/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Key Click"
+},
+{
+"group": "Sound effects",
+"title": "\"slow door hinges_nm.wav\"",
+"author": "Alex_hears_things",
+"url": "https://freesound.org/s/316683/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Door Creaking"
+},
+{
+"group": "Sound effects",
+"title": "\"Wood Door Slam.wav\"",
+"author": "MootMcnoodles",
+"url": "https://freesound.org/s/444409/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Door"
+},
+{
+"group": "Sound effects",
+"title": "\"Door Slam - No Reverb.wav\"",
+"author": "adriann",
+"url": "https://freesound.org/s/440261/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Door"
+},
+{
+"group": "Sound effects",
+"title": "\"wind chimes - single 04.wav\"",
+"author": "Anthousai",
+"url": "https://freesound.org/s/398496/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Windchime"
+},
+{
+"group": "Sound effects",
+"title": "\"Colt M16A1.wav\"",
+"author": "areniporgen",
+"url": "https://freesound.org/s/693546/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Machinegun"
+},
+{
+"group": "Sound effects",
+"title": "\"Blaster pew\"",
+"author": "hotpin7",
+"url": "https://freesound.org/s/819682/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Lasergun"
+},
+{
+"group": "Sound effects",
+"title": "\"Dynamite explosion in the mountain\"",
+"author": "felix.blume",
+"url": "https://freesound.org/s/251401/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Explosion"
+},
+{
+"group": "Sound effects",
+"title": "\"santa - ho ho ho #1.wav\"",
+"author": "canucklovingbrit",
+"url": "https://freesound.org/s/110641/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Laughing"
+},
+{
+"group": "Sound effects",
+"title": "\"Girl Screaming_01.wav\"",
+"author": "tomattka",
+"url": "https://freesound.org/s/400183/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Screaming"
+},
+{
+"group": "Sound effects",
+"title": "\"Woman laugh\"",
+"author": "Kalibrk",
+"url": "https://freesound.org/s/433921/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Laughing"
+},
+{
+"group": "Sound effects",
+"title": "\"Realistic Punch\"",
+"author": "JewTwinz",
+"url": "https://freesound.org/s/244513/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Punch"
+},
+{
+"group": "Sound effects",
+"title": "\"Punch Punching Fist To Skin Hit\"",
+"author": "deleted_user_7146007",
+"url": "https://freesound.org/s/383882/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Punch"
+},
+{
+"group": "Sound effects",
+"title": "\"footsteps shoes walk hard floor stone patio nice.flac\"",
+"author": "kyles",
+"url": "https://freesound.org/s/637555/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Footsteps"
+},
+{
+"group": "Sound effects",
+"title": "\"Horse Clip Clopping Downhill (stereo)\"",
+"author": "swiftoid",
+"url": "https://freesound.org/s/182504/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Horse gallop hoof"
+},
+{
+"group": "Sound effects",
+"title": "\"Single Dog Bark\"",
+"author": "kwahmah_02",
+"url": "https://freesound.org/s/277058/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Dog"
+},
+{
+"group": "Sound effects",
+"title": "\"Dog Bark\"",
+"author": "aunrea",
+"url": "https://freesound.org/s/495658/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Dog"
+},
+{
+"group": "Sound effects",
+"title": "\"Dog bark\"",
+"author": "rodrigocswm",
+"url": "https://freesound.org/s/449490/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Dog"
+},
+{
+"group": "Sound effects",
+"title": "\"single bark - small to medium dog\"",
+"author": "haulaway",
+"url": "https://freesound.org/s/630648/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Dog"
+},
+{
+"group": "Sound effects",
+"title": "\"Dog Shih Tzu Bark Single 05.wav\"",
+"author": "Glitchedtones",
+"url": "https://freesound.org/s/372528/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Dog"
+},
+{
+"group": "Sound effects",
+"title": "\"rose_bark.wav\"",
+"author": "nfrae",
+"url": "https://freesound.org/s/100032/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Dog"
+},
+{
+"group": "Sound effects",
+"title": "\"Cat meowing x5\"",
+"author": "peridactyloptrix",
+"url": "https://freesound.org/s/214759/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Kitty"
+},
+{
+"group": "Sound effects",
+"title": "\"Dog Growling Snarling Grumbling\"",
+"author": "qubodup",
+"url": "https://freesound.org/s/122183/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "SFX set: Dog, Growl"
+},
+{
+"group": "Sound effects",
+"title": "Our own recording of a Wittner metronome",
+"licence": "our own recording",
+"how": "fitted",
+"voices": "Metronome Click and Bell"
+},
+{
+"group": "Tunings",
+"title": "Saraga 1.5 (Hindustani)",
+"author": "MTG, Universitat Pompeu Fabra (CompMusic)",
+"url": "https://zenodo.org/records/4301737",
+"licence": "CC BY-NC-SA 4.0",
+"licence_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+"how": "measured",
+"voices": "the measured raga tunings"
+},
+{
+"group": "Tunings",
+"title": "Sankey Bach keyboard MIDI corpus",
+"author": "John Sankey",
+"url": "http://www.jsbach.net/midi/sankey/",
+"licence": "John Sankey's terms",
+"licence_url": "http://www.johnsankey.ca/copyright.html",
+"how": "measured",
+"voices": "the Sankey tuning (Werckmeister III as he played it)"
 }
 ]

@@ -1927,7 +1927,7 @@ Kit.press($('flAsk'), b => flRender(b.dataset.ask === 'whole' ? 'best' : 'heard'
 // examples/gm_coverage.py --about, from variation_desc.py and ui_words.py)
 fetch('about.json').then(r => (r.ok ? r.json() : null)).then(a => { S.about = a; drawAbout(); drawDisplay(); drawTiles(true); }).catch(() => {});
 // the credits help topic's sources (credits.json, beside about.json)
-fetch('credits.json').then(r => (r.ok ? r.json() : null)).then(c => { if (c && HELP.credits) HELP.credits.terms = c.map(x => [x.voice, x.source]); }).catch(() => {});
+fetch('credits.json').then(r => (r.ok ? r.json() : null)).then(c => { if (c && HELP.credits) HELP.credits.terms = creditTerms(c); }).catch(() => {});
 function aboutHtml(title, line) {
   if (!line) return '';
   return `<div class="ab-head"><b>${esc(title)}</b></div><p>${esc(line)}</p>`;

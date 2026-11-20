@@ -119,7 +119,7 @@ RATED = {
  49:(4,"slow_bow() on the same measured section: the entry a soft section swells in with, read off VSCO 2 CE's soft layers (rise 420-1400 ms, median 660; 1.1 s of attack), where it had taken 170 -- the pad Roland's SlowStr is. Ben, by ear: sounds great"),
  50:(4,"a Messenger patch: the string machine without its chorus -- two saws seven cents apart, the ladder half open, amp and filter swelling together"),
  51:(4,"a Messenger patch: slower and darker than 50, the pair eleven cents apart so it beats faster"),
- 52:(4,"FITTED TO VOCALSET'S LONG TONES (CC BY 4.0, measured only; examples/choir_fit.py): 20 conservatory singers, each by the voice type their readme names, every frame's harmonics -- the vibrato sweeps them across the tract. The old \"ah\" was 10 dB short at F2 and 20-30 dB short at 2.4-3.4 kHz, the singer's formant, and so it was against all four GM sets' choirs; weighted rms 11.1 -> 3.2 dB. A woman's whole cluster is weaker (not only the top formant), and a declared countertenor keeps a tenth of it (one singer: an estimate). The section from Dagstuhl ChoirSet's larynx microphones: each singer 14-22 cents off the note, vibrato +/-12 at 4.4-5.5 Hz. The air between the harmonics (51-77 dB under them, in the tract's shape; the room 15-25 dB under that), and EFFORT: +0.23 dB/octave brighter per dB louder, from 109 messa di voce notes. Not modelled: each singer's slow drift (8.5 cents rms under 1 Hz, independent between singers) and the harmonics' level swing under vibrato (under 1 dB at a choir's depth). Ben: sounds great, the wider section even better; the breath and effort, great"),
+ 52:(4,"FITTED TO VOCALSET'S LONG TONES (CC BY 4.0, measured only; examples/choir_fit.py): 20 conservatory singers, each by the voice type their readme names, every frame's harmonics -- the vibrato sweeps them across the tract. The old \"ah\" was 10 dB short at F2 and 20-30 dB short at 2.4-3.4 kHz, the singer's formant, and so it was against all four GM sets' choirs; weighted rms 11.1 -> 3.2 dB. A woman's whole cluster is weaker (not only the top formant), and a declared countertenor keeps a tenth of it (one singer: an estimate). The section from Dagstuhl ChoirSet's larynx microphones (CC BY-NC-SA 4.0): each singer 14-22 cents off the note, vibrato +/-12 at 4.4-5.5 Hz. The air between the harmonics (51-77 dB under them, in the tract's shape; the room 15-25 dB under that), and EFFORT: +0.23 dB/octave brighter per dB louder, from 109 messa di voce notes. Not modelled: each singer's slow drift (8.5 cents rms under 1 Hz, independent between singers) and the harmonics' level swing under vibrato (under 1 dB at a choir's depth). Ben: sounds great, the wider section even better; the breath and effort, great"),
  53:(4,"as 52, on \"u\": 11.7 -> 3.2 dB; its F3 is a woman's strongest peak up there, which is why the cluster rule covers every formant above F2"),
  54:(4,"two saws on the Messenger, then the class's own sung tract after it -- now the MEASURED sung /E/ (VocalSet, vowels.MEASURED), four formants and the singer's cluster, the tract's measured floor and mouth (it had the spoken three, and a 4 kHz mouth that hid the cluster: 2.4-3.6 kHz +13 dB). Both halves measured. Ben, A/B (examples/synthvoice_ab.py): sounds great"),
  55:(4,"FITTED TO WHAT GM PLAYS (examples/orchhit_fit.py): the patch is the Fairlight-era SAMPLE, one recorded orchestral stab, so the GM sets' own hits are the instrument (FluidR3/MuseScore, GeneralUser GS, TimGM6mb; measured only). A root and its FIFTH (horns re-voiced onto it, winds onto the twelfth), flat across the octaves, a quarter of it noise, short (-20 dB at ~0.3 s; it rang 1.4 s) -- and the PERCUSSION: 55-74% of their power is under 400 Hz, the impact and then the chord's root three and four octaves down, so a TIMPANI on the root (our fitted kettle's own modes, a new pitched layer) and a cymbal above. A/B'd against FluidR3's own hit. Ben: sounds great now"),
@@ -142,9 +142,9 @@ RATED = {
  72:(4,"the flute law, measured across bass, alto and concert flute"),
  73:(4,"Iowa flute (nonvib -- vibrato smears the harmonics)"),
  74:(4,"VCSL baroque soprano, alto and tenor recorders (CC0), 38 sustains (examples/wind_fit.py): harmonic to 0.3 cents, odd-dominant (h2 -33, h3 -24), its breath a hiss of its own colour, each harmonic fluttering on its own and the whole tone and pitch wavering with the breath; attack and release fitted. Ben: sounds great"),
- 75:(4,"Freesound pan pipes (mrshoes CC BY 3.0, j008b and PanPiper5 CC0), 35 notes (examples/wind_fit.py --fit=tables): closed but not odd-only -- the evens 14 dB under the odds; harmonic, not the stopped rank's stretch; quiet breath (-64 to -70 dB) of its own colour; the bass pipe's D3 its own low-register tables, breathier and rich to h48. Ben: sounds good"),
+ 75:(4,"Freesound pan pipes (mrshoes CC BY 4.0, j008b and PanPiper5 CC0), 35 notes (examples/wind_fit.py --fit=tables): closed but not odd-only -- the evens 14 dB under the odds; harmonic, not the stopped rank's stretch; quiet breath (-64 to -70 dB) of its own colour; the bass pipe's D3 its own low-register tables, breathier and rich to h48. Ben: sounds good"),
  76:(4,"Freesound blown bottles, 18 notes (examples/wind_fit.py): near-pure, a measured series and breath, the breath wavering slowly. Ben: sounds good"),
- 77:(4,"Freesound shakuhachi (UncleSigmund CC BY 3.0, gonzooka CC0), 49 notes (examples/wind_fit.py --fit=tables): two tones by register -- the low breathy and buzzy to h40, the high near-pure -- each harmonic fluttering on its own and a 2.5 dB shared waver (a locked 8 dB swell was a fog horn); meri/kari not modelled. Ben: sounds good"),
+ 77:(4,"Freesound shakuhachi (UncleSigmund CC BY 4.0, gonzooka CC0), 49 notes (examples/wind_fit.py --fit=tables): two tones by register -- the low breathy and buzzy to h40, the high near-pure -- each harmonic fluttering on its own and a 2.5 dB shared waver (a locked 8 dB swell was a fog horn); meri/kari not modelled. Ben: sounds good"),
  78:(4,"CATEGORY CORRECTION: a human whistle is a Helmholtz resonator, not a pipe. Freesound whistling (nbild, oscarboyle CC0), 9 notes (examples/wind_fit.py --fit=tables): h2 -43, h3 -57, its breath measured under the tone as well as between the harmonics. Ben: sounds good"),
  79:(4,"VCSL typical and small ocarinas (CC0), 21 sustains (examples/wind_fit.py): near-pure (h2 -44), its breath, flutter, shared wobble (2.4 dB) and pitch wander (5.6 cents) fitted, a soft chiff. Ben: sounds great"),
  80:(4,"a Messenger patch: a square with the SUB's square an octave under -- the weight a square lead has on a Moog and not on a chip"),
@@ -1295,7 +1295,7 @@ VAR_RATED = {
     (125, 12): (3, "a BURNER: the breath noise voice as a gas burner's roar, its low bands up, falling 4 dB a third-octave band above 250 Hz, flickering 3 dB at 7 Hz -- a guess, no recording"),
     (120, 13): (3, "BIWA TREMOLO: the biwa (120.12, fitted) tremolo-picked, ten strokes a second"),
     (118, 13): (3, "606 DIST.TOM: the 606 set's tom (set 28's key 45) from the keyboard, through the valve at drive 2"),
-    (109, 9): (3, "the UILLEANN PIPES measured on luis_audp's practice set (freesound 268816, CC BY: measurement only; examples/wind_fit.py --voice=uilleann): the chanter's just scale against the drone (E 9/8, F# 5/4, A 3/2, the C natural the harmonic seventh), its two registers fitted as two tables (the bottom a reed, h2-h3 level with the fundamental, 0.0 dB rms; the upper nearly a flute, 1.2 dB), the bellows' breath (0.1-0.4 dB); three drones in D (the Highland drones' voices retuned, 4 dB quieter, the bass 17 dB under the chanter as the take's)"),
+    (109, 9): (3, "the UILLEANN PIPES measured on luis_audp's practice set (freesound 268816, CC BY 3.0: measurement only; examples/wind_fit.py --voice=uilleann): the chanter's just scale against the drone (E 9/8, F# 5/4, A 3/2, the C natural the harmonic seventh), its two registers fitted as two tables (the bottom a reed, h2-h3 level with the fundamental, 0.0 dB rms; the upper nearly a flute, 1.2 dB), the bellows' breath (0.1-0.4 dB); three drones in D (the Highland drones' voices retuned, 4 dB quieter, the bass 17 dB under the chanter as the take's)"),
     (109, 10): (3, "the UILLEANN PIPES (109.9), 'normal': the same voice -- Roland's names do not say what parts the two"),
     (109, 11): (3, "the UILLEANN PIPES ornamented: a CUT on every note (tonelib cut_semitones) -- a flicked upper finger, a fourth above for 30 ms, slurred into the note"),
     (109, 8): (3, "the DIDGERIDOO fitted to two CC0 takes (dethrok's drone, Jimmie P. Rodgers' playing; examples/didg_fit.py): the lips' series through the pipe (odd harmonics strong, evens 15-25 dB under) and the PLAYER'S MOUTH -- three formants wandering among 12 fitted states, as a moving vowel filter (efxfilter.mouth) -- frames 7.2 -> 5.7 dB rms with it"),
@@ -2279,6 +2279,8 @@ def about_json(path):
         json.dump(doc, f, ensure_ascii=False, separators=(",", ":"), sort_keys=True)
         f.write("\n")
     credits = credits_json(os.path.join(os.path.dirname(path), "credits.json"))
+    if credits[0] is None:
+        return 1
     print("%s: %d patches' words, %d drum sets', %d organs' stops, %d effects; %s: %d sources credited"
           % (path, len(desc), len(kit_desc), len(stop_notes), len(efx) + len(effects),
              os.path.basename(credits[0]), credits[1]))
@@ -2293,48 +2295,40 @@ _ACRONYMS = {"VCSL", "VSCO", "NYU", "IDMT", "SMT", "CC", "II", "III", "CE", "SC"
               "SD", "PARADISEC", "HDF", "ELA", "DRS", "MKS", "JX", "OB", "SH", "TB", "LP", "EP", "FM", "B3", "L102"}
 
 
-def credits_json(path):
-    """THE CREDITS (ui/credits.json): each voice's sources as its notes name
-    them -- the parenthesis or clause that holds a licence -- with the
-    examples/ paths and our own remarks taken out. CC BY and CC BY-SA ask to
-    be named; CC0 sources are listed too, as thanks."""
-    import json
-    seen, out = set(), []
-
-    def take(what, note):
-        for m in re.finditer(r"\(([^()]*)\)", note):
-            t = m.group(1)
-            if not _LICENCE.search(t):
-                continue
-            t = re.sub(r";?\s*examples/[^;,)]*", "", t)
-            t = re.sub(r";?\s*[a-z_]+\.py[^;,)]*", "", t).strip(" ;,")
-            # (what the parenthesis is about: the clause before it, which names the take and its maker)
-            pre = note[:m.start()]
-            for sep in ("; ", ": ", ". ", " -- ", "("):
-                pre = pre.split(sep)[-1]
-            pre = re.sub(r"^(an? |the )?(fitted|refitted|refit|measured)( as a difference from GM \d+)? (to|on) ",
-                         "", pre.strip(), flags=re.I).strip(" ,")
-            # (a shouted name, as the notes write a voice's subject, said plainly)
-            pre = re.sub(r"\b([A-Z]{2,})('S)?\b", lambda w: w.group(1)[0] + w.group(1)[1:].lower() +
-                         ("'s" if w.group(2) else "") if w.group(1) not in _ACRONYMS else w.group(0), pre)
-            if pre and pre.lower() not in t.lower():
-                t = "%s (%s)" % (pre, t)
-            if t and (what, t) not in seen:
-                seen.add((what, t))
-                out.append({"voice": what, "source": t, "licence": _LICENCE.search(t).group(1)})
+def _voice_notes():
+    """every voice's provenance note, by the name a player knows it by"""
+    import percussion_map as PM
     for p, (r, note) in sorted(RATED.items()):
-        take("%03d %s" % (p, GM[p]), note)
+        yield GM[p], note
     for p, v, name, cls, r, note in variations():
         if cls:
-            take("%03d.%d %s" % (p, v, name), note)
+            yield name.strip(" :"), note
     for k, ks in sorted(KIT_RATED.items()):
         for n, (r, note) in sorted(ks.items()):
-            take("drum set %d, key %d" % (k, n), note)
+            key = (PM.KITS.get(k, {}).get(n) or PM.PERCUSSION.get(n) or ("key %d" % n,))[0]
+            yield "%s kit: %s" % (PM.drum_set_name(k), key), note
     for k, (r, note) in sorted(PERC_RATED.items()):
-        take("drum key %d" % k, note)
+        yield "drums: %s" % (PM.PERCUSSION.get(k) or ("key %d" % k,))[0], note
     for ps, panel, rows, controls in stops():
         for bit, n, r, note in rows:
-            take("stop %s" % n, note)
+            yield "organ stop %s" % n, note
+
+
+def credits_json(path):
+    """THE CREDITS (ui/credits.json): the register's sources (credits.py), in
+    its order, each with the voices it shaped. A voice's notes that name a
+    licence must name a registered source -- its `match` patterns -- so a
+    refit to a new recording fails here until the recording is credited."""
+    import json
+    import credits as CR
+    orphans = [(voice, note) for voice, note in _voice_notes()
+               if _LICENCE.search(note) and not any(re.search(m, note) for s in CR.SOURCES for m in s["match"])]
+    for voice, note in orphans:
+        print("credits: no registered source for %s: %s" % (voice, note[:160]))
+    if orphans:
+        return None, len(orphans)
+    out = [{k: s[k] for k in ("group", "title", "author", "url", "licence", "licence_url", "how", "voices") if s.get(k)}
+           for s in CR.SOURCES]
     with open(path, "w") as f:
         json.dump(out, f, ensure_ascii=False, indent=0)
         f.write("\n")

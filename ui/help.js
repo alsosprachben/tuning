@@ -812,14 +812,27 @@ Object.assign(HELP, {
 });
 
 // THE CONTENTS: the topics in order, under their headings
-// THE CREDITS: the recordings our voices were modelled on, each source as its
-// licence asks it to be named -- the terms filled from credits.json (written
-// by examples/gm_coverage.py --about), by app.js here and help_json.js native
+// THE CREDITS: the recordings our voices were modelled on, each source named as
+// its licence asks (author, title, link, licence, what we did with it) -- the
+// terms filled from credits.json (credits.py, by examples/gm_coverage.py
+// --about) by creditTerms, here for the web and in help_json.js for native
 HELP.credits = {
   title: 'Credits',
-  intro: 'Many of the instruments here were modelled on recordings that their makers shared under open licences. These are the sources, by the voice each one shaped; CC BY licences ask to be named, and CC0 sources are listed with thanks.',
+  intro: 'No recordings are included in Clavitone. Its instruments are models, and many of them were fitted to recordings that musicians, sound recordists, libraries and researchers shared. These are those sources, by kind of instrument, each with its licence and the voices it shaped. Our thanks to all of them; the CC BY and CC BY-SA licences ask that they be named, and the CC0 and public domain sources are named with gratitude.',
   terms: [],
 };
+// (credits.json's sources as the topic's terms: a heading per group, then
+//  each source's title and maker, its licence, what was done and for which voices)
+function creditTerms(cr) {
+  const out = [];
+  let g = null;
+  for (const c of cr) {
+    if (c.group !== g) out.push((g = c.group));
+    out.push([c.author ? `${c.title}, ${c.author}` : c.title,
+      `${c.licence}${c.how ? ' · ' + c.how + ':' : ' ·'} ${c.voices}${c.url ? ' · ' + c.url : ''}`]);
+  }
+  return out;
+}
 
 const HELP_TOC = [
   ['Start here', ['basics']],

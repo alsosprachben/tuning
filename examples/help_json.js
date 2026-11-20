@@ -10,12 +10,12 @@ const stub = new Proxy(function () {}, { get: () => stub, apply: () => stub, con
 const ctx = { document: { querySelectorAll: () => [], createElement: () => stub, body: stub }, MutationObserver: function () { return { observe() {} }; },
   requestAnimationFrame: () => 0, Kit: stub, esc: s => s, showCard: () => {} };
 vm.createContext(ctx);
-vm.runInContext(src + '\n;globalThis.__out = { help: HELP, toc: HELP_TOC };', ctx);
+vm.runInContext(src + '\n;globalThis.__out = { help: HELP, toc: HELP_TOC }; globalThis.__creditTerms = creditTerms;', ctx);
 const out = ctx.__out;
-// (the credits topic's terms: credits.json's sources, by voice)
+// (the credits topic's terms: credits.json's sources, by help.js's creditTerms)
 try {
   const cr = JSON.parse(fs.readFileSync(path.join(dir, 'credits.json'), 'utf8'));
-  out.help.credits.terms = cr.map(c => [c.voice, c.source]);
+  out.help.credits.terms = ctx.__creditTerms(cr);
 } catch (e) { /* no credits.json: the topic says so by its intro alone */ }
 fs.writeFileSync(path.join(dir, 'help.json'), JSON.stringify(out));
 console.log(`help.json: ${Object.keys(out.help).length} topics, ${out.toc.length} groups`);

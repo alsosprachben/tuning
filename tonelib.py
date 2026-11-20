@@ -24286,7 +24286,7 @@ class PanFluteProperties(StoppedPipeProperties):
     couples into the resonance and stays as turbulence. That noise is not a
     defect of the instrument; it is most of its sound.
     """
-    # MEASURED (examples/wind_fit.py --voice=panflute): mrshoes' scale (CC BY 3.0),
+    # MEASURED (examples/wind_fit.py --voice=panflute): mrshoes' scale (CC BY 4.0),
     # j008b's melody and PanPiper5's zanka (CC0), 35 stable notes. Its breath is
     # QUIET: -64 to -71 dB between the harmonics, where the white wash below
     # (sustain_jitter 0.55) put -54 and a flat floor at -45 over every
