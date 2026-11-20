@@ -1042,26 +1042,30 @@ J stops_of(nv_host *h, int row)
     n = nv_host_parts(h, ps.data(), n);
     const bool has = row >= 0 && row < n;
     int prog = has && !ps[(size_t)row].drums ? ps[(size_t)row].program : -1;
-    std::vector<char> nb(16384);
-    const int nr = prog >= 0 ? nv_host_stop_names(h, prog, nb.data(), (int)nb.size()) : 0;
+    const int var = has && !ps[(size_t)row].drums ? ps[(size_t)row].variation : 0;   // (a bank's own organ: its stops)
+    std::vector<char> nb(16384), lb(16384);
+    const int nr = prog >= 0 ? nv_host_stop_names_v(h, prog, var, nb.data(), (int)nb.size(), 0) : 0;
+    if (nr > 0)
+        nv_host_stop_names_v(h, prog, var, lb.data(), (int)lb.size(), 1);
     if (nr <= 0)
         prog = -1;
     o.o["program"] = sess::integer(prog);
     o.o["row"] = sess::integer(row);
     o.o["part"] = sess::str(has ? ps[(size_t)row].name : "");
-    J names = sess::arr(), rows = sess::arr(), drawn = sess::arr();
+    J names = sess::arr(), labels = sess::arr(), rows = sess::arr(), drawn = sess::arr();
     if (prog >= 0) {
-        for (const char *p = nb.data();;) {
-            const char *e = strchr(p, '\n');
-            names.a.push_back(sess::str(std::string(p, e ? (size_t)(e - p) : strlen(p))));
-            if (!e)
-                break;
-            p = e + 1;
-        }
-        const int k = nv_host_stop_rows(h, prog, nullptr, 0);
+        for (J *out : {&names, &labels})
+            for (const char *p = (out == &names ? nb : lb).data();;) {
+                const char *e = strchr(p, '\n');
+                out->a.push_back(sess::str(std::string(p, e ? (size_t)(e - p) : strlen(p))));
+                if (!e)
+                    break;
+                p = e + 1;
+            }
+        const int k = nv_host_stop_rows_v(h, prog, var, nullptr, 0);
         std::vector<int> v((size_t)std::max(0, k));
         if (k > 0)
-            nv_host_stop_rows(h, prog, v.data(), k);
+            nv_host_stop_rows_v(h, prog, var, v.data(), k);
         J line = sess::arr(), grp = sess::arr();
         for (int x : v) {
             if (x >= 0) {
@@ -1092,6 +1096,7 @@ J stops_of(nv_host *h, int row)
         }
     }
     o.o["names"] = names;
+    o.o["labels"] = labels;                 // (the card's words: the class's stop_labels)
     o.o["rows"] = rows;
     o.o["drawn"] = drawn;
     return o;

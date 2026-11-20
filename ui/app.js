@@ -912,7 +912,8 @@ function drawStops(force) {
     const nums = st.names.map(n => (/\s(\S+)$/.exec(n) || [])[1]).filter(t => t && /^\d/.test(t));
     const feet = nums.length > 0 && nums.every(t => FEET.has(t));
     el.innerHTML = st.rows.map(row => `<div class="jrow">${row.map(g => `<div class="jgrp">${g.map(r => {
-      const [a, b] = stopParts(st.names[r] || String(r), feet);
+      // (the card's words: a stop's label where the voice gives one, its name otherwise)
+      const [a, b] = stopParts((st.labels && st.labels[r]) || st.names[r] || String(r), feet);
       const f = b.endsWith('′') ? `${esc(b.slice(0, -1))}<i>′</i>` : esc(b);
       return `<button class="tab" data-kit="1" data-rank="${r}"><span class="tnm">${esc(a)}</span><span class="tf">${f}</span></button>`;
     }).join('')}</div>`).join('')}</div>`).join('');
@@ -1948,7 +1949,7 @@ function drawAbout() {
   const org = S.about.stops[String(st.program)];
   const t = S.stopTouched;
   if (t !== null && t.program === st.program && org && org.stops[st.names[t.rank]])
-    el.innerHTML = aboutHtml(st.names[t.rank], org.stops[st.names[t.rank]]);
+    el.innerHTML = aboutHtml((st.labels && st.labels[t.rank]) || st.names[t.rank], org.stops[st.names[t.rank]]);
   else
     el.innerHTML = aboutHtml(st.part, patchAbout(cur() && cur().row === st.row ? cur() : null)) +
       (org ? `<p class="ab-hint">${esc(org.panel)}: touch a stop for what it is.</p>` : '');

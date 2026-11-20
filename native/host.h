@@ -213,6 +213,10 @@ int nv_host_stop_names(nv_host *h, int program, char *names, int cap);
 /* the panel's rows of them: rank indices, -2 a break within a row (the
    voice's groups), -1 a row's end -- how many ints (cap of them copied) */
 int nv_host_stop_rows(nv_host *h, int program, int *out, int cap);
+/* ...an organ VARIATION's (a bank's own organ; 0 the program's): its stops' names, or
+   with labels its card words (the class's stop_labels), and its rows as above */
+int nv_host_stop_names_v(nv_host *h, int program, int variation, char *names, int cap, int labels);
+int nv_host_stop_rows_v(nv_host *h, int program, int variation, int *out, int cap);
 /* each rank drawn (1) or not, now, on the first part's organ: how many; a
    rank drawn or retired between two blocks */
 int nv_host_drawn(nv_host *h, char *out, int cap);

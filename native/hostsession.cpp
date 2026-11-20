@@ -1461,23 +1461,30 @@ int nv_host_session_save(nv_host *h)
 }
 
 // AN ORGAN's STOPS (the export's LSTOP: livetui's stop rows)
-int nv_host_stop_names(nv_host *h, int program, char *names, int cap)
+int nv_host_stop_names_v(nv_host *h, int program, int variation, char *names, int cap, int labels)
 {
-    if (program < 0 || program > 127)
+    const auto *st = h->E.stops_for(program, variation);
+    if (!st)
         return 0;
-    const auto &st = h->E.stops[program];
+    const auto &nm = labels && st->labels.size() == st->names.size() ? st->labels : st->names;
     std::string all;
-    for (size_t i = 0; i < st.names.size(); i++)
-        all += (i ? "\n" : "") + st.names[i];
+    for (size_t i = 0; i < nm.size(); i++)
+        all += (i ? "\n" : "") + nm[i];
     copy_out(all, names, cap);
-    return (int)st.names.size();
+    return (int)nm.size();
 }
 
-int nv_host_stop_rows(nv_host *h, int program, int *out, int cap)
+int nv_host_stop_names(nv_host *h, int program, char *names, int cap)
 {
-    if (program < 0 || program > 127)
+    return nv_host_stop_names_v(h, program, 0, names, cap, 0);
+}
+
+int nv_host_stop_rows_v(nv_host *h, int program, int variation, int *out, int cap)
+{
+    const auto *stp = h->E.stops_for(program, variation);
+    if (!stp)
         return 0;
-    const auto &st = h->E.stops[program];
+    const auto &st = *stp;
     std::vector<int> v;
     for (size_t r = 0; r < st.rows.size(); r++) {
         for (size_t i = 0; i < st.rows[r].size(); i++) {
@@ -1490,6 +1497,11 @@ int nv_host_stop_rows(nv_host *h, int program, int *out, int cap)
     for (int i = 0; out && i < cap && i < (int)v.size(); i++)
         out[i] = v[(size_t)i];
     return (int)v.size();
+}
+
+int nv_host_stop_rows(nv_host *h, int program, int *out, int cap)
+{
+    return nv_host_stop_rows_v(h, program, 0, out, cap);
 }
 
 // (the patch behind a row, as nv_host_parts lists them: -1 none)

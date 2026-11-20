@@ -6,7 +6,7 @@
 //                       [--drum-set=P | --no-drums] [--split=N [--split-channel=C] [--split-transpose=T]]
 //                       [--no-register] [--pedal-key=N] [--press-db=DB] [--gpu[=cl|c]] [--gpu-min=N]
 //                       [--no-rt] [--rt-prio=N] [--reg-sync] [--no-governor] [--dry] [--no-panel]
-//                       [--tuner=NAME [--a=HZ | --c=HZ]] [--eastern=SPEC] [--eastern-at=S:SPEC]
+//                       [--tuner=NAME [--a=HZ | --c=HZ]] [--eastern=SPEC] [--eastern-at=S:SPEC] [--stops=WORD] [--stops-at=S:WORD]
 //                       [--ui[=PORT] [--ui-no-browser]]   (the touch interface: ui/, in Chromium, full screen,
 //                                                          in place of the panel; closing its window stops nvlive)
 //                       [--file-export=PATH]   (the Files card's best-quality renders: native_export.py's file export)
@@ -319,6 +319,19 @@ int nv_host::run(int argc, char **argv)
                             nb_++;
                         });
                         fprintf(stderr, "nvlive: tuner %s at block %lld (%d patch(es))\n", ta.substr(c + 1).c_str(), b, nb_);
+                    }
+                }
+                {                                       // --stops-at=S:WORD: the first part's organ registered, as its panel posts it
+                    std::string sa = opt(argc, argv, "stops-at", "");
+                    size_t c = sa.find(':');
+                    if (c != std::string::npos && (long long)(atof(sa.substr(0, c).c_str()) * SR) / BLK == b) {
+                        int pi;
+                        {
+                            std::lock_guard<std::mutex> lk(parts_mu);
+                            pi = pats.empty() ? -1 : pats[0].pi;
+                        }
+                        if (pi >= 0)
+                            nv_part_post_stops(part, pi, strtoll(sa.substr(c + 1).c_str(), nullptr, 0));
                     }
                 }
                 {                                       // --eastern-at=S:SPEC: the Eastern tuning switched to, in step ("off": none)

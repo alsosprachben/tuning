@@ -12122,6 +12122,17 @@ class Live:
         if n0 is None:
             n0 = self.n
         want = {r for r in want if r in part.patch.rank_names} or set(part.patch.cres_order[:1])
+        # A LEVEL STOP (the divider organ's Solo, Accent, Volume) moved: the ranks it
+        # names, sounding, to their new level at once -- a shunt lifted, no new note
+        _lc = part.patch._voice_class(60)
+        if getattr(_lc, 'level_stops', None):
+            for rank in [r for r in part.patch.rank_names if r in want and r in part.drawn]:
+                _r = T.level_gain(_lc, rank, want) / T.level_gain(_lc, rank, part.drawn)
+                if _r != 1.0:
+                    _ix = [i for k, sl in self.slab.live.items() if k[0] == part.pid and k[3] == rank for i in sl]
+                    if _ix:
+                        self.slab.channel_gain(_ix, _r)
+        part.lvl_want = want
         for rank in [r for r in part.patch.rank_names if r in want and r not in part.drawn]:   # (in order)
             for (c, note) in self._held_any():
                 if part.matches(self._pc(c), note):
@@ -12133,6 +12144,7 @@ class Live:
                       if k[0] == part.pid and k[3] == rank]:
                 self.slab.release(k, n0)
         part.drawn = set(want)
+        part.lvl_want = None
         # A drawbar IS a parent, so the amplifier's products are now wrong --
         # drawing all nine bars changes what is intermodulating with what.
         self._amp_touch(part)
@@ -12190,9 +12202,13 @@ class Live:
         # even though it takes no velocity at all. It cannot come from the
         # scale computed in _note_on, because this branch returns before that
         # is used.
+        # (its level stops': tonelib.level_gain at the registration being set, or the drawn)
+        _lc = part.patch._voice_class(60)
+        _lv = (T.level_gain(_lc, rank, getattr(part, 'lvl_want', None) or part.drawn)
+               if getattr(_lc, 'level_stops', None) else 1.0)
         if not self.slab.stamp_cols(cols, n, key, n0,
                                     part.gain() * self._chan_gain(ch)
-                                    * self.note_touch.get((part.pid, ch, note), 1.0),
+                                    * self.note_touch.get((part.pid, ch, note), 1.0) * _lv,
                                     hrel, 0, False):
             self.dropped += 1
             return

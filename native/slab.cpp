@@ -8529,6 +8529,35 @@ struct Part {
 
     // live._draw: rank ri of the key's template stamped -- at the part's gain,
     // the channel's, and the key's touch -- on its chest's row
+    // A LEVEL STOP's gain on rank ri at registration dr (tonelib.level_gain: each group's
+    // loudest drawn, summed in the order the groups first come)
+    static double level_gain(const OrganSpec *og, int ri, const std::vector<char> &dr)
+    {
+        if (!og || !og->n_lvl)
+            return 1.0;
+        int gid[8];
+        double gmax[8];
+        int ng = 0;
+        for (int q = 0; q < og->n_lvl; q++) {
+            int sr = og->lvl_rank[q];
+            if (!(og->lvl_mask[q] >> ri & 1) || sr >= (int)dr.size() || !dr[sr])
+                continue;
+            int k = 0;
+            while (k < ng && gid[k] != og->lvl_group[q])
+                k++;
+            if (k == ng) {
+                gid[ng] = og->lvl_group[q];
+                gmax[ng++] = 0.0;
+            }
+            gmax[k] = std::max(gmax[k], og->lvl_db[q][ri]);
+        }
+        double d = 0.0;
+        for (int k = 0; k < ng; k++)
+            d += gmax[k];
+        return d != 0.0 ? pow(10.0, d / 20.0) : 1.0;
+    }
+    const std::vector<char> *lvl_want = nullptr;   // (set_stops': the registration being set)
+
     void draw_rank(const nv::live::Template &T, int ch, int note, int ri, long long n0)
     {
         if (ri >= (int)T.ranks.size() || !T.ranks[ri].P)
@@ -8537,6 +8566,8 @@ struct Part {
         Key key(pid, ch, note, rank_layer(patches[cur].organ, ri));
         auto nt = note_touch.find(std::make_pair(ch, note));
         double scale = pow(10.0, level_db / 20.0) * swell * chan_gain(ch) * (nt != note_touch.end() ? nt->second : 1.0);
+        if (patches[cur].organ && patches[cur].organ->n_lvl)        // (its level stops')
+            scale *= level_gain(patches[cur].organ, ri, lvl_want ? *lvl_want : patches[cur].drawn);
         const double *f8p[6];
         const float *f4p[27];
         const long long *i8p[2];
@@ -8709,6 +8740,22 @@ struct Part {
         if (!any && og->n_order)
             want[og->order[0]] = 1;
         std::vector<char> &dr = patches[cur].drawn;
+        // A LEVEL STOP moved: the ranks it names, sounding, to their new level at once
+        if (og->n_lvl)
+            for (int ri = 0; ri < og->n_rank; ri++) {
+                if (!want[ri] || !dr[ri])
+                    continue;
+                double r = level_gain(og, ri, want) / level_gain(og, ri, dr);
+                if (r == 1.0)
+                    continue;
+                std::vector<long> ix;
+                long long rl = rank_layer(og, ri);
+                for (auto &kv : S.live)
+                    if (std::get<0>(kv.first) == pid && std::get<3>(kv.first) == rl)
+                        ix.insert(ix.end(), kv.second.begin(), kv.second.end());
+                S.channel_gain(ix, r);
+            }
+        lvl_want = &want;
         for (int ri = 0; ri < og->n_rank; ri++) {
             if (!want[ri] || dr[ri])
                 continue;
@@ -8734,6 +8781,7 @@ struct Part {
             for (auto &k : ks)
                 S.release(k, n0);
         }
+        lvl_want = nullptr;
         dr = want;
         amp_touch(pi);                      // a drawbar is a parent: the valve's products are stale
     }

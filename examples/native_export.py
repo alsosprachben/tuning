@@ -707,13 +707,25 @@ def main(argv):
             # after the prefix) -- its ranks' names, and each row's ranks, -1
             # where the voice breaks the line (a "|" in Patch.stop_row_lines:
             # livetui.stops_grid's groups; not a stop, no key)
-            orgs = [p for p in range(128) if prog_organ[p] >= 0]
+            # -- and each ORGAN VARIATION's too (a bank's own organ: the Wurlitzer's
+            # divisions), keyed (program, variation), and each stop's LABEL, the
+            # card's word for it (the class's stop_labels; its name otherwise)
+            orgs = [(p, 0) for p in range(128) if prog_organ[p] >= 0]
+            for (_p, _v) in sorted(PM.VARIATIONS):
+                _vc = PM.VARIATIONS[(_p, _v)]
+                if (isinstance(_vc, type) and getattr(_vc, 'registerable', False) and getattr(_vc, 'stop_ranks', None)
+                        and N.organ(_vc) is not None and (_p, _v) not in LIVE_REFUSED):
+                    orgs.append((_p, _v))
             f.write(b"LSTOP" + struct.pack("<i", len(orgs)))
-            for p in orgs:
-                pt = L.Patch(p, False, tuner, 0)
-                f.write(struct.pack("<ii", p, len(pt.rank_names)))
+            for p, v in orgs:
+                pt = L.Patch(p, False, tuner, v)
+                _lab = getattr(pt._voice_class(60), 'stop_labels', None) or {}
+                f.write(struct.pack("<iii", p, v, len(pt.rank_names)))
                 for nm in pt.rank_names:
                     b = nm.encode()
+                    f.write(struct.pack("<i", len(b)) + b)
+                for nm in pt.rank_names:
+                    b = _lab.get(nm, nm).encode()
                     f.write(struct.pack("<i", len(b)) + b)
                 f.write(struct.pack("<i", len(pt.stop_row_lines)))
                 for row in pt.stop_row_lines:

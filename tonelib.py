@@ -6930,10 +6930,46 @@ class DividerOrganProperties(TonewheelProperties):
         ("sustain short", None, 0.0),
         ("sustain medium", None, 0.0),
         ("sustain long", None, 0.0),
+        ("Solo 16'", None, 0.0),
+        ("Solo 8'", None, 0.0),
+        ("Solo 5-1/3'", None, 0.0),
+        ("Solo 4'", None, 0.0),
+        ("Accent", None, 0.0),
     ]
     crescendo_order = ["Flute 8'", "Diapason 8'", "Tibia 16'", "Clarinet 8'", "Quint 5-1/3'", "Clarinet 4'",
                        "Trombone 16'", "Trumpet 8'", "Bass Clarinet 16'", "String 8'", "Oboe 8'", "Kinura 8'"]
-    default_stops = 0b000000001000          # the Flute 8'
+    # (21 stops: the stop word's third and fourth bytes, CC44 and CC45, as the church organ's)
+    stop_word_ccs = (11, 43, 44, 45)
+    # THE SOLO AND ACCENT TABS (the upper STRAF, 653542): each a SHUNT lifted -- off, a
+    # resistor bleeds part of its group's signal to ground; drawn, the group is louder and
+    # its tone the same. Level stops: each draws no rank, it raises the ranks it names by
+    # its dB (level_stops; a coupler's copy of a tab with it). Measured on Ben's takes 1
+    # (every Solo and the Accent off) and 2 (all on), the same sequence, nothing else
+    # moved between them: each tab's level on its own harmonics (the garage's floor under
+    # the quiet ones), the median of C3, C4, C5 (examples/wurlitzer_solo.py). Two takes
+    # give each tab's TOTAL, all drawn: shared out by the schematic -- Solo 8' shunts the
+    # whole 8' line (the Diapason and String rise with it, +5), the Accent the reeds' feed
+    # on top of it. Oboe and Kinura too quiet with the tabs off to read: the Trumpet's.
+    # Clarinet 8' joins the 16' pre-amp's output: with the 16's.
+    level_stops = {
+        "Solo 16'": {"Tibia 16'": 11.3, "Bass Clarinet 16'": 13.9, "Trombone 16'": 12.8, "Clarinet 8'": 14.6},
+        "Solo 8'": {"Flute 8'": 9.0, "Diapason 8'": 5.5, "String 8'": 4.5,
+                    "Oboe 8'": 5.5, "Trumpet 8'": 5.5, "Kinura 8'": 5.5},
+        "Solo 5-1/3'": {"Quint 5-1/3'": 13.5},
+        "Solo 4'": {"Clarinet 4'": 14.9},
+        "Accent": {"Oboe 8'": 16.5, "Trumpet 8'": 16.5, "Kinura 8'": 16.5},
+    }
+    # stops that are positions of one switch (the pedal's volume): in a group, the loudest
+    # drawn counts, not their sum (level_groups: stop -> group; none here)
+    level_groups = {}
+    # ...and the tables are the takes': as recorded, with these drawn -- so a tab's
+    # rank sits under its level by what they add, and drawing them gives the take back
+    level_fitted = ("Solo 16'", "Solo 8'", "Solo 5-1/3'", "Solo 4'", "Accent")
+    # THE CARD'S WORDS for stops the engines know by other names (the Stops card and
+    # the export's stop lists: labels, never keys)
+    stop_labels = {"tremulant": "Vibrato", "sustain short": "Sustain Short", "sustain medium": "Sustain Medium",
+                   "sustain long": "Sustain Long"}
+    default_stops = 0b111110000000000001000  # the Flute 8', every Solo and the Accent (as recorded)
     # THE VIBRATO (the 4500's tab: Ben's take 5, the Flute 8' at C4 -- 5.00 Hz, 26.4
     # cents peak to peak at its normal depth): an oscillator sweeping the twelve
     # master oscillators' bias, so every note of every division swings together,
@@ -6972,7 +7008,8 @@ class DividerOrganProperties(TonewheelProperties):
     # the 8' flues, the reeds, the mutations ("|" a break, not a stop)
     stop_rows = [["Tibia 16'", "Bass Clarinet 16'", "Trombone 16'", "|", "Flute 8'", "Diapason 8'", "String 8'",
                   "Clarinet 8'", "|", "Oboe 8'", "Trumpet 8'", "Kinura 8'", "|", "Quint 5-1/3'", "Clarinet 4'", "|", "tremulant",
-                  "sustain short", "sustain medium", "sustain long"]]
+                  "sustain short", "sustain medium", "sustain long"],
+                 ["Solo 16'", "Solo 8'", "Solo 5-1/3'", "Solo 4'", "|", "Accent"]]
 
     # THE COUPLERS (Upper to Upper 16', 4', 2'): each keys the octave below or
     # above as well, so every drawn tab sounds again there -- its own colour at
@@ -7109,10 +7146,27 @@ class DividerPedalProperties(DividerOrganProperties):
         ("tremulant", None, 0.0),
         ("sustain", None, 0.0),
         ("sustain long", None, 0.0),
+        ("Volume Soft", None, 0.0),
+        ("Volume Medium", None, 0.0),
+        ("Volume Full", None, 0.0),
     ]
     crescendo_order = ["Bourdon 16'", "Flute 8'", "Principal 16'", "String Bass 8'"]
     stop_rows = [["Bourdon 16'", "Principal 16'", "|", "Flute 8'", "String Bass 8'", "|", "tremulant",
-                  "sustain", "sustain long"]]
+                  "sustain", "sustain long", "|", "Volume Soft", "Volume Medium", "Volume Full"]]
+    stop_word_ccs = (11, 43)
+    # THE PEDAL VOLUME (the pedal STRAF, 652747): its pre-amp's emitter divider, 47 + 100
+    # + 390 ohms, each tab shorting it at a tap -- the stage's gain, a level only, the
+    # tabs positions of one switch (the lowest tap drawn wins: a group). None drawn is
+    # NORMAL, as the tables are (Ben's take 6). Medium +15.0 and Full +22.0 dB, measured
+    # on all four tabs (take 6's Normal and Medium passes; Full on its lightly clipped
+    # Bourdon, Principal and String Bass); Soft +7, the divider's ratio scaled as those two
+    # read against it: an estimate.
+    _ALL = {"Bourdon 16'": 1.0, "Principal 16'": 1.0, "Flute 8'": 1.0, "String Bass 8'": 1.0}
+    level_stops = {"Volume Soft": {k: 7.0 for k in _ALL}, "Volume Medium": {k: 15.0 for k in _ALL},
+                   "Volume Full": {k: 22.0 for k in _ALL}}
+    level_groups = {"Volume Soft": "volume", "Volume Medium": "volume", "Volume Full": "volume"}
+    level_fitted = ()
+    stop_labels = {"tremulant": "Vibrato", "sustain": "Sustain On", "sustain long": "Sustain Long"}
     # (the pedal sustain, take 3 and 4b: On 1.1 s, Long 1.95 s to 60 dB)
     sustain_stops = {"sustain": 1.1, "sustain long": 1.95}
     default_stops = 0b0101                  # the Bourdon 16' and Flute 8'
@@ -7386,14 +7440,31 @@ class DividerLowerProperties(DividerOrganProperties):
         ("Quint 5-1/3'", 1.498307, _LOWER_GAIN, DividerLowerQuint513Properties),
         ("tremulant", None, 0.0),
         ("sustain", None, 0.0),
+        ("Solo 8'", None, 0.0),
+        ("Solo 5-1/3'", None, 0.0),
+        ("Volume Full", None, 0.0),
     ]
     crescendo_order = ["Melodia 8'", "Geigen Diapason 8'", "Trombone 8'", "Viole 8'", "Cornet 8'",
                        "Quint 5-1/3'", "Vox Humana 8'"]
     stop_rows = [["Melodia 8'", "Geigen Diapason 8'", "Viole 8'", "|", "Trombone 8'", "Vox Humana 8'",
-                  "Cornet 8'", "|", "Quint 5-1/3'", "|", "tremulant", "sustain"]]
+                  "Cornet 8'", "|", "Quint 5-1/3'", "|", "tremulant", "sustain", "|", "Solo 8'", "Solo 5-1/3'",
+                  "Volume Full"]]
+    stop_word_ccs = (11, 43)
+    # THE LOWER's SOLO AND VOLUME TABS (the lower STRAF, 653543: shunts lifted, a level
+    # only). Measured in one take (Ben's take 8, the Melodia at C4 and C5): Solo +5.0 dB,
+    # then Lower Keyboard Volume Full +7.0 more. Volume Full is the whole manual's; Solo
+    # 8' is taken as every 8' tab's (the upper's Solo 8' lifts its whole 8' line), and
+    # Solo 5-1/3' as the Quint's at the same +5: neither read apart. The tables are take
+    # 8's, recorded with both Solos and Volume Full drawn.
+    _EIGHTS = ("Melodia 8'", "Geigen Diapason 8'", "Viole 8'", "Trombone 8'", "Vox Humana 8'", "Cornet 8'")
+    level_stops = {"Solo 8'": {k: 5.0 for k in _EIGHTS}, "Solo 5-1/3'": {"Quint 5-1/3'": 5.0},
+                   "Volume Full": {k: 7.0 for k in _EIGHTS + ("Quint 5-1/3'",)}}
+    level_groups = {}
+    level_fitted = ("Solo 8'", "Solo 5-1/3'", "Volume Full")
+    stop_labels = {"tremulant": "Vibrato", "sustain": "Sustain"}
     # (the lower sustain, take 4b: the Melodia at C4, 2.4 s to 60 dB)
     sustain_stops = {"sustain": 2.4}
-    default_stops = 0b0001001              # Preset I: the Melodia and Trombone
+    default_stops = 0b111000001001         # Preset I (the Melodia and Trombone), both Solos and Volume Full
     seat_pan = 0.5                          # (the lower amplifier: the right)
 
 
@@ -7405,6 +7476,38 @@ for _div in (DividerOrganProperties, DividerPedalProperties, DividerLowerPropert
             _r[3].octave_width = 0.0
 del _div, _r
 
+
+def level_db(cls, rank, drawn):
+    """A LEVEL STOP's work (level_stops: the divider organ's Solo, Accent and Volume
+    tabs) on one rank: the dB its drawn level stops add -- each group's loudest
+    (level_groups), summed. A coupler's copy ("Flute 8', 4' coupler") is its tab's."""
+    ls = getattr(cls, 'level_stops', None)
+    if not ls:
+        return 0.0
+    base = rank.split(", ")[0]
+    groups = getattr(cls, 'level_groups', None) or {}
+    acc = {}
+    for st, tabs in ls.items():
+        if st in drawn and base in tabs:
+            g = groups.get(st, st)
+            acc[g] = max(acc.get(g, 0.0), tabs[base])
+    return sum(acc.values())
+
+
+def level_gain(cls, rank, drawn):
+    """...as a gain (1.0 none)."""
+    d = level_db(cls, rank, drawn)
+    return 10.0 ** (d / 20.0) if d else 1.0
+
+
+# ...THE TABLES ARE THE TAKES', recorded with level_fitted drawn: each rank set under
+# them by what they add, so drawing them gives the take back
+for _div in (DividerOrganProperties, DividerPedalProperties, DividerLowerProperties):
+    _div.stop_ranks = [((_r[0], _r[1], _r[2] / level_gain(_div, _r[0], _div.level_fitted)) + tuple(_r[3:]))
+                       if _r[1] is not None else _r for _r in _div.stop_ranks]
+del _div
+
+
 def divider_registration(tabs, couplers=()):
     """A divider organ's registration as a variation's settings: its TABS drawn
     and the COUPLERS on -- each coupler a copy of every drawn tab at its
@@ -7414,7 +7517,7 @@ def divider_registration(tabs, couplers=()):
     names = [r[0] for r in D.stop_ranks]
     ranks = list(D.stop_ranks)
     bits = 0
-    for t in tabs:
+    for t in tuple(tabs) + tuple(D.level_fitted):     # (every Solo and the Accent drawn: as recorded)
         bits |= 1 << names.index(t)
     for c in couplers:
         cr, cg = D.COUPLERS[c]   # (each tab drawn copied; the vibrato is no tab to copy)

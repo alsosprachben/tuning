@@ -554,6 +554,12 @@ typedef struct OrganSpec {
        and T60 (s); a note let go with one drawn decays on a damper track of its own */
     int n_sus, sus_rank[4];
     double sus_t60[4];
+    /* ITS LEVEL STOPS (tonelib level_stops: the divider organ's Solo, Accent and Volume
+       tabs): each stop's rank, its group (level_groups: the loudest drawn of a group
+       counts), the ranks it raises (a bit a rank) and by how much (dB) -- tonelib.level_db */
+    int n_lvl, lvl_rank[8], lvl_group[8];
+    long long lvl_mask[8];
+    double lvl_db[8][32];
 } OrganSpec;
 
 /* what the note setup reads of the voice besides its VoiceSnap */

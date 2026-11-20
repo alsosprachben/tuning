@@ -28,6 +28,7 @@ place of the export's, its free strings' bank built again at it.
 --eastern: a secondary tuning (a raga spec) for the Indian instruments, on
 both sides (live.Live(eastern=), nvlive --eastern).
 --stops=WORD: the part an organ registered (bit i its rank i), as its panel would (live.set_stops).
+--stops-at=S:WORD: ...registered again at second S, posted as the panel posts it (after the block's events).
 --drums: the part a drum part, PROGRAM its drum set (live.Live(drums=True),
 nvlive --drums): the file's notes struck on its kit, whatever their channel.
 --beside: the drum set (Standard) on channel 10 beside the piano, which
@@ -242,7 +243,8 @@ def main(argv):
                           + (["--metronome=" + opt["metronome"]] if opt.get("metronome") else [])
                           + (["--fixed-touch=" + opt["fixed-touch"]] if opt.get("fixed-touch") else [])
                           + (["--rotary=" + opt["rotary"]] if opt.get("rotary") else [])
-                          + (["--stops=" + opt["stops"]] if opt.get("stops") else []),
+                          + (["--stops=" + opt["stops"]] if opt.get("stops") else [])
+                          + (["--stops-at=" + opt["stops-at"]] if opt.get("stops-at") else []),
                           stderr=subprocess.DEVNULL)
     raw = open(out, "rb").read()          # float32 stereo after a 44-byte header
     nv = np.frombuffer(raw[44:], np.float32).reshape(-1, 2)
@@ -308,6 +310,10 @@ def main(argv):
     # patches built in the new room and their swaps posted: patchsync's)
     # --eastern-at=S:SPEC: live.set_eastern at the block S falls in, before
     # its events ("off": none) -- the panel's E, its builder in step
+    stops_b, stops_w = -1, 0
+    if opt.get("stops-at"):                 # --stops-at=S:WORD: the part's organ registered at second S
+        _s, _w = opt["stops-at"].split(":", 1)
+        stops_b, stops_w = int(float(_s) * 48000) // 128, int(_w, 0)
     east_b, east_spec = -1, None
     if opt.get("eastern-at"):
         _s, east_spec = opt["eastern-at"].split(":", 1)
@@ -351,6 +357,10 @@ def main(argv):
             lv._room_switch()
             for _part, _p in patchsync.build(lv):
                 instant_scan(lv, _p)
+        if b == stops_b:                    # (posted, as the panel posts: run after the block's events)
+            _nm = lv.parts[0].patch.rank_names
+            _want = {_nm[i] for i in range(len(_nm)) if (stops_w >> i) & 1}
+            lv.post(lambda n0, _w=_want: lv.set_stops(lv.parts[0], _w, n0))
         if b == east_b:
             lv.set_eastern(None if east_spec == "off" else east_spec)
             for _part, _p in patchsync.build(lv):

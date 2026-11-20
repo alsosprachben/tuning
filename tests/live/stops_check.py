@@ -6,7 +6,9 @@ python3 tests/live/stops_check.py
 The host opened on the church organ (19): its ranks named, the panel's rows
 covering every rank once; a stop not drawn drawn by nv_host_toggle_stop --
 read back drawn, and a held note's level moved by it (a rank more sounding);
-retired again -- read back so, and the level back where it was. Then a
+retired again -- read back so, and the level back where it was. An organ
+VARIATION's own stops and labels (nv_host_stop_names_v: the Wurlitzer's lower
+manual, 16.41). Then a
 second part layered on it (another church organ): its stops its own
 (nv_host_part_set_drawn on it leaves the first's as they were), and with
 the first muted, a stop drawn on the second moves what is heard.
@@ -38,6 +40,7 @@ def main():
     for f, a in (("nv_host_start", [vp]), ("nv_host_block", [vp]), ("nv_host_render", [vp, vp, vp, ci]),
                  ("nv_host_midi", [vp, cp, ci]), ("nv_host_stop_names", [vp, ci, cp, ci]),
                  ("nv_host_stop_rows", [vp, ci, vp, ci]), ("nv_host_drawn", [vp, cp, ci]),
+                 ("nv_host_stop_names_v", [vp, ci, ci, cp, ci, ci]), ("nv_host_stop_rows_v", [vp, ci, ci, vp, ci]),
                  ("nv_host_toggle_stop", [vp, ci]), ("nv_host_part_drawn", [vp, ci, cp, ci]),
                  ("nv_host_part_set_drawn", [vp, ci, cp, ci]), ("nv_host_part_layer", [vp, ci]),
                  ("nv_host_parts", [vp, vp, ci]),
@@ -147,6 +150,25 @@ def main():
     check("a stop drawn on the second moves what is heard", abs(20 * np.log10(more2 / alone)) > 0.3,
           "%+.2f dB" % (20 * np.log10(more2 / alone)))
     check("...and the first's still as they were", pdrawn(0) == first)
+    # AN ORGAN VARIATION's OWN STOPS (a bank's organ: the Wurlitzer's divisions), and the
+    # card's words for them (stop_labels): the lower manual, 16.41
+    import patch_map as PM
+    want_names = [r[0] for r in PM.VARIATIONS[(16, 41)].stop_ranks]
+    vb = ctypes.create_string_buffer(16384)
+    nv_ = d.nv_host_stop_names_v(h, 16, 41, vb, 16384, 0)
+    vnames = vb.value.decode().split("\n") if nv_ else []
+    check("16.41's stops its own (not program 16's)", vnames == want_names, "%d stops" % nv_)
+    d.nv_host_stop_names_v(h, 16, 41, vb, 16384, 1)
+    vlabels = vb.value.decode().split("\n")
+    check("...labelled for the card", len(vlabels) == len(vnames) and vlabels[vnames.index("tremulant")] == "Vibrato"
+          and vlabels[vnames.index("Solo 8'")] == "Solo 8'", str(vlabels[-5:]))
+    k = d.nv_host_stop_rows_v(h, 16, 41, None, 0)
+    rv = (ctypes.c_int * max(k, 1))()
+    d.nv_host_stop_rows_v(h, 16, 41, rv, k)
+    check("...its rows cover every stop once", sorted(x for x in rv[:k] if x >= 0) == list(range(len(vnames))))
+    p0 = ctypes.create_string_buffer(16384)
+    d.nv_host_stop_names_v(h, 16, 0, p0, 16384, 0)
+    check("program 16 itself unchanged", d.nv_host_stop_names(h, 16, vb, 16384) == 0 or p0.value == vb.value)
     print("stops: %d failed" % bad)
     sys.stdout.flush()
     shutil.rmtree(tmp, ignore_errors=True)      # (the export, made here without NV_EXPORT_CACHE: 1 GB)

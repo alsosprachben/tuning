@@ -2159,13 +2159,17 @@ def registration_blocks(ch, prop, ccs, nblk, amp=None, recalls=()):
     wbytes = [(ds >> (7 * i)) & 0x7F for i in range(len(wccs))]
     swells = wccs[0] == 11
     rank_ev = {r[0]: [] for r in ranks}; swell_ev = []
+    lvl = bool(getattr(prop, 'level_stops', None))
     def emit(t):
         mask = 0
         for i, b in enumerate(wbytes):
             mask |= b << (7 * i)
         nd = int(cres*len(order)+1e-9); drawn = set(order[:nd])
+        # (a LEVEL STOP -- the divider organ's Solo, Accent, Volume -- drawn raises the
+        #  ranks it names: their target past 1, T.level_gain)
+        on = {r[0] for i, r in enumerate(ranks) if (mask >> i) & 1 or r[0] in drawn}
         for i, r in enumerate(ranks):
-            k = r[0]; rank_ev[k].append((t, 1.0 if ((mask>>i)&1 or k in drawn) else 0.0))
+            k = r[0]; rank_ev[k].append((t, (T.level_gain(prop, k, on) if lvl else 1.0) if k in on else 0.0))
         swell_ev.append((t, vol))
     emit(0.0)
     # ...and a PROGRAM CHANGE recalls its tone's registration (recalls: [(t,

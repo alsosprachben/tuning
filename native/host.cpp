@@ -446,19 +446,21 @@ bool read_export(const char *path, Export &E)
                 int no = 0;
                 if (ok && fread(s5, 1, 5, f) == 5 && !memcmp(s5, "LSTOP", 5) && fread(&no, 4, 1, f) == 1)
                     for (int q = 0; q < no; q++) {
-                        int pg = 0, nr = 0, nrow = 0;
-                        if (fread(&pg, 4, 1, f) != 1 || fread(&nr, 4, 1, f) != 1 || pg < 0 || pg > 127)
+                        int pg = 0, var = 0, nr = 0, nrow = 0;
+                        if (fread(&pg, 4, 1, f) != 1 || fread(&var, 4, 1, f) != 1 || fread(&nr, 4, 1, f) != 1
+                            || pg < 0 || pg > 127)
                             break;
-                        auto &so = E.stops[pg];
-                        for (int i = 0; i < nr; i++) {
-                            int len = 0;
-                            if (fread(&len, 4, 1, f) != 1)
-                                break;
-                            std::string nm(len, ' ');
-                            if (len && fread(&nm[0], 1, len, f) != (size_t)len)
-                                break;
-                            so.names.push_back(nm);
-                        }
+                        auto &so = var ? E.vstops[std::make_pair(pg, var)] : E.stops[pg];
+                        for (int pass = 0; pass < 2; pass++)        // (its names, then their labels)
+                            for (int i = 0; i < nr; i++) {
+                                int len = 0;
+                                if (fread(&len, 4, 1, f) != 1)
+                                    break;
+                                std::string nm(len, ' ');
+                                if (len && fread(&nm[0], 1, len, f) != (size_t)len)
+                                    break;
+                                (pass ? so.labels : so.names).push_back(nm);
+                            }
                         if (fread(&nrow, 4, 1, f) != 1)
                             break;
                         for (int r = 0; r < nrow; r++) {

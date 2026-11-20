@@ -98,9 +98,20 @@ struct Export {
     std::vector<VarEnt> vents;
     struct Stops {
         std::vector<std::string> names;
+        std::vector<std::string> labels;        // the card's word for each (the class's stop_labels)
         std::vector<std::vector<int>> rows;
         std::vector<std::vector<int>> breaks;   // each row's line breaks: a new line at its stop i
     } stops[128];                         // LSTOP: an organ program's ranks and the panel's stop rows
+    std::map<std::pair<int, int>, Stops> vstops;    // ...an organ variation's: (program, variation)
+    const Stops *stops_for(int program, int variation) const
+    {
+        if (variation) {
+            auto it = vstops.find(std::make_pair(program, variation));
+            if (it != vstops.end())
+                return &it->second;
+        }
+        return program >= 0 && program < 128 ? &stops[program] : nullptr;
+    }
     std::vector<int> cls_organ, prog_organ;   // each class's organ, each program's (-1 none, -2 not the engine's)
     std::vector<double> les;              // LESL: the rotating speaker's constants
     std::string lobe_lib;                 // ...and synth_voice_lobe's library

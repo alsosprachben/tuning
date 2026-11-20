@@ -130,6 +130,13 @@ inline void draw_stops(App &a)
     if (const J *n = T.st.get("names"); n && n->is(J::ARR))
         for (const J &x : n->a)
             names.push_back(x.is(J::STR) ? x.s : "");
+    // (the card's words: a stop's label where the voice gives one -- "Vibrato" for the
+    //  engine's "tremulant" -- its name otherwise)
+    std::vector<std::string> labels = names;
+    if (const J *n = T.st.get("labels"); n && n->is(J::ARR) && n->a.size() == names.size())
+        for (size_t i = 0; i < names.size(); i++)
+            if (n->a[i].is(J::STR) && !n->a[i].s.empty())
+                labels[i] = n->a[i].s;
     bool feet = false;
     {
         int nums = 0, ok = 0;
@@ -190,7 +197,7 @@ inline void draw_stops(App &a)
                 const bool hit = ImGui::InvisibleButton(id.c_str(), ImVec2(tw * a.k, th * a.k));
                 const bool held = ImGui::IsItemActive();
                 look::chip(a, x, ty, tw, th, on, held);
-                const auto np = stop_parts(r < (int)names.size() ? names[(size_t)r] : std::to_string(r), feet);
+                const auto np = stop_parts(r < (int)labels.size() ? labels[(size_t)r] : std::to_string(r), feet);
                 const auto ls = wrap(a, a.bold, 14, np.first, tw - 14);
                 const size_t nl = std::min<size_t>(3, ls.size());
                 // (a name alone centred in its tab, as a drawbar's footage is; above its footage otherwise)
@@ -309,7 +316,7 @@ inline void draw_stops(App &a)
         org = ss->get(std::to_string(prog).c_str());
     std::string title, body;
     if (org && T.touched >= 0 && T.touched_prog == prog && T.touched < (int)names.size()) {
-        title = names[(size_t)T.touched];
+        title = labels[(size_t)T.touched];
         if (const J *os = org->get("stops"))
             body = str(os, names[(size_t)T.touched].c_str());
     } else {

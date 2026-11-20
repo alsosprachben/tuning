@@ -3003,7 +3003,9 @@ class OrganSpec(ctypes.Structure):
                    ('choir_beat', I * 8), ('n_buff', I), ('buff', (I * 2) * 8), ('rank_choir', I * 32),
                    ('choir_ratio', C * 8), ('cross', C), ('choir_cents', (C * 128) * 8),
                    ('choir_stiff', (C * 128) * 8), ('choir_bname', (ctypes.c_char * 16) * 8),
-                   ('siren_up', I), ('n_sus', I), ('sus_rank', I * 4), ('sus_t60', C * 4)])
+                   ('siren_up', I), ('n_sus', I), ('sus_rank', I * 4), ('sus_t60', C * 4),
+                   ('n_lvl', I), ('lvl_rank', I * 8), ('lvl_group', I * 8), ('lvl_mask', ctypes.c_longlong * 8),
+                   ('lvl_db', (C * 32) * 8)])
 
 
 _ORGAN = {}
@@ -3267,6 +3269,29 @@ def organ(cls):
     o.n_sus = len(_sus)
     for q, (i, t) in enumerate(_sus):
         o.sus_rank[q], o.sus_t60[q] = i, t
+    # ITS LEVEL STOPS (level_stops, level_groups; tonelib.level_db): in the class's order
+    _ls = getattr(cls, 'level_stops', None) or {}
+    if len(_ls) > 8 or (_ls and len(keys) > 32):
+        return None
+    _lg = getattr(cls, 'level_groups', None) or {}
+    _gids = []
+    o.n_lvl = 0
+    for st, tabs in _ls.items():
+        if st not in keys:
+            continue
+        q = o.n_lvl
+        o.n_lvl += 1
+        g = _lg.get(st, st)
+        if g not in _gids:
+            _gids.append(g)
+        o.lvl_rank[q], o.lvl_group[q] = keys.index(st), _gids.index(g)
+        m = 0
+        for i, k in enumerate(keys):
+            b = k.split(", ")[0]
+            if b in tabs:
+                m |= 1 << i
+                o.lvl_db[q][i] = float(tabs[b])
+        o.lvl_mask[q] = m
     if T.organ_wind(cls):
         import wind as WND
         o.wind = 1

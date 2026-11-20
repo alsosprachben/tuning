@@ -509,6 +509,34 @@ struct Song {
                         drawn = true;
                 o.rank_ev[ri].push_back(std::make_pair(t, ((mask >> ri) & 1) || drawn ? 1.0 : 0.0));
             }
+            // (a LEVEL STOP drawn raises the ranks it names: tonelib.level_gain, its
+            //  groups' loudest summed in the order they first come)
+            if (spec->n_lvl)
+                for (int ri = 0; ri < nr; ri++) {
+                    double &tg = o.rank_ev[ri].back().second;
+                    if (tg == 0.0)
+                        continue;
+                    int gid[8];
+                    double gmax[8];
+                    int ng = 0;
+                    for (int q = 0; q < spec->n_lvl; q++) {
+                        if (!(spec->lvl_mask[q] >> ri & 1) || o.rank_ev[spec->lvl_rank[q]].back().second == 0.0)
+                            continue;
+                        int k = 0;
+                        while (k < ng && gid[k] != spec->lvl_group[q])
+                            k++;
+                        if (k == ng) {
+                            gid[ng] = spec->lvl_group[q];
+                            gmax[ng++] = 0.0;
+                        }
+                        gmax[k] = pymax(gmax[k], spec->lvl_db[q][ri]);
+                    }
+                    double d = 0.0;
+                    for (int k = 0; k < ng; k++)
+                        d += gmax[k];
+                    if (d != 0.0)
+                        tg = pow(10.0, d / 20.0);
+                }
             o.swell_ev.push_back(std::make_pair(t, vol));
         };
         emit(0.0);
