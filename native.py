@@ -131,7 +131,8 @@ class VoiceSnap(ctypes.Structure):
                 ('fb_gain', C), ('fb_dbs', C), ('fbs', (C * 2) * 8), ('sw_set', I), ('sw_cents', C),
                 ('sw_hz', C * 2), ('mm_pts', I), ('mr_law', I), ('mr_a', C * 2), ('mr_b', C * 2), ('mr_lo', C * 2),
                 ('mr_ref', C), ('mr_body', C * 3), ('crs_ntrio', I), ('crs_trio', C * 4),
-                ('swp_set', I), ('swp_share', C), ('swp_tog', C * 2), ('swp_swept', C * 2), ('swp_step', C)]
+                ('swp_set', I), ('swp_share', C), ('swp_tog', C * 2), ('swp_swept', C * 2), ('swp_step', C),
+                ('hm_vp_n', I), ('hm_vp_hz', C * 32), ('hm_vp_p', C * 32)]
 
 
 class ToneIn(ctypes.Structure):
@@ -308,7 +309,11 @@ class NoteClass(ctypes.Structure):
                       ('bn_oct', C), ('bn_ref', C), ('osr_n', I), ('osr_open', C * 8), ('osr_cap', C),
                       ('ng_set', I), ('ng_p', C * 12), ('sym_per_mode', I), ('sym_bw', C),
                       ('n_dstop', I), ('dstop_def', I), ('dstr_note', I), ('dstr_k', I), ('dstr_db', C),
-                      ('dstr_ring', C)])
+                      ('dstr_ring', C),
+                      ('strike_reg_n', I), ('strike_reg_hz', C * 16), ('strike_reg_db', C * 16),
+                      ('strike_vp_n', I), ('strike_vp_hz', C * 16), ('strike_vp_p', C * 16),
+                      ('ring_tuned', I), ('ring_vp', C * 48), ('ring_reg_n', I), ('ring_reg_hz', C * 16),
+                      ('ring_reg_db', C * 16)])
 
 
 class NoteIn(ctypes.Structure):
@@ -2702,6 +2707,10 @@ def snapshot(props):
         s.hm_n_pts = len(pts)
         for i, (hz, db) in enumerate(pts):
             s.hm_pts_hz[i], s.hm_pts_db[i] = float(hz), float(db)
+        vps = tuple(getattr(p, 'hammer_vel_power_points', ()) or ())[:32]
+        s.hm_vp_n = len(vps)
+        for i, (hz, ep) in enumerate(vps):
+            s.hm_vp_hz[i], s.hm_vp_p[i] = float(hz), float(ep)
         if not s.decay_by_hz:
             s.dz_scale, s.dz_lmax = p._string_scale()
         # (the note's own shares, as Python's harmonic_volume reads them)
@@ -2781,9 +2790,6 @@ def init_supported(cls):
     kit drum's (SynthProperties' alone), the base class's placing and laws,
     and none of the branches not ported."""
     import tonelib as T
-    # (the strings' velocity growth by register is not in the C yet)
-    if getattr(cls, 'hammer_vel_power_points', ()):
-        return False
     if kit_drum(cls):
         # (a dynamic B: the steel's law, or a pipe's -- the piano's polynomial, borrowed)
         if not T.hrtf or (cls.inharmonicity_dynamic and kit_drum(cls) != 4 and not pipe_voice(cls)):
@@ -3383,10 +3389,6 @@ def note_class(cls):
     import blockrender as BR
     got = _NOTE.get(cls)
     drum = kit_drum(cls)
-    # (the knock's register tables are not in the C yet: the Python plays such a class)
-    if got is None and (getattr(cls, 'strike_noise_register_db', ()) or getattr(cls, 'strike_noise_vel_power_register', ())):
-        _NOTE[cls] = False
-        return None
     if got is None:
         v = _class(cls)
         # (a kit drum's one-shot hold is the engine's, a snare's partials'
@@ -3517,6 +3519,16 @@ def note_class(cls):
             k.strike_at_s = getattr(cls, 'strike_noise_at', 0.0) or 0.0
             k.strike_cal_db = getattr(cls, 'strike_noise_cal_db', 0.0) or 0.0
             k.strike_vel_power = getattr(cls, 'strike_noise_vel_power', 0.0) or 0.0
+            _kr = tuple(getattr(cls, 'strike_noise_register_db', ()) or ())
+            _kv = tuple(getattr(cls, 'strike_noise_vel_power_register', ()) or ())
+            if len(_kr) > 16 or len(_kv) > 16:
+                _NOTE[cls] = False
+                return None
+            k.strike_reg_n, k.strike_vp_n = len(_kr), len(_kv)
+            for i, (hz, db) in enumerate(_kr):
+                k.strike_reg_hz[i], k.strike_reg_db[i] = float(hz), float(db)
+            for i, (hz, vp) in enumerate(_kv):
+                k.strike_vp_hz[i], k.strike_vp_p[i] = float(hz), float(vp)
             tl = getattr(cls, 'strike_noise_tail', None)
             if tl:
                 k.tail_set, k.tail_db, k.tail_dbs = 1, float(tl[0]), float(tl[1])
@@ -3902,8 +3914,8 @@ def note_class(cls):
                 [float(row[8])] if len(row) > 8 else [1.0])
         # ITS OTHER STRINGS (ring_db: _note_ring)
         _rg = getattr(cls, 'ring_db', ()) or ()
-        # (their velocity law is not in the C yet: the Python plays such a class)
-        if len(_rg) > 48 or (_rg and ((getattr(cls, 'ring_vel_power', 0.0) or 0.0) or any(len(r) > 3 for r in _rg) or getattr(cls, 'ring_register_db', ()))):
+        _rr = tuple(getattr(cls, 'ring_register_db', ()) or ())
+        if len(_rg) > 48 or len(_rr) > 16:
             _NOTE[cls] = False
             return None
         k.ring_n, k.ring_skip = len(_rg), float(getattr(cls, 'ring_skip', 0.03))
@@ -3913,8 +3925,14 @@ def note_class(cls):
             return None
         k.ring_nown = len(_ro[:16])
         k.ring_own[:k.ring_nown] = [float(x) for x in _ro[:16]]
-        for _i, (_hz, _db, _dps) in enumerate(_rg):
-            k.ring_hz[_i], k.ring_db[_i], k.ring_dps[_i] = float(_hz), float(_db), float(_dps)
+        _rvp0 = float(getattr(cls, 'ring_vel_power', 0.0) or 0.0)
+        for _i, _row in enumerate(_rg):
+            k.ring_hz[_i], k.ring_db[_i], k.ring_dps[_i] = float(_row[0]), float(_row[1]), float(_row[2])
+            k.ring_vp[_i] = float(_row[3]) if len(_row) > 3 else _rvp0
+        k.ring_tuned = int(bool(getattr(cls, 'ring_tuned', True)))
+        k.ring_reg_n = len(_rr)
+        for _i, (_hz, _db) in enumerate(_rr):
+            k.ring_reg_hz[_i], k.ring_reg_db[_i] = float(_hz), float(_db)
         # ITS SYMPATHETIC STRINGS, BY CONTACT (sympathetic.responders): a fixed
         # set's pitches (the tonic's offsets), each string's drive and its own
         # cents -- which answer is the strike's (its key), so the C asks -- or

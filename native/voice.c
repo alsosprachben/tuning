@@ -1793,6 +1793,23 @@ static void hm_note(VoiceSnap *s)
             }
         kk *= pow(10.0, db / 20.0);
     }
+    if (s->hm_vp_n) {                           /* the strings' growth with force (hammer_vel_power_points) */
+        double lf = log(f0), ep = 0.0;
+        if (lf <= log(s->hm_vp_hz[0]))
+            ep = s->hm_vp_p[0];
+        else if (lf >= log(s->hm_vp_hz[s->hm_vp_n - 1]))
+            ep = s->hm_vp_p[s->hm_vp_n - 1];
+        else
+            for (int i = 0; i + 1 < s->hm_vp_n; i++) {
+                double fa = s->hm_vp_hz[i], ea = s->hm_vp_p[i], fb = s->hm_vp_hz[i + 1];
+                if (f0 <= fb) {
+                    ep = ea + (s->hm_vp_p[i + 1] - ea) * (lf - log(fa)) / (log(fb) - log(fa));
+                    break;
+                }
+            }
+        if (ep != 0.0)
+            kk *= pow(s->attack_volume > 1e-6 ? s->attack_volume : 1e-6, 0.5 * ep);
+    }
     if (s->hm_bass_level_db != 0.0 && f0 < s->hm_bass_level_top_hz) {
         double uu = log(s->hm_bass_level_top_hz / f0) / log(s->hm_bass_level_top_hz / 27.5);
         kk *= pow(10.0, s->hm_bass_level_db * (1.0 < uu ? 1.0 : uu) / 20.0);

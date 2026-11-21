@@ -375,6 +375,11 @@ typedef struct {
        together (swp_tog) -- the trio's strings swp_step s apart; 0 none */
     int swp_set;
     double swp_share, swp_tog[2], swp_swept[2], swp_step;
+    /* THE STRINGS' GROWTH WITH FORCE BY REGISTER (hammer_vel_power_points):
+       hm_vp_n (Hz, power) points, in octaves; the hammer's partials take
+       attack_volume ** (power / 2) more */
+    int hm_vp_n;
+    double hm_vp_hz[32], hm_vp_p[32];
 } VoiceSnap;
 
 /* AN ORGAN PIPE (a class an organ's ranks draw on: the host, a borrowed
@@ -1190,6 +1195,22 @@ typedef struct NoteClass {
     // dstr_db under it, re-struck by the next, the last ringing dstr_ring s
     int n_dstop, dstop_def, dstr_note, dstr_k;
     double dstr_db, dstr_ring;
+    // THE KNOCK BY REGISTER (strike_noise_register_db: strike_reg_n (Hz, dB)
+    // points in place of the octave law) and ITS VELOCITY LAW BY REGISTER
+    // (strike_noise_vel_power_register: strike_vp_n (Hz, power) points in
+    // place of strike_vel_power), read at the note's f0 in octaves
+    int strike_reg_n;
+    double strike_reg_hz[16], strike_reg_db[16];
+    int strike_vp_n;
+    double strike_vp_hz[16], strike_vp_p[16];
+    // THE OTHER STRINGS' -- OR THE CASE'S -- RINGING, further: ring_tuned 0
+    // keeps them in Hz (a case's modes), each row its own velocity power
+    // (ring_vp: dB += it x 10 log10 attack_volume), and the register's level
+    // (ring_register_db: ring_reg_n (Hz, dB) points at the note's f0)
+    int ring_tuned;
+    double ring_vp[48];
+    int ring_reg_n;
+    double ring_reg_hz[16], ring_reg_db[16];
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.

@@ -53,6 +53,16 @@ static double np_interp1(double x, const double *xp, const double *fp, int n)
     return slope * (x - xp[j]) + fp[j];
 }
 
+// (Hz, value) points read at log-frequency lx, in octaves, flat past the ends
+// (blockrender._octave_interp: numpy.interp over the points' logs)
+static double oct_points(double lx, const double *hz, const double *val, int n)
+{
+    double xp[48];
+    for (int i = 0; i < n; i++)
+        xp[i] = log(hz[i]);
+    return np_interp1(lx, xp, val, n);
+}
+
 // A RECORD's CLICKS to t_end s (blockrender._record_clicks): (t, dB,
 // balance) on one timeline, drawn a revolution at a time from a seed of that
 // revolution (random.Random(0xD15C0 + rev)) -- each of the last revolution's
@@ -272,7 +282,9 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
     out->n_ft = 0;
     if (K->n_strike) {
         double sf0 = K->strike_span_set ? pymin(pymax(f0, K->strike_span_lo), K->strike_span_hi) : f0;
-        double reg = K->strike_octave_db * log2(pymax(sf0, 1.0) / 440.0);
+        // (its level by register: strike_noise_register_db's points, else the octave law)
+        double reg = K->strike_reg_n ? nv::oct_points(log(pymax(f0, 1.0)), K->strike_reg_hz, K->strike_reg_db, K->strike_reg_n)
+                                     : K->strike_octave_db * log2(pymax(sf0, 1.0) / 440.0);
         double slr = log(10.0) / 20.0 * K->strike_noise_dbs;
         double sfade = pymax(1.0, K->strike_fade_s * SR);
         double slen = K->strike_len_s * SR;
@@ -401,8 +413,11 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         // the calibration, and the knock's own velocity law (strike_noise_vel_power:
         // its power as attack_volume ** (1 + this) -- blockrender's _scal)
         double scal = K->strike_cal_db;
-        if (K->strike_vel_power != 0.0)
-            scal += K->strike_vel_power * 10.0 * log10(pymax(s.attack_volume, 1e-6));
+        // (by register where the class says: strike_noise_vel_power_register)
+        double svp = K->strike_vp_n ? nv::oct_points(log(pymax(f0, 1.0)), K->strike_vp_hz, K->strike_vp_p, K->strike_vp_n)
+                                    : K->strike_vel_power;
+        if (svp != 0.0)
+            scal += svp * 10.0 * log10(pymax(s.attack_volume, 1e-6));
         tk.cbw0 = -0.25; tk.cbw1 = 0.0;
         out->n_knock = 0;
         // A PERSON'S PALMS RINGING after each clap: the clap's colour at
@@ -734,7 +749,14 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         tr.br = n->fbr;
         PyRandom rr;
         pyr_seed(&rr, (long long)rint(n->on * 1e6) * 137 + n->note * 11 + n->ch);
-        int k = nv_ring(&s, &tr, f0, K->ring_n, n->ring_f, K->ring_db, K->ring_dps, K->ring_skip,
+        // each row's level: the register's (ring_register_db) and its own
+        // velocity law (ring_vp), as _note_ring adds them
+        double rreg = K->ring_reg_n ? nv::oct_points(log(f0), K->ring_reg_hz, K->ring_reg_db, K->ring_reg_n) : 0.0;
+        double rlav = log10(pymax(s.attack_volume, 1e-6));
+        double rdb[48];
+        for (int q = 0; q < K->ring_n; q++)
+            rdb[q] = (K->ring_db[q] + rreg) + K->ring_vp[q] * 10.0 * rlav;
+        int k = nv_ring(&s, &tr, f0, K->ring_n, n->ring_f, rdb, K->ring_dps, K->ring_skip,
                         K->ring_nown, K->ring_own, &rr,
                         reflect ? nimg : 0, nsurf, surf, img, mir, rows + NCOLS * total, cap - total, qacc, azimuth);
         if (k < 0)
@@ -1300,7 +1322,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
             for (int q = 0; q < k->ring_n; q++) {
                 double hf = k->ring_hz[q];
                 int rk = (int)nearbyint(69.0 + 12.0 * log2(hf / 440.0));
-                if (rk >= 0 && rk < 128 && rtab[rk] > 0.0)
+                if (k->ring_tuned && rk >= 0 && rk < 128 && rtab[rk] > 0.0)
                     hf = rtab[rk] * hf / (440.0 * pow(2.0, (rk - 69.0) / 12.0));
                 n.ring_f[q] = hf;
             }
