@@ -5384,7 +5384,18 @@ class ElectricGrandProperties(GrandPianoProperties):
     attack_time = 0.0015           # FITTED (cp80_attack_fit.py): 3 ms was slow; under 1.5 ms it clicks
     unison_beat_scatter = False   # its unisons as they were voiced (the grand's scatter is the Steinway's)
     string_gain = (0.28, 0.20)   # its unisons as they were voiced
-    strike_noise_db = ()   # no strike noise yet: the grand's is the Steinway's
+    # THE ACTION'S KNOCK, through the piezo (Ben: "there is a part of the
+    # attack that is just wrong"): the takes' first 10 ms carry a thump under
+    # the fundamental 6-20 dB over ours at every key, gone by 20 ms, and the
+    # treble's gaps between harmonics 10-15 dB fuller. Fitted
+    # (upright_fit.py --ref=cp80 --fit=strike) from the upright's.
+    strike_noise_db = ((45, -12.7), (57, -16.7), (71, -38.9), (90, -59.0), (113, -5.8), (143, -2.7), (180, -27.9), (226, -21.6), (285, -73.3), (359, -25.9), (453, -30.2), (570, -47.2), (718, -29.9), (905, -77.8), (1140, -31.2), (1437, -57.4), (1810, -47.4), (2281, -47.8), (2874, -94.1), (3620, -98.7), (4561, -42.0), (5747, -70.7), (7241, -50.6), (9123, -55.4), (11494, -55.8))
+    strike_noise_slope = 3.885
+    # ...and SHORT: 10 dB down in its first 10 ms, the takes' knock against
+    # the grand's 250 dB/s (the first 40 ms under the fundamental, D3-F#6:
+    # 250 -> 6.1 dB rms, 600 -> 4.9, 1200 -> 4.3, 2400 -> 5.9; the table
+    # refitted at each)
+    strike_noise_dbs = 1200.0
 
 
 # One waveshaper answer per (curve, offset, deflection). A note asks for it up to
