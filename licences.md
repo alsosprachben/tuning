@@ -163,12 +163,20 @@ store build.
   - Guitar Feedback (Gretsch Feedback and Feedbacker).
 - **Status:** open, and the largest issue by count. Each samplist can grant
   permission; otherwise each voice needs another source.
+  - **Refitted 2026-11-20, waiting on Ben's ear** (A/Bs in
+    ~/Music/licence_refits): Electric Grand to Greg Sullivan's CP80 (CC BY
+    4.0); Taisho Koto to msx2plus's taishogoto (CC0); the harpsichord's lute
+    stop back to VCSL's English Lute row (CC0). Each voice's notes still name
+    the old source beside the new until Ben approves and the old fit's text
+    goes.
 - **Alternatives (checked 2026-11-20; Freesound licenses each sound, so check
   every file before fitting it):**
   - **Wurlitzer:** Greg Sullivan's "Wurlitzer EP200" (an EP203W;
     github sfzinstruments/GregSullivan.E-Pianos), CC BY 4.0 on his own site
-    (the README says 3.0: credit him either way): 42 notes A1-A6, four
-    velocities, 2-6 s. Velocity behaviour. Plus OldBassMan's "Wurlitzer 200a"
+    (updated 21-Oct-2026; the README says 3.0: credit him either way). THIN:
+    42 takes but only ~11 keys A1-Ab6 (four velocities on some), median
+    2.2 s, and LOOPED ("clean up the audible loop artifacts" is on his own
+    to-do list): attack and early decay only. Velocity behaviour. Plus OldBassMan's "Wurlitzer 200a"
     (Freesound pack 5726, CC BY 4.0): 13 notes D3-D7, ~7 s, through a
     transformer and tube preamp, so DI-like. Tone and decay.
   - **Electric Grand:** Greg Sullivan's CP80 (same licence): 81 notes D#1-C#7,
