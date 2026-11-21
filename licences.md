@@ -24,6 +24,13 @@ source the register doesn't hold.
 
 ## Open issues
 
+**Policy (Ben, 2026-11-20): no licence requests.** We never ask a rights
+holder for permission or a written grant ("they will ask for a revenue
+share"). Every issue below closes by an openly licensed source or our own
+recording, and the "ask ..." alternatives are dropped. The drum machines
+take the TR-8 route (MckAudio's CC0 recordings of a Roland TR-8 playing:
+808, 909, 707, 606) and, for the 606, the Behringer RD-6 recordings (CC0).
+
 Status: `open` until the voice is refitted to an open source, the rights
 holder grants commercial use in writing, or the voice is left out of the
 store build.
