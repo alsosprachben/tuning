@@ -4887,6 +4887,7 @@ class GrandPianoProperties(InharmonicStringProperties):
     hammer_model = False
     hammer_logk = 10.0
     hammer_logk_slope = 0.6
+    hammer_logk_curve = 0.0           # ...and its bend across the register (per octave squared)
     hammer_p_lo = 2.3
     hammer_p_hi = 3.0
     hammer_mass_lo_g = 11.0
@@ -4898,13 +4899,41 @@ class GrandPianoProperties(InharmonicStringProperties):
     hammer_alpha = 0.0
     hammer_log_tau = -4.0
 
+    # THE DECAY BY FREQUENCY, when decay_by_hz (Chaigne & Askenfelt's string,
+    # Weinreich's bridge): a partial's amplitude falls
+    #     decay_b1 + decay_b3 (f/1 kHz)^2            the string's own losses,
+    #                                                 the same for every string
+    #   + decay_board_db (Z_A4 / Z) / (1 + (decay_board_hz / f)^2)
+    # dB/s -- the board's drain through the bridge, which a heavy string (its
+    # impedance Z, hammer.string_of) feels less, and which falls under the
+    # board's lowest modes. In place of the law by harmonic number and
+    # register (harmonic_decay's), which killed a bass note's upper partials
+    # and let the treble's ring on.
+    decay_by_hz = False
+    decay_b1 = 0.5
+    decay_b3 = 1.0
+    decay_board_db = 8.0
+    decay_board_hz = 150.0
+
+    def harmonic_decay(self, harmonic):
+        if not self.decay_by_hz:
+            return super().harmonic_decay(harmonic)
+        import hammer as _H
+        f0 = self.frequency_x * (2.0 ** self.octave_position)
+        B = self.inharmonicity_coefficient_for_frequency(f0)
+        f = f0 * harmonic * (1.0 + B * harmonic * harmonic) ** 0.5
+        z = _H.string_of(f0)[2]
+        zr = _H.string_of(440.0)[2]
+        return (self.decay_b1 + self.decay_b3 * (f / 1000.0) ** 2
+                + self.decay_board_db * (zr / z) / (1.0 + (self.decay_board_hz / f) ** 2))
+
     def _hammer_felt(self):
         f0 = self.frequency_x * (2.0 ** self.octave_position)
         octs = _log(f0 / 440.0) / _log(2.0)
         u = min(1.0, max(0.0, _log(f0 / 27.5) / _log(4186.0 / 27.5)))
         mass = (self.hammer_mass_lo_g + (self.hammer_mass_hi_g - self.hammer_mass_lo_g) * u) * 1e-3
         p = self.hammer_p_lo + (self.hammer_p_hi - self.hammer_p_lo) * u
-        K = 10.0 ** (self.hammer_logk + self.hammer_logk_slope * octs)
+        K = 10.0 ** (self.hammer_logk + self.hammer_logk_slope * octs + self.hammer_logk_curve * octs * octs)
         return f0, mass, K, p
 
     def _hammer_gain(self, harmonic):

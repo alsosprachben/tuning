@@ -8,4 +8,5 @@ if sys.argv[2]=='new':
     C.max_partial_hz=10000.0; C.hammer_model=True
     for kv in (os.environ['SETV']).split(','):
         n_,v_=kv.split(':'); setattr(C,n_,float(v_))
+    if os.environ.get('SN'): C.strike_noise_db=tuple((h,db+float(os.environ['SN'])) for h,db in C.strike_noise_db)
 U.ab(0,sys.argv[1])

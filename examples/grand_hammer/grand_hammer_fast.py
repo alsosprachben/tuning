@@ -29,7 +29,19 @@ def thirds_model(k,d):
     b=np.array([P[(fn>=lo)&(fn<hi)].sum() for lo,hi in zip(E3[:-1],E3[1:])])
     b=10*np.log10(b+1e-30); b=np.maximum(b-b.max(),-50.0)
     return np.where(E3[1:]>f0*0.89,b,np.nan)
+W_ABS=float(os.environ.get('W_ABS','0'))
 def err(verbose=False):
+    if W_ABS:
+        ea=[]
+        for k in KEYS:
+            for d in (1,3):
+                m=thirds_model(k,d); r=R[(d,k)]
+                w=((r>-40)|(m>-40))&np.isfinite(r)&np.isfinite(m)
+                ea.extend((np.maximum(m,-60)-np.maximum(r,-60))[w])
+        ed=err_dyn(verbose)
+        return float(np.sqrt(ed**2+W_ABS*np.mean(np.square(ea))))
+    return err_dyn(verbose)
+def err_dyn(verbose=False):
     e=[]
     for k in KEYS:
         o1,o3=thirds_model(k,1),thirds_model(k,3); od=o3-o1; r=REC[k]
@@ -44,7 +56,7 @@ if __name__=="__main__":
     if sys.argv[1]=="check":
         t=time.time(); print("fast hard-minus-soft rms %.2f (%.1fs)"%(err(True),time.time()-t)); sys.exit()
     names=sys.argv[2].split(',')
-    BOUNDS={'hammer_logk':(8.0,13.0),'hammer_logk_slope':(0.2,1.5),'hammer_p_lo':(1.8,4.0),'hammer_p_hi':(1.8,4.0),
+    BOUNDS={'hammer_logk':(8.0,13.0),'hammer_logk_slope':(0.15,0.6),'hammer_logk_curve':(-0.08,0.08),'hammer_p_lo':(1.8,4.0),'hammer_p_hi':(1.8,4.0),
             'hammer_speed_lo':(0.2,1.0),'hammer_speed_hi':(2.0,12.0),'hammer_alpha':(0.0,0.95),'hammer_log_tau':(-6.0,-3.0),
             'tonal_dampening':(0.5,2.0),'strike_depth':(0.0,1.0),'strike_fill_fraction':(0.0,1.0)}
     bnds=[BOUNDS[n] for n in names]; ev=[0]; best=[1e9,None]
