@@ -5253,23 +5253,20 @@ class ElectricGrandProperties(GrandPianoProperties):
     bridge_force_power = 0.0
     # The board radiates poorly above 2.6 kHz; a pickup does not stop there. The
     # DIRECTION is defensible, the number is an estimate.
-    bridge_corner_hz = 8120.0
-    bridge_order = 1.6
-    # FITTED with the hammer and the top's decay (examples/cp80_attack_fit.py:
-    # four bands, 5 ms to 0.64 s, re the note, every key, both layers), after
-    # Ben: "the louder ones are missing a little brilliance ... the high
-    # seems to be decaying too much ... the attack needs some care". The hard
-    # layer's 3.2-8 kHz stood 5-10 dB under the takes at every window while
-    # its 8-14 kHz was right: a hump, which no hammer low-pass makes. 8.21 ->
-    # 7.37 dB in all (the onset 3 -> 1.5 ms; under that it clicks).
-    bridge_peak_db = 8.44             # 0: none (soundboard_gain)
-    bridge_peak_hz = 5189.0
-    bridge_peak_width = 0.604          # natural-log units, as board_body_width
+    # THE PICKUP AND THE CHAIN, as Greg Sullivan's takes hear them: a broad
+    # dip at 790 Hz and a gentle roll-off from 3 kHz, fitted to the takes'
+    # colour by ABSOLUTE frequency (every partial of every key, rec - ours,
+    # each note's median removed: 4.5 -> 2.1 dB rms, 110 Hz-5 kHz). Smooth,
+    # so not a room's modes -- but the takes are MIKED (Ben: cabinet
+    # reverberations on the top notes), so part of this is the microphone
+    # and the case, not the pickup. Banked as heard, 2026-11-20.
+    bridge_corner_hz = 3000.0
+    bridge_order = 1.27
+    bridge_peak_db = -8.8             # 0: none (soundboard_gain); here a dip
+    bridge_peak_hz = 790.0
+    bridge_peak_width = 0.75          # natural-log units, as board_body_width
     initial_gain = 0.115586      # C3/C4/C5 at v100 matched on rms to the grand piano (was -2.3 dB over)
     bridge_gain = 1.0               # neutral: the board's three terms became one
-    # THE REGISTER'S LEVEL, to David's CP70's own (its files keep their
-    # levels): a line through the gap, 4.3 -> 3.5 dB rms re the keys' mean.
-    octave_gain = 1.45
 
     # BALANCE, and it is not linear in this knob. Measured on four notes at
     # velocity 100 with the master well clear of any ceiling, level against
@@ -5296,14 +5293,17 @@ class ElectricGrandProperties(GrandPianoProperties):
     # that dies fast. Above wound_corner_hz (a smooth second-order step),
     # a wound note's partials start wound_zing_db x attack_volume louder and fall
     # wound_decay_db faster; wound_below_hz is the break (A3, plain, 220 Hz).
+    # (Fitted at 15 dB and 30 dB/s while the partials stopped at 64 harmonics,
+    # boosting partials that were not there; with them to 10 kHz, the spectra
+    # fit wants it nearly off: 0.31 dB, no extra fall.)
     # FITTED by grid on the takes' D#1-A3, both layers: 1.6-3.2 and 3.2-8 kHz
     # from 5 ms to 0.64 s, re the note's own level at 0.3-0.6 s: 8.76 -> 6.44
     # dB rms (the hard layer's D#1 17.3 -> 10.9, B1 14.3 -> 7.2, F#2 9.1 ->
     # 3.0; the soft layer's F#2-F3 1-2 dB worse, its decay as hard's)
     wound_below_hz = 200.0
     wound_corner_hz = 1000.0
-    wound_zing_db = 15.0
-    wound_decay_db = 25.42
+    wound_zing_db = 0.31
+    wound_decay_db = 0.0
 
     def _wound_weight(self, harmonic):
         f0 = self.frequency_x * (2.0 ** self.octave_position)
@@ -5343,47 +5343,35 @@ class ElectricGrandProperties(GrandPianoProperties):
             g = g * (1.0 + (10.0 ** (self.bridge_peak_db / 20.0) - 1.0) * _exp(
                 -(_log(fn / self.bridge_peak_hz) ** 2) / (2.0 * self.bridge_peak_width ** 2)))
         return g
-    # THE OLD GRAND LAW, PINNED: this scales the grand's B for a CP-70's
-    # short strings, and the grand's was refitted to the Steinway B; the
-    # electric grand was voiced on the published law, so it keeps it.
-    a = 5.22964e-6
-    b = 1.21012e-6
-    c = 8.3666e-10
-    d = -0.007927
-    e = 0.429601
-    # ...and the old board and felt, pinned likewise (the grand's were refitted)
-    board_low_hz = 35.0
-    board_high_hz = 2600.0
-    # THE HAMMERS, FITTED (upright_fit.py --ref=cp70 --fit=spectrum, its soft
-    # and hard layers together): the corner ~260 Hz at the softest touch to
-    # ~18 kHz at the hardest -- dark soft, bright hard, the CP-70's "ambiguous
-    # dynamic range" (Sawchuk) -- where the grand's opens only 2:1.
-    hammer_corner_hz = 7.374
-    hammer_order = 2.763
-    hammer_open_lo = 1.997
-    hammer_open_slope = 617.9
-    hammer_register_slope = 0.0
-    hammer_open_power = 1.0
-    harmonic_decay_dampening = -0.0236
-    tonal_dampening = 1.144
-    board_body_hz = 240.0
-    board_body_gain = 0.6
-    # THE DECAY, FITTED to David's CP70 (Pianobook, measured only;
-    # examples/upright_fit.py --ref=cp70 --fit=decay): every octave band's
-    # T20 at the middle layer, 8.56 -> 6.78 dB. The CP-70's thick, clean
-    # bottom is a FUNDAMENTAL that sings -- F1's 63-125 Hz band 13.6 s to
-    # fall 20 dB -- over upper partials gone in 0.2-0.5 s; the grand's
-    # pinned decay had it the other way round (2.6 s and 3-4 s).
-    decay_db = 2.568
-    harmonic_decay_db = 1.831
-    decay_register_slope = 0.894
-    aftersound_level_1 = 0.118
-    aftersound_level_2 = 0.375
-    aftersound_level_3 = 0.362
-    aftersound_decay_ratio = 0.402
-    attack_time = 0.0015           # FITTED (cp80_attack_fit.py): 3 ms was slow; under 1.5 ms it clicks
-    unison_beat_scatter = False   # its unisons as they were voiced (the grand's scatter is the Steinway's)
-    string_gain = (0.28, 0.20)   # its unisons as they were voiced
+    # A PIANO, AS THE GRAND NOW IS (Ben: "it is physically very similar to
+    # a piano"): a CP80 is a Yamaha grand action, real hammers and strings,
+    # a pickup for a board. So its B law, decay law, aftersound, onset and
+    # unisons are the grand's as fitted to the Steinway B (they stood pinned
+    # at the grand's OLD values, the CP-70 fit on top); only what a CP80 has
+    # of its own is here.
+    #
+    # ITS STRINGING: ONE STRING TO F#2, TWO ABOVE, NEVER THREE. The takes'
+    # beating: D#1-F#2 hardly wobble (1.4-2.0 dB, ours with two strings
+    # 3.2-3.9), A#2 up beat deep and slow (3-6 dB at 0.4-1 Hz) where three
+    # shallow strings gave 1.7-2.2. The second string's level fitted to the
+    # takes' wobble (hard layer, every key): 0.4 -> 2.48 dB rms, 0.7 -> 1.88,
+    # 0.95 -> 1.91.
+    string_break_hz = (95.0, 1.0e6)
+    string_gain = (0.82, 0.0)
+    # ITS HAMMERS: the grand's felt (its order and opening), the corner and
+    # its swing fitted to the takes' third-octave spectra, both layers, with
+    # the bridge above (upright_fit's measure: 12.05 -> 7.17 dB), brighter
+    # up the compass as lighter hammers are
+    hammer_corner_hz = 363.07
+    hammer_open_slope = 17.836
+    hammer_register_slope = 0.11605
+    # ITS PARTIALS TO 10 kHz, NOT 64 (Ben, on the refit: "it feels like we
+    # are low passing, or not having enough harmonics"): 64 stopped E1 at
+    # 2.6 kHz and C2 at 4.2, where the takes' bass carries harmonics past
+    # 8 kHz -- the wound strings' zing and the brilliance fits had been
+    # boosting partials that were not there. The takes fall to -44 dB re
+    # 1 kHz by 10 kHz: nothing above it matters.
+    max_partial_hz = 10000.0
     # THE ACTION'S KNOCK, through the piezo (Ben: "there is a part of the
     # attack that is just wrong"): the takes' first 10 ms carry a thump under
     # the fundamental 6-20 dB over ours at every key, gone by 20 ms, and the
