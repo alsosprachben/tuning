@@ -4910,6 +4910,9 @@ class GrandPianoProperties(InharmonicStringProperties):
     # there, thickening to hammer_core_edge_mm hammer_wear_octaves away (a
     # Gaussian in octaves). hammer_core_edge_mm 0: the same depth everywhere.
     hammer_core_edge_mm = 0.0
+    # (the loudness reference, _hammer_gain: the low-pass grand's tilt and range)
+    hammer_level_tilt = 1.1
+    hammer_level_harmonics = 64
     hammer_wear_center_hz = 160.0
     hammer_wear_octaves = 1.0
 
@@ -4975,12 +4978,36 @@ class GrandPianoProperties(InharmonicStringProperties):
                 n = max(n, int(self.max_partial_hz / f0))
             fr = [self.partial_frequency_for(h) if hasattr(self, 'partial_frequency_for') else f0 * h
                   for h in range(1, n + 1)]
-            got = self._hammer_g = list(_H.gains(f0, vel, fr, self.strike_point, mass, K, p,
+            got = list(_H.gains(f0, vel, fr, self.strike_point, mass, K, p,
                                                  self.hammer_speed_lo, self.hammer_speed_hi,
                                                  string=self._string_scale(),
                                                  alpha=self.hammer_alpha, tau=10.0 ** self.hammer_log_tau,
                                                  core_x=self._core_mm(f0) * 1e-3,
                                                  core_K=10.0 ** self.hammer_core_logk))
+            # THE NOTE'S LOUDNESS AS THE LOW-PASS HAMMER GAVE IT: the
+            # simulated force changes the spectrum, not the level -- the
+            # register's balance and the velocity law stay the ones fitted
+            # (unscaled, a contact as long as a middle note's period took its
+            # fundamental with it: E1 came out 22 dB over C4, Ondine's bass
+            # octaves at -2 dB over a piece at -50)
+            av = self.attack_volume if self.hammer_open_power == 1.0 else self.attack_volume ** self.hammer_open_power
+            fc = (self.hammer_corner_hz * (self.hammer_open_lo + self.hammer_open_slope * av)
+                  * 2.0 ** (self.hammer_register_slope * self.octave_position))
+            # ...the low-pass grand's whole sound, its own tilt and 64 harmonics
+            # (hammer_level_tilt, hammer_level_harmonics), not this voice's
+            dt_ = self.tonal_dampening - self.hammer_level_tilt
+            e_old = e_new = 0.0
+            for h in range(1, n + 1):
+                base = super().harmonic_volume(h)
+                if base == 0.0:
+                    continue
+                fn = f0 * h
+                bb = (base * self.soundboard_gain(fn)) ** 2
+                e_new += bb * got[h - 1] ** 2
+                if h <= self.hammer_level_harmonics:
+                    e_old += bb * h ** (2.0 * dt_) / (1.0 + (fn / fc) ** self.hammer_order) ** 2
+            k = (e_old / e_new) ** 0.5 if e_new > 0.0 else 1.0
+            got = self._hammer_g = [g * k for g in got]
         return got[harmonic - 1] if harmonic - 1 < len(got) else 0.0
 
     def harmonic_volume(self, harmonic):
