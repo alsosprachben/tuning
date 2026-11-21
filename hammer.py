@@ -38,14 +38,22 @@ def string_of(f0, scale_c_hz_m=162.0, string_max_m=1.95, tension_n=750.0, bass_t
     return L, T, sqrt(T * mu)
 
 
-def contact(f0, v0, mass_kg, K, p, beta, L, Z, os_=8, sr=44100, t_max=0.025, alpha=0.0, tau=1e-4):
+def contact(f0, v0, mass_kg, K, p, beta, L, Z, os_=8, sr=44100, t_max=0.025, alpha=0.0, tau=1e-4,
+            core_x=0.0, core_K=0.0, core_p=3.5):
     """The hammer's force on the string, one value per step of 1/(sr*os_) s,
     from first touch until it leaves (or t_max). Returns (force list, dt).
 
     THE FELT REMEMBERS (Stulov, JASA 97, 1995): F = K [u^p - alpha/tau
     integral u^p(s) e^-(t-s)/tau ds] -- it pushes back harder squeezed than
     recovering, the more so the faster the squeeze. alpha 0 is the elastic
-    felt; the memory a running sum, decaying by e^-dt/tau a step."""
+    felt; the memory a running sum, decaying by e^-dt/tau a step.
+
+    AND A WORN HAMMER'S HARD LAYER (core_x m, core_K, core_p): a felt
+    compacted by years of blows, or thinned, leaves less soft felt over the
+    hard underfelt and the wooden core. A soft blow never reaches it; a hard
+    one squeezes through and meets it -- F gains core_K (x - core_x)^core_p
+    -- and the contact sharpens: a bright, hard fortissimo over an unchanged
+    piano (Ben: "maybe it is older felt that is worn"). core_x 0 is off."""
     import numpy as np
     from math import exp
     dt = 1.0 / (sr * os_)
@@ -65,6 +73,8 @@ def contact(f0, v0, mass_kg, K, p, beta, L, Z, os_=8, sr=44100, t_max=0.025, alp
         up = x ** p if x > 0.0 else 0.0
         mem = mem * kdec + up * (1.0 - kdec)
         f = K * (up - alpha * mem) if x > 0.0 else 0.0
+        if core_x > 0.0 and x > core_x:
+            f += core_K * (x - core_x) ** core_p
         if f < 0.0:
             f = 0.0
         if f > 0.0:
@@ -87,18 +97,19 @@ def contact(f0, v0, mass_kg, K, p, beta, L, Z, os_=8, sr=44100, t_max=0.025, alp
     return F, dt
 
 
-def gains(f0, velocity, freqs, beta, mass_kg, K, p, v_lo=0.5, v_hi=5.0, string=None, alpha=0.0, tau=1e-4):
+def gains(f0, velocity, freqs, beta, mass_kg, K, p, v_lo=0.5, v_hi=5.0, string=None, alpha=0.0, tau=1e-4,
+          core_x=0.0, core_K=0.0):
     """The hammer's share of each partial (freqs, Hz) for a key at f0 struck
     at MIDI velocity: |F(f)| re |F(0)|, cached by (f0, velocity, the felt).
     The hammer's speed spans v_lo..v_hi m/s exponentially over velocity 1..127
     (a piano's pp to ff, Askenfelt & Jansson 1990)."""
     import numpy as np
-    key = (round(f0, 4), int(velocity), beta, mass_kg, K, p, v_lo, v_hi, string, alpha, tau)
+    key = (round(f0, 4), int(velocity), beta, mass_kg, K, p, v_lo, v_hi, string, alpha, tau, core_x, core_K)
     got = _CACHE.get(key)
     if got is None:
         L, T, Z = string_of(f0, *(string or ()))
         v0 = v_lo * (v_hi / v_lo) ** ((max(1, velocity) - 1) / 126.0)
-        F, dt = contact(f0, v0, mass_kg, K, p, beta, L, Z, alpha=alpha, tau=tau)
+        F, dt = contact(f0, v0, mass_kg, K, p, beta, L, Z, alpha=alpha, tau=tau, core_x=core_x, core_K=core_K)
         F = np.asarray(F)
         got = _CACHE[key] = (F, dt, F.sum() * dt)
         if len(_CACHE) > 4096:

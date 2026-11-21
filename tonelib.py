@@ -4900,6 +4900,18 @@ class GrandPianoProperties(InharmonicStringProperties):
     # elastic felt), hammer_log_tau its relaxation time, log10 s
     hammer_alpha = 0.0
     hammer_log_tau = -4.0
+    # ...and a worn hammer's hard layer (hammer.contact's core): reached past
+    # hammer_core_mm of compression, log10 of its stiffness (p 3.5). 0 mm: none.
+    hammer_core_mm = 0.0
+    hammer_core_logk = 14.0
+    # ...WORN MOST WHERE IT IS PLAYED MOST (Ben: "maybe the owner hit those
+    # tenor octaves quite hard ... my felt is also fairly worn"): the soft felt
+    # over the hard layer thinnest at hammer_wear_center_hz, hammer_core_mm
+    # there, thickening to hammer_core_edge_mm hammer_wear_octaves away (a
+    # Gaussian in octaves). hammer_core_edge_mm 0: the same depth everywhere.
+    hammer_core_edge_mm = 0.0
+    hammer_wear_center_hz = 160.0
+    hammer_wear_octaves = 1.0
 
     # THE DECAY BY FREQUENCY, when decay_by_hz (Chaigne & Askenfelt's string,
     # Weinreich's bridge): a partial's amplitude falls
@@ -4935,6 +4947,14 @@ class GrandPianoProperties(InharmonicStringProperties):
         return (getattr(self, 'scale_constant_hz_m', None) or 162.0,
                 getattr(self, 'case_string_max_m', None) or 1.95)
 
+    def _core_mm(self, f0):
+        """How deep a hard blow must squeeze before the worn hard layer, here."""
+        if not self.hammer_core_edge_mm:
+            return self.hammer_core_mm
+        d = _log(f0 / self.hammer_wear_center_hz) / _log(2.0) / self.hammer_wear_octaves
+        w = _exp(-0.5 * d * d)
+        return self.hammer_core_edge_mm + (self.hammer_core_mm - self.hammer_core_edge_mm) * w
+
     def _hammer_felt(self):
         f0 = self.frequency_x * (2.0 ** self.octave_position)
         octs = _log(f0 / 440.0) / _log(2.0)
@@ -4958,7 +4978,9 @@ class GrandPianoProperties(InharmonicStringProperties):
             got = self._hammer_g = list(_H.gains(f0, vel, fr, self.strike_point, mass, K, p,
                                                  self.hammer_speed_lo, self.hammer_speed_hi,
                                                  string=self._string_scale(),
-                                                 alpha=self.hammer_alpha, tau=10.0 ** self.hammer_log_tau))
+                                                 alpha=self.hammer_alpha, tau=10.0 ** self.hammer_log_tau,
+                                                 core_x=self._core_mm(f0) * 1e-3,
+                                                 core_K=10.0 ** self.hammer_core_logk))
         return got[harmonic - 1] if harmonic - 1 < len(got) else 0.0
 
     def harmonic_volume(self, harmonic):
