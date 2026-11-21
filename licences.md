@@ -163,10 +163,11 @@ store build.
   - Guitar Feedback (Gretsch Feedback and Feedbacker).
 - **Status:** open, and the largest issue by count. Each samplist can grant
   permission; otherwise each voice needs another source.
-  - **Refitted 2026-11-20, waiting on Ben's ear** (A/Bs in
-    ~/Music/licence_refits): Electric Grand to Greg Sullivan's CP80 (CC BY
-    4.0); Taisho Koto to msx2plus's taishogoto (CC0); the harpsichord's lute
-    stop back to VCSL's English Lute row (CC0). Each voice's notes still name
+  - **Refitted 2026-11-20** (A/Bs in ~/Music/licence_refits): Taisho Koto
+    to msx2plus's taishogoto (CC0) and the harpsichord's lute stop back to
+    VCSL's English Lute row (CC0) -- both APPROVED by Ben's ear. Electric
+    Grand to Greg Sullivan's CP80 (CC BY 4.0): "mostly fits", the wound
+    bass's attack then fitted (cp80_wound_fit.py), awaiting his ear again. Each voice's notes still name
     the old source beside the new until Ben approves and the old fit's text
     goes.
 - **Alternatives (checked 2026-11-20; Freesound licenses each sound, so check
