@@ -287,6 +287,19 @@ def rank_spectrum(cls):
 master_gain = 10.0 ** (float(os.environ.get("TUNING_MASTER_DB", "-9.3")) / 20.0)
 
 
+def partial_hash(f0, m):
+    """Two fixed draws in [0, 1) for a key (f0's nearest MIDI note) and a
+    partial m -- integer arithmetic mod 2^32, so native/voice.c's are the same."""
+    k = int(round(69.0 + 12.0 * _log(f0 / 440.0) / _log(2.0)))
+    h = ((k * 2654435761) ^ (m * 40503)) & 0xffffffff
+    h = (h * 2246822519 + 3266489917) & 0xffffffff
+    h ^= h >> 15
+    a = h
+    h = (h * 668265263 + 374761393) & 0xffffffff
+    h ^= h >> 13
+    return a / 4294967296.0, h / 4294967296.0
+
+
 class Decay:
 
     def __init__(self, dbps, start_second, sustain_level=0.0,
@@ -4725,6 +4738,13 @@ class GrandPianoProperties(InharmonicStringProperties):
                                   # audible clang up at C4). No floor -> a smooth taper, no cliff.
     phantom_note_max_hz = 260.0   # hard safety cap only (coupling is already ~3% here); above it, none
     phantom_gain_floor = 3e-3     # prune pair-sums quieter than this fraction of the peak partial
+    # A PAIR'S DRIVE GROWS WITH ITS WAVENUMBERS: the tension the string's swing
+    # modulates goes as k_m k_n a_m a_n (Bank & Sujbert, JASA 117, 2005), so the
+    # sums of low partials -- landing on the low partials, filling the strike
+    # point's notch -- are weak beside the high sums that make the growl over
+    # 1 kHz. Each pair x (m n / phantom_index_ref) ** phantom_index_power; 0: none
+    phantom_index_power = 0.0
+    phantom_index_ref = 100.0
 
     # Damper: releasing the key drops the felt and stops the string over ~0.1 s
     # (a fast decay with a soft thump), not the instant cut that a 0-length
@@ -4834,6 +4854,18 @@ class GrandPianoProperties(InharmonicStringProperties):
         if self.pitch_jitter_cents:
             self.pitch_jitter = 2.0 ** (rng.uniform(-self.pitch_jitter_cents,
                                                     self.pitch_jitter_cents) / 1200.0) - 1.0
+        # THE STRIKE POINT BY KEY (strike_curve: a, b, c): a piano's hammer line
+        # strikes each string at its own fraction, a smooth curve down the
+        # keyboard (a regulator's drawing, not one number) -- the strike ratio
+        # (length over the distance to the strike) a + b o + c o^2, o the key's
+        # octaves from A4; None: strike_point for every key
+        if self.strike_curve:
+            a, b, c = self.strike_curve
+            o = (midi - 69) / 12.0
+            self.strike_point = min(0.5, max(0.02, 1.0 / (a + b * o + c * o * o)))
+
+    # (see __init__)
+    strike_curve = None
 
     def string_count_for_frequency(self, frequency):
         # Full-upright stringing (the owner's instrument): single wound monochord
@@ -4961,6 +4993,23 @@ class GrandPianoProperties(InharmonicStringProperties):
     decay_b3 = 1.0
     decay_board_db = 8.0
     decay_board_hz = 150.0
+    # ...AND ABOVE ITS BAND THE BOARD LETS GO (decay_board_top_hz): a board's
+    # mobility, high from its first modes to a kilohertz or so, falls where it
+    # is mass-controlled, so the drain falls as 1 / (1 + (f / top)^2) -- the
+    # Steinway's mid and treble fundamentals die in 0.25-0.5 s while their
+    # upper partials ring no faster; 0: none (the drain flat on up)
+    decay_board_top_hz = 0.0
+    # ...AND THE TREBLE'S THINNER WIRE: hammer.string_of's strings scale as C/f
+    # from 110 Hz up, one impedance for all; the real treble's wire thins, and
+    # its strings drain faster -- the board's drain times (f0 / 440) **
+    # decay_treble_power above A4 (the note's pitch; 0: none)
+    decay_treble_power = 0.0
+    # ...AND NO PARTIAL EXACTLY ON THE LAW (Ben: the soft A0's decay sweeping
+    # down like a phaser): each partial m > 1 moved +-partial_cents_scatter
+    # cents, fixed per key and partial (partial_hash) -- on the law exactly,
+    # the stretched partials slip past each other in step and their alignment
+    # glides down the series as the note dies. 0: none
+    partial_cents_scatter = 0.0
 
     def harmonic_decay(self, harmonic):
         if not self.decay_by_hz:
@@ -4971,8 +5020,12 @@ class GrandPianoProperties(InharmonicStringProperties):
         f = f0 * harmonic * (1.0 + B * harmonic * harmonic) ** 0.5
         z = _H.string_of(f0, *self._string_scale())[2]
         zr = _H.string_of(440.0, *self._string_scale())[2]
-        return (self.decay_b1 + self.decay_b3 * (f / 1000.0) ** 2
-                + self.decay_board_db * (zr / z) / (1.0 + (self.decay_board_hz / f) ** 2))
+        board = self.decay_board_db * (zr / z) / (1.0 + (self.decay_board_hz / f) ** 2)
+        if self.decay_treble_power and f0 > 440.0:
+            board = board * (f0 / 440.0) ** self.decay_treble_power
+        if self.decay_board_top_hz:
+            board = board / (1.0 + (f / self.decay_board_top_hz) ** 2)
+        return self.decay_b1 + self.decay_b3 * (f / 1000.0) ** 2 + board
 
     def _string_scale(self):
         """(C, longest string) for hammer.string_of: the class's own scale where
@@ -5081,6 +5134,31 @@ class GrandPianoProperties(InharmonicStringProperties):
             got = self._hammer_g = [g * k for g in got]
         return got[harmonic - 1] if harmonic - 1 < len(got) else 0.0
 
+    # THE HAMMER'S PHASE (Ben: "the hammer might affect phase"): each partial
+    # set going at the phase of the contact force at its frequency, arg F(f),
+    # as hammer.phases gives it; in phase, a long bass contact's stretched
+    # partials slipped past each other in step and the decay swept down
+    hammer_phase = False
+
+    def hammer_phase_of(self, harmonic):
+        got = self.__dict__.get('_hammer_ph')
+        if got is None:
+            import hammer as _H
+            _fn, mass, K, p = self._hammer_felt()
+            f0 = self.frequency_x * (2.0 ** self.octave_position)
+            vel = int(round(127.0 * self.attack_volume ** 0.5))
+            n = self.max_harmonic or 64
+            if self.max_partial_hz:
+                n = max(n, int(self.max_partial_hz / f0))
+            n = min(n, 400)
+            got = self._hammer_ph = _H.phases(f0, vel, n, self.strike_point, mass, K, p,
+                                              self.hammer_speed_lo, self.hammer_speed_hi,
+                                              string=self._string_scale(),
+                                              alpha=self.hammer_alpha, tau=10.0 ** self.hammer_log_tau,
+                                              core_x=self._core_mm(_fn) * 1e-3,
+                                              core_K=10.0 ** self.hammer_core_logk)
+        return got[harmonic - 1] if harmonic - 1 < len(got) else 0.0
+
     def harmonic_volume(self, harmonic):
         v = super().harmonic_volume(harmonic)
         if v == 0.0:
@@ -5103,8 +5181,20 @@ class GrandPianoProperties(InharmonicStringProperties):
         body = 1.0 + self.board_body_gain * _exp(
             -(_log(fn / self.board_body_hz) ** 2) / (2.0 * self.board_body_width ** 2))
         high = 1.0 / (1.0 + (fn / self.board_high_hz) ** self.board_high_order)
-        low = 1.0 / (1.0 + (self.board_low_hz / fn) ** 2)
-        return body * high * low
+        low = 1.0 / (1.0 + (self.board_low_hz / fn) ** (getattr(self, "board_low_order", None) or 2))
+        g = body * high * low
+        if self.lid_db:
+            g = g * (1.0 + (10.0 ** (self.lid_db / 20.0) - 1.0) / (1.0 + (self.lid_hz / fn) ** self.lid_order))
+        return g
+
+    # THE OPEN LID (Ben: "the lid is reflecting the high-end of the bass more
+    # clearly than we model"): a reflector ~1.5 m long sends the board's sound
+    # to the listener a second time where the wavelength is short beside it --
+    # up to +6 dB in phase, +3 dB not -- rising from lid_hz at lid_order. A
+    # shelf in the board's radiation, fixed in Hz; 0 dB: none
+    lid_db = 0.0
+    lid_hz = 2000.0
+    lid_order = 2.0
 
     # ---- THE NEW GRAND (2026-11-21; examples/grand_hammer/, Ben's ear on
     # Ondine and MAESTRO's Chopin): the simulated hammer on a worn felt, the
@@ -5124,28 +5214,65 @@ class GrandPianoProperties(InharmonicStringProperties):
     hammer_alpha = 0.39029
     hammer_log_tau = -4.1929
     hammer_core_mm = 0.62859
-    hammer_core_logk = 17.38
+    hammer_core_logk = 18.0           # the worn layer harder: loud D2-F#3 short 11-17 dB over 1 kHz (18.5 with the lid and the strike curve: the loud tenor a snare)
     hammer_core_edge_mm = 1.4439
     hammer_wear_center_hz = 159.8
-    hammer_wear_octaves = 1.1679
-    strike_depth = 0.64567
+    hammer_wear_octaves = 1.6         # ...and worn wider, down to D2
+    strike_depth = 0.9                # the strike point's notch 20 dB deep (the Steinway's 25-65)
     strike_fill_fraction = 0.0
     tonal_dampening = 0.5
     strike_noise_vel_power = 0.3
     decay_by_hz = True
     decay_b1 = 0.97097
-    decay_b3 = 1.8427
+    decay_b3 = 0.8                    # the highs sustain (4-8 kHz at 2 s: 15-20 dB short at 1.84)
     decay_board_db = 4.9698
     decay_board_hz = 68.13
     aftersound_level_1 = 0.266664
-    aftersound_level_2 = 0.58426
+    aftersound_level_2 = 0.3          # (with the unison's depth: the loud bass swelled back at 1.5 s)
     aftersound_level_3 = 0.11174
     aftersound_decay_ratio = 0.326029
-    hammer_level_points = ((27.5, -1.5), (41.2, 1.3), (55.0, 1.6), (82.4, 2.6), (110.0, 3.2), (164.8, 3.0), (220.0, -0.1), (329.6, 0.5), (440.0, 2.5), (659.3, 2.6), (880.0, 4.5), (1318.5, 5.0), (2093.0, 2.4))
+    hammer_level_points = ((27.5, -3.1), (41.2, -4.6), (55.0, -5.4), (82.4, -5.2), (110.0, -5.7), (164.8, -2.8), (220.0, -2.1), (329.6, 1.9), (440.0, -1.4), (659.3, -4.5), (880.0, -1.1), (1318.5, 6.2), (2093.0, -3.1))   # re-matched to GU's grand after the afternoon's voicing: 0.62 dB
     # the knock 22 dB under the low-pass grand's (its fit under this hammer:
     # soft and hard blows each within ~1 dB of the takes' noise between harmonics)
     strike_noise_db = ((45, -50.2), (57, -46.7), (71, -40.0), (90, -40.8), (113, -34.2), (143, -36.1), (180, -46.0), (226, -47.4), (285, -48.6), (359, -34.1), (453, -36.9), (570, -35.6), (718, -36.3), (905, -35.5), (1140, -33.9), (1437, -41.3), (1810, -41.6), (2281, -46.6), (2874, -49.5), (3620, -51.7), (4561, -57.9), (5747, -61.8), (7241, -74.0), (9123, -77.5), (11494, -87.3))
-
+    # ---- THE GRAND, FURTHER (2026-11-21, afternoon; Ben's ear on the bass A/Bs
+    # and the nocturne; examples/grand_hammer/): measured against the VCSL
+    # Steinway B by band and by partial.
+    # THE CASE RINGS, far under the upright's (the lid open, the rim heavy):
+    # fixed modes on every treble take, fitted at 120 ms within ~2.5 dB; the
+    # top octave's 13 dB under (D7-F#7 rang 9-28 dB over the takes)
+    ring_db = ((110, -29.4, 41, -0.47), (218, -27.0, 103, -0.36), (345, -23.5, 146, -1.2), (583, -33.8, 154, -0.54), (960, -28.1, 155, -0.21), (1305, -43.4, 42, -0.18))
+    ring_tuned = False
+    ring_register_db = ((1865.0, 0.0), (2349.0, -14.0), (2960.0, -12.0))
+    # THE SOFT BASS BARELY KNOCKS (attack 2-8 kHz, p: 6 dB bright at 0.3)
+    strike_noise_vel_power_register = ((65.0, 2.0), (130.0, 2.0), (260.0, 0.3))
+    # THE OPEN LID: a reflector over the board, +6 dB rising from 2.5 kHz (every
+    # register's hard notes 2-13 dB short at 1-8 kHz, in Hz, not by key)
+    lid_db = 6.0
+    lid_hz = 2500.0
+    # THE TREBLE'S THINNER WIRE: its strings drain faster (D6 rang 12 dB long,
+    # A#6 15 dB) -- the board's drain x (f0 / 440) above A4
+    decay_treble_power = 1.0
+    # THE UNISON SHALLOWER: its beats pumped the bass's aftersound back up
+    string_gain = (0.4, 0.3)
+    # THE PHANTOMS TO HARMONIC 60 (the bottom octave's growl over 1 kHz), each
+    # pair x m n / 1500 (Bank & Sujbert): unweighted, the low sums filled the
+    # strike point's notch at the 8th 19-34 dB
+    phantom_max_order = 60
+    phantom_index_power = 1.0
+    phantom_index_ref = 1500.0
+    # THE BOARD'S LOW CUT STEEPER (5th order): the bottom octave's fundamentals
+    # sat 9.5 dB too strong (the Steinway's 40-50 dB under its strongest partial)
+    board_low_order = 5.0
+    # THE STRIKE POINT BY KEY, a curve: 1/8.3 at A1, 1/7.3 at A3-A4, 1/8.7 at A6,
+    # 1/10.4 at C8 (fitted to 13 keys' partial ladders, 8.29 -> 7.33 dB)
+    strike_curve = (7.3951, 0.2813, 0.1960)
+    # THE HAMMER'S PHASE, and EACH PARTIAL OFF THE LAW BY ITS OWN CENTS (Ben:
+    # the soft A0's decay swept down like a phaser): the Steinway's partials sit
+    # irregularly ~0.5 cent off the stiff string's law (max 1.4), ours had sat
+    # on a smooth curve and all started in phase
+    hammer_phase = True
+    partial_cents_scatter = 0.9
 
 
 # HOW FAR OUT OF TUNE, on the wheel. 1.0 is the class's own range; 0 is a piano
@@ -5328,6 +5455,15 @@ class UprightPianoProperties(GrandPianoProperties):
     strike_noise_register_db = ((27.5, -15.5), (440.0, 0.0), (1760.0, 0.0), (4186.0, 3.0))
     strike_noise_vel_power_register = ((55.0, 2.5), (175.0, 2.0), (330.0, 1.0), (880.0, 0.3))
     strike_noise_vel_power = 0.3
+    # (the grand's afternoon voicing is the grand's: this voice keeps its own)
+    lid_db = 0.0
+    decay_treble_power = 0.0
+    phantom_max_order = 30
+    phantom_index_power = 0.0
+    strike_curve = None
+    ring_register_db = ()
+    hammer_phase = False
+    partial_cents_scatter = 0.0
 
 
 class BrightPianoProperties(GrandPianoProperties):
@@ -5414,6 +5550,22 @@ class BrightPianoProperties(GrandPianoProperties):
     # THE GRAND'S HAMMER AND DECAY ARE THE NEW GRAND'S OWN (2026-11-21): this
     # voice keeps the low-pass hammer and the decay it was voiced on
     hammer_model = False
+    lid_db = 0.0
+    # (the grand's afternoon voicing is the grand's: this voice keeps its own)
+    decay_treble_power = 0.0
+    phantom_max_order = 30
+    phantom_index_power = 0.0
+    strike_curve = None
+    ring_register_db = ()
+    hammer_phase = False
+    partial_cents_scatter = 0.0
+    string_gain = (0.7, 0.6)
+    hammer_core_logk = 17.38
+    hammer_wear_octaves = 1.1679
+    decay_b3 = 1.8427
+    board_low_order = None
+    ring_db = ()
+    strike_noise_vel_power_register = ()
     decay_by_hz = False
     strike_noise_vel_power = 0.0
     tonal_dampening = 1.1
@@ -5709,6 +5861,21 @@ class ElectricGrandProperties(GrandPianoProperties):
     # THE GRAND'S HAMMER AND DECAY ARE THE NEW GRAND'S OWN (2026-11-21): this
     # voice keeps the low-pass hammer and the decay it was voiced on
     hammer_model = False
+    # (the grand's afternoon voicing is the grand's: this voice keeps its own)
+    lid_db = 0.0
+    decay_treble_power = 0.0
+    phantom_max_order = 30
+    phantom_index_power = 0.0
+    strike_curve = None
+    ring_register_db = ()
+    hammer_phase = False
+    partial_cents_scatter = 0.0
+    hammer_core_logk = 17.38
+    hammer_wear_octaves = 1.1679
+    decay_b3 = 1.8427
+    board_low_order = None
+    ring_db = ()
+    strike_noise_vel_power_register = ()
     decay_by_hz = False
     strike_noise_vel_power = 0.0
     tonal_dampening = 1.1

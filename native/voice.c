@@ -503,8 +503,12 @@ static double soundboard_gain(const VoiceSnap *v, double fn)
     double body = 1.0 + v->board_body_gain * exp(
         -(pow(log(fn / v->board_body_hz), 2.0)) / (2.0 * pow(v->board_body_width, 2.0)));
     double high = 1.0 / (1.0 + pow(fn / v->board_high_hz, v->board_high_order));
-    double low = 1.0 / (1.0 + pow(v->board_low_hz / fn, v->board_kind == 1 ? v->board_low_order : 2.0));
-    return body * high * low;
+    double low = 1.0 / (1.0 + pow(v->board_low_hz / fn,
+                                  (v->board_kind == 1 || v->board_low_order > 0.0) ? v->board_low_order : 2.0));
+    double g = body * high * low;
+    if (v->board_kind == 0 && v->lid_db != 0.0)       /* the open lid */
+        g = g * (1.0 + (pow(10.0, v->lid_db / 20.0) - 1.0) / (1.0 + pow(v->lid_hz / fn, v->lid_order)));
+    return g;
 }
 
 /* Plectrum._pick_db: the pick's boost on partial m, dB (0 under pick_hz) */
@@ -677,8 +681,12 @@ static double harmonic_decay_(const VoiceSnap *v, int harmonic)
     if (v->kind == 0 && v->decay_by_hz) {       /* GrandPianoProperties': by the partial's frequency */
         double f0 = v->frequency_x * pow(2.0, v->octave_position);
         double f = f0 * harmonic * pow(1.0 + v->dz_B * harmonic * harmonic, 0.5);
-        return (v->decay_b1 + v->decay_b3 * pow(f / 1000.0, 2.0)
-                + v->decay_board_db * v->dz_zr / (1.0 + pow(v->decay_board_hz / f, 2.0)));
+        double board = v->decay_board_db * v->dz_zr / (1.0 + pow(v->decay_board_hz / f, 2.0));
+        if (v->decay_treble_power != 0.0 && f0 > 440.0)  /* the treble's thinner wire */
+            board = board * pow(f0 / 440.0, v->decay_treble_power);
+        if (v->decay_board_top_hz != 0.0)       /* the board letting go above its band */
+            board = board / (1.0 + pow(f / v->decay_board_top_hz, 2.0));
+        return v->decay_b1 + v->decay_b3 * pow(f / 1000.0, 2.0) + board;
     }
     double h = (double)harmonic;                /* mode_ratios None */
     double base = v->decay_db + v->harmonic_decay_db * h * pow(h, v->harmonic_decay_dampening);
@@ -1244,6 +1252,16 @@ int nv_string_partial(const VoiceSnap *v, double f0, double ratio, int m, double
     double stretch = B > 0 ? (1.0 + 0.5 * (h * h - 1.0) * B) : 1.0;
     out[0] = h;
     out[1] = f0 * h * stretch;
+    if (v->partial_cents_scatter != 0.0 && m > 1) {   /* off the law by its own cents (tonelib.partial_hash) */
+        int k = (int)rint(69.0 + 12.0 * log(f0 / 440.0) / log(2.0));
+        uint32_t hh = ((uint32_t)k * 2654435761u) ^ ((uint32_t)m * 40503u);
+        hh = hh * 2246822519u + 3266489917u;
+        hh ^= hh >> 15;
+        hh = hh * 668265263u + 374761393u;
+        hh ^= hh >> 13;
+        double u = hh / 4294967296.0;
+        out[1] *= pow(2.0, (2.0 * u - 1.0) * v->partial_cents_scatter / 1200.0);
+    }
     return 1;
 }
 
@@ -1623,18 +1641,27 @@ static int hm_contact(double f0, double v0, double mass, double K, double p, dou
 
 /* hammer.level_gains' cache: one per (nominal key, level), the felt it was made
    with, its longest spectrum */
-typedef struct { double fn; int j, n; double key[13]; double *g; } HmEntry;
+typedef struct { double fn; int j, n; double key[13]; double *g, *ph; } HmEntry;
 static HmEntry *hm_cache;
 static int hm_ncache, hm_capcache;
 static pthread_mutex_t hm_lock = PTHREAD_MUTEX_INITIALIZER;
 
+static const double *hm_level_gains_ph(double fn, int j, int nharm, const double key[13], const double **ph_out);
+
 static const double *hm_level_gains(double fn, int j, int nharm, const double key[13])
+{
+    return hm_level_gains_ph(fn, j, nharm, key, NULL);
+}
+
+static const double *hm_level_gains_ph(double fn, int j, int nharm, const double key[13], const double **ph_out)
 {
     /* key: beta, mass, K, p, v_lo, v_hi, scale, lmax, alpha, tau, core_x, core_K, (unused 0) */
     pthread_mutex_lock(&hm_lock);
     for (int i = 0; i < hm_ncache; i++) {
         HmEntry *e = &hm_cache[i];
         if (e->fn == fn && e->j == j && e->n >= nharm && !memcmp(e->key, key, sizeof(e->key))) {
+            if (ph_out)
+                *ph_out = e->ph;
             pthread_mutex_unlock(&hm_lock);
             return e->g;
         }
@@ -1651,6 +1678,7 @@ static const double *hm_level_gains(double fn, int j, int nharm, const double ke
     for (int i = 0; i < nf; i++)
         tot += F[i];
     double *g = malloc((size_t)nharm * sizeof(double));
+    double *ph = malloc((size_t)nharm * sizeof(double));
     for (int h = 1; h <= nharm; h++) {
         double w = 2.0 * PI * fn * h * dt;
         double cw = cos(w), sw = sin(w), cc = 1.0, ss = 0.0, re = 0.0, im = 0.0;
@@ -1662,6 +1690,7 @@ static const double *hm_level_gains(double fn, int j, int nharm, const double ke
             cc = c2;
         }
         g[h - 1] = tot > 0.0 ? sqrt(re * re + im * im) / tot : 0.0;
+        ph[h - 1] = -atan2(im, re);              /* hammer.phases: arg F(f) */
     }
     free(F);
     pthread_mutex_lock(&hm_lock);
@@ -1670,7 +1699,9 @@ static const double *hm_level_gains(double fn, int j, int nharm, const double ke
         hm_cache = realloc(hm_cache, (size_t)hm_capcache * sizeof(HmEntry));
     }
     HmEntry *e = &hm_cache[hm_ncache++];
-    e->fn = fn; e->j = j; e->n = nharm; e->g = g;
+    e->fn = fn; e->j = j; e->n = nharm; e->g = g; e->ph = ph;
+    if (ph_out)
+        *ph_out = ph;
     memcpy(e->key, key, sizeof(e->key));
     pthread_mutex_unlock(&hm_lock);
     return g;
@@ -1760,6 +1791,24 @@ static void hm_note(VoiceSnap *s)
         }
     }
     s->hm_n = n;
+    if (s->hm_phase) {                          /* hammer.phases: the levels' phases, blended the shorter way */
+        int np = n < 400 ? n : 400;
+        const double *pa, *pb;
+        hm_level_gains_ph(fn, j, n, key, &pa);
+        if (v == va) {
+            for (int h = 0; h < np; h++) s->mode_phases[h] = pa[h];
+        } else {
+            hm_level_gains_ph(fn, j + 1, n, key, &pb);
+            if (v == vb) {
+                for (int h = 0; h < np; h++) s->mode_phases[h] = pb[h];
+            } else {
+                double t = (double)(v - va) / (double)(vb - va);
+                for (int h = 0; h < np; h++)
+                    s->mode_phases[h] = pa[h] + t * remainder(pb[h] - pa[h], 2.0 * PI);
+            }
+        }
+        s->n_mp = np;
+    }
     /* THE NOTE'S LOUDNESS AS THE LOW-PASS HAMMER GAVE IT (its tilt, 64 harmonics) */
     double av = s->hammer_open_power == 1.0 ? s->attack_volume : pow(s->attack_volume, s->hammer_open_power);
     double fc = (s->hammer_corner_hz * (s->hammer_open_lo + s->hammer_open_slope * av)
@@ -2168,6 +2217,12 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
     }
     /* blockrender: the law's B at the note (inharmonicity_coefficient_for_frequency) */
     o->B = law_B(c, frequency);
+    if (s->sp_curve_set) {                      /* GrandPianoProperties.strike_curve: the key's strike point */
+        int midi = (int)rint(69.0 + 12.0 * log(frequency / 440.0) / log(2.0));
+        double oo = (midi - 69) / 12.0;
+        double sp = 1.0 / (s->sp_curve[0] + s->sp_curve[1] * oo + s->sp_curve[2] * oo * oo);
+        s->strike_point = 0.5 < sp ? 0.5 : (0.02 > sp ? 0.02 : sp);
+    }
     if (s->hammer_model)
         hm_note(s);
 }

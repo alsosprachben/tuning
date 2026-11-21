@@ -132,7 +132,11 @@ class VoiceSnap(ctypes.Structure):
                 ('sw_hz', C * 2), ('mm_pts', I), ('mr_law', I), ('mr_a', C * 2), ('mr_b', C * 2), ('mr_lo', C * 2),
                 ('mr_ref', C), ('mr_body', C * 3), ('crs_ntrio', I), ('crs_trio', C * 4),
                 ('swp_set', I), ('swp_share', C), ('swp_tog', C * 2), ('swp_swept', C * 2), ('swp_step', C),
-                ('hm_vp_n', I), ('hm_vp_hz', C * 32), ('hm_vp_p', C * 32)]
+                ('hm_vp_n', I), ('hm_vp_hz', C * 32), ('hm_vp_p', C * 32),
+                ('lid_db', C), ('lid_hz', C), ('lid_order', C), ('decay_board_top_hz', C),
+                ('decay_treble_power', C), ('sp_curve_set', I), ('sp_curve', C * 3),
+                ('phantom_index_power', C), ('phantom_index_ref', C), ('hm_phase', I),
+                ('partial_cents_scatter', C)]
 
 
 class ToneIn(ctypes.Structure):
@@ -2610,6 +2614,8 @@ def snapshot(props):
                   'hammer_order', 'hammer_open_power', 'board_body_gain', 'board_body_hz', 'board_body_width', 'board_high_hz',
                   'board_high_order', 'board_low_hz', 'string_crossfade_semitones', 'aftersound_decay_ratio'):
             setattr(s, f, getattr(p, f))
+        s.lid_db = float(getattr(p, 'lid_db', 0.0) or 0.0)
+        s.lid_hz, s.lid_order = float(getattr(p, 'lid_hz', 2000.0)), float(getattr(p, 'lid_order', 2.0))
         s.string_gain[:] = list(p.string_gain)
         s.string_break_hz[:] = list(p.string_break_hz)
         s.soft_pedal_strings = int(p.soft_pedal_strings)
@@ -2637,6 +2643,9 @@ def snapshot(props):
     s.phantom_note_max_hz = getattr(p, 'phantom_note_max_hz', 0.0)
     s.phantom_gain_floor = getattr(p, 'phantom_gain_floor', 3e-3)
     s.phantom_max_order = int(getattr(p, 'phantom_max_order', 16))
+    s.phantom_index_power = float(getattr(p, 'phantom_index_power', 0.0) or 0.0)
+    s.partial_cents_scatter = float(getattr(p, 'partial_cents_scatter', 0.0) or 0.0)
+    s.phantom_index_ref = float(getattr(p, 'phantom_index_ref', 100.0))
     if s.kind == 2 and pipe_voice(type(p)) and not getattr(p, 'registerable', False):
         s.pps = float(getattr(p, 'partial_phase_spread', 0.0) or 0.0)    # (a blown pipe's: a drone's)
         s.ml_spread = float(getattr(p, 'mode_lock_spread', 0.0) or 0.0)
@@ -2689,6 +2698,8 @@ def snapshot(props):
         s.decay_by_hz = 1
         s.decay_b1, s.decay_b3 = p.decay_b1, p.decay_b3
         s.decay_board_db, s.decay_board_hz = p.decay_board_db, p.decay_board_hz
+        s.decay_board_top_hz = float(getattr(p, 'decay_board_top_hz', 0.0) or 0.0)
+        s.decay_treble_power = float(getattr(p, 'decay_treble_power', 0.0) or 0.0)
         s.dz_scale, s.dz_lmax = p._string_scale()
         import hammer as _H
         _f0 = p.frequency_x * (2.0 ** p.octave_position)
@@ -2718,9 +2729,21 @@ def snapshot(props):
         g = p.__dict__['_hammer_g'][:400]
         s.hm_n = len(g)
         s.hm_g[:len(g)] = g
+        if getattr(p, 'hammer_phase', False):
+            # (the note's phases, as Python's partial loop reads them: mode_phases)
+            s.hm_phase = 1
+            p.hammer_phase_of(1)
+            ph = p.__dict__['_hammer_ph'][:400]
+            s.n_mp = len(ph)
+            s.mode_phases[:len(ph)] = ph
     s.board_kind = _board_kind(type(p)) if s.kind == 0 else 0
     if s.kind == 0 and s.board_kind == 1:
         s.board_low_order = p.board_low_order
+    elif s.kind == 0 and s.board_kind == 0:
+        s.board_low_order = float(getattr(p, "board_low_order", None) or 0.0)
+    if s.kind == 0 and getattr(p, 'strike_curve', None):
+        s.sp_curve_set = 1
+        s.sp_curve[:] = [float(x) for x in p.strike_curve]
     elif s.kind == 0 and s.board_kind == 2:
         s.bridge_gain, s.bridge_corner_hz, s.bridge_order = p.bridge_gain, p.bridge_corner_hz, p.bridge_order
         s.bridge_force_power = p.bridge_force_power or 0.0

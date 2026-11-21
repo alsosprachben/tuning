@@ -380,6 +380,28 @@ typedef struct {
        attack_volume ** (power / 2) more */
     int hm_vp_n;
     double hm_vp_hz[32], hm_vp_p[32];
+    /* THE OPEN LID (lid_db, lid_hz, lid_order): a shelf in the grand board's
+       radiation (board_kind 0); lid_db 0 none */
+    double lid_db, lid_hz, lid_order;
+    /* THE BOARD LETTING GO ABOVE ITS BAND (decay_board_top_hz): the decay law's
+       board drain over 1 + (f / top)^2; 0 none */
+    double decay_board_top_hz;
+    /* THE TREBLE'S THINNER WIRE (decay_treble_power): the board's drain times
+       (f0 / 440) ** it above A4; 0 none */
+    double decay_treble_power;
+    /* THE STRIKE POINT BY KEY (strike_curve): sp_curve_set, the ratio's a, b, c
+       in the key's octaves from A4; nv_voice_init sets strike_point from it */
+    int sp_curve_set;
+    double sp_curve[3];
+    /* A PHANTOM PAIR'S DRIVE BY ITS WAVENUMBERS (phantom_index_power, _ref):
+       x (m n / ref) ** power; 0 none */
+    double phantom_index_power, phantom_index_ref;
+    /* THE HAMMER'S PHASE (hammer_phase): hm_note fills mode_phases / n_mp with
+       the contact force's arg F at each partial, levels blended */
+    int hm_phase;
+    /* EACH PARTIAL OFF THE STIFF STRING'S LAW (partial_cents_scatter): +- cents,
+       fixed per key and partial (tonelib.partial_hash); 0 none */
+    double partial_cents_scatter;
 } VoiceSnap;
 
 /* AN ORGAN PIPE (a class an organ's ranks draw on: the host, a borrowed

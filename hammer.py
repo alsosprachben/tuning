@@ -23,9 +23,10 @@ from f = sqrt(T/mu) / 2L. The hammer's: mass from ~11 g in the bass to ~6.6
 g at the top (Conklin, JASA 99, 1996: hammer weights across a concert
 grand), the felt's K and p by register -- the free numbers, fitted.
 """
-from math import cos, sin, pi, sqrt, log, exp
+from math import cos, sin, pi, sqrt, log, exp, atan2, remainder
 
 _CACHE = {}
+_PCACHE = {}
 
 
 def string_of(f0, scale_c_hz_m=162.0, string_max_m=1.95, tension_n=750.0, bass_tension_n=1100.0,
@@ -149,6 +150,7 @@ def level_gains(fn, j, nharm, beta, mass_kg, K, p, v_lo, v_hi, string, alpha, ta
     for x in F:
         tot += x
     out = []
+    ph = []
     for h in range(1, nharm + 1):
         w = 2.0 * pi * fn * h * dt
         cw, sw = cos(w), sin(w)
@@ -159,10 +161,14 @@ def level_gains(fn, j, nharm, beta, mass_kg, K, p, v_lo, v_hi, string, alpha, ta
             im += x * s_
             c, s_ = c * cw - s_ * sw, s_ * cw + c * sw
         out.append(sqrt(re * re + im * im) / tot if tot > 0.0 else 0.0)
+        ph.append(-atan2(im, re))
+    _PCACHE[key] = ph
     _CACHE[key] = out
     if len(_CACHE) > 8192:
         _CACHE.clear()
+        _PCACHE.clear()
         _CACHE[key] = out
+        _PCACHE[key] = ph
     return out
 
 
@@ -178,3 +184,28 @@ def force_spectrum(F, dt, freqs):
             im -= x * sin(w * n)
         out.append(sqrt(re * re + im * im) * dt / tot if tot > 0 else 0.0)
     return out
+
+
+def phases(f0, velocity, nharm, beta, mass_kg, K, p, v_lo=0.5, v_hi=5.0, string=None, alpha=0.0, tau=1e-4,
+           core_x=0.0, core_K=0.0):
+    """THE HAMMER'S PHASE at partials 1..nharm: arg F(f) of the contact force,
+    the two nearest LEVELS blended (the shorter way round) as gains() blends
+    their sizes -- each partial set going at its own instant of the contact,
+    where in phase the stretched partials slip past each other in step."""
+    fn = nominal_f0(f0)
+    v = min(max(int(velocity), 1), 127)
+    j = 0
+    while j + 1 < len(LEVELS) - 1 and LEVELS[j + 1] <= v:
+        j += 1
+    va, vb = LEVELS[j], LEVELS[j + 1]
+    args = (nharm, beta, mass_kg, K, p, v_lo, v_hi, string, alpha, tau, core_x, core_K)
+    level_gains(fn, j, *args)
+    pa = _PCACHE[(fn, j, beta, mass_kg, K, p, v_lo, v_hi, string, alpha, tau, core_x, core_K)]
+    if v == va:
+        return list(pa[:nharm])
+    level_gains(fn, j + 1, *args)
+    pb = _PCACHE[(fn, j + 1, beta, mass_kg, K, p, v_lo, v_hi, string, alpha, tau, core_x, core_K)]
+    if v == vb:
+        return list(pb[:nharm])
+    t = (v - va) / (vb - va)
+    return [a + t * remainder(b - a, 2.0 * pi) for a, b in zip(pa[:nharm], pb[:nharm])]

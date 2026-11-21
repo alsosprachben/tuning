@@ -2240,6 +2240,13 @@ def string_partial(props, f0, ratio, m, B):
     if mr <= 0.0:
         return None
     h = ratio*mr; stretch = (1.0+0.5*(h*h-1.0)*B) if B>0 else 1.0; hf = f0*h*stretch
+    # ...EACH PARTIAL OFF THE STIFF STRING'S LAW BY ITS OWN FEW CENTS
+    # (partial_cents_scatter): drawn per key and partial, as a real string's
+    # bridge and wrapping place each mode -- exactly on the law, the partials
+    # slip past one another in step and their alignment sweeps down the series
+    _pcs = getattr(props, 'partial_cents_scatter', 0.0) or 0.0
+    if _pcs and m > 1:
+        hf *= 2.0 ** ((2.0 * T.partial_hash(f0, m)[1] - 1.0) * _pcs / 1200.0)
     return h, hf
 
 
@@ -6794,6 +6801,9 @@ def _note_phantoms_py(em, props, nt, transverse, emit_partial):
     if coupling > 0.0 and nt.f0 <= getattr(props,'phantom_note_max_hz',0.0) and transverse:
         parents = transverse[:getattr(props,'phantom_max_order',16)]
         floor = getattr(props,'phantom_gain_floor',3e-3)*max(v for _,v,_ in parents)
+        # (each pair as its partials' wavenumbers drive the tension: x (m n / ref) ** power)
+        _ipow = getattr(props, 'phantom_index_power', 0.0) or 0.0
+        _iref = getattr(props, 'phantom_index_ref', 100.0)
         for a in range(len(parents)):
             fa,va,da = parents[a]
             for bb in range(a,len(parents)):
@@ -6801,6 +6811,7 @@ def _note_phantoms_py(em, props, nt, transverse, emit_partial):
                 fph = fa+fb
                 if fph >= SR/2: break
                 g = coupling*va*vb*(1.0 if a==bb else 2.0)*props.radiation_gain(fph)
+                if _ipow: g *= ((a + 1) * (bb + 1) / _iref) ** _ipow
                 if g < floor: continue
                 dph = da+db_; lrp = math.log(T.db_ratio(dph)) if dph>0 else 0.0
                 aftp, adbp = props.aftersound(nt.f0, dph); lrAp = math.log(T.db_ratio(adbp)) if adbp>0 else 0.0
@@ -7598,6 +7609,10 @@ def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TB
                 _mph = getattr(rp, 'mode_phase', None)
                 if _mph is not None:
                     mph += _mph(m)
+                elif getattr(rp, 'hammer_phase', False) and getattr(rp, 'hammer_model', False):
+                    # ...or the hammer's (GrandPianoProperties.hammer_phase): its contact
+                    # force's phase at the partial (native/voice.c's mode_phases)
+                    mph += rp.hammer_phase_of(m)
                 if _prng is not None:
                     # each partial its own phase (SynthProperties.partial_phase_spread)
                     mph += 2.0 * math.pi * _pps * _prng.random()

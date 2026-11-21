@@ -1857,6 +1857,8 @@ int nv_phantom(const VoiceSnap *v, const ToneIn *t, const double *trans, int ntr
             if (fph >= sr / 2)
                 break;
             double g = coupling * va * vb * (a == b ? 1.0 : 2.0) * nv_radiation_gain(v, fph, 0.0, 0);
+            if (v->phantom_index_power != 0.0)    /* the pair's wavenumbers */
+                g *= pow((double)((a + 1) * (b + 1)) / v->phantom_index_ref, v->phantom_index_power);
             if (g < floor_)
                 continue;
             double dph = da + db_;
