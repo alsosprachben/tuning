@@ -4777,9 +4777,11 @@ class GrandPianoProperties(InharmonicStringProperties):
     # knock (re the strike's loudest partial, at the best-coupled mode) and its
     # fall along the bridge -- set by ear, Ben's on Ondine (2026-10-05) against
     # four times as much: about 25 dB under the struck strings. The top 18 keys
-    # have no damper at all and answer whatever the pedal does.
-    register_gain = 0.02
-    register_knock_gain = 0.005
+    # have no damper at all and answer whatever the pedal does. HALVED, Ben on
+    # Ondine again (2026-11-21): "the sustain halo is too much ... probably
+    # half of what it is" -- about 31 dB under.
+    register_gain = 0.01
+    register_knock_gain = 0.0025
     register_knock_falloff = 1.0
     damper_top = 91
 
@@ -4922,10 +4924,16 @@ class GrandPianoProperties(InharmonicStringProperties):
         f0 = self.frequency_x * (2.0 ** self.octave_position)
         B = self.inharmonicity_coefficient_for_frequency(f0)
         f = f0 * harmonic * (1.0 + B * harmonic * harmonic) ** 0.5
-        z = _H.string_of(f0)[2]
-        zr = _H.string_of(440.0)[2]
+        z = _H.string_of(f0, *self._string_scale())[2]
+        zr = _H.string_of(440.0, *self._string_scale())[2]
         return (self.decay_b1 + self.decay_b3 * (f / 1000.0) ** 2
                 + self.decay_board_db * (zr / z) / (1.0 + (self.decay_board_hz / f) ** 2))
+
+    def _string_scale(self):
+        """(C, longest string) for hammer.string_of: the class's own scale where
+        it has one (the electric grand's shorter case), else the grand's."""
+        return (getattr(self, 'scale_constant_hz_m', None) or 162.0,
+                getattr(self, 'case_string_max_m', None) or 1.95)
 
     def _hammer_felt(self):
         f0 = self.frequency_x * (2.0 ** self.octave_position)
@@ -4949,6 +4957,7 @@ class GrandPianoProperties(InharmonicStringProperties):
                   for h in range(1, n + 1)]
             got = self._hammer_g = list(_H.gains(f0, vel, fr, self.strike_point, mass, K, p,
                                                  self.hammer_speed_lo, self.hammer_speed_hi,
+                                                 string=self._string_scale(),
                                                  alpha=self.hammer_alpha, tau=10.0 ** self.hammer_log_tau))
         return got[harmonic - 1] if harmonic - 1 < len(got) else 0.0
 
