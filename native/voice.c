@@ -492,7 +492,11 @@ static double soundboard_gain(const VoiceSnap *v, double fn)
             double r = fn / (f0 > 1e-9 ? f0 : 1e-9);
             slope = pow(1.0 > r ? 1.0 : r, v->bridge_force_power);     /* max(r, 1.0) */
         }
-        return v->bridge_gain * slope / (1.0 + pow(fn / v->bridge_corner_hz, v->bridge_order));
+        double g = v->bridge_gain * slope / (1.0 + pow(fn / v->bridge_corner_hz, v->bridge_order));
+        if (v->bridge_peak_db != 0.0)           /* the piezo's resonance */
+            g = g * (1.0 + (pow(10.0, v->bridge_peak_db / 20.0) - 1.0) * exp(
+                -(pow(log(fn / v->bridge_peak_hz), 2.0)) / (2.0 * pow(v->bridge_peak_width, 2.0))));
+        return g;
     }
     double body = 1.0 + v->board_body_gain * exp(
         -(pow(log(fn / v->board_body_hz), 2.0)) / (2.0 * pow(v->board_body_width, 2.0)));
@@ -579,7 +583,8 @@ static double harmonic_volume(const VoiceSnap *v, int harmonic)
         return s;
     }
     double fn = v->frequency_x * pow(2.0, v->octave_position) * harmonic;
-    double fc = (v->hammer_corner_hz * (v->hammer_open_lo + v->hammer_open_slope * v->attack_volume)
+    double av = v->hammer_open_power == 1.0 ? v->attack_volume : pow(v->attack_volume, v->hammer_open_power);
+    double fc = (v->hammer_corner_hz * (v->hammer_open_lo + v->hammer_open_slope * av)
                  * pow(2.0, v->hammer_register_slope * v->octave_position));
     double r = s / (1.0 + pow(fn / fc, v->hammer_order)) * soundboard_gain(v, fn);
     double w = wound_weight(v, harmonic);       /* ElectricGrandProperties': the wound strings' zing */

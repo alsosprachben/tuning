@@ -39,7 +39,7 @@ class VoiceSnap(ctypes.Structure):
                 ('decay_db', C), ('harmonic_decay_db', C), ('harmonic_decay_dampening', C),
                 ('decay_register_factor', C),
                 ('hammer_corner_hz', C), ('hammer_open_lo', C), ('hammer_open_slope', C),
-                ('hammer_register_slope', C), ('hammer_order', C),
+                ('hammer_register_slope', C), ('hammer_order', C), ('hammer_open_power', C),
                 ('board_body_gain', C), ('board_body_hz', C), ('board_body_width', C), ('board_high_hz', C),
                 ('board_high_order', C), ('board_low_hz', C),
                 ('string_gain', C * 2), ('string_break_hz', C * 2), ('string_crossfade_semitones', C),
@@ -57,6 +57,7 @@ class VoiceSnap(ctypes.Structure):
                 ('board_kind', I), ('board_low_order', C), ('bridge_gain', C), ('bridge_corner_hz', C),
                 ('bridge_order', C), ('bridge_force_power', C),
                 ('wound_below_hz', C), ('wound_corner_hz', C), ('wound_zing_db', C), ('wound_decay_db', C),
+                ('bridge_peak_db', C), ('bridge_peak_hz', C), ('bridge_peak_width', C),
                 ('kind', I), ('unison_gain', C), ('n_unison', I), ('unison_detune', C * 8),
                 ('n_modes', I), ('modes', (C * 3) * 128), ('n_click', I), ('click_per_band', I),
                 ('click_db', C * 32), ('click_hz0', C), ('click_cal_db', C), ('click_scatter', C),
@@ -2591,7 +2592,7 @@ def snapshot(props):
                 s.rim_from, s.rim_dbs = int(p.RIM_FROM), p.rim_dbs
     else:
         for f in ('hammer_corner_hz', 'hammer_open_lo', 'hammer_open_slope', 'hammer_register_slope',
-                  'hammer_order', 'board_body_gain', 'board_body_hz', 'board_body_width', 'board_high_hz',
+                  'hammer_order', 'hammer_open_power', 'board_body_gain', 'board_body_hz', 'board_body_width', 'board_high_hz',
                   'board_high_order', 'board_low_hz', 'string_crossfade_semitones', 'aftersound_decay_ratio'):
             setattr(s, f, getattr(p, f))
         s.string_gain[:] = list(p.string_gain)
@@ -2677,6 +2678,7 @@ def snapshot(props):
         s.bridge_force_power = p.bridge_force_power or 0.0
         s.wound_below_hz, s.wound_corner_hz = p.wound_below_hz, p.wound_corner_hz
         s.wound_zing_db, s.wound_decay_db = p.wound_zing_db, p.wound_decay_db
+        s.bridge_peak_db, s.bridge_peak_hz, s.bridge_peak_width = p.bridge_peak_db, p.bridge_peak_hz, p.bridge_peak_width
     return s
 
 

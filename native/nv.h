@@ -38,6 +38,7 @@ typedef struct {
     double decay_db, harmonic_decay_db, harmonic_decay_dampening, decay_register_factor;
     /* the grand's hammer and board */
     double hammer_corner_hz, hammer_open_lo, hammer_open_slope, hammer_register_slope, hammer_order;
+    double hammer_open_power;       /* (attack_volume ** it; 1 the line) */
     double board_body_gain, board_body_hz, board_body_width, board_high_hz, board_high_order, board_low_hz;
     /* its strings */
     double string_gain[2], string_break_hz[2], string_crossfade_semitones;
@@ -66,6 +67,7 @@ typedef struct {
     double board_low_order, bridge_gain, bridge_corner_hz, bridge_order, bridge_force_power;
     /* ...and its wound strings' zing (ElectricGrandProperties._wound_weight) */
     double wound_below_hz, wound_corner_hz, wound_zing_db, wound_decay_db;
+    double bridge_peak_db, bridge_peak_hz, bridge_peak_width;     /* ...and the piezo's resonance */
     /* WHOSE METHODS THE VOICE HAS: 0 the grand's (its hammer and board, its
        strings, its aftersound -- above); 1 a kit drum's (KitDrumProperties:
        its measured modes, its stick's click, its two-stage decay -- below),

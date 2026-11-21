@@ -4726,6 +4726,10 @@ class GrandPianoProperties(InharmonicStringProperties):
     # softest touch to 1.4x at the hardest, a 2:1 swing, for this piano.
     hammer_open_lo = 0.7
     hammer_open_slope = 0.7
+    # ...the opening as attack_volume ** hammer_open_power: 1, the line above;
+    # more, a corner that stays shut through the soft touches and opens late
+    # (the CP80's: its soft layers dark, its hard ones brilliant)
+    hammer_open_power = 1.0
     # ...and with register: the hammers are lighter and harder up the
     # keyboard, the contact shorter, the corner higher -- octaves of corner
     # per octave of the note. 0 for this piano: one corner everywhere.
@@ -4882,7 +4886,8 @@ class GrandPianoProperties(InharmonicStringProperties):
         # brighten the tone. (Note frequency is not stored raw; recover it from
         # octave_position = log2(f0 / frequency_x).)
         fn = self.frequency_x * (2.0 ** self.octave_position) * harmonic
-        fc = (self.hammer_corner_hz * (self.hammer_open_lo + self.hammer_open_slope * self.attack_volume)
+        av = self.attack_volume if self.hammer_open_power == 1.0 else self.attack_volume ** self.hammer_open_power
+        fc = (self.hammer_corner_hz * (self.hammer_open_lo + self.hammer_open_slope * av)
               * 2.0 ** (self.hammer_register_slope * self.octave_position))
         return v / (1.0 + (fn / fc) ** self.hammer_order) * self.soundboard_gain(fn)
 
@@ -5250,6 +5255,16 @@ class ElectricGrandProperties(GrandPianoProperties):
     # DIRECTION is defensible, the number is an estimate.
     bridge_corner_hz = 8120.0
     bridge_order = 1.6
+    # FITTED with the hammer and the top's decay (examples/cp80_attack_fit.py:
+    # four bands, 5 ms to 0.64 s, re the note, every key, both layers), after
+    # Ben: "the louder ones are missing a little brilliance ... the high
+    # seems to be decaying too much ... the attack needs some care". The hard
+    # layer's 3.2-8 kHz stood 5-10 dB under the takes at every window while
+    # its 8-14 kHz was right: a hump, which no hammer low-pass makes. 8.21 ->
+    # 7.37 dB in all (the onset 3 -> 1.5 ms; under that it clicks).
+    bridge_peak_db = 8.44             # 0: none (soundboard_gain)
+    bridge_peak_hz = 5189.0
+    bridge_peak_width = 0.604          # natural-log units, as board_body_width
     initial_gain = 0.115586      # C3/C4/C5 at v100 matched on rms to the grand piano (was -2.3 dB over)
     bridge_gain = 1.0               # neutral: the board's three terms became one
     # THE REGISTER'S LEVEL, to David's CP70's own (its files keep their
@@ -5288,7 +5303,7 @@ class ElectricGrandProperties(GrandPianoProperties):
     wound_below_hz = 200.0
     wound_corner_hz = 1000.0
     wound_zing_db = 15.0
-    wound_decay_db = 30.0
+    wound_decay_db = 25.42
 
     def _wound_weight(self, harmonic):
         f0 = self.frequency_x * (2.0 ** self.octave_position)
@@ -5320,8 +5335,14 @@ class ElectricGrandProperties(GrandPianoProperties):
         if self.bridge_force_power:
             f0 = self.frequency_x * (2.0 ** self.octave_position)
             slope = max(fn / max(f0, 1e-9), 1.0) ** self.bridge_force_power
-        return self.bridge_gain * slope / (
+        g = self.bridge_gain * slope / (
             1.0 + (fn / self.bridge_corner_hz) ** self.bridge_order)
+        if self.bridge_peak_db:
+            # THE PIEZO'S OWN RESONANCE on the bridge's mass: a peak only a
+            # hard blow reaches, the felt cutting a soft one off under it
+            g = g * (1.0 + (10.0 ** (self.bridge_peak_db / 20.0) - 1.0) * _exp(
+                -(_log(fn / self.bridge_peak_hz) ** 2) / (2.0 * self.bridge_peak_width ** 2)))
+        return g
     # THE OLD GRAND LAW, PINNED: this scales the grand's B for a CP-70's
     # short strings, and the grand's was refitted to the Steinway B; the
     # electric grand was voiced on the published law, so it keeps it.
@@ -5337,11 +5358,13 @@ class ElectricGrandProperties(GrandPianoProperties):
     # and hard layers together): the corner ~260 Hz at the softest touch to
     # ~18 kHz at the hardest -- dark soft, bright hard, the CP-70's "ambiguous
     # dynamic range" (Sawchuk) -- where the grand's opens only 2:1.
-    hammer_corner_hz = 8.733
-    hammer_order = 2.0
-    hammer_open_lo = 2.228
-    hammer_open_slope = 721.7
+    hammer_corner_hz = 7.374
+    hammer_order = 2.763
+    hammer_open_lo = 1.997
+    hammer_open_slope = 617.9
     hammer_register_slope = 0.0
+    hammer_open_power = 1.0
+    harmonic_decay_dampening = -0.0236
     tonal_dampening = 1.144
     board_body_hz = 240.0
     board_body_gain = 0.6
@@ -5352,13 +5375,13 @@ class ElectricGrandProperties(GrandPianoProperties):
     # fall 20 dB -- over upper partials gone in 0.2-0.5 s; the grand's
     # pinned decay had it the other way round (2.6 s and 3-4 s).
     decay_db = 2.568
-    harmonic_decay_db = 1.600
+    harmonic_decay_db = 1.831
     decay_register_slope = 0.894
     aftersound_level_1 = 0.118
     aftersound_level_2 = 0.375
     aftersound_level_3 = 0.362
     aftersound_decay_ratio = 0.402
-    attack_time = 0.003           # the grand's old onset, pinned likewise
+    attack_time = 0.0015           # FITTED (cp80_attack_fit.py): 3 ms was slow; under 1.5 ms it clicks
     unison_beat_scatter = False   # its unisons as they were voiced (the grand's scatter is the Steinway's)
     string_gain = (0.28, 0.20)   # its unisons as they were voiced
     strike_noise_db = ()   # no strike noise yet: the grand's is the Steinway's
