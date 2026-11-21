@@ -4877,6 +4877,52 @@ class GrandPianoProperties(InharmonicStringProperties):
             voices.append((g, 0.0, ratio, harmonic_decay, 0.0))
         return voices
 
+    # THE HAMMER, SIMULATED (hammer.py), in place of the low-pass below, when
+    # hammer_model: a mass on a felt spring (F = K x^p) against the note's own
+    # string, its contact force's spectrum each partial's share. The felt by
+    # register: log10 K = hammer_logk + hammer_logk_slope per octave from A4;
+    # p from hammer_p_lo (A0) to hammer_p_hi (C8); the mass from
+    # hammer_mass_lo_g to hammer_mass_hi_g (Conklin's ~11 to ~6.6 g); its
+    # speed hammer_speed_lo..hi m/s over velocity 1..127.
+    hammer_model = False
+    hammer_logk = 10.0
+    hammer_logk_slope = 0.6
+    hammer_p_lo = 2.3
+    hammer_p_hi = 3.0
+    hammer_mass_lo_g = 11.0
+    hammer_mass_hi_g = 6.6
+    hammer_speed_lo = 0.5
+    hammer_speed_hi = 5.0
+    # ...and the felt's memory (Stulov): hammer_alpha its strength (0, an
+    # elastic felt), hammer_log_tau its relaxation time, log10 s
+    hammer_alpha = 0.0
+    hammer_log_tau = -4.0
+
+    def _hammer_felt(self):
+        f0 = self.frequency_x * (2.0 ** self.octave_position)
+        octs = _log(f0 / 440.0) / _log(2.0)
+        u = min(1.0, max(0.0, _log(f0 / 27.5) / _log(4186.0 / 27.5)))
+        mass = (self.hammer_mass_lo_g + (self.hammer_mass_hi_g - self.hammer_mass_lo_g) * u) * 1e-3
+        p = self.hammer_p_lo + (self.hammer_p_hi - self.hammer_p_lo) * u
+        K = 10.0 ** (self.hammer_logk + self.hammer_logk_slope * octs)
+        return f0, mass, K, p
+
+    def _hammer_gain(self, harmonic):
+        import hammer as _H
+        got = self.__dict__.get('_hammer_g')
+        if got is None:
+            f0, mass, K, p = self._hammer_felt()
+            vel = int(round(127.0 * self.attack_volume ** 0.5))
+            n = self.max_harmonic or 64
+            if self.max_partial_hz:
+                n = max(n, int(self.max_partial_hz / f0))
+            fr = [self.partial_frequency_for(h) if hasattr(self, 'partial_frequency_for') else f0 * h
+                  for h in range(1, n + 1)]
+            got = self._hammer_g = list(_H.gains(f0, vel, fr, self.strike_point, mass, K, p,
+                                                 self.hammer_speed_lo, self.hammer_speed_hi,
+                                                 alpha=self.hammer_alpha, tau=10.0 ** self.hammer_log_tau))
+        return got[harmonic - 1] if harmonic - 1 < len(got) else 0.0
+
     def harmonic_volume(self, harmonic):
         v = super().harmonic_volume(harmonic)
         if v == 0.0:
@@ -4886,6 +4932,8 @@ class GrandPianoProperties(InharmonicStringProperties):
         # brighten the tone. (Note frequency is not stored raw; recover it from
         # octave_position = log2(f0 / frequency_x).)
         fn = self.frequency_x * (2.0 ** self.octave_position) * harmonic
+        if self.hammer_model:
+            return v * self._hammer_gain(harmonic) * self.soundboard_gain(fn)
         av = self.attack_volume if self.hammer_open_power == 1.0 else self.attack_volume ** self.hammer_open_power
         fc = (self.hammer_corner_hz * (self.hammer_open_lo + self.hammer_open_slope * av)
               * 2.0 ** (self.hammer_register_slope * self.octave_position))
