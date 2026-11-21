@@ -4913,6 +4913,8 @@ class GrandPianoProperties(InharmonicStringProperties):
     # (the loudness reference, _hammer_gain: the low-pass grand's tilt and range)
     hammer_level_tilt = 1.1
     hammer_level_harmonics = 64
+    hammer_bass_level_db = 0.0
+    hammer_bass_level_top_hz = 130.8   # C3
     hammer_wear_center_hz = 160.0
     hammer_wear_octaves = 1.0
 
@@ -5007,6 +5009,13 @@ class GrandPianoProperties(InharmonicStringProperties):
                 if h <= self.hammer_level_harmonics:
                     e_old += bb * h ** (2.0 * dt_) / (1.0 + (fn / fc) ** self.hammer_order) ** 2
             k = (e_old / e_new) ** 0.5 if e_new > 0.0 else 1.0
+            # ...and the bottom octaves a little louder, in level only (Ben, on
+            # Ondine: "the bottom 2 octaves were played more gently than they
+            # would have been"): hammer_bass_level_db at A0, easing (in
+            # octaves) to nothing at hammer_bass_level_top_hz
+            if self.hammer_bass_level_db and f0 < self.hammer_bass_level_top_hz:
+                u = _log(self.hammer_bass_level_top_hz / f0) / _log(self.hammer_bass_level_top_hz / 27.5)
+                k *= 10.0 ** (self.hammer_bass_level_db * min(1.0, u) / 20.0)
             got = self._hammer_g = [g * k for g in got]
         return got[harmonic - 1] if harmonic - 1 < len(got) else 0.0
 
