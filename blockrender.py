@@ -10123,7 +10123,20 @@ def _record_clicks(props, t_end):
     return st['clicks']
 
 
+_RENDERS = [0]
+
+
 def render(path, tuner='hybrid440'):
+    # THE ENGINE KEEPS EACH CLASS'S TABLES (native._CLASS, _NOTE, ...), made at
+    # their first use. A process that renders again may have changed a class
+    # in between -- every fit script does, setting a constant and rendering
+    # -- so a second render lets them go, or it plays the constants the first
+    # one saw (the harpsichord's lute fit walked 40 steps on one rms, 2026-11-20).
+    # A file render renders once and keeps its tables.
+    if _RENDERS[0]:
+        import native as _NV
+        _NV.forget()
+    _RENDERS[0] += 1
     if RENDER_STREAM:
         import streamrender as _STR
         try:
