@@ -2239,7 +2239,12 @@ def string_partial(props, f0, ratio, m, B):
     mr = props.mode_ratio(m)
     if mr <= 0.0:
         return None
-    h = ratio*mr; stretch = (1.0+0.5*(h*h-1.0)*B) if B>0 else 1.0; hf = f0*h*stretch
+    h = ratio*mr
+    if B > 0 and getattr(props, 'stretch_exact', False):
+        stretch = math.sqrt((1.0 + B*h*h) / (1.0 + B))   # the stiff string's law, the fundamental at f0
+    else:
+        stretch = (1.0+0.5*(h*h-1.0)*B) if B>0 else 1.0
+    hf = f0*h*stretch
     # ...EACH PARTIAL OFF THE STIFF STRING'S LAW BY ITS OWN FEW CENTS
     # (partial_cents_scatter): drawn per key and partial, as a real string's
     # bridge and wrapping place each mode -- exactly on the law, the partials

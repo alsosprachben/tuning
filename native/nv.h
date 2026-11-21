@@ -402,6 +402,8 @@ typedef struct {
     /* EACH PARTIAL OFF THE STIFF STRING'S LAW (partial_cents_scatter): +- cents,
        fixed per key and partial (tonelib.partial_hash); 0 none */
     double partial_cents_scatter;
+    /* THE STIFF STRING'S LAW EXACTLY (stretch_exact): sqrt((1 + B h^2) / (1 + B)) */
+    int stretch_exact;
 } VoiceSnap;
 
 /* AN ORGAN PIPE (a class an organ's ranks draw on: the host, a borrowed

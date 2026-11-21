@@ -1249,7 +1249,8 @@ int nv_string_partial(const VoiceSnap *v, double f0, double ratio, int m, double
     if (mr <= 0.0)
         return 0;
     double h = ratio * mr;
-    double stretch = B > 0 ? (1.0 + 0.5 * (h * h - 1.0) * B) : 1.0;
+    double stretch = B > 0 ? (v->stretch_exact ? sqrt((1.0 + B * h * h) / (1.0 + B))
+                                              : (1.0 + 0.5 * (h * h - 1.0) * B)) : 1.0;
     out[0] = h;
     out[1] = f0 * h * stretch;
     if (v->partial_cents_scatter != 0.0 && m > 1) {   /* off the law by its own cents (tonelib.partial_hash) */

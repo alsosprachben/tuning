@@ -136,7 +136,7 @@ class VoiceSnap(ctypes.Structure):
                 ('lid_db', C), ('lid_hz', C), ('lid_order', C), ('decay_board_top_hz', C),
                 ('decay_treble_power', C), ('sp_curve_set', I), ('sp_curve', C * 3),
                 ('phantom_index_power', C), ('phantom_index_ref', C), ('hm_phase', I),
-                ('partial_cents_scatter', C)]
+                ('partial_cents_scatter', C), ('stretch_exact', I)]
 
 
 class ToneIn(ctypes.Structure):
@@ -2645,6 +2645,7 @@ def snapshot(props):
     s.phantom_max_order = int(getattr(p, 'phantom_max_order', 16))
     s.phantom_index_power = float(getattr(p, 'phantom_index_power', 0.0) or 0.0)
     s.partial_cents_scatter = float(getattr(p, 'partial_cents_scatter', 0.0) or 0.0)
+    s.stretch_exact = int(bool(getattr(p, 'stretch_exact', False)))
     s.phantom_index_ref = float(getattr(p, 'phantom_index_ref', 100.0))
     if s.kind == 2 and pipe_voice(type(p)) and not getattr(p, 'registerable', False):
         s.pps = float(getattr(p, 'partial_phase_spread', 0.0) or 0.0)    # (a blown pipe's: a drone's)

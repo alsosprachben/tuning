@@ -1163,6 +1163,12 @@ class SynthProperties:
     # is left out. () = none.
     ring_db = ()
     ring_skip = 0.03
+    # THE STIFF STRING'S LAW EXACTLY (stretch_exact): partial h at
+    # f0 h sqrt((1 + B h^2) / (1 + B)), where False keeps the first-order
+    # f0 h (1 + B (h^2 - 1) / 2) -- the same where B h^2 is small, but a
+    # piano's bass partial 30 came out 6 (grand) to 17 (upright) cents sharp,
+    # on a smooth curve the partials slipped along in step
+    stretch_exact = False
     # ...TUNED AS THE NOTES ARE (other strings, other tines), or FIXED IN HZ
     # (ring_tuned False: a piano's case and the room it stands in -- the
     # knock rings the same modes whatever the tuning)
@@ -5273,6 +5279,7 @@ class GrandPianoProperties(InharmonicStringProperties):
     # on a smooth curve and all started in phase
     hammer_phase = True
     partial_cents_scatter = 0.9
+    stretch_exact = True
 
 
 # HOW FAR OUT OF TUNE, on the wheel. 1.0 is the class's own range; 0 is a piano
@@ -5421,7 +5428,7 @@ class UprightPianoProperties(GrandPianoProperties):
     hammer_core_edge_mm = 4.7874
     hammer_wear_center_hz = 326.76
     hammer_wear_octaves = 2.369
-    hammer_core_logk = 14.317
+    hammer_core_logk = 16.3            # harder (Ben's ear): the loud bass 3-15 dB short over 1 kHz at 14.3
     # THE DECAY BY FREQUENCY (band T20s and the late tail: 7.7 -> 5.8 dB),
     # the 2-string aftersound held at its own (the fit ran it past 1)
     decay_by_hz = True
@@ -5436,7 +5443,7 @@ class UprightPianoProperties(GrandPianoProperties):
     # THE REGISTER'S LEVEL TO GENERALUSER GS'S UPRIGHT (K-weighted, each key
     # re its C4, velocities 64 and 100): within 0.85 dB; the old voicing's
     # 10 dB hole at A5-E6 and its bass 6-15 dB loud were VSCO's keys
-    hammer_level_points = ((27.5, -5.8), (41.2, -5.8), (55.0, -8.4), (82.4, -9.9), (110.0, -6.5), (164.8, -0.8), (220.0, 1.0), (329.6, -2.5), (440.0, -3.7), (659.3, 4.0), (880.0, 14.7), (1318.5, 16.8), (2093.0, 2.8))
+    hammer_level_points = ((27.5, -2.9), (41.2, -5.6), (55.0, -10.3), (82.4, -12.6), (110.0, -11.0), (164.8, -3.1), (220.0, 0.8), (329.6, -1.7), (440.0, -7.0), (659.3, -1.1), (880.0, 10.5), (1318.5, 11.4), (2093.0, -1.6))   # re-matched to GU's upright with the harder worn layer: 1.34 dB
     # THE CASE RINGS (Ben: "the noise needs drum modes of the cabinet"): on
     # every treble take the same peaks under the fundamental, where no
     # partial lives -- 143 to 955 Hz, ringing 70-150 dB/s, as loud as a soft
@@ -5455,15 +5462,23 @@ class UprightPianoProperties(GrandPianoProperties):
     strike_noise_register_db = ((27.5, -15.5), (440.0, 0.0), (1760.0, 0.0), (4186.0, 3.0))
     strike_noise_vel_power_register = ((55.0, 2.5), (175.0, 2.0), (330.0, 1.0), (880.0, 0.3))
     strike_noise_vel_power = 0.3
-    # (the grand's afternoon voicing is the grand's: this voice keeps its own)
+    # (the grand's afternoon voicing is the grand's: the lid, the treble's
+    # drain, the phantoms' reach and the strike curve stay off here)
     lid_db = 0.0
     decay_treble_power = 0.0
     phantom_max_order = 30
-    phantom_index_power = 0.0
     strike_curve = None
     ring_register_db = ()
-    hammer_phase = False
-    partial_cents_scatter = 0.0
+    # ...BUT ITS PHYSICS CARRIES OVER (Ben, 2026-11-21: "they all sound great"):
+    # the stiff string's law exactly (stretch_exact, the grand's -- 17 cents
+    # sharp at the bass's partial 30 otherwise), the hammer's phase, each partial
+    # off the law by its own cents (VSCO's sit 1.4-4.5 off, irregularly: +-2.4),
+    # and the phantoms weighted by their partials' wavenumbers -- unweighted,
+    # the bass's phantoms outweighed the string's own partials
+    hammer_phase = True
+    partial_cents_scatter = 2.4
+    phantom_index_power = 1.0
+    phantom_index_ref = 1500.0
 
 
 class BrightPianoProperties(GrandPianoProperties):
@@ -5559,6 +5574,7 @@ class BrightPianoProperties(GrandPianoProperties):
     ring_register_db = ()
     hammer_phase = False
     partial_cents_scatter = 0.0
+    stretch_exact = False
     string_gain = (0.7, 0.6)
     hammer_core_logk = 17.38
     hammer_wear_octaves = 1.1679
@@ -5870,6 +5886,7 @@ class ElectricGrandProperties(GrandPianoProperties):
     ring_register_db = ()
     hammer_phase = False
     partial_cents_scatter = 0.0
+    stretch_exact = False
     hammer_core_logk = 17.38
     hammer_wear_octaves = 1.1679
     decay_b3 = 1.8427
@@ -28663,7 +28680,10 @@ class SynthTone(BaseTone):
                     if mr <= 0.0:
                         break             # past the end of a measured mode set
                     h = eff_ratio * mr
-                    stretch = (1.0 + 0.5 * (h * h - 1.0) * rank_B) if rank_B > 0.0 else 1.0
+                    if rank_B > 0.0 and getattr(self.properties, 'stretch_exact', False):
+                        stretch = ((1.0 + rank_B * h * h) / (1.0 + rank_B)) ** 0.5
+                    else:
+                        stretch = (1.0 + 0.5 * (h * h - 1.0) * rank_B) if rank_B > 0.0 else 1.0
                     hf = f * h * stretch
                     if hf > self.nyquist:
                         break
