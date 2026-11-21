@@ -191,9 +191,9 @@ BEFORE = {
     "upper": ("HarpsiUpperProperties", {"strike_point": 0.083, "decay_db": 4.62 * 1.31,
                                         "harmonic_decay_db": 2.29 * 1.31},
               (("8-upper", "upper"), ("8+8-upper", "both8"))),
-    # the lute, fitted to VCSL's English Lute set
-    "lute": ("HarpsiLuteProperties", {"tonal_dampening": 1.095, "octave_dampening": 0.370,
-                                      "decay_db": 14.46},
+    # the lute as the Harpsimachord fitted it (2026-10-18), before VCSL again
+    "lute": ("HarpsiLuteProperties", {"tonal_dampening": 0.634, "octave_dampening": 0.178,
+                                      "decay_db": 10.1, "decay_register_slope": 0.823},
              (("lute", "lute"),)),
 }
 

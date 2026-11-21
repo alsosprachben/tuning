@@ -3881,13 +3881,21 @@ class HarpsiLuteProperties(HarpsiBase):
     # The whole-envelope fit (envfit) wanted 4.3, a buffed string no faster
     # than a plain one -- the tail again taken for the buffed string's own,
     # with register_gain held at VCSL's (it is every stop's coupling).
+    #
+    # REFITTED, 2026-11-20, BACK TO VCSL (CC0): the Harpsimachord's terms
+    # (Pianobook) forbid a model sold as an instrument (licences.md L7). Its
+    # tilt on the ladder, 8.43 -> 4.48 dB; its decay with the tail's pitch
+    # (envfit --shift-weight=1, register_gain held), cost 15.64 -> 13.98: the
+    # envelope 8.93 -> 9.79 dB, the tail 6.7 -> 4.2 cents from the
+    # recording's. The Harpsimachord's gentler buff, above, is no longer
+    # this voice's.
     strike_point = 0.115
     tonal_dampening = 1.105
     octave_dampening = 0.255
-    decay_db = 10.1
+    decay_db = 13.54
     harmonic_decay_db = 2.89
     harmonic_decay_dampening = 0.016   # its own: the buff takes the top fast, the 8''s m^0.6 law does not
-    decay_register_slope = 0.823
+    decay_register_slope = 0.428
     # ...and refitted over the whole band as the 8' was (harpsi_fit.py decay
     # --stop=lute): 0.942 -> 0.719 in log rate. The buffed string's upper
     # bands die FAST -- the recordings' 1-4 kHz 55-97 dB/s, 4-13 kHz 95-120 --
