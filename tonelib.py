@@ -4828,6 +4828,12 @@ class GrandPianoProperties(InharmonicStringProperties):
     # half of what it is" -- about 31 dB under.
     register_gain = 0.01
     register_knock_gain = 0.0025
+    # ...AND A KICK MOVES EACH MODE AS ITS VELOCITY OVER ITS FREQUENCY (the
+    # dulcimer's law, register_knock_tilt 1): flat, every free string under the
+    # pedal rang its whole ladder to 10 kHz on every stroke -- a snare behind
+    # the nocturne's soft left-hand chords (Ben), 2-8 kHz 16 dB over no knock
+    # and noise-like; tilted, within 1 dB of it and lines
+    register_knock_tilt = 1.0
     register_knock_falloff = 1.0
     damper_top = 91
 
@@ -5531,7 +5537,7 @@ class BrightPianoProperties(GrandPianoProperties):
     # warmth takes 2.5 dB of low-mid out of the note. Solved on the render at
     # 21.8 dB per decade of this knob rather than 20, the phantom partials
     # again being sum-tones that scale as its square.
-    initial_gain = 0.093189
+    initial_gain = 0.349836      # on the new grand: held at the old Bright's level (-31.8 dB K, C2-C6 at velocity 100)
     # A VOICING OF THE GRAND, so relative to it: the grand was refitted to a
     # Steinway B (its board now rolls off at 9.8 kHz, not 2.6), and these were
     # written as absolute numbers against the old one -- left so, "bright"
@@ -5562,37 +5568,14 @@ class BrightPianoProperties(GrandPianoProperties):
     board_high_hz = GrandPianoProperties.board_high_hz * 2.1154
     board_body_gain = GrandPianoProperties.board_body_gain * 0.5
 
-    # THE GRAND'S HAMMER AND DECAY ARE THE NEW GRAND'S OWN (2026-11-21): this
-    # voice keeps the low-pass hammer and the decay it was voiced on
-    hammer_model = False
-    lid_db = 0.0
-    # (the grand's afternoon voicing is the grand's: this voice keeps its own)
-    decay_treble_power = 0.0
-    phantom_max_order = 30
-    phantom_index_power = 0.0
-    strike_curve = None
-    ring_register_db = ()
-    hammer_phase = False
-    partial_cents_scatter = 0.0
-    stretch_exact = False
-    string_gain = (0.7, 0.6)
-    hammer_core_logk = 17.38
-    hammer_wear_octaves = 1.1679
-    decay_b3 = 1.8427
-    board_low_order = None
-    ring_db = ()
-    strike_noise_vel_power_register = ()
-    decay_by_hz = False
-    strike_noise_vel_power = 0.0
-    tonal_dampening = 1.1
-    strike_depth = 0.65
-    max_partial_hz = None
-    aftersound_level_1 = 0.266664
-    aftersound_level_2 = 0.3709
-    aftersound_level_3 = 0.283217
-    aftersound_decay_ratio = 0.326029
-    strike_noise_db = ((45, -28.2), (57, -24.7), (71, -18.0), (90, -18.8), (113, -12.2), (143, -14.1), (180, -24.0), (226, -25.4), (285, -26.6), (359, -12.1), (453, -14.9), (570, -13.6), (718, -14.3), (905, -13.5), (1140, -11.9), (1437, -19.3), (1810, -19.6), (2281, -24.6), (2874, -27.5), (3620, -29.7), (4561, -35.9), (5747, -39.8), (7241, -52.0), (9123, -55.5), (11494, -65.3))
-
+    # ON THE NEW GRAND (2026-11-21, Ben: "should be easy to derive"): the
+    # simulated hammer, the decay by frequency, the case, the lid, the strike
+    # curve, the hammer's phase, the stiff string's law -- all the grand's;
+    # only the voicing is its own. "Contact 1.75x shorter" in the felt's terms:
+    # a contact's length goes as K^(-1/(p+1)), p ~2.5, so a felt 1.75^3.5 ~ 7x
+    # stiffer (+0.85 on log K). The notch stays: the grand's never fills now.
+    hammer_logk = GrandPianoProperties.hammer_logk + 0.85
+    strike_fill_fraction = 0.0
 
 class HonkyTonkProperties(UprightPianoProperties):
     """GM 3. The UPRIGHT, badly tuned -- which is all a honky-tonk is (the
@@ -5887,6 +5870,7 @@ class ElectricGrandProperties(GrandPianoProperties):
     hammer_phase = False
     partial_cents_scatter = 0.0
     stretch_exact = False
+    register_knock_tilt = None
     hammer_core_logk = 17.38
     hammer_wear_octaves = 1.1679
     decay_b3 = 1.8427

@@ -3029,7 +3029,7 @@ _NOTE_OFF = ('bloom_seconds', 'speech_harmonic_exp', 'speech_harmonic_exp_per_oc
              'strike_flam_rate', 'strike_flam_times', 'strike_flam_people', 'strike_noise_tail',
              'strike_noise_layers', 'transposed_from_hz', 'one_shot', 'gate_time',
              'course_keys', 'key_bridge', 'bridge_partner', 'buff_choirs',
-             'register_knock_tilt', 'register_knock_profile')
+             'register_knock_profile')
 _NOTE_ABSENT = ('pre_pluck_s',)
 
 
