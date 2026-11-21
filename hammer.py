@@ -23,7 +23,7 @@ from f = sqrt(T/mu) / 2L. The hammer's: mass from ~11 g in the bass to ~6.6
 g at the top (Conklin, JASA 99, 1996: hammer weights across a concert
 grand), the felt's K and p by register -- the free numbers, fitted.
 """
-from math import cos, sin, pi, sqrt, log
+from math import cos, sin, pi, sqrt, log, exp
 
 _CACHE = {}
 
@@ -62,8 +62,8 @@ def contact(f0, v0, mass_kg, K, p, beta, L, Z, os_=8, sr=44100, t_max=0.025, alp
     c = 2.0 * L * f0
     M = max(8, int(round(L / (c * dt))))        # string segments
     i0 = max(1, min(M - 2, int(round(beta * M))))
-    r = np.zeros(M)                              # right- and left-going velocity waves
-    l = np.zeros(M)
+    r = [0.0] * M                                # right- and left-going velocity waves
+    l = [0.0] * M
     ys = yh = 0.0
     vh = v0
     F = []
@@ -81,53 +81,89 @@ def contact(f0, v0, mass_kg, K, p, beta, L, Z, os_=8, sr=44100, t_max=0.025, alp
             touched = True
         elif touched:
             break                                # the felt has left the string
-        F.append(f)
+        F.append(float(f))
         inj = f / (2.0 * Z)
         vs = r[i0 - 1] + l[i0 + 1] + inj          # the string at the strike point
         ys += vs * dt
         vh -= f / mass_kg * dt
         yh += vh * dt
         rl, ll0 = r[-1], l[0]
-        r[1:] = r[:-1].copy()                     # one segment on: right-goers right,
-        l[:-1] = l[1:].copy()                     # left-goers left
+        r = [-ll0] + r[:-1]                       # one segment on: right-goers right,
+        l = l[1:] + [-rl]                         # left-goers left; the ends invert
         r[i0] += inj
         l[i0] += inj
-        r[0] = -ll0                               # the ends invert
-        l[-1] = -rl
     return F, dt
 
 
-def gains(f0, velocity, freqs, beta, mass_kg, K, p, v_lo=0.5, v_hi=5.0, string=None, alpha=0.0, tau=1e-4,
+# THE VELOCITIES THE CONTACT IS SIMULATED AT: between them a note's partials
+# are the two nearest levels' blended in dB (gains_at). A table of 88 keys x 17
+# levels is the whole piano, whatever the tuning -- what the C engine computes
+# once, ahead of the notes, so no note waits on a simulation.
+LEVELS = (1, 9, 17, 25, 33, 41, 49, 57, 65, 73, 81, 89, 97, 105, 113, 121, 127)
+
+
+def nominal_f0(f0):
+    """The key's equal-tempered pitch: its contact is simulated there (a few
+    cents of tuning move the hammer's spectrum by nothing audible)."""
+    k = int(round(69.0 + 12.0 * log(f0 / 440.0) / log(2.0)))
+    return 440.0 * 2.0 ** ((k - 69) / 12.0)
+
+
+def gains(f0, velocity, nharm, beta, mass_kg, K, p, v_lo=0.5, v_hi=5.0, string=None, alpha=0.0, tau=1e-4,
           core_x=0.0, core_K=0.0):
-    """The hammer's share of each partial (freqs, Hz) for a key at f0 struck
-    at MIDI velocity: |F(f)| re |F(0)|, cached by (f0, velocity, the felt).
-    The hammer's speed spans v_lo..v_hi m/s exponentially over velocity 1..127
-    (a piano's pp to ff, Askenfelt & Jansson 1990)."""
-    import numpy as np
-    key = (round(f0, 4), int(velocity), beta, mass_kg, K, p, v_lo, v_hi, string, alpha, tau, core_x, core_K)
+    """The hammer's share of partials 1..nharm (at h x the key's nominal
+    pitch) for a key struck at MIDI velocity: |F(f)| re |F(0)|, the two
+    nearest LEVELS blended in dB.
+
+    EVERY SUM IN ORDER, every cosine libm's, the spectrum by a rotation
+    (cos, sin of w(n+1) from w n's): native/voice.c computes the same, step for
+    step, so a note's partials are the same numbers in the C engine as here."""
+    fn = nominal_f0(f0)
+    v = min(max(int(velocity), 1), 127)
+    j = 0
+    while j + 1 < len(LEVELS) - 1 and LEVELS[j + 1] <= v:
+        j += 1
+    va, vb = LEVELS[j], LEVELS[j + 1]
+    ga = level_gains(fn, j, nharm, beta, mass_kg, K, p, v_lo, v_hi, string, alpha, tau, core_x, core_K)
+    if v == va:
+        return list(ga[:nharm])
+    gb = level_gains(fn, j + 1, nharm, beta, mass_kg, K, p, v_lo, v_hi, string, alpha, tau, core_x, core_K)
+    if v == vb:
+        return list(gb[:nharm])
+    t = (v - va) / (vb - va)
+    return [exp((1.0 - t) * log(max(a, 1e-30)) + t * log(max(b, 1e-30))) for a, b in zip(ga[:nharm], gb[:nharm])]
+
+
+def level_gains(fn, j, nharm, beta, mass_kg, K, p, v_lo, v_hi, string, alpha, tau, core_x, core_K):
+    """LEVELS[j]'s spectrum for the key at nominal pitch fn, partials 1..nharm
+    (cached, longest asked)."""
+    key = (fn, j, beta, mass_kg, K, p, v_lo, v_hi, string, alpha, tau, core_x, core_K)
     got = _CACHE.get(key)
-    if got is None:
-        L, T, Z = string_of(f0, *(string or ()))
-        v0 = v_lo * (v_hi / v_lo) ** ((max(1, velocity) - 1) / 126.0)
-        F, dt = contact(f0, v0, mass_kg, K, p, beta, L, Z, alpha=alpha, tau=tau, core_x=core_x, core_K=core_K)
-        F = np.asarray(F)
-        got = _CACHE[key] = (F, dt, F.sum() * dt)
-        if len(_CACHE) > 4096:
-            _CACHE.clear()
-    F, dt, tot = got
-    import numpy as np
-    t = np.arange(len(F)) * dt
-    w = 2.0 * np.pi * np.asarray(freqs, float)[:, None]
-    re = (F * np.cos(w * t)).sum(1)
-    im = (F * np.sin(w * t)).sum(1)
-    return np.sqrt(re * re + im * im) * dt / tot if tot > 0 else np.zeros(len(freqs))
-
-
-def contact_s(f0, velocity, beta, mass_kg, K, p, v_lo=0.5, v_hi=5.0, string=None):
-    """How long the felt is on the string (s), for the onset."""
-    gains(f0, velocity, [f0], beta, mass_kg, K, p, v_lo, v_hi, string)
-    F, dt, _ = _CACHE[(round(f0, 4), int(velocity), beta, mass_kg, K, p, v_lo, v_hi, string)]
-    return len(F) * dt
+    if got is not None and len(got) >= nharm:
+        return got
+    L, T, Z = string_of(fn, *(string or ()))
+    vel = LEVELS[j]
+    v0 = v_lo * (v_hi / v_lo) ** ((vel - 1) / 126.0)
+    F, dt = contact(fn, v0, mass_kg, K, p, beta, L, Z, alpha=alpha, tau=tau, core_x=core_x, core_K=core_K)
+    tot = 0.0
+    for x in F:
+        tot += x
+    out = []
+    for h in range(1, nharm + 1):
+        w = 2.0 * pi * fn * h * dt
+        cw, sw = cos(w), sin(w)
+        c, s_ = 1.0, 0.0
+        re = im = 0.0
+        for x in F:
+            re += x * c
+            im += x * s_
+            c, s_ = c * cw - s_ * sw, s_ * cw + c * sw
+        out.append(sqrt(re * re + im * im) / tot if tot > 0.0 else 0.0)
+    _CACHE[key] = out
+    if len(_CACHE) > 8192:
+        _CACHE.clear()
+        _CACHE[key] = out
+    return out
 
 
 def force_spectrum(F, dt, freqs):

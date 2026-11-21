@@ -58,6 +58,15 @@ class VoiceSnap(ctypes.Structure):
                 ('bridge_order', C), ('bridge_force_power', C),
                 ('wound_below_hz', C), ('wound_corner_hz', C), ('wound_zing_db', C), ('wound_decay_db', C),
                 ('bridge_peak_db', C), ('bridge_peak_hz', C), ('bridge_peak_width', C),
+                ('decay_by_hz', I), ('decay_b1', C), ('decay_b3', C), ('decay_board_db', C), ('decay_board_hz', C),
+                ('dz_scale', C), ('dz_lmax', C), ('dz_B', C), ('dz_zr', C),
+                ('hammer_model', I), ('hm_logk', C), ('hm_logk_slope', C), ('hm_logk_curve', C), ('hm_p_lo', C),
+                ('hm_p_hi', C), ('hm_mass_lo_g', C), ('hm_mass_hi_g', C), ('hm_speed_lo', C), ('hm_speed_hi', C),
+                ('hm_alpha', C), ('hm_log_tau', C), ('hm_core_mm', C), ('hm_core_logk', C), ('hm_core_edge_mm', C),
+                ('hm_wear_center_hz', C), ('hm_wear_octaves', C), ('hm_level_tilt', C), ('hm_tonal', C),
+                ('hm_bass_level_db', C), ('hm_bass_level_top_hz', C), ('hm_max_partial_hz', C),
+                ('hm_level_harmonics', I), ('hm_n_pts', I), ('hm_pts_hz', C * 32), ('hm_pts_db', C * 32),
+                ('hm_n', I), ('hm_g', C * 400),
                 ('kind', I), ('unison_gain', C), ('n_unison', I), ('unison_detune', C * 8),
                 ('n_modes', I), ('modes', (C * 3) * 128), ('n_click', I), ('click_per_band', I),
                 ('click_db', C * 32), ('click_hz0', C), ('click_cal_db', C), ('click_scatter', C),
@@ -226,7 +235,7 @@ class NoteClass(ctypes.Structure):
                    ('n_strike', I), ('strike_hz', C * 32), ('strike_db', C * 32), ('strike_noise_dbs', C),
                    ('strike_span_set', I)]
                 + [(f, C) for f in ('strike_span_lo', 'strike_span_hi', 'strike_octave_db', 'strike_fade_s',
-                                    'strike_len_s', 'strike_at_s', 'strike_cal_db')]
+                                    'strike_len_s', 'strike_at_s', 'strike_cal_db', 'strike_vel_power')]
                 + [('room_planes', C * 6), ('room_order', I), ('damper_pedal', I), ('detune_lo', C),
                    ('detune_hi', C), ('detune_wheel', I)]
                 + [('reg_gain', C), ('reg_knock', C), ('reg_fall', C), ('damper_top', I), ('reg_floor', C),
@@ -2670,6 +2679,35 @@ def snapshot(props):
             s.gong[:s.n_gong] = [int(x) for x in c.GONG]
         s.tap_drop = int(bool(getattr(c, 'unison_drop_late', False)))
         s.sect_ofm = float(getattr(c, 'unison_onset_fraction_max', 0.25))
+    if s.kind == 0 and getattr(p, 'decay_by_hz', False):
+        s.decay_by_hz = 1
+        s.decay_b1, s.decay_b3 = p.decay_b1, p.decay_b3
+        s.decay_board_db, s.decay_board_hz = p.decay_board_db, p.decay_board_hz
+        s.dz_scale, s.dz_lmax = p._string_scale()
+        import hammer as _H
+        _f0 = p.frequency_x * (2.0 ** p.octave_position)
+        s.dz_B = p.inharmonicity_coefficient_for_frequency(_f0)
+        s.dz_zr = _H.string_of(440.0, *p._string_scale())[2] / _H.string_of(_f0, *p._string_scale())[2]
+    if s.kind == 0 and getattr(p, 'hammer_model', False):
+        s.hammer_model = 1
+        for f in ('logk', 'logk_slope', 'logk_curve', 'p_lo', 'p_hi', 'mass_lo_g', 'mass_hi_g', 'speed_lo',
+                  'speed_hi', 'alpha', 'log_tau', 'core_mm', 'core_logk', 'core_edge_mm', 'wear_center_hz',
+                  'wear_octaves', 'level_tilt', 'bass_level_db', 'bass_level_top_hz'):
+            setattr(s, 'hm_' + f, float(getattr(p, 'hammer_' + f)))
+        s.hm_tonal = p.tonal_dampening
+        s.hm_max_partial_hz = p.max_partial_hz or 0.0
+        s.hm_level_harmonics = int(p.hammer_level_harmonics)
+        pts = tuple(p.hammer_level_points or ())[:32]
+        s.hm_n_pts = len(pts)
+        for i, (hz, db) in enumerate(pts):
+            s.hm_pts_hz[i], s.hm_pts_db[i] = float(hz), float(db)
+        if not s.decay_by_hz:
+            s.dz_scale, s.dz_lmax = p._string_scale()
+        # (the note's own shares, as Python's harmonic_volume reads them)
+        p._hammer_gain(1)
+        g = p.__dict__['_hammer_g'][:400]
+        s.hm_n = len(g)
+        s.hm_g[:len(g)] = g
     s.board_kind = _board_kind(type(p)) if s.kind == 0 else 0
     if s.kind == 0 and s.board_kind == 1:
         s.board_low_order = p.board_low_order
@@ -3470,6 +3508,7 @@ def note_class(cls):
             k.strike_len_s = getattr(cls, 'strike_noise_len_s', None) or 0.25
             k.strike_at_s = getattr(cls, 'strike_noise_at', 0.0) or 0.0
             k.strike_cal_db = getattr(cls, 'strike_noise_cal_db', 0.0) or 0.0
+            k.strike_vel_power = getattr(cls, 'strike_noise_vel_power', 0.0) or 0.0
             tl = getattr(cls, 'strike_noise_tail', None)
             if tl:
                 k.tail_set, k.tail_db, k.tail_dbs = 1, float(tl[0]), float(tl[1])

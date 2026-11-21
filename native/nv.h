@@ -68,6 +68,22 @@ typedef struct {
     /* ...and its wound strings' zing (ElectricGrandProperties._wound_weight) */
     double wound_below_hz, wound_corner_hz, wound_zing_db, wound_decay_db;
     double bridge_peak_db, bridge_peak_hz, bridge_peak_width;     /* ...and the piezo's resonance */
+    /* the decay by frequency (GrandPianoProperties.decay_by_hz): its law, the
+       string scale its impedances come from, and at the note its B and Z_A4/Z */
+    int decay_by_hz;
+    double decay_b1, decay_b3, decay_board_db, decay_board_hz, dz_scale, dz_lmax, dz_B, dz_zr;
+    /* the simulated hammer (GrandPianoProperties.hammer_model; hammer.py): the
+       felt by register, its speeds and memory, the worn layer, the loudness
+       reference, the register's levels; at the note, partials 1..hm_n's shares */
+    int hammer_model;
+    double hm_logk, hm_logk_slope, hm_logk_curve, hm_p_lo, hm_p_hi, hm_mass_lo_g, hm_mass_hi_g;
+    double hm_speed_lo, hm_speed_hi, hm_alpha, hm_log_tau, hm_core_mm, hm_core_logk, hm_core_edge_mm;
+    double hm_wear_center_hz, hm_wear_octaves, hm_level_tilt, hm_tonal, hm_bass_level_db, hm_bass_level_top_hz;
+    double hm_max_partial_hz;
+    int hm_level_harmonics, hm_n_pts;
+    double hm_pts_hz[32], hm_pts_db[32];
+    int hm_n;
+    double hm_g[400];
     /* WHOSE METHODS THE VOICE HAS: 0 the grand's (its hammer and board, its
        strings, its aftersound -- above); 1 a kit drum's (KitDrumProperties:
        its measured modes, its stick's click, its two-stage decay -- below),
@@ -822,6 +838,7 @@ typedef struct NoteClass {
     double strike_span_lo, strike_span_hi;
     double strike_octave_db;            // strike_noise_octave_db, else strike_noise_slope
     double strike_fade_s, strike_len_s, strike_at_s, strike_cal_db;
+    double strike_vel_power;            // strike_noise_vel_power: the knock's own velocity law
     // the room it plays in (WALLS' signed planes, its reflection order), its
     // dampers, its strings' detune range and whether CC1 scales it (detune_wheel)
     double room_planes[6];

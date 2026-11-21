@@ -4962,7 +4962,10 @@ class GrandPianoProperties(InharmonicStringProperties):
         return self.hammer_core_edge_mm + (self.hammer_core_mm - self.hammer_core_edge_mm) * w
 
     def _hammer_felt(self):
-        f0 = self.frequency_x * (2.0 ** self.octave_position)
+        import hammer as _H
+        # (at the key's nominal pitch: the table hammer.gains keeps is the
+        # piano's, whatever it is tuned to)
+        f0 = _H.nominal_f0(self.frequency_x * (2.0 ** self.octave_position))
         octs = _log(f0 / 440.0) / _log(2.0)
         u = min(1.0, max(0.0, _log(f0 / 27.5) / _log(4186.0 / 27.5)))
         mass = (self.hammer_mass_lo_g + (self.hammer_mass_hi_g - self.hammer_mass_lo_g) * u) * 1e-3
@@ -4974,18 +4977,19 @@ class GrandPianoProperties(InharmonicStringProperties):
         import hammer as _H
         got = self.__dict__.get('_hammer_g')
         if got is None:
-            f0, mass, K, p = self._hammer_felt()
+            _fn, mass, K, p = self._hammer_felt()
+            # (the felt and its table at the nominal pitch _fn; the note's own
+            # f0 for its partial count and its loudness)
+            f0 = self.frequency_x * (2.0 ** self.octave_position)
             vel = int(round(127.0 * self.attack_volume ** 0.5))
             n = self.max_harmonic or 64
             if self.max_partial_hz:
                 n = max(n, int(self.max_partial_hz / f0))
-            fr = [self.partial_frequency_for(h) if hasattr(self, 'partial_frequency_for') else f0 * h
-                  for h in range(1, n + 1)]
-            got = list(_H.gains(f0, vel, fr, self.strike_point, mass, K, p,
+            got = list(_H.gains(f0, vel, n, self.strike_point, mass, K, p,
                                                  self.hammer_speed_lo, self.hammer_speed_hi,
                                                  string=self._string_scale(),
                                                  alpha=self.hammer_alpha, tau=10.0 ** self.hammer_log_tau,
-                                                 core_x=self._core_mm(f0) * 1e-3,
+                                                 core_x=self._core_mm(_fn) * 1e-3,
                                                  core_K=10.0 ** self.hammer_core_logk))
             # THE NOTE'S LOUDNESS AS THE LOW-PASS HAMMER GAVE IT: the
             # simulated force changes the spectrum, not the level -- the
@@ -5061,12 +5065,54 @@ class GrandPianoProperties(InharmonicStringProperties):
         low = 1.0 / (1.0 + (self.board_low_hz / fn) ** 2)
         return body * high * low
 
+    # ---- THE NEW GRAND (2026-11-21; examples/grand_hammer/, Ben's ear on
+    # Ondine and MAESTRO's Chopin): the simulated hammer on a worn felt, the
+    # knock fitted under it, the decay by frequency, partials to 10 kHz, the
+    # register's level to GeneralUser GS's grand. Fitted on the Steinway B's
+    # soft-to-hard change (the microphone cancels), its band T20s and the
+    # hard tenor's upper bands; the values as the fits left them.
+    max_partial_hz = 10000.0
+    hammer_model = True
+    hammer_logk = 9.853
+    hammer_logk_slope = 0.58811
+    hammer_logk_curve = 0.043204
+    hammer_p_lo = 2.3
+    hammer_p_hi = 3.0
+    hammer_speed_lo = 0.6
+    hammer_speed_hi = 5.0
+    hammer_alpha = 0.39029
+    hammer_log_tau = -4.1929
+    hammer_core_mm = 0.62859
+    hammer_core_logk = 17.38
+    hammer_core_edge_mm = 1.4439
+    hammer_wear_center_hz = 159.8
+    hammer_wear_octaves = 1.1679
+    strike_depth = 0.64567
+    strike_fill_fraction = 0.0
+    tonal_dampening = 0.5
+    strike_noise_vel_power = 0.3
+    decay_by_hz = True
+    decay_b1 = 0.97097
+    decay_b3 = 1.8427
+    decay_board_db = 4.9698
+    decay_board_hz = 68.13
+    aftersound_level_1 = 0.266664
+    aftersound_level_2 = 0.58426
+    aftersound_level_3 = 0.11174
+    aftersound_decay_ratio = 0.326029
+    hammer_level_points = ((27.5, -1.5), (41.2, 1.3), (55.0, 1.6), (82.4, 2.6), (110.0, 3.2), (164.8, 3.0), (220.0, -0.1), (329.6, 0.5), (440.0, 2.5), (659.3, 2.6), (880.0, 4.5), (1318.5, 5.0), (2093.0, 2.4))
+    # the knock 22 dB under the low-pass grand's (its fit under this hammer:
+    # soft and hard blows each within ~1 dB of the takes' noise between harmonics)
+    strike_noise_db = ((45, -50.2), (57, -46.7), (71, -40.0), (90, -40.8), (113, -34.2), (143, -36.1), (180, -46.0), (226, -47.4), (285, -48.6), (359, -34.1), (453, -36.9), (570, -35.6), (718, -36.3), (905, -35.5), (1140, -33.9), (1437, -41.3), (1810, -41.6), (2281, -46.6), (2874, -49.5), (3620, -51.7), (4561, -57.9), (5747, -61.8), (7241, -74.0), (9123, -77.5), (11494, -87.3))
+
+
 
 # HOW FAR OUT OF TUNE, on the wheel. 1.0 is the class's own range; 0 is a piano
 # somebody has just tuned; 2.0 is one nobody has touched in a decade. Set per
 # note by blockrender from the channel's CC1, and live by the bank axis, which
 # is literally "the CC1 value to build this template with".
 honky_detune = 1.0
+
 
 
 class UprightPianoProperties(GrandPianoProperties):
@@ -5183,6 +5229,16 @@ class UprightPianoProperties(GrandPianoProperties):
     strike_noise_db = ((45, -42.4), (57, -42.4), (71, -44.1), (90, -47.2), (113, -25.4), (143, -21.3), (180, -25.3), (226, -27.4), (285, -46.5), (359, -20.1), (453, -20.7), (570, -21.5), (718, -24.5), (905, -33.3), (1140, -35.8), (1437, -38.9), (1810, -45.5), (2281, -51.0), (2874, -56.1), (3620, -61.2), (4561, -61.4), (5747, -59.0), (7241, -64.2), (9123, -67.3), (11494, -74.5))
     strike_noise_slope = 3.885
 
+    # THE GRAND'S HAMMER AND DECAY ARE THE NEW GRAND'S OWN (2026-11-21): this
+    # voice keeps the low-pass hammer and the decay it was voiced on
+    hammer_model = False
+    decay_by_hz = False
+    strike_noise_vel_power = 0.0
+    tonal_dampening = 1.1
+    strike_depth = 0.65
+    strike_fill_fraction = 1.0
+    max_partial_hz = None
+
 
 class BrightPianoProperties(GrandPianoProperties):
     """GM 1. The same piano, voiced hard -- which is what a technician does.
@@ -5264,6 +5320,20 @@ class BrightPianoProperties(GrandPianoProperties):
     # piano voiced".
     board_high_hz = GrandPianoProperties.board_high_hz * 2.1154
     board_body_gain = GrandPianoProperties.board_body_gain * 0.5
+
+    # THE GRAND'S HAMMER AND DECAY ARE THE NEW GRAND'S OWN (2026-11-21): this
+    # voice keeps the low-pass hammer and the decay it was voiced on
+    hammer_model = False
+    decay_by_hz = False
+    strike_noise_vel_power = 0.0
+    tonal_dampening = 1.1
+    strike_depth = 0.65
+    max_partial_hz = None
+    aftersound_level_1 = 0.266664
+    aftersound_level_2 = 0.3709
+    aftersound_level_3 = 0.283217
+    aftersound_decay_ratio = 0.326029
+    strike_noise_db = ((45, -28.2), (57, -24.7), (71, -18.0), (90, -18.8), (113, -12.2), (143, -14.1), (180, -24.0), (226, -25.4), (285, -26.6), (359, -12.1), (453, -14.9), (570, -13.6), (718, -14.3), (905, -13.5), (1140, -11.9), (1437, -19.3), (1810, -19.6), (2281, -24.6), (2874, -27.5), (3620, -29.7), (4561, -35.9), (5747, -39.8), (7241, -52.0), (9123, -55.5), (11494, -65.3))
 
 
 class HonkyTonkProperties(UprightPianoProperties):
@@ -5546,10 +5616,24 @@ class ElectricGrandProperties(GrandPianoProperties):
     # refitted at each)
     strike_noise_dbs = 1200.0
 
+    # THE GRAND'S HAMMER AND DECAY ARE THE NEW GRAND'S OWN (2026-11-21): this
+    # voice keeps the low-pass hammer and the decay it was voiced on
+    hammer_model = False
+    decay_by_hz = False
+    strike_noise_vel_power = 0.0
+    tonal_dampening = 1.1
+    strike_depth = 0.65
+    strike_fill_fraction = 1.0
+    aftersound_level_1 = 0.266664
+    aftersound_level_2 = 0.3709
+    aftersound_level_3 = 0.283217
+    aftersound_decay_ratio = 0.326029
+
 
 # One waveshaper answer per (curve, offset, deflection). A note asks for it up to
 # max_harmonic times, and a bank asks for it once per velocity bucket.
 _EP_PICKUP_CACHE = {}
+
 
 
 def _ep_owner(cls, name):

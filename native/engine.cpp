@@ -398,6 +398,11 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
         }
         ToneIn tk = t;
         tk.gain = s.gain; tk.B = 0.0; tk.sjit = 0.0; tk.reflect = 0;
+        // the calibration, and the knock's own velocity law (strike_noise_vel_power:
+        // its power as attack_volume ** (1 + this) -- blockrender's _scal)
+        double scal = K->strike_cal_db;
+        if (K->strike_vel_power != 0.0)
+            scal += K->strike_vel_power * 10.0 * log10(pymax(s.attack_volume, 1e-6));
         tk.cbw0 = -0.25; tk.cbw1 = 0.0;
         out->n_knock = 0;
         // A PERSON'S PALMS RINGING after each clap: the clap's colour at
@@ -422,14 +427,14 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
                     cdb = slope * (x - xj) + K->strike_db[j];
                 }
             }
-            double db = cdb + K->pk_db + reg + bd + K->strike_cal_db;
+            double db = cdb + K->pk_db + reg + bd + scal;
             double plr = log(10.0) / 20.0 * 27.29 * hz / K->pk_q;
             return nv_palm(&s, &tk, hz, db, plr, bon, slen, sfade, bgl[b], bgr[b], s.position_x,
                            rows + NCOLS * total, cap - total, qacc, azimuth);
         };
         for (int b = 0; b < nb; b++) {
             double bon = non + K->strike_at_s * SR + boff[b] * SR;
-            int k = nv_strike_bal(&s, &tk, K->n_strike, K->strike_hz, K->strike_db, reg, bdb[b], K->strike_cal_db,
+            int k = nv_strike_bal(&s, &tk, K->n_strike, K->strike_hz, K->strike_db, reg, bdb[b], scal,
                                   slr, sfade, slen, bon, s.position_x, bgl[b], bgr[b], rows + NCOLS * total,
                                   cap - total, qacc, azimuth);
             if (k < 0)
@@ -451,7 +456,7 @@ int nv_note(const NoteClass *K, const NoteIn *n, PyRandom *rs,
             for (int b = 0; b < nb; b++) {
                 double bon = non + K->strike_at_s * SR + boff[b] * SR;
                 int k = nv_strike_bal(&s, &tk, K->n_strike, K->strike_hz, K->strike_db, reg, bdb[b] + K->tail_db,
-                                      K->strike_cal_db, tlr, sfade, slen, bon, s.position_x, bgl[b], bgr[b],
+                                      scal, tlr, sfade, slen, bon, s.position_x, bgl[b], bgr[b],
                                       rows + NCOLS * total, cap - total, qacc, azimuth);
                 if (k < 0)
                     return -1;

@@ -14,6 +14,8 @@
  * aftersound; and the shared ones every voice uses (decay, radiation,
  * chiff, bloom, vibrato, the head's shadow).
  */
+#include <stdlib.h>
+#include <string.h>
 #include "nv.h"
 #include "pycompat.h"
 #include "../roomcore.c"        /* air_db, directivity_gain: the room's, shared */
@@ -552,6 +554,17 @@ static double blare(const VoiceSnap *v, double hz)
     return pow(10.0, d / 20.0);
 }
 
+/* hammer.string_of's impedance sqrt(T mu): L = C/f to the case's longest, the
+   wound bass's higher tension, mu from f = sqrt(T/mu) / 2L */
+static double string_z(double f0, double scale_c, double lmax)
+{
+    double L = (lmax < scale_c / f0 ? lmax : scale_c / f0);
+    double T = f0 < 110.0 ? 1100.0 : 750.0;
+    double c = 2.0 * L * f0;
+    double mu = T / (c * c);
+    return sqrt(T * mu);
+}
+
 /* ElectricGrandProperties._wound_weight: 0 above the break or with no term */
 static double wound_weight(const VoiceSnap *v, int harmonic)
 {
@@ -583,6 +596,8 @@ static double harmonic_volume(const VoiceSnap *v, int harmonic)
         return s;
     }
     double fn = v->frequency_x * pow(2.0, v->octave_position) * harmonic;
+    if (v->hammer_model)                        /* GrandPianoProperties': the simulated hammer's share */
+        return s * (harmonic - 1 < v->hm_n ? v->hm_g[harmonic - 1] : 0.0) * soundboard_gain(v, fn);
     double av = v->hammer_open_power == 1.0 ? v->attack_volume : pow(v->attack_volume, v->hammer_open_power);
     double fc = (v->hammer_corner_hz * (v->hammer_open_lo + v->hammer_open_slope * av)
                  * pow(2.0, v->hammer_register_slope * v->octave_position));
@@ -658,6 +673,12 @@ static double harmonic_decay_(const VoiceSnap *v, int harmonic)
         int b;
         double hz;
         return drum_click(v, harmonic, &b, &hz) ? 0.5 * v->click_dbs : 0.0;
+    }
+    if (v->kind == 0 && v->decay_by_hz) {       /* GrandPianoProperties': by the partial's frequency */
+        double f0 = v->frequency_x * pow(2.0, v->octave_position);
+        double f = f0 * harmonic * pow(1.0 + v->dz_B * harmonic * harmonic, 0.5);
+        return (v->decay_b1 + v->decay_b3 * pow(f / 1000.0, 2.0)
+                + v->decay_board_db * v->dz_zr / (1.0 + pow(v->decay_board_hz / f, 2.0)));
     }
     double h = (double)harmonic;                /* mode_ratios None */
     double base = v->decay_db + v->harmonic_decay_db * h * pow(h, v->harmonic_decay_dampening);
@@ -1538,6 +1559,231 @@ void nv_voice_turn(const VoiceInit *c, const VoiceSnap *s, VoiceNote *o, double 
     o->left_hrtf_delay = e[2]; o->right_hrtf_delay = e[3];
 }
 
+
+/* ---- THE SIMULATED HAMMER (hammer.py; GrandPianoProperties._hammer_gain) ----
+   Every step and sum as the Python takes them, so a note's partials are the
+   same numbers here as there. */
+#include <pthread.h>
+
+static const int HM_LEVELS[17] = {1, 9, 17, 25, 33, 41, 49, 57, 65, 73, 81, 89, 97, 105, 113, 121, 127};
+
+/* hammer.contact: the felt's force each step of 1/(44100*8) s, first touch to
+   lift-off (or 25 ms); *dt_out its step. Returns its length; F malloc'd. */
+static int hm_contact(double f0, double v0, double mass, double K, double p, double beta, double L, double Z,
+                      double alpha, double tau, double core_x, double core_K, double **F_out, double *dt_out)
+{
+    const double core_p = 3.5;
+    double dt = 1.0 / (44100 * 8);
+    double kdec = exp(-dt / tau);
+    double mem = 0.0;
+    double c = 2.0 * L * f0;
+    int M = (int)rint(L / (c * dt));
+    if (M < 8) M = 8;
+    int i0 = (int)rint(beta * M);
+    if (i0 > M - 2) i0 = M - 2;
+    if (i0 < 1) i0 = 1;
+    double *r = calloc((size_t)M, sizeof(double)), *l = calloc((size_t)M, sizeof(double));
+    int nmax = (int)(0.025 / dt);
+    double *F = malloc((size_t)nmax * sizeof(double));
+    int nf = 0, touched = 0;
+    double ys = 0.0, yh = 0.0, vh = v0;
+    for (int n = 0; n < nmax; n++) {
+        double x = yh - ys;
+        double up = x > 0.0 ? pow(x, p) : 0.0;
+        mem = mem * kdec + up * (1.0 - kdec);
+        double f = x > 0.0 ? K * (up - alpha * mem) : 0.0;
+        if (core_x > 0.0 && x > core_x)
+            f += core_K * pow(x - core_x, core_p);
+        if (f < 0.0)
+            f = 0.0;
+        if (f > 0.0)
+            touched = 1;
+        else if (touched)
+            break;
+        F[nf++] = f;
+        double inj = f / (2.0 * Z);
+        double vs = r[i0 - 1] + l[i0 + 1] + inj;
+        ys += vs * dt;
+        vh -= f / mass * dt;
+        yh += vh * dt;
+        double rl = r[M - 1], ll0 = l[0];
+        memmove(r + 1, r, (size_t)(M - 1) * sizeof(double));
+        r[0] = -ll0;
+        memmove(l, l + 1, (size_t)(M - 1) * sizeof(double));
+        l[M - 1] = -rl;
+        r[i0] += inj;
+        l[i0] += inj;
+    }
+    free(r);
+    free(l);
+    *F_out = F;
+    *dt_out = dt;
+    return nf;
+}
+
+/* hammer.level_gains' cache: one per (nominal key, level), the felt it was made
+   with, its longest spectrum */
+typedef struct { double fn; int j, n; double key[13]; double *g; } HmEntry;
+static HmEntry *hm_cache;
+static int hm_ncache, hm_capcache;
+static pthread_mutex_t hm_lock = PTHREAD_MUTEX_INITIALIZER;
+
+static const double *hm_level_gains(double fn, int j, int nharm, const double key[13])
+{
+    /* key: beta, mass, K, p, v_lo, v_hi, scale, lmax, alpha, tau, core_x, core_K, (unused 0) */
+    pthread_mutex_lock(&hm_lock);
+    for (int i = 0; i < hm_ncache; i++) {
+        HmEntry *e = &hm_cache[i];
+        if (e->fn == fn && e->j == j && e->n >= nharm && !memcmp(e->key, key, sizeof(e->key))) {
+            pthread_mutex_unlock(&hm_lock);
+            return e->g;
+        }
+    }
+    pthread_mutex_unlock(&hm_lock);
+    double scale = key[6], lmax = key[7];
+    double L = lmax < scale / fn ? lmax : scale / fn;
+    double T = fn < 110.0 ? 1100.0 : 750.0;
+    double c = 2.0 * L * fn, mu = T / (c * c), Z = sqrt(T * mu);
+    double v0 = key[4] * pow(key[5] / key[4], (HM_LEVELS[j] - 1) / 126.0);
+    double *F, dt;
+    int nf = hm_contact(fn, v0, key[1], key[2], key[3], key[0], L, Z, key[8], key[9], key[10], key[11], &F, &dt);
+    double tot = 0.0;
+    for (int i = 0; i < nf; i++)
+        tot += F[i];
+    double *g = malloc((size_t)nharm * sizeof(double));
+    for (int h = 1; h <= nharm; h++) {
+        double w = 2.0 * PI * fn * h * dt;
+        double cw = cos(w), sw = sin(w), cc = 1.0, ss = 0.0, re = 0.0, im = 0.0;
+        for (int i = 0; i < nf; i++) {
+            re += F[i] * cc;
+            im += F[i] * ss;
+            double c2 = cc * cw - ss * sw;
+            ss = ss * cw + cc * sw;
+            cc = c2;
+        }
+        g[h - 1] = tot > 0.0 ? sqrt(re * re + im * im) / tot : 0.0;
+    }
+    free(F);
+    pthread_mutex_lock(&hm_lock);
+    if (hm_ncache == hm_capcache) {
+        hm_capcache = hm_capcache ? 2 * hm_capcache : 256;
+        hm_cache = realloc(hm_cache, (size_t)hm_capcache * sizeof(HmEntry));
+    }
+    HmEntry *e = &hm_cache[hm_ncache++];
+    e->fn = fn; e->j = j; e->n = nharm; e->g = g;
+    memcpy(e->key, key, sizeof(e->key));
+    pthread_mutex_unlock(&hm_lock);
+    return g;
+}
+
+/* GrandPianoProperties._hammer_gain, for the whole note: s->hm_g[0..hm_n) */
+static void hm_note(VoiceSnap *s)
+{
+    double f0 = s->frequency_x * pow(2.0, s->octave_position);
+    /* hammer.nominal_f0 and _hammer_felt: the felt at the key's nominal pitch */
+    int k = (int)rint(69.0 + 12.0 * log(f0 / 440.0) / log(2.0));
+    double fn = 440.0 * pow(2.0, (k - 69) / 12.0);
+    double octs = log(fn / 440.0) / log(2.0);
+    double u = log(fn / 27.5) / log(4186.0 / 27.5);
+    u = u < 0.0 ? 0.0 : u;
+    u = 1.0 < u ? 1.0 : u;
+    double mass = (s->hm_mass_lo_g + (s->hm_mass_hi_g - s->hm_mass_lo_g) * u) * 1e-3;
+    double p = s->hm_p_lo + (s->hm_p_hi - s->hm_p_lo) * u;
+    double K = pow(10.0, s->hm_logk + s->hm_logk_slope * octs + s->hm_logk_curve * octs * octs);
+    double core_mm = s->hm_core_mm;
+    if (s->hm_core_edge_mm != 0.0) {
+        double d = log(fn / s->hm_wear_center_hz) / log(2.0) / s->hm_wear_octaves;
+        double w = exp(-0.5 * d * d);
+        core_mm = s->hm_core_edge_mm + (s->hm_core_mm - s->hm_core_edge_mm) * w;
+    }
+    int vel = (int)rint(127.0 * pow(s->attack_volume, 0.5));
+    int n = s->max_harmonic ? s->max_harmonic : 64;
+    if (s->hm_max_partial_hz != 0.0) {
+        int m = (int)(s->hm_max_partial_hz / f0);
+        n = m > n ? m : n;
+    }
+    if (n > 400)
+        n = 400;
+    double key[13] = {s->strike_point, mass, K, p, s->hm_speed_lo, s->hm_speed_hi, s->dz_scale, s->dz_lmax,
+                      s->hm_alpha, pow(10.0, s->hm_log_tau), core_mm * 1e-3, pow(10.0, s->hm_core_logk), 0.0};
+    /* hammer.gains: the two nearest levels, blended in dB */
+    int v = vel < 1 ? 1 : (vel > 127 ? 127 : vel);
+    int j = 0;
+    while (j + 1 < 16 && HM_LEVELS[j + 1] <= v)
+        j++;
+    int va = HM_LEVELS[j], vb = HM_LEVELS[j + 1];
+    const double *ga = hm_level_gains(fn, j, n, key);
+    if (v == va) {
+        for (int h = 0; h < n; h++) s->hm_g[h] = ga[h];
+    } else {
+        const double *gb = hm_level_gains(fn, j + 1, n, key);
+        if (v == vb) {
+            for (int h = 0; h < n; h++) s->hm_g[h] = gb[h];
+        } else {
+            double t = (double)(v - va) / (double)(vb - va);
+            for (int h = 0; h < n; h++) {
+                double a = ga[h] < 1e-30 ? 1e-30 : ga[h], b = gb[h] < 1e-30 ? 1e-30 : gb[h];
+                s->hm_g[h] = exp((1.0 - t) * log(a) + t * log(b));
+            }
+        }
+    }
+    s->hm_n = n;
+    /* THE NOTE'S LOUDNESS AS THE LOW-PASS HAMMER GAVE IT (its tilt, 64 harmonics) */
+    double av = s->hammer_open_power == 1.0 ? s->attack_volume : pow(s->attack_volume, s->hammer_open_power);
+    double fc = (s->hammer_corner_hz * (s->hammer_open_lo + s->hammer_open_slope * av)
+                 * pow(2.0, s->hammer_register_slope * s->octave_position));
+    double dt_ = s->hm_tonal - s->hm_level_tilt;
+    double e_old = 0.0, e_new = 0.0;
+    for (int h = 1; h <= n; h++) {
+        double base = nv_series_volume(s, h);
+        if (base == 0.0)
+            continue;
+        double fh = f0 * h;
+        double bb = pow(base * soundboard_gain(s, fh), 2.0);
+        e_new += bb * pow(s->hm_g[h - 1], 2.0);
+        if (h <= s->hm_level_harmonics)
+            e_old += bb * pow((double)h, 2.0 * dt_) / pow(1.0 + pow(fh / fc, s->hammer_order), 2.0);
+    }
+    double kk = e_new > 0.0 ? pow(e_old / e_new, 0.5) : 1.0;
+    if (s->hm_n_pts) {                          /* the register's level (hammer_level_points) */
+        double lf = log(f0), db = 0.0;
+        if (lf <= log(s->hm_pts_hz[0]))
+            db = s->hm_pts_db[0];
+        else if (lf >= log(s->hm_pts_hz[s->hm_n_pts - 1]))
+            db = s->hm_pts_db[s->hm_n_pts - 1];
+        else
+            for (int i = 0; i + 1 < s->hm_n_pts; i++) {
+                double fa = s->hm_pts_hz[i], da = s->hm_pts_db[i], fb = s->hm_pts_hz[i + 1];
+                if (f0 <= fb) {
+                    db = da + (s->hm_pts_db[i + 1] - da) * (lf - log(fa)) / (log(fb) - log(fa));
+                    break;
+                }
+            }
+        kk *= pow(10.0, db / 20.0);
+    }
+    if (s->hm_bass_level_db != 0.0 && f0 < s->hm_bass_level_top_hz) {
+        double uu = log(s->hm_bass_level_top_hz / f0) / log(s->hm_bass_level_top_hz / 27.5);
+        kk *= pow(10.0, s->hm_bass_level_db * (1.0 < uu ? 1.0 : uu) / 20.0);
+    }
+    for (int h = 0; h < n; h++)
+        s->hm_g[h] = s->hm_g[h] * kk;
+}
+
+/* a piano's inharmonicity_coefficient_for_frequency at x, by its law */
+static double law_B(const VoiceInit *c, double x)
+{
+    if (c->b_law == 1)
+        return x < c->break_hz ? c->wound_k * pow(x, c->wound_p) : c->plain_k * pow(x, c->plain_p);
+    double B = c->ia + c->ib * x + c->ic * x * x + (c->id / x) + (c->ie / (x * x));
+    if (c->b_law == 2) {
+        double f = pymax(x, 1e-6);
+        double long_ = pymin(c->scale_constant_hz_m / f, c->reference_string_max_m);
+        double short_ = pymin(c->scale_constant_hz_m / f, c->case_string_max_m);
+        B = B * pow(long_ / short_, 4.0);
+    }
+    return B;
+}
+
 void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, double channel_pan,
                    double attack_volume, double channel_volume, double effort, PyRandom *rs,
                    VoiceSnap *s, VoiceNote *o)
@@ -1864,17 +2110,15 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
             s->gain *= pow(10.0, db / 20.0);
         }
     }
-    /* blockrender: the law's B at the note (inharmonicity_coefficient_for_frequency) */
-    double x = frequency;
-    if (c->b_law == 1) {
-        o->B = frequency < c->break_hz ? c->wound_k * pow(x, c->wound_p) : c->plain_k * pow(x, c->plain_p);
-    } else {
-        o->B = c->ia + c->ib * x + c->ic * x * x + (c->id / x) + (c->ie / (x * x));
-        if (c->b_law == 2) {
-            double f = pymax(x, 1e-6);
-            double long_ = pymin(c->scale_constant_hz_m / f, c->reference_string_max_m);
-            double short_ = pymin(c->scale_constant_hz_m / f, c->case_string_max_m);
-            o->B = o->B * pow(long_ / short_, 4.0);
-        }
+    if (s->decay_by_hz) {
+        /* GrandPianoProperties.harmonic_decay's B and impedance ratio, at the
+           note's frequency as Python rebuilds it (frequency_x * 2 ** op) */
+        double f0 = s->frequency_x * pow(2.0, s->octave_position);
+        s->dz_B = law_B(c, f0);
+        s->dz_zr = string_z(440.0, s->dz_scale, s->dz_lmax) / string_z(f0, s->dz_scale, s->dz_lmax);
     }
+    /* blockrender: the law's B at the note (inharmonicity_coefficient_for_frequency) */
+    o->B = law_B(c, frequency);
+    if (s->hammer_model)
+        hm_note(s);
 }
