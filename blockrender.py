@@ -6077,6 +6077,12 @@ def _note_strike_noise_py(em, props, nt, _CBW, _VB, _pjit, emit_partial, random)
         # moved strike_noise_cal_db
         _sat = (getattr(props, 'strike_noise_at', 0.0) or 0.0) * SR
         _scal = getattr(props, 'strike_noise_cal_db', 0.0) or 0.0
+        # ...AND THE KNOCK GROWS FASTER THAN THE NOTE (strike_noise_vel_power):
+        # its power as attack_volume ** (1 + this) where the note's is
+        # attack_volume -- a soft blow's felt barely knocks
+        _svp = getattr(props, 'strike_noise_vel_power', 0.0) or 0.0
+        if _svp:
+            _scal += _svp * 10.0 * math.log10(max(props.attack_volume, 1e-6))
         # ...AND A SLOWER TAIL under it (strike_noise_tail: dB re the
         # strike, its own dB/s): the table again, quieter and longer -- a
         # music box's pin snaps off the tooth and is gone in 5 ms, while
@@ -6666,6 +6672,9 @@ def _strike_native(em, props, nt):
         _slen = min(_slen, max(1.0, nt.noff - nt.non))
     _sat = (getattr(P, 'strike_noise_at', 0.0) or 0.0) * SR
     _scal = getattr(P, 'strike_noise_cal_db', 0.0) or 0.0
+    _svp = getattr(P, 'strike_noise_vel_power', 0.0) or 0.0
+    if _svp:                       # (the knock's own velocity law: _note_strike_noise_py's)
+        _scal += _svp * 10.0 * math.log10(max(P.attack_volume, 1e-6))
     _bon = nt.non + _sat + 0.0 * SR
     # as the Python sets them for the knock: a noise row's width, no images
     t = _tone_in(em, P, nt, P.gain, 0.0, 0.0, False)
