@@ -3,7 +3,7 @@
 Ivy Audio's upright, CC0 in VSCO-2 CE; sources.md), and our render the same
 way.
 
-    python3 examples/upright_fit.py [--ref=steinway|cp70] [--dyn=2] [--program=P] [--class=NAME] [--notes=21,45,...]
+    python3 examples/upright_fit.py [--ref=steinway|cp70|cp80] [--dyn=2] [--program=P] [--class=NAME] [--notes=21,45,...]
 
 Each recorded note is read from its KNOWN key (Keys/Upright Piano/
 MappingChart.txt: file index k is key 21 + 2k, the last 108), not from an f0
@@ -91,6 +91,26 @@ def _cp70_map():
     return {k: sorted(set(v)) for k, v in out.items()}
 
 
+# ...or Greg Sullivan's Yamaha CP80 (--ref=cp80; CC BY 4.0, sullivang.net;
+# sfzinstruments/GregSullivan.E-Pianos, its flac converted to wav beside it):
+# 81 takes, 21 keys D#1-C#7, mono off the instrument, layers PP/MP/F/FF
+# (the sfz's velocity ranges 1-49, 50-81, 82-103, 104-127). NORMALIZED, every
+# take peaking near full scale, so -- like the Steinway -- its levels by key
+# and by layer say nothing: its spectra, decays and inharmonicity do. Dynamic
+# 1 is PP, 2 MP (F where a key has no MP), 3 FF.
+CP80 = os.path.expanduser("~/Documents/refs/epianos_sullivan/cp80_wav")
+CP80_LAYERS = {"PP": 25, "MP": 65, "F": 92, "FF": 115}
+
+
+def _cp80_map():
+    """{key: {layer: path}} from the takes' names (027-D#1-FF.wav)."""
+    out = {}
+    for p in glob.glob(os.path.join(CP80, "*.wav")):
+        k, _, lay = os.path.basename(p)[:-4].split("-")
+        out.setdefault(int(k), {})[lay] = p
+    return out
+
+
 def vel_for(key, dyn):
     """Our velocity for a recorded key and dynamic: the CP70 layer's own
     (CP70_VEL, filled by recordings()), else VEL."""
@@ -109,6 +129,15 @@ def _clipped(p):
 
 
 def recordings(dyn):
+    if REF[0] == "cp80":
+        out = {}
+        want = {1: ("PP",), 2: ("MP", "F"), 3: ("FF",)}[dyn]
+        for k, lay in _cp80_map().items():
+            got = next((l for l in want if l in lay), None)
+            if got and not _clipped(lay[got]):
+                out[k] = lay[got]
+                CP70_VEL[(k, dyn)] = CP80_LAYERS[got]
+        return out
     if REF[0] == "cp70":
         out = {}
         for k, lay in _cp70_map().items():
@@ -585,6 +614,9 @@ def main(argv):
     if any(a == "--ref=cp70" for a in argv):
         REF[0] = "cp70"
         FIT_KEYS = tuple(sorted(_cp70_map()))[::2]
+    if any(a == "--ref=cp80" for a in argv):
+        REF[0] = "cp80"
+        FIT_KEYS = tuple(sorted(k for k, v in _cp80_map().items() if "PP" in v and "FF" in v))
     use_class(argv, prog)
     _ab = next((a.split("=", 1)[1] for a in argv if a.startswith("--ab=")), None)
     if _ab:

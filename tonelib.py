@@ -5204,12 +5204,24 @@ class ElectricGrandProperties(GrandPianoProperties):
     law (Ben: "simply variation in the physical properties"). How many
     strings per note a CP-70 uses is still unverified -- the unison
     behaviour is inherited unchanged. Ben: sounds great.
+
+    REFITTED, 2026-11-20, to Greg Sullivan's Yamaha CP80 (CC BY 4.0; the
+    Pianobook set's terms forbid a model sold as an instrument: licences.md
+    L7), through examples/upright_fit.py --ref=cp80: 21 keys D#1-C#7, mono off
+    the instrument, four layers, NORMALIZED -- so its spectra, decays and
+    stretch are fitted and its levels are not (octave_gain and the velocity
+    law stay as voiced). A CP-80 is the 88-key CP-70, its case longer: the
+    bass's B fits a 1.25 m case (log rms 0.44 -> 0.24). Its decay, the bands'
+    T20 and the tail at 1 and 2 s: 10.25 -> 5.13 dB, the middle ringing 2-8 s
+    where the CP-70 fit's died in one. Its hammers and bridge on the soft and
+    hard layers' third-octave spectra: 9.45 -> 7.75 dB; left over, the bass's
+    fundamental 12 dB over ours and its 800 Hz 11 dB under.
     """
 
     # L = C/f until the case runs out. C from a grand's C4 string, 0.62 m.
     scale_constant_hz_m = 162.0
     reference_string_max_m = 1.95   # the Steinway B the inherited fit describes
-    case_string_max_m = 1.05        # a CP-70, whose case is about half as deep
+    case_string_max_m = 1.25        # FITTED to the CP80 takes' B below 154 Hz (log rms 0.44 -> 0.24; the CP-70's 1.05)
 
     # THE +6 dB/OCTAVE IS DERIVED AND DELIBERATELY NOT APPLIED, which is the
     # most interesting thing in this class. Bridge force for mode n is T times
@@ -5228,7 +5240,7 @@ class ElectricGrandProperties(GrandPianoProperties):
     bridge_force_power = 0.0
     # The board radiates poorly above 2.6 kHz; a pickup does not stop there. The
     # DIRECTION is defensible, the number is an estimate.
-    bridge_corner_hz = 4000.0
+    bridge_corner_hz = 8120.0
     bridge_order = 1.6
     initial_gain = 0.115586      # C3/C4/C5 at v100 matched on rms to the grand piano (was -2.3 dB over)
     bridge_gain = 1.0               # neutral: the board's three terms became one
@@ -5280,12 +5292,12 @@ class ElectricGrandProperties(GrandPianoProperties):
     # and hard layers together): the corner ~260 Hz at the softest touch to
     # ~18 kHz at the hardest -- dark soft, bright hard, the CP-70's "ambiguous
     # dynamic range" (Sawchuk) -- where the grand's opens only 2:1.
-    hammer_corner_hz = 24.6624
+    hammer_corner_hz = 8.733
     hammer_order = 2.0
-    hammer_open_lo = 1.504
-    hammer_open_slope = 900.8
+    hammer_open_lo = 2.228
+    hammer_open_slope = 721.7
     hammer_register_slope = 0.0
-    tonal_dampening = 1.275
+    tonal_dampening = 1.144
     board_body_hz = 240.0
     board_body_gain = 0.6
     # THE DECAY, FITTED to David's CP70 (Pianobook, measured only;
@@ -5294,13 +5306,13 @@ class ElectricGrandProperties(GrandPianoProperties):
     # bottom is a FUNDAMENTAL that sings -- F1's 63-125 Hz band 13.6 s to
     # fall 20 dB -- over upper partials gone in 0.2-0.5 s; the grand's
     # pinned decay had it the other way round (2.6 s and 3-4 s).
-    decay_db = 2.746
-    harmonic_decay_db = 3.275
-    decay_register_slope = 0.831
-    aftersound_level_1 = 0.138
-    aftersound_level_2 = 0.140
-    aftersound_level_3 = 0.266
-    aftersound_decay_ratio = 0.527
+    decay_db = 2.568
+    harmonic_decay_db = 1.600
+    decay_register_slope = 0.894
+    aftersound_level_1 = 0.118
+    aftersound_level_2 = 0.375
+    aftersound_level_3 = 0.362
+    aftersound_decay_ratio = 0.402
     attack_time = 0.003           # the grand's old onset, pinned likewise
     unison_beat_scatter = False   # its unisons as they were voiced (the grand's scatter is the Steinway's)
     string_gain = (0.28, 0.20)   # its unisons as they were voiced
