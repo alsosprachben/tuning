@@ -4914,6 +4914,7 @@ class GrandPianoProperties(InharmonicStringProperties):
     hammer_level_tilt = 1.1
     hammer_level_harmonics = 64
     hammer_bass_level_db = 0.0
+    hammer_level_points = ()
     hammer_bass_level_top_hz = 130.8   # C3
     hammer_wear_center_hz = 160.0
     hammer_wear_octaves = 1.0
@@ -5013,6 +5014,22 @@ class GrandPianoProperties(InharmonicStringProperties):
             # Ondine: "the bottom 2 octaves were played more gently than they
             # would have been"): hammer_bass_level_db at A0, easing (in
             # octaves) to nothing at hammer_bass_level_top_hz
+            # ...AND THE REGISTER'S LEVEL TO GENERALUSER GS'S GRAND (sfx_levels'
+            # K-weighted reading, each key re its own C4, velocities 64 and 100
+            # averaged): hammer_level_points (Hz, dB), interpolated in octaves
+            if self.hammer_level_points:
+                pts = self.hammer_level_points
+                lf = _log(f0)
+                if lf <= _log(pts[0][0]):
+                    db = pts[0][1]
+                elif lf >= _log(pts[-1][0]):
+                    db = pts[-1][1]
+                else:
+                    for (fa, da), (fb, db_) in zip(pts[:-1], pts[1:]):
+                        if f0 <= fb:
+                            db = da + (db_ - da) * (lf - _log(fa)) / (_log(fb) - _log(fa))
+                            break
+                k *= 10.0 ** (db / 20.0)
             if self.hammer_bass_level_db and f0 < self.hammer_bass_level_top_hz:
                 u = _log(self.hammer_bass_level_top_hz / f0) / _log(self.hammer_bass_level_top_hz / 27.5)
                 k *= 10.0 ** (self.hammer_bass_level_db * min(1.0, u) / 20.0)
