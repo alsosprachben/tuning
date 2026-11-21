@@ -523,6 +523,7 @@ def _load():
     for name, res, args in (
             ('nv_series_volume', C, [P, I]), ('nv_harmonic_volume', C, [P, I]),
             ('nv_harmonic_decay', C, [P, I]), ('nv_mode_ratio', C, [P, I]),
+            ('nv_hammer_warm', I, [P]),
             ('nv_aftersound', None, [P, C, C, D]), ('nv_unison_voices', I, [P, C, I, C, D]),
             ('nv_radiation_gain', C, [P, C, C, I]), ('nv_hrtf_gain', C, [P, C, C]),
             ('nv_chiff_harmonic_gain', C, [P, C]), ('nv_bloom_delay_for', C, [P, C]), ('nv_bloom_gain_for', C, [P, C]),

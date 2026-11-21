@@ -1676,13 +1676,9 @@ static const double *hm_level_gains(double fn, int j, int nharm, const double ke
     return g;
 }
 
-/* GrandPianoProperties._hammer_gain, for the whole note: s->hm_g[0..hm_n) */
-static void hm_note(VoiceSnap *s)
+/* the felt's key (hm_level_gains') for the key at nominal pitch fn */
+static void hm_key(const VoiceSnap *s, double fn, double key[13])
 {
-    double f0 = s->frequency_x * pow(2.0, s->octave_position);
-    /* hammer.nominal_f0 and _hammer_felt: the felt at the key's nominal pitch */
-    int k = (int)rint(69.0 + 12.0 * log(f0 / 440.0) / log(2.0));
-    double fn = 440.0 * pow(2.0, (k - 69) / 12.0);
     double octs = log(fn / 440.0) / log(2.0);
     double u = log(fn / 27.5) / log(4186.0 / 27.5);
     u = u < 0.0 ? 0.0 : u;
@@ -1696,6 +1692,44 @@ static void hm_note(VoiceSnap *s)
         double w = exp(-0.5 * d * d);
         core_mm = s->hm_core_edge_mm + (s->hm_core_mm - s->hm_core_edge_mm) * w;
     }
+    double k2[13] = {s->strike_point, mass, K, p, s->hm_speed_lo, s->hm_speed_hi, s->dz_scale, s->dz_lmax,
+                     s->hm_alpha, pow(10.0, s->hm_log_tau), core_mm * 1e-3, pow(10.0, s->hm_core_logk), 0.0};
+    memcpy(key, k2, sizeof(k2));
+}
+
+/* THE WHOLE PIANO'S TABLE AHEAD OF THE NOTES: every key A0-C8 at every level,
+   to a partial count that covers a tuning half a semitone flat -- what a live
+   host calls once the voice is loaded (off the audio thread), so no note-on
+   waits on a simulation. Returns how many it made. */
+int nv_hammer_warm(const VoiceSnap *tmpl)
+{
+    if (!tmpl->hammer_model)
+        return 0;
+    int made = 0;
+    for (int k = 21; k <= 108; k++) {
+        double fn = 440.0 * pow(2.0, (k - 69) / 12.0);
+        double key[13];
+        hm_key(tmpl, fn, key);
+        int n = tmpl->hm_max_partial_hz != 0.0 ? (int)(tmpl->hm_max_partial_hz / (fn * 0.97)) + 1 : 64;
+        if (n < 64) n = 64;
+        if (n > 400) n = 400;
+        for (int j = 0; j < 17; j++) {
+            hm_level_gains(fn, j, n, key);
+            made++;
+        }
+    }
+    return made;
+}
+
+/* GrandPianoProperties._hammer_gain, for the whole note: s->hm_g[0..hm_n) */
+static void hm_note(VoiceSnap *s)
+{
+    double f0 = s->frequency_x * pow(2.0, s->octave_position);
+    /* hammer.nominal_f0 and _hammer_felt: the felt at the key's nominal pitch */
+    int k = (int)rint(69.0 + 12.0 * log(f0 / 440.0) / log(2.0));
+    double fn = 440.0 * pow(2.0, (k - 69) / 12.0);
+    double key[13];
+    hm_key(s, fn, key);
     int vel = (int)rint(127.0 * pow(s->attack_volume, 0.5));
     int n = s->max_harmonic ? s->max_harmonic : 64;
     if (s->hm_max_partial_hz != 0.0) {
@@ -1704,8 +1738,6 @@ static void hm_note(VoiceSnap *s)
     }
     if (n > 400)
         n = 400;
-    double key[13] = {s->strike_point, mass, K, p, s->hm_speed_lo, s->hm_speed_hi, s->dz_scale, s->dz_lmax,
-                      s->hm_alpha, pow(10.0, s->hm_log_tau), core_mm * 1e-3, pow(10.0, s->hm_core_logk), 0.0};
     /* hammer.gains: the two nearest levels, blended in dB */
     int v = vel < 1 ? 1 : (vel > 127 ? 127 : vel);
     int j = 0;
