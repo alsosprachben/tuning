@@ -64,6 +64,8 @@ typedef struct {
     /* the board (soundboard_gain): 0 the grand's, 1 the upright's, 2 the electric grand's bridge */
     int board_kind;
     double board_low_order, bridge_gain, bridge_corner_hz, bridge_order, bridge_force_power;
+    /* ...and its wound strings' zing (ElectricGrandProperties._wound_weight) */
+    double wound_below_hz, wound_corner_hz, wound_zing_db, wound_decay_db;
     /* WHOSE METHODS THE VOICE HAS: 0 the grand's (its hammer and board, its
        strings, its aftersound -- above); 1 a kit drum's (KitDrumProperties:
        its measured modes, its stick's click, its two-stage decay -- below),

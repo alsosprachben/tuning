@@ -56,6 +56,7 @@ class VoiceSnap(ctypes.Structure):
                 ('phantom_note_max_hz', C), ('phantom_gain_floor', C), ('phantom_max_order', I),
                 ('board_kind', I), ('board_low_order', C), ('bridge_gain', C), ('bridge_corner_hz', C),
                 ('bridge_order', C), ('bridge_force_power', C),
+                ('wound_below_hz', C), ('wound_corner_hz', C), ('wound_zing_db', C), ('wound_decay_db', C),
                 ('kind', I), ('unison_gain', C), ('n_unison', I), ('unison_detune', C * 8),
                 ('n_modes', I), ('modes', (C * 3) * 128), ('n_click', I), ('click_per_band', I),
                 ('click_db', C * 32), ('click_hz0', C), ('click_cal_db', C), ('click_scatter', C),
@@ -2674,6 +2675,8 @@ def snapshot(props):
     elif s.kind == 0 and s.board_kind == 2:
         s.bridge_gain, s.bridge_corner_hz, s.bridge_order = p.bridge_gain, p.bridge_corner_hz, p.bridge_order
         s.bridge_force_power = p.bridge_force_power or 0.0
+        s.wound_below_hz, s.wound_corner_hz = p.wound_below_hz, p.wound_corner_hz
+        s.wound_zing_db, s.wound_decay_db = p.wound_zing_db, p.wound_decay_db
     return s
 
 

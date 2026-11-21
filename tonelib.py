@@ -5272,6 +5272,43 @@ class ElectricGrandProperties(GrandPianoProperties):
         short = min(c / f, self.case_string_max_m)
         return b * (long_ / short) ** 4
 
+    # THE WOUND STRINGS' ZING. Below F3 a CP80's strings are wound, and their
+    # top starts far over where it settles: 1.6-8 kHz 17-57 dB over its own
+    # 0.3-0.6 s level in the first 40 ms, gone by ~0.3 s, where the plain
+    # strings from A3 up rise only as ours do, ~10 dB (Ben: "on the low-end
+    # ... where the wound strings are ... the attack is a bit off"). The
+    # winding's mass and its turns' rubbing: a brighter strike and a top
+    # that dies fast. Above wound_corner_hz (a smooth second-order step),
+    # a wound note's partials start wound_zing_db x attack_volume louder and fall
+    # wound_decay_db faster; wound_below_hz is the break (A3, plain, 220 Hz).
+    # FITTED by grid on the takes' D#1-A3, both layers: 1.6-3.2 and 3.2-8 kHz
+    # from 5 ms to 0.64 s, re the note's own level at 0.3-0.6 s: 8.76 -> 6.44
+    # dB rms (the hard layer's D#1 17.3 -> 10.9, B1 14.3 -> 7.2, F#2 9.1 ->
+    # 3.0; the soft layer's F#2-F3 1-2 dB worse, its decay as hard's)
+    wound_below_hz = 200.0
+    wound_corner_hz = 1000.0
+    wound_zing_db = 15.0
+    wound_decay_db = 30.0
+
+    def _wound_weight(self, harmonic):
+        f0 = self.frequency_x * (2.0 ** self.octave_position)
+        if self.wound_below_hz <= 0.0 or f0 >= self.wound_below_hz:
+            return 0.0
+        fn = f0 * harmonic
+        return 1.0 / (1.0 + (self.wound_corner_hz / fn) ** 2)
+
+    def harmonic_volume(self, harmonic):
+        v = super().harmonic_volume(harmonic)
+        w = self._wound_weight(harmonic)
+        # (as hard as the hammer: attack_volume, (velocity/127)^2 -- the takes'
+        # soft layers zing far less than their hard ones)
+        return v * 10.0 ** (self.wound_zing_db * self.attack_volume * w / 20.0) if w else v
+
+    def harmonic_decay(self, harmonic):
+        d = super().harmonic_decay(harmonic)
+        w = self._wound_weight(harmonic)
+        return d + self.wound_decay_db * w if w else d
+
     def soundboard_gain(self, fn):
         """There is no soundboard. This is the bridge and the piezo on it.
 

@@ -548,6 +548,16 @@ static double blare(const VoiceSnap *v, double hz)
     return pow(10.0, d / 20.0);
 }
 
+/* ElectricGrandProperties._wound_weight: 0 above the break or with no term */
+static double wound_weight(const VoiceSnap *v, int harmonic)
+{
+    double f0 = v->frequency_x * pow(2.0, v->octave_position);
+    if (v->board_kind != 2 || v->wound_below_hz <= 0.0 || f0 >= v->wound_below_hz)
+        return 0.0;
+    double fn = f0 * harmonic;
+    return 1.0 / (1.0 + pow(v->wound_corner_hz / fn, 2.0));
+}
+
 /* GrandPianoProperties.harmonic_volume, on SynthProperties' (no bore) */
 static double harmonic_volume(const VoiceSnap *v, int harmonic)
 {
@@ -571,7 +581,9 @@ static double harmonic_volume(const VoiceSnap *v, int harmonic)
     double fn = v->frequency_x * pow(2.0, v->octave_position) * harmonic;
     double fc = (v->hammer_corner_hz * (v->hammer_open_lo + v->hammer_open_slope * v->attack_volume)
                  * pow(2.0, v->hammer_register_slope * v->octave_position));
-    return s / (1.0 + pow(fn / fc, v->hammer_order)) * soundboard_gain(v, fn);
+    double r = s / (1.0 + pow(fn / fc, v->hammer_order)) * soundboard_gain(v, fn);
+    double w = wound_weight(v, harmonic);       /* ElectricGrandProperties': the wound strings' zing */
+    return w != 0.0 ? r * pow(10.0, v->wound_zing_db * v->attack_volume * w / 20.0) : r;
 }
 
 /* SynthProperties.harmonic_decay by where the mode sits; CymbalProperties'
@@ -645,6 +657,11 @@ static double harmonic_decay_(const VoiceSnap *v, int harmonic)
     double h = (double)harmonic;                /* mode_ratios None */
     double base = v->decay_db + v->harmonic_decay_db * h * pow(h, v->harmonic_decay_dampening);
     base = base * v->decay_register_factor;
+    if (v->kind == 0) {                         /* ElectricGrandProperties': the wound top's faster fall */
+        double w = wound_weight(v, harmonic);
+        if (w != 0.0)
+            return base + v->wound_decay_db * w;
+    }
     if (v->pd_max_hz != 0.0) {                  /* PromptDecay: the prompt fall under its corner */
         double f = v->frequency_x * pow(2.0, v->octave_position) * harmonic;
         if (f < v->pd_max_hz)
