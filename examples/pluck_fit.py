@@ -505,11 +505,28 @@ def fit_bright():
         # ...and the BODY'S LOW CORNER (bell_cutoff_hz, bell_order): a small
         # box radiates the low string's fundamental weakly -- E5's 3rd stands
         # 11 dB over its 1st
-        C.low_string_tilt_db = 0.0
+        if "--course" in sys.argv:
+            # THE LOW STRING'S OWN DARKNESS TOO (low_string_tilt_db): msx2plus's
+            # odd harmonics -- the low string's alone -- stand 35-45 dB down
+            for og in (1.0, 2.0, 4.0):
+                for lt in (0.0, 6.0, 12.0, 18.0):
+                    for bc in (300.0, 600.0, 900.0):
+                        C.octave_partner_gain, C.low_string_tilt_db, C.bell_cutoff_hz = og, lt, bc
+                        e = err()
+                        print("  trio %.1f low tilt %4.1f body corner %4.0f -> %.2f dB" % (og, lt, bc, e), flush=True)
+                        if best is None or e < best[0]:
+                            best = (e, og, lt, bc)
+            print("    octave_partner_gain = %s\n    low_string_tilt_db = %s\n    bell_cutoff_hz = %s   (%.2f dB)"
+                  % (best[1], best[2], best[3], best[0]))
+            return
         if "--top" in sys.argv:
-            # the top again, with the body's corner in place (bell_cutoff_hz)
-            for td in (0.97, 0.85, 0.7):
-                for bc in (2500.0, 5000.0, 9000.0):
+            # the top again, with the body's corner and the low string's tilt
+            # in place (bell_cutoff_hz, low_string_tilt_db)
+            tds, bcs = (0.97, 0.85, 0.7), (2500.0, 5000.0, 9000.0)
+            if "--dark" in sys.argv:          # msx2plus's: darker than the grid above
+                tds, bcs = (1.2, 1.1, 0.97), (1200.0, 1800.0, 2500.0)
+            for td in tds:
+                for bc in bcs:
                     C.tonal_dampening, C.bore_corner_hz = td, bc
                     e = err()
                     print("  tonal_dampening %.2f corner %5.0f Hz -> %.2f dB" % (td, bc, e), flush=True)
@@ -517,6 +534,7 @@ def fit_bright():
                         best = (e, td, bc)
             print("    tonal_dampening = %s\n    bore_corner_hz = %s   (%.2f dB)" % (best[1], best[2], best[0]))
             return
+        C.low_string_tilt_db = 0.0
         for og in (1.0, 2.0):
             for bc in (300.0, 600.0, 900.0, 1300.0):
                 for bo in (1.0, 2.5):
@@ -869,6 +887,12 @@ def main(argv):
         elif voice == "taishodrone":
             stage_files("drone", os.path.expanduser(
                 "~/Documents/refs/taishogoto/x/Taishogoto/Taishogoto Samples/Drone_Mic_*.wav"), 94.0, 102.0, div=4)
+        elif voice == "taisho" and "--pianobook" not in argv:
+            # msx2plus's "multisampled taishogoto" (freesound 678381, CC0): one
+            # take, every note D3-D#5 chromatic, each left 5-7 s; the
+            # Pianobook takes below (--pianobook) are under terms that forbid a
+            # model sold as an instrument (licences.md L7)
+            stage_live("msx", "taishogoto_msx2plus/678381__*.wav", min_next=3.0, lo=120, hi=800)
         elif voice == "taisho":
             # named by the trio, an octave over the low string (stage_files)
             stage_files("mic", os.path.expanduser(

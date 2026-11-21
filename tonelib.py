@@ -3882,8 +3882,8 @@ class HarpsiLuteProperties(HarpsiBase):
     # than a plain one -- the tail again taken for the buffed string's own,
     # with register_gain held at VCSL's (it is every stop's coupling).
     strike_point = 0.115
-    tonal_dampening = 0.634
-    octave_dampening = 0.178
+    tonal_dampening = 1.105
+    octave_dampening = 0.255
     decay_db = 10.1
     harmonic_decay_db = 2.89
     harmonic_decay_dampening = 0.016   # its own: the buff takes the top fast, the 8''s m^0.6 law does not
@@ -29304,7 +29304,12 @@ class TaishoKotoProperties(TwelveStringProperties):
     """GS 107.8 "Taisho Koto": the taishogoto, the keyed zither of 1912 -- a
     typewriter's row of keys stopping its strings on frets, the right hand
     picking -- fitted to Arthur Chanson's soprano (Pianobook, Taishogoto;
-    sources.md; examples/pluck_fit.py --voice=taisho).
+    sources.md; examples/pluck_fit.py --voice=taisho --pianobook). REFITTED,
+    2026-11-20, to msx2plus's "multisampled taishogoto" (Freesound 678381,
+    CC0; every note D3-D#5, each left 5-7 s), the Pianobook set's terms
+    forbidding a model sold as an instrument (licences.md L7): the low
+    string's tilt 15.83 -> 12.16 dB on the 0.15 s ladder, the top as it
+    stood; the decay on h1-h6 12.81 -> 11.35 dB/s.
 
     EVERY KEY STOPS A COURSE: one string at the note and THREE an octave over
     it, as the 12-string's low courses pair a string with its octave (E5 in
@@ -29315,9 +29320,9 @@ class TaishoKotoProperties(TwelveStringProperties):
     octave_partner_gain = 1.0           # the trio's sum re the low string
     # ITS DECAY (pluck_fit --fit=decay --nh=6: on h1-h6, the takes' upper
     # harmonics in their floor within a second), 10.7 dB/s rms
-    decay_db = 4.937
-    harmonic_decay_db = 0.7595
-    decay_register_slope = 0.1527
+    decay_db = 5.105
+    harmonic_decay_db = 1.485
+    decay_register_slope = 0.546
     # ITS TOP (pluck_fit --fit=bright --top): 13.2 dB rms over the 0.15 s
     # ladders, the rest each single pluck's own point (one take a note)
     tonal_dampening = 0.85
@@ -29379,8 +29384,10 @@ class TaishoKotoProperties(TwelveStringProperties):
     # THE LOW STRING DARKER THAN THE TRIO: its own harmonics fall
     # low_string_tilt_db an octave more than the trio's (the takes' odd
     # harmonics -- the low string's alone -- 8-42 dB down where the trio's
-    # own 2nd and 3rd are 1-24)
-    low_string_tilt_db = 0.0
+    # own 2nd and 3rd are 1-24). FITTED on msx2plus's CC0 take (pluck_fit
+    # --voice=taisho --fit=bright --course; the trio and the box's corner as
+    # they stood): 15.83 -> 12.16 dB on the 0.15 s ladder
+    low_string_tilt_db = 6.0
 
     def harmonic_volume(self, m):
         from math import log2
