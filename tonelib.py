@@ -1150,6 +1150,19 @@ class SynthProperties:
     # is left out. () = none.
     ring_db = ()
     ring_skip = 0.03
+    # ...TUNED AS THE NOTES ARE (other strings, other tines), or FIXED IN HZ
+    # (ring_tuned False: a piano's case and the room it stands in -- the
+    # knock rings the same modes whatever the tuning)
+    ring_tuned = True
+    # ...and their own velocity law: dB += ring_vel_power x 10 log10(attack_volume)
+    # over the note's -- a case is knocked by the key bottoming as much as by
+    # the string, which grows less with force than the note does (negative)
+    ring_vel_power = 0.0
+    # ...and by register (ring_register_db: (Hz of the struck note, dB), in
+    # octaves, flat past the ends): a bass key's blow reaches the case
+    # through a heavier string and a longer bridge, and its partials crowd
+    # where the case's modes are
+    ring_register_db = ()
     # A FLAM: the strike (strike_noise_db) fired strike_flam times, at offsets
     # within strike_flam_s and levels within strike_flam_db under the loudest
     # (an ensemble clap: several hands). 0 or 1 = one strike.
@@ -1428,6 +1441,13 @@ class SynthProperties:
     # chiff_volume scales as attack_volume ** strike_noise_slope. 0 (the default)
     # is the old behaviour exactly, so only the voices that set it are affected.
     strike_noise_slope = 0.0
+    # ...or the knock's level by register as points (strike_noise_register_db:
+    # (Hz, dB), in octaves, flat past the ends) in place of the octave law,
+    # and its velocity law by register (strike_noise_vel_power_register:
+    # (Hz, power)) in place of strike_noise_vel_power -- a bass blow's felt
+    # knocks the case as a soft blow barely does
+    strike_noise_register_db = ()
+    strike_noise_vel_power_register = ()
     # ...BUT STRIKE FORCE IS EFFORT AND VOLUME BOTH. Where the noise is most of
     # the voice, the effort was setting the volume too, far more steeply than
     # the square law every voice's volume follows (Ben: "our drums use velocity
@@ -4915,6 +4935,13 @@ class GrandPianoProperties(InharmonicStringProperties):
     hammer_level_harmonics = 64
     hammer_bass_level_db = 0.0
     hammer_level_points = ()
+    # ...AND THE STRINGS' GROWTH WITH FORCE, more in some registers
+    # (hammer_vel_power_points: (Hz, power), in octaves): the partials take
+    # attack_volume ** (power / 2) more -- velocity 40 to 120 gains 9.5 dB
+    # a unit -- the knock and the case modes not. An upright's top octave
+    # played softly barely sets its short strings going (VSCO's: the
+    # fundamental grows 31-40 dB from p to f, ours 23)
+    hammer_vel_power_points = ()
     hammer_bass_level_top_hz = 130.8   # C3
     hammer_wear_center_hz = 160.0
     hammer_wear_octaves = 1.0
@@ -5034,6 +5061,20 @@ class GrandPianoProperties(InharmonicStringProperties):
                             db = da + (db_ - da) * (lf - _log(fa)) / (_log(fb) - _log(fa))
                             break
                 k *= 10.0 ** (db / 20.0)
+            if self.hammer_vel_power_points:
+                pts = self.hammer_vel_power_points
+                lf = _log(f0)
+                if lf <= _log(pts[0][0]):
+                    ep = pts[0][1]
+                elif lf >= _log(pts[-1][0]):
+                    ep = pts[-1][1]
+                else:
+                    for (fa, ea), (fb, eb) in zip(pts[:-1], pts[1:]):
+                        if f0 <= fb:
+                            ep = ea + (eb - ea) * (lf - _log(fa)) / (_log(fb) - _log(fa))
+                            break
+                if ep:
+                    k *= max(self.attack_volume, 1e-6) ** (0.5 * ep)
             if self.hammer_bass_level_db and f0 < self.hammer_bass_level_top_hz:
                 u = _log(self.hammer_bass_level_top_hz / f0) / _log(self.hammer_bass_level_top_hz / 27.5)
                 k *= 10.0 ** (self.hammer_bass_level_db * min(1.0, u) / 20.0)
@@ -5203,9 +5244,10 @@ class UprightPianoProperties(GrandPianoProperties):
     # the bottom octave's 50 Hz band 15 dB high.
     board_low_order = 8.0
     board_low_hz = 99.6682
-    board_high_hz = 22296.8
-    board_body_hz = 346.472
-    board_body_gain = 0.0562881
+    board_high_hz = 27717.0
+    board_high_order = 1.9091
+    board_body_hz = 444.7
+    board_body_gain = 0.13393
     # THE WHOLE INSTRUMENT IS DARKER, by about 6 dB an octave from the bottom
     # of the tenor up: the fit put that in the felt's corner, at 189 Hz and
     # first order, opening with force as a hammer's does. No felt filters at
@@ -5229,15 +5271,63 @@ class UprightPianoProperties(GrandPianoProperties):
     strike_noise_db = ((45, -42.4), (57, -42.4), (71, -44.1), (90, -47.2), (113, -25.4), (143, -21.3), (180, -25.3), (226, -27.4), (285, -46.5), (359, -20.1), (453, -20.7), (570, -21.5), (718, -24.5), (905, -33.3), (1140, -35.8), (1437, -38.9), (1810, -45.5), (2281, -51.0), (2874, -56.1), (3620, -61.2), (4561, -61.4), (5747, -59.0), (7241, -64.2), (9123, -67.3), (11494, -74.5))
     strike_noise_slope = 3.885
 
-    # THE GRAND'S HAMMER AND DECAY ARE THE NEW GRAND'S OWN (2026-11-21): this
-    # voice keeps the low-pass hammer and the decay it was voiced on
-    hammer_model = False
-    decay_by_hz = False
-    strike_noise_vel_power = 0.0
-    tonal_dampening = 1.1
-    strike_depth = 0.65
-    strike_fill_fraction = 1.0
-    max_partial_hz = None
+    # ---- THE NEW UPRIGHT (2026-11-21; Ben's ear on the VSCO takes and
+    # MAESTRO's nocturne): the grand's simulated hammer and decay by frequency
+    # on this piano's own numbers, its case ringing, its knock by register.
+    # THE HAMMER fitted jointly on the soft-to-hard change and the absolute
+    # spectrum (rendered: change 12.7 -> 9.4 dB, spectrum 12.1 -> 11.4); its
+    # felt worn hardest around E4, the board's low cut held at 100 Hz (the
+    # fit's 190 Hz, order 8, took 22 dB off the bass fundamentals); the old
+    # tilt 1.1 was standing in for the low-pass hammer's darkening.
+    hammer_model = True
+    max_partial_hz = 10000.0
+    case_string_max_m = 1.3
+    strike_fill_fraction = 0.0
+    tonal_dampening = 0.80033
+    hammer_logk = 9.1707
+    hammer_logk_slope = 0.43676
+    hammer_logk_curve = 0.01706
+    hammer_alpha = 0.59914
+    hammer_log_tau = -4.5322
+    strike_depth = 0.80346
+    hammer_core_mm = 0.92524
+    hammer_core_edge_mm = 4.7874
+    hammer_wear_center_hz = 326.76
+    hammer_wear_octaves = 2.369
+    hammer_core_logk = 14.317
+    # THE DECAY BY FREQUENCY (band T20s and the late tail: 7.7 -> 5.8 dB),
+    # the 2-string aftersound held at its own (the fit ran it past 1)
+    decay_by_hz = True
+    decay_b1 = 0.9666
+    decay_b3 = 0.44851
+    decay_board_db = 10.234
+    decay_board_hz = 106.7
+    aftersound_decay_ratio = 0.2824
+    # THE STRINGS' GROWTH WITH FORCE in the top (VSCO's fundamental grows
+    # 31-40 dB from p to f there, ours 23): F5-C#7 within ~2 dB, C#6 left short
+    hammer_vel_power_points = ((440.0, 0.0), (698.5, 0.4), (880.0, 0.6), (1108.7, 1.1), (1396.9, 1.15), (1760.0, 1.0), (2217.5, 0.75), (2793.8, 0.0))
+    # THE REGISTER'S LEVEL TO GENERALUSER GS'S UPRIGHT (K-weighted, each key
+    # re its C4, velocities 64 and 100): within 0.85 dB; the old voicing's
+    # 10 dB hole at A5-E6 and its bass 6-15 dB loud were VSCO's keys
+    hammer_level_points = ((27.5, -5.8), (41.2, -5.8), (55.0, -8.4), (82.4, -9.9), (110.0, -6.5), (164.8, -0.8), (220.0, 1.0), (329.6, -2.5), (440.0, -3.7), (659.3, 4.0), (880.0, 14.7), (1318.5, 16.8), (2093.0, 2.8))
+    # THE CASE RINGS (Ben: "the noise needs drum modes of the cabinet"): on
+    # every treble take the same peaks under the fundamental, where no
+    # partial lives -- 143 to 955 Hz, ringing 70-150 dB/s, as loud as a soft
+    # top note's fundamental; our knock had them for 40 ms and died 2-3x too
+    # fast, and the top two octaves were a music box. Fixed in Hz (the case,
+    # not the tuning); (Hz, dB re the note, dB/s, velocity power): the low
+    # modes grow with force as the note does, those over 500 Hz less. Fitted
+    # at 120 ms after the strike, soft and hard, within ~6 dB; they ring on
+    # past the key's release (the case is not damped)
+    ring_db = ((143, -36.8, 27, 1.34), (240, -33.5, 69, 0.08), (322, -34.0, 102, 0.1), (377, -34.4, 86, 0.26), (522, -50.0, 76, -1.54), (598, -46.2, 122, -1.26), (640, -45.5, 112, -1.22), (955, -54.3, 152, -1.01))
+    ring_tuned = False
+    # THE KNOCK BY REGISTER (the attack's 2-8 kHz share, first 20 ms, soft
+    # and hard: bass 11.8 -> 8.4, middle 10.1 -> 9.8, top 10.1 -> 7.3 dB):
+    # level flat above A4 (the octave law put 4-10 dB too much on the top),
+    # and a soft blow in the bass barely knocks (velocity power 2.5 there)
+    strike_noise_register_db = ((27.5, -15.5), (440.0, 0.0), (1760.0, 0.0), (4186.0, 3.0))
+    strike_noise_vel_power_register = ((55.0, 2.5), (175.0, 2.0), (330.0, 1.0), (880.0, 0.3))
+    strike_noise_vel_power = 0.3
 
 
 class BrightPianoProperties(GrandPianoProperties):

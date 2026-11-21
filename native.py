@@ -2781,6 +2781,9 @@ def init_supported(cls):
     kit drum's (SynthProperties' alone), the base class's placing and laws,
     and none of the branches not ported."""
     import tonelib as T
+    # (the strings' velocity growth by register is not in the C yet)
+    if getattr(cls, 'hammer_vel_power_points', ()):
+        return False
     if kit_drum(cls):
         # (a dynamic B: the steel's law, or a pipe's -- the piano's polynomial, borrowed)
         if not T.hrtf or (cls.inharmonicity_dynamic and kit_drum(cls) != 4 and not pipe_voice(cls)):
@@ -3380,6 +3383,10 @@ def note_class(cls):
     import blockrender as BR
     got = _NOTE.get(cls)
     drum = kit_drum(cls)
+    # (the knock's register tables are not in the C yet: the Python plays such a class)
+    if got is None and (getattr(cls, 'strike_noise_register_db', ()) or getattr(cls, 'strike_noise_vel_power_register', ())):
+        _NOTE[cls] = False
+        return None
     if got is None:
         v = _class(cls)
         # (a kit drum's one-shot hold is the engine's, a snare's partials'
@@ -3895,7 +3902,8 @@ def note_class(cls):
                 [float(row[8])] if len(row) > 8 else [1.0])
         # ITS OTHER STRINGS (ring_db: _note_ring)
         _rg = getattr(cls, 'ring_db', ()) or ()
-        if len(_rg) > 48:
+        # (their velocity law is not in the C yet: the Python plays such a class)
+        if len(_rg) > 48 or (_rg and ((getattr(cls, 'ring_vel_power', 0.0) or 0.0) or any(len(r) > 3 for r in _rg) or getattr(cls, 'ring_register_db', ()))):
             _NOTE[cls] = False
             return None
         k.ring_n, k.ring_skip = len(_rg), float(getattr(cls, 'ring_skip', 0.03))

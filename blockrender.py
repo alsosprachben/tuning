@@ -5910,6 +5910,31 @@ def _moog_native(em, props, nt, layer, mre, sd=None, over=None):
     return rows[:n], qacc, az.value
 
 
+def _octave_interp(pts, f0):
+    """(Hz, value) points read at f0, in octaves, flat past the ends."""
+    lf = math.log(max(f0, 1.0))
+    xs = [math.log(q[0]) for q in pts]
+    return float(np.interp(lf, xs, [q[1] for q in pts]))
+
+
+def _strike_reg(props, f0, sf0):
+    """The knock's level across the register (dB): strike_noise_register_db's
+    points where a class names them, else the octave law from A4."""
+    pts = getattr(props, 'strike_noise_register_db', ()) or ()
+    if pts:
+        return _octave_interp(pts, f0)
+    return getattr(props, 'strike_noise_octave_db', props.strike_noise_slope) * math.log2(max(sf0, 1.0) / 440.0)
+
+
+def _strike_vel_power(props, f0):
+    """The knock's own velocity law: strike_noise_vel_power_register's points
+    (Hz, power) where a class names them, else strike_noise_vel_power."""
+    pts = getattr(props, 'strike_noise_vel_power_register', ()) or ()
+    if pts:
+        return _octave_interp(pts, f0)
+    return getattr(props, 'strike_noise_vel_power', 0.0) or 0.0
+
+
 def _note_strike_noise(em, props, nt, _CBW, _VB, _pjit, emit_partial, random):
     """THE STRIKE'S NOISE (strike_noise_db): bursts -- flams, a crowd's claps
     and their hand pitches, a late hit, a tail -- as noise rows. Returns _pjit."""
@@ -5961,8 +5986,7 @@ def _note_strike_noise_py(em, props, nt, _CBW, _VB, _pjit, emit_partial, random)
         # slope fitted over a recorded compass is not extrapolated past it
         _sspan = getattr(props, 'strike_noise_span_hz', None)
         _sf0 = min(max(nt.f0, _sspan[0]), _sspan[1]) if _sspan else nt.f0
-        _reg = getattr(props, 'strike_noise_octave_db', props.strike_noise_slope) \
-            * math.log2(max(_sf0, 1.0) / 440.0)
+        _reg = _strike_reg(props, nt.f0, _sf0)
         _sfade = max(1.0, props.strike_noise_fade_s * SR)
         # ...and its length a class may lengthen (strike_noise_len_s): a
         # slower strike than the grand's is still heard at 0.25 s
@@ -6080,7 +6104,7 @@ def _note_strike_noise_py(em, props, nt, _CBW, _VB, _pjit, emit_partial, random)
         # ...AND THE KNOCK GROWS FASTER THAN THE NOTE (strike_noise_vel_power):
         # its power as attack_volume ** (1 + this) where the note's is
         # attack_volume -- a soft blow's felt barely knocks
-        _svp = getattr(props, 'strike_noise_vel_power', 0.0) or 0.0
+        _svp = _strike_vel_power(props, nt.f0)
         if _svp:
             _scal += _svp * 10.0 * math.log10(max(props.attack_volume, 1e-6))
         # ...AND A SLOWER TAIL under it (strike_noise_tail: dB re the
@@ -6194,18 +6218,28 @@ def _note_ring(em, props, nt, A, _RING, _VB, emit_partial, random):
         _r0, _bkeep = len(A['om']), em.bend_row
         em.bend_row = -1
         em.ring_rows = True
-        for _hf, _db, _dps in props.ring_db:
+        _rvp = (getattr(props, 'ring_vel_power', 0.0) or 0.0) * 10.0 * math.log10(max(props.attack_volume, 1e-6))
+        _rreg = 0.0
+        _rpts = getattr(props, 'ring_register_db', ()) or ()
+        if _rpts:
+            _lf = math.log(nt.f0)
+            _rreg = float(np.interp(_lf, [math.log(_q[0]) for _q in _rpts], [_q[1] for _q in _rpts]))
+        for _rrow in props.ring_db:
+            _hf, _db, _dps = _rrow[0], _rrow[1] + _rreg, _rrow[2]
+            # ...a row's own velocity law (a 4th number), else the class's
+            _rvp = (_rrow[3] if len(_rrow) > 3 else (getattr(props, 'ring_vel_power', 0.0) or 0.0)) \
+                * 10.0 * math.log10(max(props.attack_volume, 1e-6))
             # ...TUNED AS THE NOTES ARE: a row is the nearest key and its
             # offset from 12-TET at A440 (none for the koto's strings, the
             # measured tines' own for the kalimba), so the other strings
             # sit in the tuning the music is played in -- the key's
             # frequency in the table in force at this note's onset
             _rk = int(round(69.0 + 12.0 * math.log2(_hf / 440.0)))
-            if _rk in nt.freq:
+            if _rk in nt.freq and getattr(props, 'ring_tuned', True):
                 _hf = nt.freq[_rk] * _hf / (440.0 * 2.0 ** ((_rk - 69.0) / 12.0))
             if _hf >= 0.45 * SR or any(abs(_hf / _q - 1.0) < props.ring_skip for _q in _own):
                 continue
-            _gM = props.gain * 10.0 ** (_db / 20.0)
+            _gM = props.gain * 10.0 ** ((_db + _rvp) / 20.0)
             emit_partial(2 * math.pi * _hf / SR, _gM * props.hrtf_gain(_hf, nt.li),
                          _gM * props.hrtf_gain(_hf, nt.ri), _gM, _hf, nt.non, max(nt.noff, nt.non + 4.0 * SR),
                          nt.fade, nt.rel, nt.chiff, math.log(10.0) / 20.0 * _dps, 0.0, 0.0, 0.0, 0.0,
@@ -6665,14 +6699,14 @@ def _strike_native(em, props, nt):
     _slr = math.log(10.0) / 20.0 * P.strike_noise_dbs
     _sspan = getattr(P, 'strike_noise_span_hz', None)
     _sf0 = min(max(nt.f0, _sspan[0]), _sspan[1]) if _sspan else nt.f0
-    _reg = getattr(P, 'strike_noise_octave_db', P.strike_noise_slope) * math.log2(max(_sf0, 1.0) / 440.0)
+    _reg = _strike_reg(P, nt.f0, _sf0)
     _sfade = max(1.0, P.strike_noise_fade_s * SR)
     _slen = (getattr(P, 'strike_noise_len_s', None) or 0.25) * SR
     if getattr(P, 'gate_time', None) and getattr(P, 'one_shot', False):
         _slen = min(_slen, max(1.0, nt.noff - nt.non))
     _sat = (getattr(P, 'strike_noise_at', 0.0) or 0.0) * SR
     _scal = getattr(P, 'strike_noise_cal_db', 0.0) or 0.0
-    _svp = getattr(P, 'strike_noise_vel_power', 0.0) or 0.0
+    _svp = _strike_vel_power(P, nt.f0)
     if _svp:                       # (the knock's own velocity law: _note_strike_noise_py's)
         _scal += _svp * 10.0 * math.log10(max(P.attack_volume, 1e-6))
     _bon = nt.non + _sat + 0.0 * SR
@@ -6987,9 +7021,10 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
     n.fbr = em.fader_row if em.fader_row >= 0 else -1
     if getattr(P, 'ring_db', ()):
         n.ring_on = 1
-        for _i, (_hf, _db, _dps) in enumerate(P.ring_db):
+        for _i, _rrow in enumerate(P.ring_db):
+            _hf = _rrow[0]
             _rk = int(round(69.0 + 12.0 * math.log2(_hf / 440.0)))
-            if _rk in nt.freq:
+            if _rk in nt.freq and getattr(P, 'ring_tuned', True):
                 _hf = nt.freq[_rk] * _hf / (440.0 * 2.0 ** ((_rk - 69.0) / 12.0))
             n.ring_f[_i] = _hf
     # ...and its breath noise's, wobbling on its own row (_note_breath_noise)
