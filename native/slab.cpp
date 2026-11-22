@@ -14974,6 +14974,23 @@ void nv_part_spectra(void *h, const double *sp, int n, void *scone)
 // value -- a Leslie's half-moon (leslie.zone), a Spectra-Tone's rocker
 // (spectratone.zone) -- straight to the rotors, not through the channel: a
 // part reading a Messenger's chart hears CC80 as its filter's velocity switch
+// THE SPECTRA-TONE's ROCKER, a session's (live's preset "spectra_fast"):
+// 1 up (Theater), 0 down, -1 no Spectra-Tone; and set, the rotor already there
+int nv_part_spectra_fast(void *h)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (P->spec.size() < 11)
+        return -1;
+    return P->rotor_spectra.target >= P->rotor_spectra_mid() ? 1 : 0;
+}
+void nv_part_set_spectra_fast(void *h, int fast)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (P->spec.size() < 11)
+        return;
+    P->rotor_spectra.rate = P->rotor_spectra.target = fast ? P->spec[8] : P->spec[7];
+}
+
 void nv_part_rotor(void *h, int pi, int v)
 {
     nv::slab::Part *P = (nv::slab::Part *)h;

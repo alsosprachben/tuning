@@ -13300,6 +13300,9 @@ def preset_from(live):
         bend_range=live.bend_range, mod_cents=live.mod_cents,
         press_db=live.press_db, press_tilt=live.press_tilt,
         thresh=live.thresh, mod_rate=live.mod_rate,
+        # the Spectra-Tone's rocker (the console's one rotor): up, Theater
+        spectra_fast=bool(live.rotor_spectra.target >= 0.5 * (__import__("spectratone").SLOW_HZ
+                                                               + __import__("spectratone").FAST_HZ)),
         # The panel's controls and the route table: lists, so they travel
         # outside the float() loop apply_preset runs over the knobs.
         controls=[dict(c) for c in getattr(live, "screen_controls", [])],
@@ -13543,6 +13546,11 @@ def apply_preset(live, preset, progress=None):
         if k in preset:
             setattr(live, k, float(preset[k]))
     live.slab.headroom = 10.0 ** (-live.headroom_db / 20.0)
+    # the Spectra-Tone's rocker as it was left: the rotor already at that speed
+    if "spectra_fast" in preset and getattr(live, "rotor_spectra", None) is not None:
+        import spectratone as _STp
+        live.rotor_spectra.rate = live.rotor_spectra.target = (_STp.FAST_HZ if preset["spectra_fast"]
+                                                               else _STp.SLOW_HZ)
     # The lists, outside the float() loop. A preset from before they existed
     # has neither key and leaves the rig with no routes and no panel controls,
     # which is what it had when it was saved.

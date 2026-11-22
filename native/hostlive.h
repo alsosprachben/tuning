@@ -201,6 +201,8 @@ void nv_part_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, vo
 void nv_part_moogx(void *h, void *smx, void *vbm, void *vmd, void *vmm);
 void nv_part_spectra(void *h, const double *sp, int n, void *scone);
 void nv_part_rotor(void *h, int pi, int v);
+int nv_part_spectra_fast(void *h);
+void nv_part_set_spectra_fast(void *h, int fast);
 int nv_part_couplers(void *h, int pi);
 void nv_part_set_couplers(void *h, int pi, int v, long long n0);
 // the maps' own drum sets: their keys' region of K, how many (live.cpp's) and the song's
