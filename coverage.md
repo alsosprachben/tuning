@@ -561,32 +561,32 @@ Standard. THE GOAL: every one built.
 | # | note | class | | notes |
 |---|---|---|---|---|
 | 35 | TR-808 Kick 2 | `TR808Kick` | **2** | TR-808 Kick 2: set 25's key 36 -- the nearest we have, not the sound |
-| 36 | 808 Bass Drum | `TR808Kick` | **4** | THE ROLAND TR-808, AS AN ENGINE (tr808.py: its two kinds of circuit as partials -- bridged-T resonators, and six square oscillators through band-passes -- every instrument a patch of knobs, read off the service notes' schematic where it fixes them). FITTED BY TWO LEVELS to Michael Fischer's recordings of one 808 (every knob at five positions): the GM set whose sample IS an 808 picks the setting, the patch fits that hit (examples/tr808_fit.py). Balanced within itself as GeneralUser's (examples/elkit_balance.py --kit=25). Ben: sounds incredible. The BASS DRUM: one network at 49.6 Hz, its first cycle at 4x (the time constant halved while the trigger lasts), the pitch sighing 0.5 oct onto it; its spectrum within 1-3 dB of the hit's to 8 kHz. Score 4.5 (BD0050) |
-| 37 | 808 Rim Shot | `TR808RimShot` | **4** | the RIM SHOT: two networks into the SWING VCA (a transistor conducting on one polarity: their harmonics and intermodulation, each product decaying as the networks' mix changes), out through Q63's resonant high-pass (590 Hz, Q 2.9). Score 15.2 -- the rectifier's sharp 3-12 kHz edge is short |
-| 38 | 808 Snare Drum | `TR808Snare` | **4** | the SNARE: two networks near an octave apart and SNAPPY, high-passed noise on its own envelope. Score 5.2 (SD7575) |
+| 36 | 808 Bass Drum | `TR808Kick` | **4** | THE ROLAND TR-808, AS AN ENGINE (tr808.py: its two kinds of circuit as partials -- bridged-T resonators, and six square oscillators through band-passes -- every instrument a patch of knobs, read off the service notes' schematic where it fixes them). FITTED to MckAudio's recordings of a Roland TR-8's 808 voices (CC0; examples/tr808_fit.py). Balanced within itself as GeneralUser's (examples/elkit_balance.py --kit=25). Ben: sounds good (the TR-8 refit). The BASS DRUM: one network at 47.4 Hz, its first cycle faster (the time constant halved while the trigger lasts), the pitch sighing onto it. Score 7.6 |
+| 37 | 808 Rim Shot | `TR808RimShot` | **4** | the RIM SHOT: two networks into the SWING VCA (a transistor conducting on one polarity: their harmonics and intermodulation, each product decaying as the networks' mix changes), out through Q63's resonant high-pass (590 Hz, Q 2.9). Score 13.7 |
+| 38 | 808 Snare Drum | `TR808Snare` | **4** | the SNARE: two networks near an octave apart and SNAPPY, high-passed noise on its own envelope. Score 8.4 |
 | 40 | TR-808 Snare 2 | `TR808Snare` | **2** | TR-808 Snare 2: set 25's key 38 -- the nearest we have, not the sound |
-| 41 | 808 Low Tom 2 | `TR808Tom` | **4** | the LOW TOM: diodes D80/D81 conduct with the ring, so the pitch falls as it decays and their harmonics die faster; pink noise at 154-402 Hz on its own envelope (the schematic's RCs). Score 5.0 (LT75) |
-| 42 | 808 CHH | `TR808ClosedHat` | **4** | the CLOSED HAT: the six oscillators (this 808's, read off its cymbal: 345.5, 486.2, 558.5, 630.6, 823.9, 852.0 Hz -- pulses, not squares) through the high band, a short VCA and a high-pass. Score 5.8 |
+| 41 | 808 Low Tom 2 | `TR808Tom` | **4** | the LOW TOM: diodes D80/D81 conduct with the ring, so the pitch falls as it decays and their harmonics die faster; pink noise at 154-402 Hz on its own envelope (the schematic's RCs). Score 9.9 |
+| 42 | 808 CHH | `TR808ClosedHat` | **4** | the CLOSED HAT: the six oscillators (the service notes' design: 205.3, 304.4, 369.6, 522.7 Hz by their components, the cowbell's pair trimmed to 540 and 800 -- pulses, not squares) through the high band, a short VCA and a high-pass. Score 7.9 |
 | 43 | 808 Low Tom 1 | `TR808Tom` | **4** | as 41, played 2.8 semitones higher -- the SC-55's sixth tom where FluidR3 plays it, past the TUNING knob's reach |
 | 44 | 808 CHH | `TR808ClosedHat` | **4** | as 42 (the SC-55's pedal hat is the 808's CHH) |
-| 45 | 808 Mid Tom 2 | `TR808MidTom` | **4** | the MID TOM, its own circuit: noise 219-482 Hz. Score 5.3 (MT50) |
-| 46 | 808 OHH | `TR808OpenHat` | **4** | the OPEN HAT: the same band, a longer VCA, choked by 42/44. Score 8.3 (OH75) |
+| 45 | 808 Mid Tom 2 | `TR808MidTom` | **4** | the MID TOM, its own circuit: noise 219-482 Hz. Score 11.7 |
+| 46 | 808 OHH | `TR808OpenHat` | **4** | the OPEN HAT: the same band, a longer VCA, choked by 42/44. Score 10.9 |
 | 47 | 808 Mid Tom 1 | `TR808MidTom` | **4** | as 45, 2 semitones higher (as 43) |
-| 48 | 808 Hi Tom 2 | `TR808HiTom` | **4** | the HI TOM, its own circuit: noise 268-723 Hz. Score 6.7 (HT75) |
-| 49 | 808 Cymbal | `TR808Cymbal` | **4** | the CYMBAL: the six through three bands at the circuit's centres (Werner's cymbal paper), each its own decay -- the kernel's two-stage decay per partial. Score 7.1 (CY7500) |
+| 48 | 808 Hi Tom 2 | `TR808HiTom` | **4** | the HI TOM, its own circuit: noise 268-723 Hz. Score 16.8 |
+| 49 | 808 Cymbal | `TR808Cymbal` | **4** | the CYMBAL: the six through three bands at the circuit's centres (Werner's cymbal paper), each its own decay -- the kernel's two-stage decay per partial. Score 10.3 |
 | 50 | 808 Hi Tom 1 | `TR808HiTom` | **4** | as 48, 3.5 semitones higher (as 43) |
 | 51 | TR-606 Ride Cymbal | `TR606Cymbal` | **4** | TR-606 Ride Cymbal: set 28's key 51 |
 | 54 | CR-78 Tambourine | `CR78Tambourine` | **4** | CR-78 Tambourine: set 27's key 54 |
-| 56 | 808 Cowbell | `TR808Cowbell` | **4** | the COWBELL: two of the six through a band-pass, an abrupt drop into a tail. Score 10.7 |
+| 56 | 808 Cowbell | `TR808Cowbell` | **4** | the COWBELL: two of the six through a band-pass, an abrupt drop into a tail. Score 11.5 |
 | 57 | TR-909 Crash Cymbal | `TR909Crash` | **4** | TR-909 Crash Cymbal: set 30's key 49 |
 | 60 | CR-78 High Bongo | `CR78HiBongo` | **4** | CR-78 High Bongo: set 27's key 60 |
 | 61 | CR-78 Low Bongo | `CR78LowBongo` | **4** | CR-78 Low Bongo: set 27's key 61 |
-| 62 | 808 High Conga | `TR808HiConga` | **4** | the HIGH CONGA: the tom circuit with a capacitor switched out -- higher, no noise. Score 9.3 (HC50) |
-| 63 | 808 Mid Conga | `TR808MidConga` | **4** | the MID CONGA. Score 2.8 (MC25) |
-| 64 | 808 Low Conga | `TR808Conga` | **4** | the LOW CONGA. Score 2.9 (LC25) |
-| 70 | 808 Maracas | `TR808Maracas` | **4** | the MARACAS: white noise through Q68's 1 kHz RC and 10.6 kHz Sallen-Key (Q 2.3), a gate that swells, holds and cuts. Score 10.0 |
+| 62 | 808 High Conga | `TR808HiConga` | **4** | the HIGH CONGA: the tom circuit with a capacitor switched out -- higher, no noise. Score 16.9 |
+| 63 | 808 Mid Conga | `TR808MidConga` | **4** | the MID CONGA. Score 15.0 |
+| 64 | 808 Low Conga | `TR808Conga` | **4** | the LOW CONGA. Score 9.4 |
+| 70 | 808 Maracas | `TR808Maracas` | **4** | the MARACAS: white noise through Q68's 1 kHz RC and 10.6 kHz Sallen-Key (Q 2.3), a gate that swells, holds and cuts. Score 10.2 |
 | 74 | CR-78 Guiro | `CR78Guiro` | **4** | CR-78 Guiro: set 27's key 74 |
-| 75 | 808 Claves | `TR808Claves` | **4** | the CLAVES: one network at 2.42 kHz. Score 13.4 |
+| 75 | 808 Claves | `TR808Claves` | **4** | the CLAVES: one network at 2.80 kHz. Score 21.0 |
 | 78 | High Hoo | `Hoo` | **4** | High Hoo, the Hoo at 1000 Hz |
 | 79 | Low Hoo | `Hoo` | **4** | Low Hoo, the Hoo at 1000 Hz |
 | 88 | Small Club 1 | `SmallClub` | **4** | Small Club 1, the SmallClub at 440 Hz |
@@ -678,22 +678,22 @@ Standard. THE GOAL: every one built.
 | # | note | class | | notes |
 |---|---|---|---|---|
 | 35 | CR-78 Kick 2 | `CR78Kick2` | **4** | CR-78 Kick 2: set 27's key 35 |
-| 36 | 606 Kick 1 | `TR606Kick` | **4** | 606 KICK:a bridged-T at 57.7 Hz (Ed Vargo's real 606; examples/tr606_fit.py). Score 7.3. Ben: sounds great |
+| 36 | 606 Kick 1 | `TR606Kick` | **4** | 606 KICK: a bridged-T at 50.9 Hz (MckAudio's TR-8 take, CC0; examples/tr606_fit.py). Score 12.4. Ben: sounds great (the earlier fit) |
 | 37 | CR-78 Rim Shot | `CR78Rim` | **4** | CR-78 Rim Shot: set 27's key 37 |
-| 38 | 606 Snare 1 | `TR606Snare` | **4** | 606 SNARE 1: a bridged-T at 207 Hz and its snappy noise. Score 8.1 |
+| 38 | 606 Snare 1 | `TR606Snare` | **4** | 606 SNARE 1: a bridged-T at 203 Hz and its snappy noise. Score 9.5 |
 | 39 | 707 Hand Clap | `TR707Clap` | **4** | the 707's clap |
-| 40 | 606 Snare 2 | `TR606Snare2` | **4** | 606 SNARE 2: the snare ACCENTED (bdu's CC0 take). Score 9.1 |
-| 41 | 606 Low Tom 2 | `TR606Tom` | **4** | 606 LOW TOM: a bridged-T whose pitch falls as it rings (diodes). Score 9.1 |
-| 42 | 606 CHH | `TR606ClosedHat` | **4** | 606 CLOSED HAT: six square oscillators (read off its cymbal: 203.2, 211.2, 222.1, 251.2, 333.1, 351.9 Hz) through a high band, a short VCA; the trigger's thump under 250 Hz. Score 11.8 |
+| 40 | 606 Snare 2 | `TR606Snare2` | **4** | 606 SNARE 2: the TR-8's second 606 snare. Score 12.8 |
+| 41 | 606 Low Tom 2 | `TR606Tom` | **4** | 606 LOW TOM: a bridged-T whose pitch falls as it rings (diodes). Score 9.9 |
+| 42 | 606 CHH | `TR606ClosedHat` | **4** | 606 CLOSED HAT: six square oscillators (the service notes' design: 246, 308, 367, 418, 440, 627 Hz) through a high band, a short VCA; the trigger's thump under 250 Hz. Score 7.6 |
 | 43 | 606 Low Tom 1 | `TR606Tom` | **4** | as 41, 1.75 semitones up (the 606's two toms over six keys, evenly) |
 | 44 | 606 CHH | `TR606ClosedHat` | **4** | as 42 |
 | 45 | 606 Mid Tom 2 | `TR606Tom` | **4** | as 41, 3.5 semitones up |
-| 46 | 606 OHH | `TR606OpenHat` | **4** | 606 OPEN HAT: the same band, a longer VCA. Score 10.6 |
+| 46 | 606 OHH | `TR606OpenHat` | **4** | 606 OPEN HAT: the same band, a longer VCA. Score 18.1 |
 | 47 | 606 Mid Tom 1 | `TR606HiTom` | **4** | as 48, 1.75 semitones down |
-| 48 | 606 Hi Tom 2 | `TR606HiTom` | **4** | 606 HIGH TOM. Score 10.2 |
+| 48 | 606 Hi Tom 2 | `TR606HiTom` | **4** | 606 HIGH TOM. Score 12.1 |
 | 49 | 808 Cymbal | `TR808Cymbal` | **4** | the 808's cymbal |
 | 50 | 606 Hi Tom 1 | `TR606HiTom` | **4** | as 48, 1.75 semitones up |
-| 51 | 606 Ride Cymbal | `TR606Cymbal` | **4** | 606 CYMBAL (Roland's 'Ride'): the oscillators through three bands, each its own VCA, and a tail ringing on (after_db), scored on its 50 ms envelope too (Ben: 'more ring to it than ours'): within 2 dB of the take from 0.25 s to 0.9 |
+| 51 | 606 Ride Cymbal | `TR606Cymbal` | **4** | 606 CYMBAL (Roland's 'Ride'): the oscillators through three bands, each its own VCA, and a tail ringing on (after_db), scored on its 50 ms envelope too (Ben: 'more ring to it than ours', of the earlier fit). Score 15.8 |
 | 54 | CR-78 Tambourine | `CR78Tambourine` | **4** | CR-78 Tambourine: set 27's key 54 |
 | 56 | CR-78 Cowbell | `TR808Cowbell` | **2** | CR-78 Cowbell: set 25's key 56 -- the nearest we have, not the sound |
 | 57 | 909 Crash | `TR909Crash` | **4** | the 909's crash |
@@ -716,20 +716,20 @@ Standard. THE GOAL: every one built.
 
 | # | note | class | | notes |
 |---|---|---|---|---|
-| 35 | 707 Kick 2 | `TR707Kick2` | **4** | 707 KICK 2: the same drum, its click softer, gated at 55 ms. Score 14.3 |
-| 36 | 707 Kick 1 | `TR707Kick` | **4** | 707 KICK 1: the ROM's kick swept from ~300 Hz onto 55 (zero crossings: a 20 ms frame cannot read 55 Hz), held, then its VCA closing at 58 ms (gate_ms); its beater's click a band at 0.8-1.4 kHz. Fitted to hyperreal's 707 take: score 12.3. Ben: sounds great |
-| 37 | 707 Rim Shot | `TR707Rim` | **4** | 707 RIM SHOT: a ring at 897 Hz and two more, gated. Score 17.4 |
-| 38 | 707 Snare 1 | `TR707Snare` | **4** | 707 SNARE 1: a 161 Hz shell, its modes at x1.73 and x2.31, its wires' noise, gated. Score 11.2 |
-| 39 | 707 Hand Clap | `TR707Clap` | **4** | 707 HAND CLAP: four bursts at the take's 0, 10, 20, 31 ms (click_bursts: a machine's flam, the same every note) and a tail. Score 14.5 |
-| 40 | 707 Snare 2 | `TR707Snare2` | **4** | 707 SNARE 2: the wires louder. Score 10.8 |
-| 41 | 707 Low Tom 2 | `TR707Tom` | **4** | 707 LOW TOM 2: a membrane gliding down from ~140 Hz to ~100, its modes beside it. Score 9.7 |
-| 42 | 707 CHH | `TR707ClosedHat` | **4** | 707 CLOSED HAT: a real hat in ROM, so OUR closed hat fitted to it (examples/rom_cymbal_fit.py), the ROM's grit on top: 4.58 -> 1.67 dB |
+| 35 | 707 Kick 2 | `TR707Kick2` | **4** | 707 KICK 2: the same drum at 55.6 Hz, gated at 58 ms. Score 13.6 |
+| 36 | 707 Kick 1 | `TR707Kick` | **4** | 707 KICK 1: the ROM's kick swept from ~300 Hz onto 55 (zero crossings: a 20 ms frame cannot read 55 Hz), held, then its VCA closing at 58 ms (gate_ms); its beater's click a band. Fitted to MckAudio's TR-8 take (CC0): score 14.1. Ben: sounds great (the earlier fit) |
+| 37 | 707 Rim Shot | `TR707Rim` | **4** | 707 RIM SHOT: a ring at 1.03 kHz and two more, gated. Score 17.7 |
+| 38 | 707 Snare 1 | `TR707Snare` | **4** | 707 SNARE 1: a 159 Hz shell, its modes at x1.60 and x2.14, its wires' noise, gated. Score 14.1 |
+| 39 | 707 Hand Clap | `TR707Clap` | **4** | 707 HAND CLAP: four bursts at 0, 10, 20, 31 ms (click_bursts: a machine's flam, the same every note) and a tail. Score 10.4 |
+| 40 | 707 Snare 2 | `TR707Snare2` | **4** | 707 SNARE 2: the wires louder. Score 15.2 |
+| 41 | 707 Low Tom 2 | `TR707Tom` | **4** | 707 LOW TOM 2: a membrane gliding down onto ~91 Hz, its modes beside it. Score 11.0 |
+| 42 | 707 CHH | `TR707ClosedHat` | **4** | 707 CLOSED HAT: a real hat in ROM, so OUR closed hat fitted to it (examples/rom_cymbal_fit.py), the ROM's grit on top: 12.58 -> 3.25 dB (the TR-8's take) |
 | 43 | 707 Low Tom 1 | `TR707Tom` | **4** | as 41, two semitones up (the 707 has three toms; the six evenly spaced) |
 | 44 | 707 CHH | `TR707ClosedHat` | **4** | as 42 |
-| 45 | 707 Mid Tom 2 | `TR707MidTom` | **4** | 707 MID TOM 2. Score 8.2 |
-| 46 | 707 OHH | `TR707OpenHat` | **4** | 707 OPEN HAT: our open hat fitted to the ROM's: 2.29 -> 1.99 dB |
+| 45 | 707 Mid Tom 2 | `TR707MidTom` | **4** | 707 MID TOM 2. Score 10.6 |
+| 46 | 707 OHH | `TR707OpenHat` | **4** | 707 OPEN HAT: our open hat fitted to the ROM's: 10.89 -> 4.54 dB |
 | 47 | 707 Mid Tom 1 | `TR707MidTom` | **4** | as 45, two semitones up |
-| 48 | 707 Hi Tom 2 | `TR707HiTom` | **4** | 707 HI TOM 2. Score 9.9 |
+| 48 | 707 Hi Tom 2 | `TR707HiTom` | **4** | 707 HI TOM 2. Score 10.2 |
 | 49 | 909 Crash | `TR909Crash` | **4** | the 909's crash, as Roland's set has it |
 | 50 | 707 Hi Tom 1 | `TR707HiTom` | **4** | as 48, two semitones up |
 | 51 | 909 Ride | `TR909Ride` | **4** | the 909's ride |
@@ -744,22 +744,22 @@ Standard. THE GOAL: every one built.
 
 | # | note | class | | notes |
 |---|---|---|---|---|
-| 35 | 909 Kick 2 | `TR909Kick2` | **4** | 909 KICK 2: the panel's middle, no attack (BT7A0D7). Score 8.0 |
-| 36 | 909 Kick 1 | `TR909Kick` | **4** | 909 KICK 1: a VCO swept in Hz (a current into an integrator: tr808.py's linear sweep) from 5.6x down onto 49.8 Hz, tau 30.5 ms, its ATTACK click beside it; TUNE, ATTACK, DECAY full. Fitted to Jason Baker's real 909 (BTAAADA): score 8.7. Ben: sounds great |
-| 37 | 909 Rim | `TR909Rim` | **4** | 909 RIM: a short ring and its click (RIM127). Score 16.3 |
-| 38 | 909 Snare 1 | `TR909Snare` | **4** | 909 SNARE 1: two swept oscillators 1.44 apart over SNAPPY's noise; ST0T3S3, the take GeneralUser GS's own sample is. Score 9.6 |
-| 40 | 909 Snare 2 | `TR909Snare2` | **4** | 909 SNARE 2: TUNE, TONE, SNAPPY full (STATASA, GeneralUser's other). Score 11.6 |
-| 41 | 909 Low Tom 2 | `TR909Tom` | **4** | 909 LOW TOM 2: a swept VCO and a second at 2/3 of it (LT3D7). Score 9.2 |
+| 35 | 909 Kick 2 | `TR909Kick2` | **4** | 909 KICK 2: the TR-8's second kick, its sweep slower, onto 53.5 Hz. Score 12.4 |
+| 36 | 909 Kick 1 | `TR909Kick` | **4** | 909 KICK 1: a VCO swept in Hz (a current into an integrator: tr808.py's linear sweep) from ~5x down onto 53.1 Hz, its ATTACK click beside it. Fitted to MckAudio's TR-8 take (CC0): score 12.3. Ben: sounds great (the earlier fit) |
+| 37 | 909 Rim | `TR909Rim` | **4** | 909 RIM: a short ring and its click. Score 19.1 |
+| 38 | 909 Snare 1 | `TR909Snare` | **4** | 909 SNARE 1: two swept oscillators ~1.48 apart over SNAPPY's noise. Score 11.9 |
+| 40 | 909 Snare 2 | `TR909Snare2` | **4** | 909 SNARE 2: the TR-8's second snare, lower (130 Hz). Score 9.7 |
+| 41 | 909 Low Tom 2 | `TR909Tom` | **4** | 909 LOW TOM 2: a swept VCO and a second at ~0.7 of it. Score 9.2 |
 | 42 | 707 CHH | `TR707ClosedHat` | **4** | the 707's closed hat, as Roland's set borrows it |
-| 43 | 909 Low Tom 1 | `TR909LowTom1` | **4** | 909 LOW TOM 1: TUNE full (LTAD7). Score 9.4 |
+| 43 | 909 Low Tom 1 | `TR909LowTom1` | **4** | 909 LOW TOM 1: the TR-8's long take. Score 9.4 |
 | 44 | 707 CHH | `TR707ClosedHat` | **4** | as 42 |
-| 45 | 909 Mid Tom 2 | `TR909MidTom` | **4** | 909 MID TOM 2 (MT3D7). Score 10.7 |
-| 46 | 909 OHH | `TR909OpenHat` | **4** | 909 OPEN HAT: a real hat in the 909's ROM, so OUR open hat fitted to it (examples/rom_cymbal_fit.py: crash_fit's grid, HHOD4), the ROM's 6-bit grit a noise layer on top: 4.60 -> 1.75 dB |
-| 47 | 909 Mid Tom 1 | `TR909MidTom1` | **4** | 909 MID TOM 1 (MTAD7). Score 10.2 |
-| 48 | 909 Hi Tom 2 | `TR909HiTom` | **4** | 909 HI TOM 2 (HT3D7). Score 6.8 |
-| 49 | 909 Crash | `TR909Crash` | **4** | 909 CRASH: our crash (modes, the hard hit's swell) fitted to the 909's ROM take (CSHD4), its grit on top: 3.08 -> 2.58 dB. Ben: the samples 'sound almost real'; ours 'a little more open-ended because we aren't a sample, but that is fine' |
-| 50 | 909 Hi Tom 1 | `TR909HiTom1` | **4** | 909 HI TOM 1 (HTAD7). Score 6.4 |
-| 51 | 909 Ride | `TR909Ride` | **4** | 909 RIDE: our ride fitted to the ROM's (RIDED4): 6.11 -> 1.74 dB |
+| 45 | 909 Mid Tom 2 | `TR909MidTom` | **4** | 909 MID TOM 2. Score 10.4 |
+| 46 | 909 OHH | `TR909OpenHat` | **4** | 909 OPEN HAT: a real hat in the 909's ROM, so OUR open hat fitted to it (examples/rom_cymbal_fit.py: crash_fit's grid, the TR-8's take), the ROM's 6-bit grit a noise layer on top: 5.14 -> 2.92 dB |
+| 47 | 909 Mid Tom 1 | `TR909MidTom1` | **4** | 909 MID TOM 1 (the long take). Score 11.0 |
+| 48 | 909 Hi Tom 2 | `TR909HiTom` | **4** | 909 HI TOM 2. Score 10.7 |
+| 49 | 909 Crash | `TR909Crash` | **4** | 909 CRASH: our crash (modes, the hard hit's swell) fitted to the 909's ROM take (the TR-8's), its grit on top: 6.53 -> 4.46 dB. Ben, of the earlier fit: the samples 'sound almost real'; ours 'a little more open-ended because we aren't a sample, but that is fine' |
+| 50 | 909 Hi Tom 1 | `TR909HiTom1` | **4** | 909 HI TOM 1 (the long take). Score 8.1 |
+| 51 | 909 Ride | `TR909Ride` | **4** | 909 RIDE: our ride fitted to the ROM's (the TR-8's): 4.44 -> 3.20 dB |
 | 56 | 808 Cowbell | `TR808Cowbell` | **4** | the 808's cowbell, as Roland's set borrows it |
 | 59 | Ride Cymbal Edge | `RideEdge` | **4** | Ride Cymbal Edge, the RideEdge at 148 Hz |
 | 70 | 808 Maracas | `TR808Maracas` | **4** | the 808's maracas |
@@ -1962,26 +1962,26 @@ Standard. THE GOAL: every one built.
 | # | note | class | | notes |
 |---|---|---|---|---|
 | 35 | 909 Bass Drum | `TR909Kick` | **4** | the 909's kick (its set's 36), as the SC-88 map has it |
-| 36 | 808 Bass Drum | `TR808Kick` | **4** | THE ROLAND TR-808, AS AN ENGINE (tr808.py: its two kinds of circuit as partials -- bridged-T resonators, and six square oscillators through band-passes -- every instrument a patch of knobs, read off the service notes' schematic where it fixes them). FITTED BY TWO LEVELS to Michael Fischer's recordings of one 808 (every knob at five positions): the GM set whose sample IS an 808 picks the setting, the patch fits that hit (examples/tr808_fit.py). Balanced within itself as GeneralUser's (examples/elkit_balance.py --kit=25). Ben: sounds incredible. The BASS DRUM: one network at 49.6 Hz, its first cycle at 4x (the time constant halved while the trigger lasts), the pitch sighing 0.5 oct onto it; its spectrum within 1-3 dB of the hit's to 8 kHz. Score 4.5 (BD0050) |
-| 37 | 808 Rim Shot | `TR808RimShot` | **4** | the RIM SHOT: two networks into the SWING VCA (a transistor conducting on one polarity: their harmonics and intermodulation, each product decaying as the networks' mix changes), out through Q63's resonant high-pass (590 Hz, Q 2.9). Score 15.2 -- the rectifier's sharp 3-12 kHz edge is short |
-| 38 | 808 Snare Drum | `TR808Snare` | **4** | the SNARE: two networks near an octave apart and SNAPPY, high-passed noise on its own envelope. Score 5.2 (SD7575) |
+| 36 | 808 Bass Drum | `TR808Kick` | **4** | THE ROLAND TR-808, AS AN ENGINE (tr808.py: its two kinds of circuit as partials -- bridged-T resonators, and six square oscillators through band-passes -- every instrument a patch of knobs, read off the service notes' schematic where it fixes them). FITTED to MckAudio's recordings of a Roland TR-8's 808 voices (CC0; examples/tr808_fit.py). Balanced within itself as GeneralUser's (examples/elkit_balance.py --kit=25). Ben: sounds good (the TR-8 refit). The BASS DRUM: one network at 47.4 Hz, its first cycle faster (the time constant halved while the trigger lasts), the pitch sighing onto it. Score 7.6 |
+| 37 | 808 Rim Shot | `TR808RimShot` | **4** | the RIM SHOT: two networks into the SWING VCA (a transistor conducting on one polarity: their harmonics and intermodulation, each product decaying as the networks' mix changes), out through Q63's resonant high-pass (590 Hz, Q 2.9). Score 13.7 |
+| 38 | 808 Snare Drum | `TR808Snare` | **4** | the SNARE: two networks near an octave apart and SNAPPY, high-passed noise on its own envelope. Score 8.4 |
 | 40 | 909 Snare 1 | `TR909Snare` | **4** | the 909's snare 1 (its set's 38) |
-| 41 | 808 Low Tom 2 | `TR808Tom` | **4** | the LOW TOM: diodes D80/D81 conduct with the ring, so the pitch falls as it decays and their harmonics die faster; pink noise at 154-402 Hz on its own envelope (the schematic's RCs). Score 5.0 (LT75) |
-| 42 | 808 CHH | `TR808ClosedHat` | **4** | the CLOSED HAT: the six oscillators (this 808's, read off its cymbal: 345.5, 486.2, 558.5, 630.6, 823.9, 852.0 Hz -- pulses, not squares) through the high band, a short VCA and a high-pass. Score 5.8 |
+| 41 | 808 Low Tom 2 | `TR808Tom` | **4** | the LOW TOM: diodes D80/D81 conduct with the ring, so the pitch falls as it decays and their harmonics die faster; pink noise at 154-402 Hz on its own envelope (the schematic's RCs). Score 9.9 |
+| 42 | 808 CHH | `TR808ClosedHat` | **4** | the CLOSED HAT: the six oscillators (the service notes' design: 205.3, 304.4, 369.6, 522.7 Hz by their components, the cowbell's pair trimmed to 540 and 800 -- pulses, not squares) through the high band, a short VCA and a high-pass. Score 7.9 |
 | 43 | 808 Low Tom 1 | `TR808Tom` | **4** | as 41, played 2.8 semitones higher -- the SC-55's sixth tom where FluidR3 plays it, past the TUNING knob's reach |
 | 44 | 808 CHH | `TR808ClosedHat` | **4** | as 42 (the SC-55's pedal hat is the 808's CHH) |
-| 45 | 808 Mid Tom 2 | `TR808MidTom` | **4** | the MID TOM, its own circuit: noise 219-482 Hz. Score 5.3 (MT50) |
-| 46 | 808 OHH | `TR808OpenHat` | **4** | the OPEN HAT: the same band, a longer VCA, choked by 42/44. Score 8.3 (OH75) |
+| 45 | 808 Mid Tom 2 | `TR808MidTom` | **4** | the MID TOM, its own circuit: noise 219-482 Hz. Score 11.7 |
+| 46 | 808 OHH | `TR808OpenHat` | **4** | the OPEN HAT: the same band, a longer VCA, choked by 42/44. Score 10.9 |
 | 47 | 808 Mid Tom 1 | `TR808MidTom` | **4** | as 45, 2 semitones higher (as 43) |
-| 48 | 808 Hi Tom 2 | `TR808HiTom` | **4** | the HI TOM, its own circuit: noise 268-723 Hz. Score 6.7 (HT75) |
-| 49 | 808 Cymbal | `TR808Cymbal` | **4** | the CYMBAL: the six through three bands at the circuit's centres (Werner's cymbal paper), each its own decay -- the kernel's two-stage decay per partial. Score 7.1 (CY7500) |
+| 48 | 808 Hi Tom 2 | `TR808HiTom` | **4** | the HI TOM, its own circuit: noise 268-723 Hz. Score 16.8 |
+| 49 | 808 Cymbal | `TR808Cymbal` | **4** | the CYMBAL: the six through three bands at the circuit's centres (Werner's cymbal paper), each its own decay -- the kernel's two-stage decay per partial. Score 10.3 |
 | 50 | 808 Hi Tom 1 | `TR808HiTom` | **4** | as 48, 3.5 semitones higher (as 43) |
-| 56 | 808 Cowbell | `TR808Cowbell` | **4** | the COWBELL: two of the six through a band-pass, an abrupt drop into a tail. Score 10.7 |
-| 62 | 808 High Conga | `TR808HiConga` | **4** | the HIGH CONGA: the tom circuit with a capacitor switched out -- higher, no noise. Score 9.3 (HC50) |
-| 63 | 808 Mid Conga | `TR808MidConga` | **4** | the MID CONGA. Score 2.8 (MC25) |
-| 64 | 808 Low Conga | `TR808Conga` | **4** | the LOW CONGA. Score 2.9 (LC25) |
-| 70 | 808 Maracas | `TR808Maracas` | **4** | the MARACAS: white noise through Q68's 1 kHz RC and 10.6 kHz Sallen-Key (Q 2.3), a gate that swells, holds and cuts. Score 10.0 |
-| 75 | 808 Claves | `TR808Claves` | **4** | the CLAVES: one network at 2.42 kHz. Score 13.4 |
+| 56 | 808 Cowbell | `TR808Cowbell` | **4** | the COWBELL: two of the six through a band-pass, an abrupt drop into a tail. Score 11.5 |
+| 62 | 808 High Conga | `TR808HiConga` | **4** | the HIGH CONGA: the tom circuit with a capacitor switched out -- higher, no noise. Score 16.9 |
+| 63 | 808 Mid Conga | `TR808MidConga` | **4** | the MID CONGA. Score 15.0 |
+| 64 | 808 Low Conga | `TR808Conga` | **4** | the LOW CONGA. Score 9.4 |
+| 70 | 808 Maracas | `TR808Maracas` | **4** | the MARACAS: white noise through Q68's 1 kHz RC and 10.6 kHz Sallen-Key (Q 2.3), a gate that swells, holds and cuts. Score 10.2 |
+| 75 | 808 Claves | `TR808Claves` | **4** | the CLAVES: one network at 2.80 kHz. Score 21.0 |
 
 ### 282 Dance
 
@@ -2440,9 +2440,9 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 16.10 | SC-88 | Ful Organ 7 | `DrawbarOrgan_sc8850_16_10` | **4** | SC-8850 map: GM 16 Drawbar Organ with default_stops=0x1e7 |
 | 16.11 | SC-88 | Ful Organ 8 | `DrawbarOrgan_sc8850_16_11` | **4** | SC-8850 map: GM 16 Drawbar Organ with default_stops=0x1fb |
 | 16.12 | SC-88 | Ful Organ 9 | `DrawbarOrgan_sc8850_16_12` | **4** | SC-8850 map: GM 16 Drawbar Organ with default_stops=0x1ff, amp_drive=1.0 |
-| 16.16 | SC-88 | 60'sOrgan 1 | `DividerOrgan_sc88_16_16` | **4** | SC-88 map: the DIVIDER ORGAN (tonelib.DividerOrganProperties): twelve oscillators, every octave divided down, so its ranks lock in phase and a chord stands still -- each tab ITS CIRCUIT, Ben's own Wurlitzer 4500 (its 1965 service schematics: every R, C and L of each tab's network, the dividers' squares, the complex and flute signals; examples/wurlitzer_circuit.py), its levels, duty and speaker fitted to his recordings, bounded to the parts (3.5-7.8 dB rms from takes made in a garage: the shapes kept dry); its couplers measured on it; drawing Flute 8', Flute 8', 4' coupler |
-| 16.17 | SC-88 | 60'sOrgan 2 | `DividerOrgan_sc88_16_17` | **4** | SC-88 map: the DIVIDER ORGAN (tonelib.DividerOrganProperties): twelve oscillators, every octave divided down, so its ranks lock in phase and a chord stands still -- each tab ITS CIRCUIT, Ben's own Wurlitzer 4500 (its 1965 service schematics: every R, C and L of each tab's network, the dividers' squares, the complex and flute signals; examples/wurlitzer_circuit.py), its levels, duty and speaker fitted to his recordings, bounded to the parts (3.5-7.8 dB rms from takes made in a garage: the shapes kept dry); its couplers measured on it; drawing Flute 8', Flute 8', 4' coupler, Flute 8', 2' coupler |
-| 16.18 | SC-88 | 60'sOrgan 3 | `DividerOrgan_sc88_16_18` | **4** | SC-88 map: the DIVIDER ORGAN (tonelib.DividerOrganProperties): twelve oscillators, every octave divided down, so its ranks lock in phase and a chord stands still -- each tab ITS CIRCUIT, Ben's own Wurlitzer 4500 (its 1965 service schematics: every R, C and L of each tab's network, the dividers' squares, the complex and flute signals; examples/wurlitzer_circuit.py), its levels, duty and speaker fitted to his recordings, bounded to the parts (3.5-7.8 dB rms from takes made in a garage: the shapes kept dry); its couplers measured on it; drawing Flute 8', Diapason 8', Quint 5-1/3', Flute 8', 4' coupler, Diapason 8', 4' coupler, Quint 5-1/3', 4' coupler, Flute 8', 2' coupler, Diapason 8', 2' coupler, Quint 5-1/3', 2' coupler |
+| 16.16 | SC-88 | 60'sOrgan 1 | `DividerOrgan_sc88_16_16` | **4** | SC-88 map: the DIVIDER ORGAN (tonelib.DividerOrganProperties): twelve oscillators, every octave divided down, so its ranks lock in phase and a chord stands still -- each tab ITS CIRCUIT, Ben's own Wurlitzer 4500 (its 1965 service schematics: every R, C and L of each tab's network, the dividers' squares, the complex and flute signals; examples/wurlitzer_circuit.py), its levels, duty and speaker fitted to his recordings, bounded to the parts (3.5-7.8 dB rms from takes made in a garage: the shapes kept dry); its couplers measured on it; drawing Flute 8', Solo 16', Solo 8', Solo 5-1/3', Solo 4', Accent; couplers 4' |
+| 16.17 | SC-88 | 60'sOrgan 2 | `DividerOrgan_sc88_16_17` | **4** | SC-88 map: the DIVIDER ORGAN (tonelib.DividerOrganProperties): twelve oscillators, every octave divided down, so its ranks lock in phase and a chord stands still -- each tab ITS CIRCUIT, Ben's own Wurlitzer 4500 (its 1965 service schematics: every R, C and L of each tab's network, the dividers' squares, the complex and flute signals; examples/wurlitzer_circuit.py), its levels, duty and speaker fitted to his recordings, bounded to the parts (3.5-7.8 dB rms from takes made in a garage: the shapes kept dry); its couplers measured on it; drawing Flute 8', Solo 16', Solo 8', Solo 5-1/3', Solo 4', Accent; couplers 4', 2' |
+| 16.18 | SC-88 | 60'sOrgan 3 | `DividerOrgan_sc88_16_18` | **4** | SC-88 map: the DIVIDER ORGAN (tonelib.DividerOrganProperties): twelve oscillators, every octave divided down, so its ranks lock in phase and a chord stands still -- each tab ITS CIRCUIT, Ben's own Wurlitzer 4500 (its 1965 service schematics: every R, C and L of each tab's network, the dividers' squares, the complex and flute signals; examples/wurlitzer_circuit.py), its levels, duty and speaker fitted to his recordings, bounded to the parts (3.5-7.8 dB rms from takes made in a garage: the shapes kept dry); its couplers measured on it; drawing Flute 8', Diapason 8', Quint 5-1/3', Solo 16', Solo 8', Solo 5-1/3', Solo 4', Accent; couplers 4', 2' |
 | 16.19 | SC-88 | Farf Organ | `DrawbarOrgan_sc88_16_19` | **4** | SC-88 map: GM 16 Drawbar Organ with default_stops=0x12c, amp_drive=0.8 |
 | 16.24 | SC-88 | CheeseOrgan | `DrawbarOrgan_sc88_16_24` | **4** | SC-88 map: GM 16 Drawbar Organ with default_stops=0x16c |
 | 16.25 | SC-55 | D-50 Organ | `Sc88_16_25` | **3** | SC-88 map: the D-50 VOICED (sc88_synth.D50): its partials' 15-cent detune measured on agerven's D-50 (CC0), its filter and chorus not -- no CC0 D-50 saw or organ note exists; with a_release, cutoff, eg_amount, osc1_wave, osc2_freq, osc2_level, osc2_octave, osc2_wave changed |

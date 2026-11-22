@@ -460,10 +460,10 @@ KITS = {
         52: ("Reverse Cymbal",   ReverseCymbalProperties, 181.9),
     },
     # TR-808, p.70: Roland's own drum machine, every note a patch on tr808.py
-    # FITTED to a real 808 (Michael Fischer's recordings; examples/tr808_fit.py).
+    # FITTED to MckAudio's TR-8 recordings (CC0; examples/tr808_fit.py).
     # The six toms are the machine's three tom circuits at two tunings each:
     # 41, 45, 48 at their fitted hits' own pitches, 43, 47, 50 where FluidR3
-    # plays them (Fischer's recordings repitched 2-3.5 semitones up, past the
+    # plays them (the fitted hits repitched 2-3.5 semitones up, past the
     # TUNING knob's reach -- a fill's six steps). The clap (39) is not in
     # Roland's set and stays Standard's.
     25: {
@@ -568,8 +568,8 @@ KITS = {
         64: ("808 Low Conga",    TR808CongaProperties, TR808CongaProperties.tr808_base_hz),
     },
     # TR-707 (SC-8850 p.188; the Pro's): the 707's own kicks, snares, rim,
-    # clap, toms and hats, each a patch FITTED to its ROM take (hyperreal's
-    # set; examples/tr707_fit.py). The 707 has three toms, so the set's six
+    # clap, toms and hats, each a patch FITTED to its sound (MckAudio's
+    # TR-8 recordings, CC0; examples/tr707_fit.py). The 707 has three toms, so the set's six
     # play them at two pitches each: 41, 45, 48 at the takes' own, 43, 47, 50
     # two semitones up (the six evenly spaced). Its crash and ride are the
     # 909's and its cowbell and maracas the 808's, as Roland's set has them;
@@ -597,8 +597,8 @@ KITS = {
         70: ("808 Maracas",      TR808MaracasProperties, TR808MaracasProperties.tr808_base_hz),
     },
     # TR-909 (SC-8850 p.188; the Pro's): the 909's own drums, toms, open hat
-    # and cymbals, every one a patch on tr808.py FITTED to a real 909 (Jason
-    # Baker's set; examples/tr909_fit.py). Roland's set borrows the rest: the
+    # and cymbals, every one a patch on tr808.py FITTED to MckAudio's TR-8
+    # recordings (CC0; examples/tr909_fit.py). Roland's set borrows the rest: the
     # 808's cowbell, maracas and claves and the TR-707's closed hats (ours), the
     # CR-78 guiro, the TR-626 shaker and Standard 2's tambourine, ride edge,
     # hoos and triangles (Standard's until those are built); its clap (39) is

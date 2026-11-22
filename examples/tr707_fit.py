@@ -27,11 +27,16 @@ import tr909_fit as T9         # noqa: E402  (its score, tuning rule and report)
 
 KIT = 29
 E.KIT = F.KIT = T9.KIT = KIT
-PACK = os.path.expanduser("~/Documents/refs/tr707_hyperreal/all")
+# THE REFERENCE, since 2026-11-22: MckAudio's TR-8 recordings of its 707
+# voices (CC0, ~/Documents/refs/mck_tr8_rd6/TR8; licences.md L10/L11);
+# hyperreal's set is no longer read.
+PACK = os.path.expanduser("~/Documents/refs/mck_tr8_rd6/TR8")
 
 # each note's take; 43, 47, 50 are 41, 45, 48 played two semitones up
-HITS = {35: "BassDrum2", 36: "BassDrum1", 37: "RimShot", 38: "Snare1", 39: "HandClap",
-        40: "Snare2", 41: "LowTom", 42: "HhC", 45: "MedTom", 46: "HhO", 48: "HiTom"}
+HITS = {35: "BD/010_707_Bass_Drum_2", 36: "BD/009_707_Bass_Drum_1", 37: "PERC/012_707_Rim_Shot",
+        38: "SD/008_707_Snare_Dum_1", 39: "PERC/021_707_Hand_Clap", 40: "SD/009_707_Snare_Dum_2",
+        41: "TOMS/025_707_Low_Tom", 42: "HATS/012_707_Closed_HiHat", 45: "TOMS/026_707_Mid_Tom",
+        46: "HATS/011_707_Open_HiHat", 48: "TOMS/027_707_High_Tom"}
 
 _T = ("decay_s", True, 0.3), ("h2_db", False, 6.0), ("h3_db", False, 6.0)
 _CLICK = (("click_db", False, 6.0), ("click_dbs", True, 0.4), ("click_tilt", False, 2.0))

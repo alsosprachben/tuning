@@ -41,7 +41,13 @@ import tr808_fit as F          # noqa: E402
 KIT = 30
 E.KIT = KIT
 F.KIT = KIT
-PACK = os.path.expanduser("~/Documents/refs/tr909_hyperreal/all")
+# THE REFERENCE, since 2026-11-22: MckAudio's TR-8 recordings (CC0; its 909
+# voices, ~/Documents/refs/mck_tr8_rd6/TR8) -- a played Roland recorded by its
+# owner (Ben: licences.md L10/L11); Baker's set ("not for profit, no
+# modification") is no longer read. One take a voice at the TR-8's settings;
+# a tom's two notes its normal and long takes.
+PACK = os.path.expanduser("~/Documents/refs/mck_tr8_rd6/TR8")
+BAKER = os.path.expanduser("~/Documents/refs/tr909_hyperreal/all")      # (--select's only)
 GU = os.path.expanduser("~/Documents/refs/soundfonts/GeneralUser-GS.sf2")
 
 # the GM sample each selectable note is chosen by (GeneralUser GS's 808/909 set)
@@ -52,9 +58,11 @@ CANDIDATES = {36: "BT", 35: "BT", 38: "ST", 40: "ST"}
 # GeneralUser's two snares ARE Baker's takes (scores 0.9 and 0.7); its kick is
 # another 909's, cut at 0.13 s, and says only that the sweep is TUNE's deepest:
 # kick 1 is TUNE, ATTACK and DECAY full, kick 2 the panel's middle.
-HITS = {35: "BT7A0D7", 36: "BTAAADA", 37: "RIM127", 38: "ST0T3S3", 40: "STATASA",
-        41: "LT3D7", 43: "LTAD7", 45: "MT3D7", 47: "MTAD7", 48: "HT3D7", 50: "HTAD7",
-        46: "HHOD4", 49: "CSHD4", 51: "RIDED4"}
+HITS = {35: "BD/005_909_Bass_Drum_2", 36: "BD/004_909_Bass_Drum_1", 37: "PERC/009_909_Rim_Shot",
+        38: "SD/005_909_Snare_Drum_1", 40: "SD/006_909_Snare_Drum_2",
+        41: "TOMS/010_909_Low_Tom", 43: "TOMS/016_909_Low_Tom_Long", 45: "TOMS/011_909_Mid_Tom",
+        47: "TOMS/017_909_Mid_Tom_Long", 48: "TOMS/012_909_High_Tom", 50: "TOMS/018_909_High_Tom_Long",
+        46: "HATS/007_909_Open_HiHat", 49: "HATS/020_909_Crash_Cymbal", 51: "HATS/026_909_Ride_Cymbal"}
 
 _T = ("decay_s", True, 0.3), ("h2_db", False, 6.0), ("h3_db", False, 6.0)
 _CLICK = (("click_db", False, 6.0), ("click_dbs", True, 0.4), ("click_tilt", False, 2.0))
@@ -94,7 +102,9 @@ F.VOICE = {n: None for n in HITS}
 
 
 def hit(name):
-    return E.read(os.path.join(PACK, name + ".WAV"))
+    if "/" in name:                         # a TR-8 take (HITS)
+        return E.read(os.path.join(PACK, name + ".wav"))
+    return E.read(os.path.join(BAKER, name + ".WAV"))       # (Baker's: --select only)
 
 
 F.hit = hit
@@ -117,12 +127,15 @@ _settled = F.settled
 def settled(y, sr, fmax, short=False):
     """tr808_fit's tuning, unless the pitch track over 25-75 ms disagrees by
     more than a third: snare 2 at full SNAPPY, whose noise outweighs its
-    tone after ~80 ms -- the long window read 1240 Hz, the track 234."""
+    tone after ~80 ms -- the long window read 1240 Hz, the track 234.
+    Only when the window reads HIGH: a kick whose sweep is slow (the TR-8's
+    Bass Drum 2) is still falling through ~90 Hz at 25-75 ms, and the track
+    there would tune it a fifth over where it settles (53.5 Hz)."""
     f = _settled(y, sr, fmax, short)
     tr = F.track(y, sr, fmax)
     if len(tr) >= 15:
         g = float(np.median(tr[5:15]))
-        if abs(np.log(f / g)) > np.log(4 / 3.0):
+        if np.log(f / g) > np.log(4 / 3.0):
             return g
     return f
 
@@ -138,6 +151,8 @@ def report(d, notes=None):
         y, sr = hit(HITS[n])
         x, _ = F.ours(n, d)
         cls = P.KITS[KIT][n][1]
+        if not hasattr(cls, "tr808_patch"):         # a ROM cymbal (examples/rom_cymbal_fit.py)
+            continue
         pitch = cls.tr808_patch["circuit"] == "resonator" and cls.tr808_patch["tone_db"] > -90
         s = score(x, y, sr, pitch, F.fmax(cls), F.win(cls))
         tot.append(s)

@@ -36,12 +36,15 @@ import elkit_fit as E   # noqa: E402
 
 REFS = os.path.expanduser("~/Documents/refs")
 # name: (set, note, class, take)
+# (the takes since 2026-11-22: MckAudio's TR-8 recordings, CC0 -- its 909 and
+#  707 cymbals and hats; Baker's and hyperreal's sets are no longer read,
+#  licences.md L10/L11)
 ROM = {
-    "909crash": (30, 49, "TR909CrashProperties", "tr909_hyperreal/all/CSHD4.WAV"),
-    "909ride": (30, 51, "TR909RideProperties", "tr909_hyperreal/all/RIDED4.WAV"),
-    "909openhat": (30, 46, "TR909OpenHatProperties", "tr909_hyperreal/all/HHOD4.WAV"),
-    "707closedhat": (29, 42, "TR707ClosedHatProperties", "tr707_hyperreal/all/HhC.wav"),
-    "707openhat": (29, 46, "TR707OpenHatProperties", "tr707_hyperreal/all/HhO.wav"),
+    "909crash": (30, 49, "TR909CrashProperties", "mck_tr8_rd6/TR8/HATS/020_909_Crash_Cymbal.wav"),
+    "909ride": (30, 51, "TR909RideProperties", "mck_tr8_rd6/TR8/HATS/026_909_Ride_Cymbal.wav"),
+    "909openhat": (30, 46, "TR909OpenHatProperties", "mck_tr8_rd6/TR8/HATS/007_909_Open_HiHat.wav"),
+    "707closedhat": (29, 42, "TR707ClosedHatProperties", "mck_tr8_rd6/TR8/HATS/012_707_Closed_HiHat.wav"),
+    "707openhat": (29, 46, "TR707OpenHatProperties", "mck_tr8_rd6/TR8/HATS/011_707_Open_HiHat.wav"),
 }
 VEL = 127
 ROM_PARAMS = ("rom_db", "rom_dbs")

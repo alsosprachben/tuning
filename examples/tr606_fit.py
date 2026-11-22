@@ -6,11 +6,9 @@
     python3 -I examples/tr606_fit.py --wav=DIR       write each take and ours beside it
 
 The 606 has no TUNE or DECAY but the hats': each voice is one setting,
-and its take is the target. Ed Vargo's set (~/Documents/refs/tr606_hyperreal)
-holds every voice at full length; bdu's (~/Documents/refs/tr606_bdu, CC0, a
-second unit -- its toms a semitone apart from Vargo's) each plain and
-ACCENTED, and its accented snare is the set's Snare 2. Level two only,
-through examples/tr909_fit.py's score.
+and its take is the target: MckAudio's TR-8 takes (CC0) of every voice,
+its second snare the set's Snare 2. Level two only, through
+examples/tr909_fit.py's score.
 """
 import os
 import sys
@@ -30,12 +28,16 @@ _909 = dict((k, v[2]) for k, v in F.KNOBS.items())
 
 KIT = 28
 E.KIT = F.KIT = T9.KIT = KIT
-VARGO = os.path.expanduser("~/Documents/refs/tr606_hyperreal/all")
+# THE REFERENCE, since 2026-11-22: MckAudio's TR-8 recordings of its 606
+# voices (CC0, ~/Documents/refs/mck_tr8_rd6/TR8; licences.md L10/L11);
+# Vargo's and bdu's sets are no longer read.
+TR8 = os.path.expanduser("~/Documents/refs/mck_tr8_rd6/TR8")
 BDU = os.path.expanduser("~/Documents/refs/tr606_bdu/wav")
 
 # each note's take; 43, 45, 47, 50 are the two toms played at other pitches
-HITS = {36: "606BASS", 38: "606SNAR", 40: "bdu:snareac", 41: "606LTOM", 42: "606CHAT",
-        46: "606OHAT", 48: "606HTOM", 51: "606CYMB"}
+HITS = {36: "BD/015_606_Bass_Drum_1", 38: "SD/013_606_Snare_Drum_1", 40: "SD/014_606_Snare_Drum_2",
+        41: "TOMS/035_606_Low_Tom", 42: "HATS/014_606_Closed_HiHat", 46: "HATS/013_606_Open_HiHat",
+        48: "TOMS/036_606_High_Tom", 51: "HATS/024_606_Cymbal"}
 
 # the metal voices' takes all start with a thump under 250 Hz (-35 dB, the
 # trigger leaking through): the click, low-passed
@@ -71,7 +73,7 @@ F.VOICE = {n: None for n in HITS}
 def hit(name):
     if name.startswith("bdu:"):
         return E.read(os.path.join(BDU, name[4:] + ".WAV"))
-    return E.read(os.path.join(VARGO, name + ".WAV"))
+    return E.read(os.path.join(TR8, name + ".wav"))
 
 
 F.hit = T9.hit = hit

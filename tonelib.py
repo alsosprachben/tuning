@@ -21058,9 +21058,9 @@ class TR808CymbalProperties(TR808Properties):
 # integrator, so the sweep falls in Hz, not in pitch (tr808.py's "linear"
 # sweep): the kick from ~5x its tuning onto it, tau ~31 ms at full TUNE, its
 # ATTACK a click beside it; the snare two oscillators ~1.44 apart over
-# SNAPPY's noise; each tom a VCO and a second at ~2/3 of it. FITTED to a
-# real 909 (Jason Baker's 1995 set, every knob at four positions; sources.md)
-# by examples/tr909_fit.py. The open hat, crash and ride are 6-bit samples of
+# SNAPPY's noise; each tom a VCO and a second at ~2/3 of it. FITTED to
+# MckAudio's TR-8 recordings of its 909 voices (CC0, since 2026-11-22) by
+# examples/tr909_fit.py. The open hat, crash and ride are 6-bit samples of
 # real cymbals: our own cymbals fitted to them (below the ride, examples/
 # rom_cymbal_fit.py). The closed hats (42, 44) are the TR-707's and the clap
 # (39) Standard's, as Roland's set has them.
@@ -21072,35 +21072,35 @@ class TR909Properties(TR808Properties):
 class TR909KickProperties(TR909Properties):
     """909 Kick 1: a VCO swept from ~5x its tuning down onto ~50 Hz, its
     attack's click beside it."""
-    tr808 = {"tune_hz": 49.8, "decay_s": 0.6868, "h2_db": -29.2696, "h3_db": -19.7478,
-             "bend_oct": 2.4952, "bend_ms": 30.5253, "click_db": -32.5839,
-             "click_dbs": 1732.5751, "click_tilt": -2.5276}
+    tr808 = {"tune_hz": 53.1, "decay_s": 0.6133, "h2_db": -24.5928, "h3_db": -18.1983,
+             "bend_oct": 2.364, "bend_ms": 17.0222, "click_db": -27.1176,
+             "click_dbs": 2345.5354, "click_tilt": -3.8301}
 
 
 class TR909Kick2Properties(TR909KickProperties):
     """909 Kick 2: another setting of the same circuit."""
-    tr808 = {"bend_ms": 19.1728, "decay_s": 0.4792, "tune_hz": 49.6, "h2_db": -30.3129,
-             "h3_db": -18.2145, "bend_oct": 2.6572, "click_db": -35.2801,
-             "click_dbs": 1342.8248, "click_tilt": -2.754}
+    tr808 = {"bend_ms": 32.1745, "decay_s": 0.5478, "tune_hz": 53.5, "h2_db": -27.378,
+             "h3_db": -25.5009, "bend_oct": 2.4489, "click_db": -29.7782,
+             "click_dbs": 1829.243, "click_tilt": -4.5942}
 
 
 class TR909SnareProperties(TR909Properties):
     """909 Snare 1: two swept oscillators ~1.44 apart (TONE), SNAPPY's
     noise on its own envelope."""
-    tr808 = {"tune_hz": 119.9, "decay_s": 0.1861, "h2_db": -6.2735, "h3_db": -20.5689,
-             "res": ((1.4433, -4.4671, 0.1411),), "bend_oct": 0.345, "bend_ms": 10.955,
-             "noise_db": -14.9883, "noise_hp_hz": 3944.0653, "noise_lp_hz": 8579.078,
-             "noise_decay_s": 0.4718, "click_db": -24.4036, "click_dbs": 1988.8372,
-             "click_tilt": -2.5831}
+    tr808 = {"tune_hz": 168.8, "decay_s": 0.1875, "h2_db": -12.5424, "h3_db": -22.8564,
+             "res": ((1.4779, -1.8654, 0.0839),), "bend_oct": 0.3788, "bend_ms": 10.8655,
+             "noise_db": -5.431, "noise_hp_hz": 5139.1172, "noise_lp_hz": 5334.4706,
+             "noise_decay_s": 0.4846, "click_db": -25.0914, "click_dbs": 2138.8158,
+             "click_tilt": -3.2865}
 
 
 class TR909Snare2Properties(TR909SnareProperties):
     """909 Snare 2: another setting of the same circuit."""
-    tr808 = {"noise_db": -0.0972, "tune_hz": 233.8, "decay_s": 0.1935, "h2_db": -8.8631,
-             "h3_db": -15.5345, "res": ((1.4365, -4.6771, 0.1193),), "bend_oct": 0.397,
-             "bend_ms": 11.0543, "noise_hp_hz": 6197.2688, "noise_lp_hz": 7154.6225,
-             "noise_decay_s": 0.9506, "click_db": -22.6125, "click_dbs": 513.8219,
-             "click_tilt": -0.7811}
+    tr808 = {"noise_db": 2.4318, "tune_hz": 130.4, "decay_s": 0.2615, "h2_db": -15.849,
+             "h3_db": -40.9186, "res": ((1.4309, 5.1965, 0.0562),), "bend_oct": 0.6744,
+             "bend_ms": 8.2681, "noise_hp_hz": 5058.4017, "noise_lp_hz": 4915.1154,
+             "noise_decay_s": 0.4776, "click_db": -29.5022, "click_dbs": 316.2564,
+             "click_tilt": -2.6604}
 
 
 # THE TECHNO SET's own (SC-88 Pro PC 12, "Techno Kick 1/2", "Techno Snare
@@ -21148,58 +21148,58 @@ class TR909CompKickProperties(TR909KickProperties):
 
 class TR909TomProperties(TR909Properties):
     """909 Low Tom: a swept VCO and a second at ~2/3 of it, a little noise."""
-    tr808 = {"tune_hz": 77.0, "decay_s": 0.7645, "h2_db": -19.7241, "h3_db": -6.2981,
-             "res": ((0.6788, -8.7631, 0.9206),), "bend_oct": 0.5259, "bend_ms": 44.0726,
-             "noise_db": -32.6353, "noise_hp_hz": 100.0, "noise_lp_hz": 2000.0,
-             "noise_decay_s": 0.4333, "click_db": -30.7545, "click_dbs": 187.5823,
-             "click_tilt": -2.3789}
+    tr808 = {"tune_hz": 75.8, "decay_s": 0.7334, "h2_db": -14.0579, "h3_db": -10.0086,
+             "res": ((0.7072, -6.529, 1.1866),), "bend_oct": 0.3942, "bend_ms": 40.5788,
+             "noise_db": -39.2791, "noise_hp_hz": 100.0, "noise_lp_hz": 2000.0,
+             "noise_decay_s": 0.474, "click_db": -33.3702, "click_dbs": 257.4052,
+             "click_tilt": -2.1841}
 
 
 class TR909LowTom1Properties(TR909TomProperties):
     """909 Low Tom 1: its TUNE turned up."""
-    tr808 = {"tune_hz": 121.6, "decay_s": 0.7643, "h2_db": -18.1953, "h3_db": -12.8609,
-             "res": ((0.6855, -7.2979, 0.856),), "bend_oct": 0.4015, "bend_ms": 45.4816,
-             "noise_db": -31.8166, "noise_decay_s": 0.484, "click_db": -30.0809,
-             "click_dbs": 249.946, "click_tilt": -1.6978}
+    tr808 = {"tune_hz": 75.8, "decay_s": 0.8513, "h2_db": -16.7596, "h3_db": -11.3751,
+             "res": ((0.702, -6.6618, 1.2923),), "bend_oct": 0.4355, "bend_ms": 27.4416,
+             "noise_db": -36.9064, "noise_decay_s": 0.5865, "click_db": -33.736,
+             "click_dbs": 275.9493, "click_tilt": -1.3572}
 
 
 class TR909MidTomProperties(TR909TomProperties):
     """909 Mid Tom 2."""
-    tr808 = {"tune_hz": 96.2, "decay_s": 0.6004, "h2_db": -18.8669, "h3_db": -9.1747,
-             "res": ((0.6911, -14.4004, 1.075),), "bend_oct": 0.5808, "bend_ms": 43.6208,
-             "noise_db": -35.7184, "noise_decay_s": 0.5433, "click_db": -21.3583,
-             "click_dbs": 233.434, "click_tilt": -3.3142}
+    tr808 = {"tune_hz": 109.5, "decay_s": 0.7027, "h2_db": -15.5558, "h3_db": -14.8313,
+             "res": ((0.6679, -7.1458, 1.3473),), "bend_oct": 0.4829, "bend_ms": 27.1417,
+             "noise_db": -38.5009, "noise_decay_s": 0.6093, "click_db": -30.1961,
+             "click_dbs": 458.1544, "click_tilt": -1.6678}
 
 
 class TR909MidTom1Properties(TR909MidTomProperties):
     """909 Mid Tom 1."""
-    tr808 = {"tune_hz": 150.7, "decay_s": 0.5513, "h2_db": -15.8655, "h3_db": -13.3072,
-             "res": ((0.6795, -13.9023, 1.0175),), "bend_oct": 0.4885, "bend_ms": 30.2136,
-             "noise_db": -37.416, "noise_decay_s": 0.9987, "click_db": -29.6561,
-             "click_dbs": 342.5006, "click_tilt": -2.0894}
+    tr808 = {"tune_hz": 111.0, "decay_s": 0.5358, "h2_db": -14.0388, "h3_db": -13.7422,
+             "res": ((0.6952, -9.0574, 1.0491),), "bend_oct": 0.5836, "bend_ms": 17.7943,
+             "noise_db": -43.9558, "noise_decay_s": 1.1, "click_db": -30.9236,
+             "click_dbs": 422.2953, "click_tilt": -2.0909}
 
 
 class TR909HiTomProperties(TR909TomProperties):
     """909 High Tom 2."""
-    tr808 = {"tune_hz": 114.1, "decay_s": 0.6418, "h2_db": -18.8444, "h3_db": -10.9676,
-             "res": ((0.6996, -9.1152, 0.898),), "bend_oct": 0.5079, "bend_ms": 50.7365,
-             "noise_db": -33.571, "noise_decay_s": 0.4741, "click_db": -30.3183,
-             "click_dbs": 299.1813, "click_tilt": -2.9841}
+    tr808 = {"tune_hz": 152.2, "decay_s": 0.6181, "h2_db": -16.0141, "h3_db": -11.8857,
+             "res": ((0.7318, -11.0396, 0.7916),), "bend_oct": 0.2637, "bend_ms": 46.5171,
+             "noise_db": -33.4579, "noise_decay_s": 0.6158, "click_db": -28.2647,
+             "click_dbs": 325.713, "click_tilt": -2.3803}
 
 
 class TR909HiTom1Properties(TR909HiTomProperties):
     """909 High Tom 1."""
-    tr808 = {"tune_hz": 173.8, "decay_s": 0.6363, "h2_db": -17.6609, "h3_db": -14.979,
-             "res": ((0.6946, -7.6196, 0.6437),), "bend_oct": 0.5284, "bend_ms": 32.2761,
-             "noise_db": -27.9783, "noise_decay_s": 0.438, "click_db": -31.1595,
-             "click_dbs": 521.1526, "click_tilt": -1.1741}
+    tr808 = {"tune_hz": 152.3, "decay_s": 0.5293, "h2_db": -10.4482, "h3_db": -10.9193,
+             "res": ((0.6483, -9.4045, 0.9393),), "bend_oct": 0.5698, "bend_ms": 15.9834,
+             "noise_db": -27.6319, "noise_decay_s": 0.5166, "click_db": -34.2584,
+             "click_dbs": 495.0375, "click_tilt": 0.3}
 
 
 class TR909RimProperties(TR909Properties):
     """909 Rim: a short ring and its click."""
-    tr808 = {"tune_hz": 220.4, "decay_s": 0.0738, "h2_db": -21.1418, "h3_db": -32.6418,
-             "res": ((2.3676, 3.0255, 0.0271),), "click_db": -20.0435,
-             "click_dbs": 2533.1794, "click_tilt": -1.0761}
+    tr808 = {"tune_hz": 235.8, "decay_s": 0.0704, "h2_db": 0.0184, "h3_db": -43.0588,
+             "res": ((3.3618, 8.4939, 0.0216),), "click_db": -24.0837,
+             "click_dbs": 1083.5422, "click_tilt": -1.7982}
 
 
 # THE CR-78 SET (program 27 on the drum channel; SC-8850 p.188). The
@@ -21348,12 +21348,20 @@ class CR78MetalBeat2Properties(CR78Properties):
 # Drumatix is the 808's younger circuit: bridged-T kick, snare and two toms
 # (the toms' pitch falling as they ring, as the 808's diodes make it) and a
 # metal section -- square oscillators through band-passes -- for its hats
-# and cymbal (Roland's "TR-606 Ride Cymbal"), whose oscillators are read off
-# its cymbal (TR606_OSC_HZ). FITTED to Ed Vargo's 1995 takes and, for the
-# accented snare, bdu's (examples/tr606_fit.py; sources.md). Roland's set
+# and cymbal (Roland's "TR-606 Ride Cymbal"), whose six oscillators are the
+# design's (TR606_OSC_HZ). FITTED to MckAudio's TR-8 recordings of its 606
+# voices (CC0; examples/tr606_fit.py). Roland's set
 # borrows the rest from the CR-78, the 707 (clap), the 808 (cymbal, congas)
 # and the 909 (crash 2).
-TR606_OSC_HZ = (203.2, 211.2, 222.1, 251.2, 333.1, 351.9)
+# THE SIX OSCILLATORS AS BUILT (Ben, 2026-11-22: the service manual's values):
+# IC16, an HD14584BP hex Schmitt inverter, each a resistor output-to-input and
+# a capacitor to ground -- the TR-606 Service Notes (First Edition, 1982;
+# ~/Documents/refs/tr606_service_notes, p. 5): R244 560k/C107 15n, R245
+# 560k/C108 12n, R246 470k/C109 12n, R226 330k/C99 15n, R225 470k/C98 10n,
+# R224 330k/C97 10n, f = 2.070/RC (the HD14584B's typical thresholds at 5 V).
+# The notes mark R226 "84 lot ~ 680K" (202.9 Hz): the first edition's 330k is
+# kept. The old values (203.2 ... 351.9) were read off Vargo's cymbal.
+TR606_OSC_HZ = (246.4, 308.0, 367.0, 418.2, 440.4, 627.3)
 
 
 class TR606Properties(TR808Properties):
@@ -21363,29 +21371,29 @@ class TR606Properties(TR808Properties):
 
 class TR606KickProperties(TR606Properties):
     """606 Kick: a bridged-T at ~57 Hz."""
-    tr808 = {"tune_hz": 57.7, "decay_s": 0.3012, "h2_db": -41.7367, "h3_db": -64.3223,
-             "jump_ratio": 3.0, "jump_db": -16.0, "jump_ms": 3.0, "bend_oct": 0.1029,
-             "bend_ms": 37.275, "click_db": -21.0839, "click_dbs": 4768.9274,
-             "click_tilt": -2.6804}
+    tr808 = {"tune_hz": 50.9, "decay_s": 1.0624, "h2_db": -52.6624, "h3_db": -70.0177,
+             "jump_ratio": 3.0, "jump_db": -16.0, "jump_ms": 3.0, "bend_oct": 0.0354,
+             "bend_ms": 30.7353, "click_db": -25.6638, "click_dbs": 20882.8363,
+             "click_tilt": -7.7919}
 
 
 class TR606SnareProperties(TR606Properties):
     """606 Snare 1: a bridged-T at ~208 Hz and its snappy noise."""
-    tr808 = {"tune_hz": 206.9, "decay_s": 0.1489, "res": ((1.5717, 3.5463, 0.0414),),
-             "jump_ratio": 1.4, "jump_db": -6.0, "jump_ms": 3.0, "noise_db": -9.0585,
-             "noise_hp_hz": 3063.3548, "noise_lp_hz": 7128.4204, "noise_decay_s": 0.2441,
-             "click_db": -31.7902, "click_dbs": 1337.6782, "h2_db": -89.8086,
-             "h3_db": -109.8878, "bend_oct": 0.094, "bend_ms": 22.5998,
-             "click_tilt": -1.7548}
+    tr808 = {"tune_hz": 202.9, "decay_s": 0.2105, "res": ((1.4919, 1.7673, 0.0462),),
+             "jump_ratio": 1.4, "jump_db": -6.0, "jump_ms": 3.0, "noise_db": -5.4338,
+             "noise_hp_hz": 3972.8602, "noise_lp_hz": 7324.4488, "noise_decay_s": 0.4518,
+             "click_db": -34.9405, "click_dbs": 2040.3885, "h2_db": -92.9268,
+             "h3_db": -114.7356, "bend_oct": 0.1021, "bend_ms": 18.4046,
+             "click_tilt": -2.7738}
 
 
 class TR606Snare2Properties(TR606SnareProperties):
     """606 Snare 2: the snare ACCENTED, its noise up."""
-    tr808 = {"noise_db": 6.983, "tune_hz": 203.9, "decay_s": 0.1439, "h2_db": -98.7119,
-             "h3_db": -109.7918, "res": ((1.5864, -0.4006, 0.0338),), "bend_oct": 0.1258,
-             "bend_ms": 25.2416, "noise_hp_hz": 3653.3908, "noise_lp_hz": 7139.865,
-             "noise_decay_s": 0.1752, "click_db": -27.3186, "click_dbs": 1364.3161,
-             "click_tilt": 0.4436}
+    tr808 = {"noise_db": 18.8346, "tune_hz": 203.4, "decay_s": 1.0585, "h2_db": -103.9174,
+             "h3_db": -107.4514, "res": ((1.3668, 17.5891, 0.0531),), "bend_oct": -0.2209,
+             "bend_ms": 1.8186, "noise_hp_hz": 9226.6839, "noise_lp_hz": 3637.3037,
+             "noise_decay_s": 0.8337, "click_db": -50.4654, "click_dbs": 1845.1575,
+             "click_tilt": -5.4327}
 
 
 class TechnoTR808KickProperties(TR808KickProperties):
@@ -21404,55 +21412,54 @@ class TechnoTR606SnareProperties(TR606Snare2Properties):
 
 class TR606TomProperties(TR606Properties):
     """606 Low Tom: a bridged-T whose pitch falls as it rings."""
-    tr808 = {"tune_hz": 137.1, "decay_s": 0.4388, "diodes": True, "bend_oct": 0.1552,
-             "h3_db": -45.5464, "jump_ratio": 3.1346, "jump_db": -20.5314,
-             "jump_ms": 0.4546, "noise_db": -45.9495, "noise_tilt": -3.0,
+    tr808 = {"tune_hz": 137.5, "decay_s": 0.4686, "diodes": True, "bend_oct": 0.1382,
+             "h3_db": -52.5631, "jump_ratio": 4.0889, "jump_db": -20.4076,
+             "jump_ms": 0.4126, "noise_db": -45.3734, "noise_tilt": -3.0,
              "noise_hp_hz": 150.0, "noise_lp_hz": 600.0, "noise_order": 1,
-             "noise_decay_s": 1.2154, "click_db": -5.0681, "click_dbs": 14245.1755,
-             "jump_phase": -4.3657, "click_tilt": -1.8071}
+             "noise_decay_s": 1.0299, "click_db": 2.3039, "click_dbs": 20993.4079,
+             "jump_phase": -4.8815, "click_tilt": -1.7433}
 
 
 class TR606HiTomProperties(TR606TomProperties):
     """606 High Tom."""
-    tr808 = {"tune_hz": 209.1, "decay_s": 0.2204, "jump_ratio": 3.6288,
-             "jump_db": -15.9878, "jump_ms": 0.4869, "bend_oct": 0.1031,
-             "noise_db": -46.8654, "noise_decay_s": 1.137, "h3_db": -38.4347,
-             "jump_phase": -3.7987, "click_db": -4.3534, "click_dbs": 17215.969,
-             "click_tilt": -2.2616}
+    tr808 = {"tune_hz": 220.6, "decay_s": 0.311, "jump_ratio": 4.2047, "jump_db": -13.7279,
+             "jump_ms": 0.5071, "bend_oct": 0.1013, "noise_db": -47.6526,
+             "noise_decay_s": 0.9974, "h3_db": -42.6905, "jump_phase": -3.7798,
+             "click_db": -7.6438, "click_dbs": 16695.0763, "click_tilt": -2.5958}
 
 
 class TR606ClosedHatProperties(TR606Properties):
     """606 Closed Hi-Hat: the oscillators through a high band, a short VCA."""
-    tr808 = {"click_db": -39.7037, "click_lp_hz": 314.7896, "click_dbs": 614.028,
-             "circuit": 'metal', "osc_hz": (203.2, 211.2, 222.1, 251.2, 333.1, 351.9),
-             "osc_duty": 0.5352, "bands": ((8623.7865, 0.9801, 0.0, 0.1906),),
-             "hp_hz": 3998.9919, "hp_q": 1.1812, "noise_db": -31.2567, "noise_bp": True,
-             "noise_decay_s": 0.187}
+    tr808 = {"click_db": -52.9935, "click_lp_hz": 211.9939, "click_dbs": 857.3254,
+             "circuit": 'metal', "osc_hz": (246.4, 308.0, 367.0, 418.2, 440.4, 627.3),
+             "osc_duty": 0.5579, "bands": ((9957.603, 1.9136, 0.0, 0.1126),),
+             "hp_hz": 5759.3878, "hp_q": 1.3747, "noise_db": -33.6515, "noise_bp": True,
+             "noise_decay_s": 0.1807}
 
 
 class TR606OpenHatProperties(TR606ClosedHatProperties):
     """606 Open Hi-Hat: the same band, a longer VCA."""
-    tr808 = {"click_db": -25.718, "click_lp_hz": 188.3793, "click_dbs": 267.5324,
-             "bands": ((9554.547, 1.2827, 0.0, 1.2317),), "noise_decay_s": 1.5939,
-             "osc_duty": 0.455, "hp_hz": 6757.8951, "hp_q": 2.4888, "noise_db": -48.9822}
+    tr808 = {"click_db": -36.8722, "click_lp_hz": 126.6376, "click_dbs": 905.6512,
+             "bands": ((9983.0004, 1.171, 0.0, 0.7676),), "noise_decay_s": 2.0513,
+             "osc_duty": 0.5496, "hp_hz": 5525.1382, "hp_q": 1.4119, "noise_db": -41.4554}
 
 
 class TR606CymbalProperties(TR606Properties):
     """606 Cymbal (Roland's "TR-606 Ride Cymbal"): the oscillators through a
     low and a high band, each its own decay."""
-    tr808 = {"after_db": -20.6495, "after_s": 2.3037, "circuit": 'metal',
-             "osc_hz": (203.2, 211.2, 222.1, 251.2, 333.1, 351.9), "osc_duty": 0.2607,
-             "bands": ((3935.9257, 0.804, -10.1761, 0.2858), (6132.9641, 2.4538, 7.3467, 0.585), (5589.9086, 0.9728, 2.8183, 0.0766)),
-             "hp_hz": 6715.9097, "noise_db": -25.3699, "noise_bp": True,
-             "noise_decay_s": 0.3748, "click_db": -31.1519, "click_lp_hz": 116.6004,
-             "click_dbs": 511.7972}
+    tr808 = {"after_db": -19.4698, "after_s": 2.4959, "circuit": 'metal',
+             "osc_hz": (246.4, 308.0, 367.0, 418.2, 440.4, 627.3), "osc_duty": 0.2758,
+             "bands": ((3781.0531, 0.7113, -10.4501, 0.2647), (6294.6493, 3.5009, 8.1569, 1.9004), (6658.6449, 0.9641, 4.7314, 0.0579)),
+             "hp_hz": 6711.7925, "noise_db": -32.2514, "noise_bp": True,
+             "noise_decay_s": 0.4142, "click_db": -47.96, "click_lp_hz": 123.1669,
+             "click_dbs": 424.3297}
 
 
 # THE TR-707 SET (program 29 on the drum channel; SC-8850 p.188). The 707 is
 # no circuit: each voice is a short recording in ROM (sampled acoustic and
 # electronic drums), played once through a VCA -- no TUNE, no DECAY but the
 # hats'. So each is a patch FITTED to what its take holds (examples/
-# tr707_fit.py; hyperreal's set, sources.md): the kicks a sweep onto ~55 Hz,
+# tr707_fit.py; MckAudio's TR-8 recordings, CC0): the kicks a sweep onto ~55 Hz,
 # the toms a membrane gliding down with its modes (x1.78, x2.75) beside it,
 # the clap noise -- its four bursts where its sample puts them
 # (click_bursts). Its hats are real hats in ROM, our own fitted to them (below
@@ -21465,84 +21472,84 @@ class TR707Properties(TR808Properties):
 
 class TR707KickProperties(TR707Properties):
     """707 Kick 1: a kick swept from ~300 Hz onto ~55, gone in 0.1 s."""
-    tr808 = {"tune_hz": 54.9, "decay_s": 0.4319, "h2_db": -13.4503, "h3_db": -30.9125,
-             "bend_oct": 2.6804, "bend_ms": 8.5115, "gate_ms": 57.7607,
-             "click_hp_hz": 789.0543, "click_lp_hz": 1366.2074, "click_db": -7.487,
-             "click_dbs": 1804.2564, "click_tilt": -1.6086}
+    tr808 = {"tune_hz": 46.8, "decay_s": 0.6042, "h2_db": -16.8629, "h3_db": -28.475,
+             "bend_oct": 2.7724, "bend_ms": 7.9687, "gate_ms": 59.8764,
+             "click_hp_hz": 869.1477, "click_lp_hz": 1270.9171, "click_db": -6.1166,
+             "click_dbs": 1757.2839, "click_tilt": -3.3158}
 
 
 class TR707Kick2Properties(TR707KickProperties):
     """707 Kick 2: the same drum, its beater's click softer."""
-    tr808 = {"click_db": -21.4324, "tune_hz": 55.1, "decay_s": 1.781, "h2_db": -8.9423,
-             "h3_db": -39.9895, "bend_oct": 2.6655, "bend_ms": 9.1007,
-             "click_dbs": 877.8596, "click_tilt": -2.8502, "gate_ms": 54.8182,
-             "click_hp_hz": 697.8783, "click_lp_hz": 2042.1958}
+    tr808 = {"click_db": -11.9462, "tune_hz": 55.6, "decay_s": 2.166, "h2_db": -16.9673,
+             "h3_db": -41.9684, "bend_oct": 2.5954, "bend_ms": 8.9952,
+             "click_dbs": 1426.2184, "click_tilt": -4.3349, "gate_ms": 58.4119,
+             "click_hp_hz": 683.4492, "click_lp_hz": 2010.8408}
 
 
 class TR707SnareProperties(TR707Properties):
     """707 Snare 1: a ~150 Hz shell and its wires' noise."""
-    tr808 = {"gate_ms": 165.0604, "tune_hz": 161.0, "decay_s": 0.1836, "h2_db": -15.4022,
-             "h3_db": -20.0315,
-             "res": ((1.6744, -6.6117, 0.1373), (2.3188, -9.8211, 0.1253)),
-             "bend_oct": 0.2124, "bend_ms": 3.3408, "noise_db": -8.734,
-             "noise_hp_hz": 4199.1501, "noise_lp_hz": 5648.3372, "noise_decay_s": 0.2754,
-             "click_db": -33.1537, "click_dbs": 3732.6873, "click_tilt": 1.5436}
+    tr808 = {"gate_ms": 124.8307, "tune_hz": 158.6, "decay_s": 0.3815, "h2_db": -21.225,
+             "h3_db": -26.5876,
+             "res": ((1.6028, -6.6171, 0.1784), (2.138, -7.4033, 0.0639)),
+             "bend_oct": 0.373, "bend_ms": 4.0658, "noise_db": -10.2,
+             "noise_hp_hz": 3800.3287, "noise_lp_hz": 5336.4324, "noise_decay_s": 0.5541,
+             "click_db": -30.5072, "click_dbs": 4690.2115, "click_tilt": -1.9554}
 
 
 class TR707Snare2Properties(TR707SnareProperties):
     """707 Snare 2: a second take, its wires louder."""
-    tr808 = {"noise_db": -3.659, "tune_hz": 154.4, "decay_s": 0.1475, "h2_db": -17.3926,
-             "h3_db": -15.3791,
-             "res": ((1.7214, -7.0256, 0.137), (2.3577, -4.406, 0.0851)),
-             "bend_oct": 0.1058, "bend_ms": 14.5467, "noise_hp_hz": 4516.5925,
-             "noise_lp_hz": 2912.2372, "noise_decay_s": 0.2837, "click_db": -36.7234,
-             "click_dbs": 6340.1567, "click_tilt": -0.2593, "gate_ms": 163.9299}
+    tr808 = {"noise_db": -4.5043, "tune_hz": 164.6, "decay_s": 0.3485, "h2_db": -16.4482,
+             "h3_db": -23.323,
+             "res": ((1.8255, -10.2832, 0.1157), (2.3457, -10.9164, 0.0548)),
+             "bend_oct": 0.1543, "bend_ms": 9.6532, "noise_hp_hz": 4712.2279,
+             "noise_lp_hz": 4516.0096, "noise_decay_s": 0.3478, "click_db": -36.7291,
+             "click_dbs": 7466.676, "click_tilt": 1.0588, "gate_ms": 176.0355}
 
 
 class TR707TomProperties(TR707Properties):
     """707 Low Tom: a membrane gliding down from ~140 Hz to ~100, its modes
     beside it."""
-    tr808 = {"tune_hz": 97.9, "decay_s": 1.116, "h2_db": -33.511, "h3_db": -41.3925,
-             "res": ((1.6374, -7.447, 0.1229), (2.8255, -6.1621, 0.0627)),
-             "bend_oct": 0.7307, "bend_ms": 63.3742, "noise_db": -17.0104,
-             "noise_hp_hz": 200.0, "noise_lp_hz": 4000.0, "noise_decay_s": 0.3268,
-             "click_db": -25.0307, "click_dbs": 1462.9172, "click_tilt": -2.9423}
+    tr808 = {"tune_hz": 90.6, "decay_s": 1.5258, "h2_db": -29.4519, "h3_db": -37.1075,
+             "res": ((1.5155, -5.2913, 0.1488), (2.6585, -0.0317, 0.0797)),
+             "bend_oct": 0.4662, "bend_ms": 55.2647, "noise_db": -19.6004,
+             "noise_hp_hz": 200.0, "noise_lp_hz": 4000.0, "noise_decay_s": 0.5438,
+             "click_db": -41.5838, "click_dbs": 2249.2956, "click_tilt": -1.7515}
 
 
 class TR707MidTomProperties(TR707TomProperties):
     """707 Mid Tom."""
-    tr808 = {"tune_hz": 121.1, "decay_s": 1.2621, "h2_db": -26.7499, "h3_db": -37.5268,
-             "res": ((1.7239, -15.104, 0.1586), (2.8333, 2.5921, 0.0835)),
-             "bend_oct": 0.5451, "bend_ms": 75.2066, "noise_db": -14.504,
-             "noise_decay_s": 0.2715, "click_db": -41.843, "click_dbs": 989.5287,
-             "click_tilt": 0.3412}
+    tr808 = {"tune_hz": 121.0, "decay_s": 1.5995, "h2_db": -24.3672, "h3_db": -33.456,
+             "res": ((1.7477, -14.5054, 0.1678), (2.789, 2.0252, 0.0976)),
+             "bend_oct": 0.2551, "bend_ms": 66.6662, "noise_db": -15.5404,
+             "noise_decay_s": 0.323, "click_db": -40.245, "click_dbs": 914.6619,
+             "click_tilt": 1.2417}
 
 
 class TR707HiTomProperties(TR707TomProperties):
     """707 High Tom."""
-    tr808 = {"tune_hz": 155.6, "decay_s": 1.0385, "h2_db": -28.8739, "h3_db": -42.1072,
-             "res": ((1.6856, -4.973, 0.1673), (2.773, -3.8155, 0.0657)),
-             "bend_oct": 0.6108, "bend_ms": 61.659, "noise_db": -16.0144,
-             "noise_decay_s": 0.2486, "click_db": -26.6246, "click_dbs": 1741.4126,
-             "click_tilt": -3.5416}
+    tr808 = {"tune_hz": 163.0, "decay_s": 0.9423, "h2_db": -25.8673, "h3_db": -35.1765,
+             "res": ((1.7203, -7.0496, 0.1745), (2.8281, -0.9742, 0.0843)),
+             "bend_oct": 0.6224, "bend_ms": 32.3842, "noise_db": -19.3099,
+             "noise_decay_s": 0.2984, "click_db": -37.669, "click_dbs": 1844.536,
+             "click_tilt": -2.8602}
 
 
 class TR707RimProperties(TR707Properties):
     """707 Rim Shot: a ring near 900 Hz and its click."""
-    tr808 = {"gate_ms": 49.4988, "tune_hz": 897.2, "decay_s": 0.062, "h2_db": -33.7639,
-             "h3_db": -0.6511,
-             "res": ((0.5989, -19.8819, 0.0519), (1.6488, -3.3797, 0.0603)),
-             "click_db": -20.5257, "click_dbs": 654.6437, "click_tilt": 1.36}
+    tr808 = {"gate_ms": 42.4192, "tune_hz": 1032.3, "decay_s": 0.0741, "h2_db": -39.6798,
+             "h3_db": -2.4736,
+             "res": ((0.5755, -8.3225, 0.0719), (1.5383, -7.0177, 0.0744)),
+             "click_db": -20.607, "click_dbs": 524.58, "click_tilt": 2.7052}
 
 
 class TR707ClapProperties(TR707Properties):
     """707 Hand Clap: four bursts, ~10 ms apart, and a tail after them."""
-    tr808 = {"gate_ms": 164.5496, "tune_hz": 1000.0, "tone_db": -100.0, "decay_s": 0.05,
-             "click_db": 0.0, "click_hp_hz": 1442.1292, "click_lp_hz": 44031.5919,
-             "click_dbs": 1723.5908,
+    tr808 = {"gate_ms": 121.4853, "tune_hz": 1000.0, "tone_db": -100.0, "decay_s": 0.05,
+             "click_db": 0.0, "click_hp_hz": 1805.9044, "click_lp_hz": 40661.1849,
+             "click_dbs": 2612.7548,
              "click_bursts": ((0.0, -1.0), (0.01, 0.0), (0.02, 0.0), (0.031, 0.5)),
-             "noise_db": -15.9921, "noise_hp_hz": 1194.0899, "noise_lp_hz": 2503.6435,
-             "noise_decay_s": 0.7868, "noise_rise_ms": 11.0215, "click_tilt": -3.0244}
+             "noise_db": -10.7666, "noise_hp_hz": 1444.6311, "noise_lp_hz": 2826.0365,
+             "noise_decay_s": 0.5729, "noise_rise_ms": 7.7789, "click_tilt": -0.9157}
 
 
 class ConcertBassDrumProperties(KickDrumProperties):
@@ -23238,112 +23245,115 @@ class BrushOpenHatProperties(OpenHiHatProperties):
 class TR909CrashProperties(RomMetalMixin, CrashCymbal1Properties):
     """909 Crash Cymbal: a real crash in ROM (TUNE at its middle)."""
     # FITTED (examples/rom_cymbal_fit.py)
-    ring_peak_hz = 3531.07
-    ring_decay_floor = 21.0524
-    ring_decay_below = 10.8179
-    ring_decay_above = 10.4297
-    aftersound_fraction = 0.183073
-    aftersound_dbs = 12.3718
-    bloom_gain = 4.66804
-    bloom_seconds = 0.0462339
-    bloom_center_hz = 9479.7
-    bloom_octaves = 1.3786
-    bloom_swell = 1.14961
-    bloom_gain_slope = 0.876469
-    chiff_volume = 1.34388
-    chiff_width = 0.252559
-    rom_db = -39.5041
-    rom_dbs = 20.3394
-    band_trim_db = ((354, -0.4), (707, 9.1), (1414, -2.6), (2828, -2.1), (5657, 0.6), (11314, -4.6))
+    ring_peak_hz = 2909.29
+    ring_decay_floor = 18.951
+    ring_decay_below = 6.21967
+    ring_decay_above = 5.31743
+    aftersound_fraction = 0.279977
+    aftersound_dbs = 35.0684
+    bloom_gain = 6.06457
+    bloom_seconds = 0.0925579
+    bloom_center_hz = 10098.4
+    bloom_octaves = 1.20832
+    bloom_swell = 1.60723
+    bloom_gain_slope = 0.771724
+    chiff_volume = 1.00082
+    chiff_width = 0.202772
+    rom_db = -39.5321
+    rom_dbs = 18.6325
+    band_trim_db = ((354, -2.1), (707, 9.3), (1414, -2.9), (2828, -0.8), (5657, 1.5), (11314, -5.1))
     # /FITTED
 
 
 class TR909RideProperties(RomMetalMixin, RideCymbalProperties):
     """909 Ride Cymbal: a real ride in ROM (TUNE at its middle)."""
     # FITTED (examples/rom_cymbal_fit.py)
-    ring_peak_hz = 2446.46
-    ring_decay_floor = 7.4919
-    ring_decay_below = 6.49433
-    ring_decay_above = 6.16776
-    aftersound_fraction = 0.0828374
-    aftersound_dbs = 11.0276
-    bloom_gain = 0.0316041
-    bloom_seconds = 0.00661342
-    bloom_center_hz = 3234.48
-    bloom_octaves = 0.909799
-    bloom_swell = 0.553155
-    bloom_gain_slope = 0.131382
-    chiff_volume = 2.13387
-    chiff_width = 0.51837
-    rom_db = -43.1417
-    rom_dbs = 23.3366
-    band_trim_db = ((354, -6.4), (707, -6.3), (1414, 4.9), (2828, -6.6), (5657, 6.2), (11314, 8.1))
+    ring_peak_hz = 1671.2
+    ring_decay_floor = 12.5524
+    ring_decay_below = 1.52148
+    ring_decay_above = 1.41147
+    aftersound_fraction = 0.140493
+    aftersound_dbs = 37.5139
+    bloom_gain = 0.0623523
+    bloom_seconds = 0.0080436
+    bloom_center_hz = 2856.92
+    bloom_octaves = 1.05109
+    bloom_swell = 0.302715
+    bloom_gain_slope = 0.12223
+    chiff_volume = 5.72467
+    chiff_width = 0.238396
+    rom_db = -43.4686
+    rom_dbs = 24.1499
+    band_trim_db = ((354, -7.9), (707, -9.8), (1414, 4.6), (2828, 2.1), (5657, 6.1), (11314, 4.8))
     # /FITTED
 
 
 class TR909OpenHatProperties(RomMetalMixin, OpenHiHatProperties):
     """909 Open Hi-Hat: a real hat in ROM, its DECAY at the middle."""
     # FITTED (examples/rom_cymbal_fit.py)
-    ring_peak_hz = 1958.2
-    ring_decay_floor = 47.7339
-    ring_decay_below = 2.81253
-    ring_decay_above = 3.84673
-    aftersound_fraction = 0.193874
-    aftersound_dbs = 32.4534
-    bloom_gain = 0.0582779
-    bloom_seconds = 0.00313749
-    bloom_center_hz = 2247.78
-    bloom_octaves = 1.09647
-    bloom_swell = 1.01675
-    bloom_gain_slope = 0.0689044
-    chiff_volume = 172.683
-    rom_db = -45.2095
-    rom_dbs = 19.164
-    band_trim_db = ((354, -8.6), (707, -3.1), (1414, 5.1), (2828, 4.8), (5657, 2.7), (11314, -1.0))
+    ring_peak_hz = 3403.47
+    ring_decay_floor = 46.1078
+    ring_decay_below = 1.24016
+    ring_decay_above = 1.43881
+    aftersound_fraction = 0.0546685
+    aftersound_dbs = 35.2212
+    bloom_gain = 0.0700963
+    bloom_seconds = 0.00318864
+    bloom_center_hz = 2824.34
+    bloom_octaves = 1.60051
+    bloom_swell = 1.3342
+    bloom_gain_slope = 0.105087
+    chiff_volume = 175.853
+    chiff_width = 0.00777891
+    rom_db = -45.3359
+    rom_dbs = 22.4415
+    band_trim_db = ((354, -8.4), (707, -3.0), (1414, 6.1), (2828, 4.0), (5657, 3.2), (11314, -1.9))
     # /FITTED
 
 
 class TR707ClosedHatProperties(RomMetalMixin, ClosedHiHatProperties):
     """707 Closed Hi-Hat: a real hat in ROM."""
     # FITTED (examples/rom_cymbal_fit.py)
-    ring_peak_hz = 2839.38
-    ring_decay_floor = 128.482
-    ring_decay_below = 8.51957
-    ring_decay_above = 19.4118
-    aftersound_fraction = 0.0128695
-    aftersound_dbs = 12.7085
-    bloom_gain = 0.116424
-    bloom_seconds = 0.00462444
-    bloom_center_hz = 1702.12
-    bloom_octaves = 0.267343
-    bloom_swell = 0.428416
-    bloom_gain_slope = 0.068709
-    chiff_volume = 51.452
-    rom_db = -37.9343
-    rom_dbs = 18.2605
-    band_trim_db = ((354, -0.4), (707, 1.7), (1414, 4.7), (2828, 0.7), (5657, -1.1), (11314, -5.7))
+    ring_peak_hz = 4422.66
+    ring_decay_floor = 331.995
+    ring_decay_below = 28.9177
+    ring_decay_above = 13.3617
+    aftersound_fraction = 0.000632521
+    aftersound_dbs = 3.36223
+    bloom_gain = 0.246932
+    bloom_seconds = 0.00703038
+    bloom_center_hz = 493.861
+    bloom_octaves = 0.158324
+    bloom_swell = 0.365309
+    bloom_gain_slope = 0.184686
+    chiff_volume = 109.449
+    chiff_width = 0.00144095
+    rom_db = -35.2172
+    rom_dbs = 18.1958
+    band_trim_db = ((354, 1.9), (707, 1.8), (1414, 2.2), (2828, 0.5), (5657, -0.9), (11314, -5.5))
     # /FITTED
 
 
 class TR707OpenHatProperties(RomMetalMixin, OpenHiHatProperties):
     """707 Open Hi-Hat: a real hat in ROM."""
     # FITTED (examples/rom_cymbal_fit.py)
-    ring_peak_hz = 2533.48
-    ring_decay_floor = 21.0791
-    ring_decay_below = 8.50175
-    ring_decay_above = 18.3464
-    aftersound_fraction = 0.375645
-    aftersound_dbs = 11.4619
-    bloom_gain = 0.0340369
-    bloom_seconds = 0.00335885
-    bloom_center_hz = 3378.06
-    bloom_octaves = 1.35705
-    bloom_swell = 0.827044
-    bloom_gain_slope = 0.0972256
-    chiff_volume = 91.5688
-    rom_db = -39.6436
-    rom_dbs = 18.7363
-    band_trim_db = ((354, -4.3), (707, -3.5), (1414, 2.3), (2828, 3.7), (5657, 2.4), (11314, -0.5))
+    ring_peak_hz = 4419.06
+    ring_decay_floor = 31.4902
+    ring_decay_below = 5.00496
+    ring_decay_above = 7.50638
+    aftersound_fraction = 0.414873
+    aftersound_dbs = 51.566
+    bloom_gain = 0.0469585
+    bloom_seconds = 0.00312307
+    bloom_center_hz = 3768.12
+    bloom_octaves = 1.65989
+    bloom_swell = 0.993289
+    bloom_gain_slope = 0.0883271
+    chiff_volume = 89.2382
+    chiff_width = 0.00658711
+    rom_db = -42.8423
+    rom_dbs = 18.7527
+    band_trim_db = ((354, -5.9), (707, -3.8), (1414, 2.4), (2828, 4.1), (5657, 2.8), (11314, 0.3))
     # /FITTED
 
 

@@ -356,8 +356,8 @@ def percussion_table():
 # Electronic set is a SIMMONS SDS-V on its own engine (simmons.py), its
 # patches fitted to a real Simmons's hits chosen by GeneralUser's (two levels,
 # examples/elkit_fit.py), and Ben has heard it: 4. The TR-808 the same way
-# on its own engine (tr808.py), fitted to Michael Fischer's recordings of a
-# real 808 (examples/tr808_fit.py; scores: dB rms over a time x third-octave
+# on its own engine (tr808.py), fitted to MckAudio's TR-8 recordings of its
+# 808 voices (CC0; examples/tr808_fit.py; scores: dB rms over a time x third-octave
 # grid plus the hit's band balance), and heard: 4. The Orchestra set too: its
 # concert drums and clashes fitted to VCSL (examples/orch_fit.py), the rest
 # Standard's fitted voices moved, and heard: 4. Brush too, fitted to Swirly
@@ -368,10 +368,9 @@ def percussion_table():
 _808 = ("THE ROLAND TR-808, AS AN ENGINE (tr808.py: its two kinds of circuit as partials -- "
         "bridged-T resonators, and six square oscillators through band-passes -- every "
         "instrument a patch of knobs, read off the service notes' schematic where it fixes "
-        "them). FITTED BY TWO LEVELS to Michael Fischer's recordings of one 808 (every knob "
-        "at five positions): the GM set whose sample IS an 808 picks the setting, the patch "
-        "fits that hit (examples/tr808_fit.py). Balanced within itself as GeneralUser's "
-        "(examples/elkit_balance.py --kit=25). Ben: sounds incredible")
+        "them). FITTED to MckAudio's recordings of a Roland TR-8's 808 voices (CC0; "
+        "examples/tr808_fit.py). Balanced within itself as GeneralUser's "
+        "(examples/elkit_balance.py --kit=25). Ben: sounds good (the TR-8 refit)")
 KIT_RATED = {
     24: {
         36: (4, "THE SIMMONS SDS-V, AS AN ENGINE (simmons.py: the circuit as partials, every drum a patch of knobs, as the synths are Messenger patches): its bass drum module FITTED BY TWO LEVELS -- GeneralUser GS's Elec BD picks the closest of tarane468's real Simmons hits (Freesound, CC0; hit 30), and the patch is fitted to that hit at its pitch, 28 Hz (examples/elkit_fit.py --select, --fit=skick --real). The bend falls evenly in pitch (the kernel's log sweep). Ben: sounds great -- the vintage sound is the point"),
@@ -382,41 +381,40 @@ KIT_RATED = {
         52: (4, "GM 119's reverse cymbal: the fitted crash played backwards, arriving on the written note-off"),
     },
     25: {
-        36: (4, _808 + ". The BASS DRUM: one network at 49.6 Hz, its first cycle at 4x (the time "
-             "constant halved while the trigger lasts), the pitch sighing 0.5 oct onto it; its "
-             "spectrum within 1-3 dB of the hit's to 8 kHz. Score 4.5 (BD0050)"),
+        36: (4, _808 + ". The BASS DRUM: one network at 47.4 Hz, its first cycle faster (the time "
+             "constant halved while the trigger lasts), the pitch sighing onto it. Score 7.6"),
         37: (4, "the RIM SHOT: two networks into the SWING VCA (a transistor conducting on one "
              "polarity: their harmonics and intermodulation, each product decaying as the "
              "networks' mix changes), out through Q63's resonant high-pass (590 Hz, Q 2.9). "
-             "Score 15.2 -- the rectifier's sharp 3-12 kHz edge is short"),
+             "Score 13.7"),
         38: (4, "the SNARE: two networks near an octave apart and SNAPPY, high-passed noise on "
-             "its own envelope. Score 5.2 (SD7575)"),
+             "its own envelope. Score 8.4"),
         41: (4, "the LOW TOM: diodes D80/D81 conduct with the ring, so the pitch falls as it "
              "decays and their harmonics die faster; pink noise at 154-402 Hz on its own "
-             "envelope (the schematic's RCs). Score 5.0 (LT75)"),
+             "envelope (the schematic's RCs). Score 9.9"),
         43: (4, "as 41, played 2.8 semitones higher -- the SC-55's sixth tom where FluidR3 "
              "plays it, past the TUNING knob's reach"),
-        45: (4, "the MID TOM, its own circuit: noise 219-482 Hz. Score 5.3 (MT50)"),
+        45: (4, "the MID TOM, its own circuit: noise 219-482 Hz. Score 11.7"),
         47: (4, "as 45, 2 semitones higher (as 43)"),
-        48: (4, "the HI TOM, its own circuit: noise 268-723 Hz. Score 6.7 (HT75)"),
+        48: (4, "the HI TOM, its own circuit: noise 268-723 Hz. Score 16.8"),
         50: (4, "as 48, 3.5 semitones higher (as 43)"),
-        42: (4, "the CLOSED HAT: the six oscillators (this 808's, read off its cymbal: 345.5, "
-             "486.2, 558.5, 630.6, 823.9, 852.0 Hz -- pulses, not squares) through the high "
-             "band, a short VCA and a high-pass. Score 5.8"),
+        42: (4, "the CLOSED HAT: the six oscillators (the service notes' design: 205.3, 304.4, "
+             "369.6, 522.7 Hz by their components, the cowbell's pair trimmed to 540 and 800 -- "
+             "pulses, not squares) through the high band, a short VCA and a high-pass. Score 7.9"),
         44: (4, "as 42 (the SC-55's pedal hat is the 808's CHH)"),
-        46: (4, "the OPEN HAT: the same band, a longer VCA, choked by 42/44. Score 8.3 (OH75)"),
+        46: (4, "the OPEN HAT: the same band, a longer VCA, choked by 42/44. Score 10.9"),
         49: (4, "the CYMBAL: the six through three bands at the circuit's centres (Werner's "
              "cymbal paper), each its own decay -- the kernel's two-stage decay per partial. "
-             "Score 7.1 (CY7500)"),
+             "Score 10.3"),
         56: (4, "the COWBELL: two of the six through a band-pass, an abrupt drop into a tail. "
-             "Score 10.7"),
+             "Score 11.5"),
         62: (4, "the HIGH CONGA: the tom circuit with a capacitor switched out -- higher, no "
-             "noise. Score 9.3 (HC50)"),
-        63: (4, "the MID CONGA. Score 2.8 (MC25)"),
-        64: (4, "the LOW CONGA. Score 2.9 (LC25)"),
+             "noise. Score 16.9"),
+        63: (4, "the MID CONGA. Score 15.0"),
+        64: (4, "the LOW CONGA. Score 9.4"),
         70: (4, "the MARACAS: white noise through Q68's 1 kHz RC and 10.6 kHz Sallen-Key (Q 2.3), "
-             "a gate that swells, holds and cuts. Score 10.0"),
-        75: (4, "the CLAVES: one network at 2.42 kHz. Score 13.4"),
+             "a gate that swells, holds and cuts. Score 10.2"),
+        75: (4, "the CLAVES: one network at 2.80 kHz. Score 21.0"),
     },
     32: {
         36: (4, "JAZZ KICK 1: the ~71 Hz drum of soneproject's kit in a jazz bar (Freesound 25895, CC0): "
@@ -459,70 +457,68 @@ KIT_RATED = {
         62: (4, "the 808's high conga"), 63: (4, "the 808's mid conga"), 64: (4, "the 808's low conga"),
     },
     28: {
-        36: (4, "606 KICK:a bridged-T at 57.7 Hz (Ed Vargo's real 606; examples/tr606_fit.py). "
-             "Score 7.3. Ben: sounds great"),
-        38: (4, "606 SNARE 1: a bridged-T at 207 Hz and its snappy noise. Score 8.1"),
-        40: (4, "606 SNARE 2: the snare ACCENTED (bdu's CC0 take). Score 9.1"),
-        41: (4, "606 LOW TOM: a bridged-T whose pitch falls as it rings (diodes). Score 9.1"),
+        36: (4, "606 KICK: a bridged-T at 50.9 Hz (MckAudio's TR-8 take, CC0; examples/tr606_fit.py). "
+             "Score 12.4. Ben: sounds great (the earlier fit)"),
+        38: (4, "606 SNARE 1: a bridged-T at 203 Hz and its snappy noise. Score 9.5"),
+        40: (4, "606 SNARE 2: the TR-8's second 606 snare. Score 12.8"),
+        41: (4, "606 LOW TOM: a bridged-T whose pitch falls as it rings (diodes). Score 9.9"),
         43: (4, "as 41, 1.75 semitones up (the 606's two toms over six keys, evenly)"),
         45: (4, "as 41, 3.5 semitones up"), 47: (4, "as 48, 1.75 semitones down"),
-        48: (4, "606 HIGH TOM. Score 10.2"), 50: (4, "as 48, 1.75 semitones up"),
-        42: (4, "606 CLOSED HAT: six square oscillators (read off its cymbal: 203.2, 211.2, "
-             "222.1, 251.2, 333.1, 351.9 Hz) through a high band, a short VCA; the trigger's "
-             "thump under 250 Hz. Score 11.8"),
+        48: (4, "606 HIGH TOM. Score 12.1"), 50: (4, "as 48, 1.75 semitones up"),
+        42: (4, "606 CLOSED HAT: six square oscillators (the service notes' design: 246, 308, "
+             "367, 418, 440, 627 Hz) through a high band, a short VCA; the trigger's "
+             "thump under 250 Hz. Score 7.6"),
         44: (4, "as 42"),
-        46: (4, "606 OPEN HAT: the same band, a longer VCA. Score 10.6"),
+        46: (4, "606 OPEN HAT: the same band, a longer VCA. Score 18.1"),
         51: (4, "606 CYMBAL (Roland's 'Ride'): the oscillators through three bands, each its "
              "own VCA, and a tail ringing on (after_db), scored on its 50 ms envelope too (Ben: "
-             "'more ring to it than ours'): within 2 dB of the take from 0.25 s to 0.9"),
+             "'more ring to it than ours', of the earlier fit). Score 15.8"),
         39: (4, "the 707's clap"), 49: (4, "the 808's cymbal"), 57: (4, "the 909's crash"),
         62: (4, "the 808's high conga"), 63: (4, "the 808's mid conga"), 64: (4, "the 808's low conga"),
     },
     29: {
         36: (4, "707 KICK 1: the ROM's kick swept from ~300 Hz onto 55 (zero crossings: a 20 ms "
              "frame cannot read 55 Hz), held, then its VCA closing at 58 ms (gate_ms); its "
-             "beater's click a band at 0.8-1.4 kHz. Fitted to hyperreal's 707 take: score 12.3. "
-             "Ben: sounds great"),
-        35: (4, "707 KICK 2: the same drum, its click softer, gated at 55 ms. Score 14.3"),
-        37: (4, "707 RIM SHOT: a ring at 897 Hz and two more, gated. Score 17.4"),
-        38: (4, "707 SNARE 1: a 161 Hz shell, its modes at x1.73 and x2.31, its wires' noise, "
-             "gated. Score 11.2"),
-        40: (4, "707 SNARE 2: the wires louder. Score 10.8"),
-        39: (4, "707 HAND CLAP: four bursts at the take's 0, 10, 20, 31 ms (click_bursts: a "
-             "machine's flam, the same every note) and a tail. Score 14.5"),
-        41: (4, "707 LOW TOM 2: a membrane gliding down from ~140 Hz to ~100, its modes beside "
-             "it. Score 9.7"),
+             "beater's click a band. Fitted to MckAudio's TR-8 take (CC0): score 14.1. "
+             "Ben: sounds great (the earlier fit)"),
+        35: (4, "707 KICK 2: the same drum at 55.6 Hz, gated at 58 ms. Score 13.6"),
+        37: (4, "707 RIM SHOT: a ring at 1.03 kHz and two more, gated. Score 17.7"),
+        38: (4, "707 SNARE 1: a 159 Hz shell, its modes at x1.60 and x2.14, its wires' noise, "
+             "gated. Score 14.1"),
+        40: (4, "707 SNARE 2: the wires louder. Score 15.2"),
+        39: (4, "707 HAND CLAP: four bursts at 0, 10, 20, 31 ms (click_bursts: a "
+             "machine's flam, the same every note) and a tail. Score 10.4"),
+        41: (4, "707 LOW TOM 2: a membrane gliding down onto ~91 Hz, its modes beside "
+             "it. Score 11.0"),
         43: (4, "as 41, two semitones up (the 707 has three toms; the six evenly spaced)"),
-        45: (4, "707 MID TOM 2. Score 8.2"), 47: (4, "as 45, two semitones up"),
-        48: (4, "707 HI TOM 2. Score 9.9"), 50: (4, "as 48, two semitones up"),
+        45: (4, "707 MID TOM 2. Score 10.6"), 47: (4, "as 45, two semitones up"),
+        48: (4, "707 HI TOM 2. Score 10.2"), 50: (4, "as 48, two semitones up"),
         42: (4, "707 CLOSED HAT: a real hat in ROM, so OUR closed hat fitted to it "
-             "(examples/rom_cymbal_fit.py), the ROM's grit on top: 4.58 -> 1.67 dB"),
+             "(examples/rom_cymbal_fit.py), the ROM's grit on top: 12.58 -> 3.25 dB (the TR-8's take)"),
         44: (4, "as 42"),
-        46: (4, "707 OPEN HAT: our open hat fitted to the ROM's: 2.29 -> 1.99 dB"),
+        46: (4, "707 OPEN HAT: our open hat fitted to the ROM's: 10.89 -> 4.54 dB"),
         49: (4, "the 909's crash, as Roland's set has it"), 51: (4, "the 909's ride"),
         56: (4, "the 808's cowbell"), 70: (4, "the 808's maracas"),
     },
     30: {
         36: (4, "909 KICK 1: a VCO swept in Hz (a current into an integrator: tr808.py's linear "
-             "sweep) from 5.6x down onto 49.8 Hz, tau 30.5 ms, its ATTACK click beside it; TUNE, "
-             "ATTACK, DECAY full. Fitted to Jason Baker's real 909 (BTAAADA): score 8.7. Ben: "
-             "sounds great"),
-        35: (4, "909 KICK 2: the panel's middle, no attack (BT7A0D7). Score 8.0"),
-        37: (4, "909 RIM: a short ring and its click (RIM127). Score 16.3"),
-        38: (4, "909 SNARE 1: two swept oscillators 1.44 apart over SNAPPY's noise; ST0T3S3, the "
-             "take GeneralUser GS's own sample is. Score 9.6"),
-        40: (4, "909 SNARE 2: TUNE, TONE, SNAPPY full (STATASA, GeneralUser's other). Score 11.6"),
-        41: (4, "909 LOW TOM 2: a swept VCO and a second at 2/3 of it (LT3D7). Score 9.2"),
-        43: (4, "909 LOW TOM 1: TUNE full (LTAD7). Score 9.4"),
-        45: (4, "909 MID TOM 2 (MT3D7). Score 10.7"), 47: (4, "909 MID TOM 1 (MTAD7). Score 10.2"),
-        48: (4, "909 HI TOM 2 (HT3D7). Score 6.8"), 50: (4, "909 HI TOM 1 (HTAD7). Score 6.4"),
+             "sweep) from ~5x down onto 53.1 Hz, its ATTACK click beside it. Fitted to "
+             "MckAudio's TR-8 take (CC0): score 12.3. Ben: sounds great (the earlier fit)"),
+        35: (4, "909 KICK 2: the TR-8's second kick, its sweep slower, onto 53.5 Hz. Score 12.4"),
+        37: (4, "909 RIM: a short ring and its click. Score 19.1"),
+        38: (4, "909 SNARE 1: two swept oscillators ~1.48 apart over SNAPPY's noise. Score 11.9"),
+        40: (4, "909 SNARE 2: the TR-8's second snare, lower (130 Hz). Score 9.7"),
+        41: (4, "909 LOW TOM 2: a swept VCO and a second at ~0.7 of it. Score 9.2"),
+        43: (4, "909 LOW TOM 1: the TR-8's long take. Score 9.4"),
+        45: (4, "909 MID TOM 2. Score 10.4"), 47: (4, "909 MID TOM 1 (the long take). Score 11.0"),
+        48: (4, "909 HI TOM 2. Score 10.7"), 50: (4, "909 HI TOM 1 (the long take). Score 8.1"),
         46: (4, "909 OPEN HAT: a real hat in the 909's ROM, so OUR open hat fitted to it "
-             "(examples/rom_cymbal_fit.py: crash_fit's grid, HHOD4), the ROM's 6-bit grit a "
-             "noise layer on top: 4.60 -> 1.75 dB"),
+             "(examples/rom_cymbal_fit.py: crash_fit's grid, the TR-8's take), the ROM's 6-bit grit a "
+             "noise layer on top: 5.14 -> 2.92 dB"),
         49: (4, "909 CRASH: our crash (modes, the hard hit's swell) fitted to the 909's ROM take "
-             "(CSHD4), its grit on top: 3.08 -> 2.58 dB. Ben: the samples 'sound almost real'; "
-             "ours 'a little more open-ended because we aren't a sample, but that is fine'"),
-        51: (4, "909 RIDE: our ride fitted to the ROM's (RIDED4): 6.11 -> 1.74 dB"),
+             "(the TR-8's), its grit on top: 6.53 -> 4.46 dB. Ben, of the earlier fit: the samples "
+             "'sound almost real'; ours 'a little more open-ended because we aren't a sample, but that is fine'"),
+        51: (4, "909 RIDE: our ride fitted to the ROM's (the TR-8's): 4.44 -> 3.20 dB"),
         42: (4, "the 707's closed hat, as Roland's set borrows it"), 44: (4, "as 42"),
         56: (4, "the 808's cowbell, as Roland's set borrows it"),
         70: (4, "the 808's maracas"), 75: (4, "the 808's claves"),

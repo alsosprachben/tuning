@@ -283,32 +283,15 @@ store build.
 - **Debain harmonium** (Jean-Pierre Silvestre's Hauptwerk set): the reed
   organ's registers (GS 20). His address is in the set's PDF; ask him.
 - **Aalto clavinet** recordings: the Clavinet (GM 7). Ask the authors.
-- **TR-606** (Ed Vargo's set): the TR-606 kit; and bdu's Freesound TR-606
-  pack, a third party's re-upload under CC0.
-- **TR-808** (Fischer's set): "ABSOLUTELY FREE", but no licence. The TR-808
-  kit, and the 808 voices other sets borrow.
-- **TR-707** (hyperreal): an anonymous uploader's "public domain".
+- **Drum machines (TR-808, TR-606, TR-707): CLOSED 2026-11-22.** All four
+  machine kits refitted to MckAudio's TR-8 recordings (CC0); the 808's metal
+  oscillators set from the service notes. Fischer's, Vargo's, bdu's and
+  hyperreal's sets are no longer read, and their credits are gone.
 - **Alternatives for the clavinet (checked 2026-11-20):** only Markus
   Ruffing's "Hohner Clavinet D6.ogg" (Commons; "allows anyone to use it for
   any purpose"): 101 s of playing across the pickup settings, lossy. A check
   on pickup combinations, not a fit. Keep the published DAFx/ICMC geometry,
   ask Aalto to release their examples under CC BY, or record a D6.
-- **Alternatives for the drum machines (checked 2026-11-20):** no real 808 or
-  909 set exists under an open licence given by its own recordist.
-  - **TR-808:** only Siassios's pattern clips (Commons, CC BY-SA 3.0, lossy,
-    overlapping): a listening check. MckAudio's MckSamplePacks (CC0, his own
-    recordings) has every 808, 909, 707 and 606 voice, but from a Roland TR-8,
-    Roland's digital model. ACCEPTABLE (Ben, 2026-11-20: a played Roland,
-    recorded by its owner under a proper licence, is fine, like a clean room;
-    data pulled out of a Roland is not). The TR-8 models the 808 and 909
-    rather than playing samples, so this is the route for both, beside asking
-    Michael Fischer for a licence for his real 808.
-  - **TR-707:** hesed23's "7X7 Free Samples" (Freesound, CC BY 4.0, one hit
-    per voice) is from his circuit-bent 707: listen first. Emily Schmanks's
-    two cymbals (Commons, CC0) for the cymbal envelope.
-  - **TR-606:** o-toener's Behringer RD-6 (Freesound, CC0, every voice) and
-    MckAudio's RD-6 (CC0): a circuit clone of the 606. Real but modified 606s:
-    oceansonmars's "Modified 606" (CC0, 40 one-shots).
 - **Alternatives for the harmonium (checked 2026-11-20):** no openly licensed
   French harmonium with separate registers exists (Grabowski's free Emil
   Müller set records the stops separately but is "All Rights Reserved").
@@ -319,15 +302,11 @@ store build.
 - **Status:** open. Low risk for measured numbers, but a written yes is
   cheap to ask for.
 
-### L11. TR-909 (Rob Roy / Jason Baker set) — "not for profit, no modification"
+### L11. TR-909 (Rob Roy / Jason Baker set) — CLOSED 2026-11-22
 
-- **What derives from it:** the TR-909 kit, its cymbals by the ROM cymbal fit.
-- **Alternatives (checked 2026-11-20):** altemark's "TR-909 JGB pack"
-  (Freesound, CC BY 4.0, 224 sounds) is Janne G:son Berg's own 909, but
-  re-uploaded; his own terms say only "use the samples for whatever you like".
-  Ask Berg to confirm CC BY and it becomes the best 909 source. Otherwise
-  only the TR-8 model (above) and two short Commons pattern clips.
-- **Status:** open.
+- The TR-909 kit and its ROM cymbals refitted to MckAudio's TR-8 recordings
+  (CC0; Ben 2026-11-20: a played Roland recorded by its owner is fine).
+  Baker's set is no longer read; its credit is gone.
 
 ### L12. Smaller questions
 
