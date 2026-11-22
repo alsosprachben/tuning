@@ -4462,7 +4462,7 @@ struct Part {
         bool was_on = false;
         std::vector<std::pair<std::pair<double, double>, int>> rows;
         std::map<int, double> acc;
-        int rank_row[32] = {0};
+        int rank_row[NV_MAX_RANK] = {0};      // (each rank's: as many as an organ has, nv.h)
     };
     std::map<long long, WindSt> wind_st;
     std::vector<long long> wind_order;          // the parts' wind, in the order made
