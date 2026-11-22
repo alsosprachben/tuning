@@ -60,8 +60,8 @@ own nonlinearity beyond the jump; accent (velocity is level, as every voice).
 
 THE KNOBS ARE IN PHYSICAL UNITS -- Hz, seconds, dB -- as simmons.py's are: the
 808's own knobs (TONE, DECAY, SNAPPY, TUNING) are positions on an unmeasured
-law, and Michael Fischer's recordings give each patch the place a position
-lands it (examples/tr808_fit.py).
+law; each patch is fitted to MckAudio's TR-8 recordings (CC0), the metal
+oscillators to the service notes (examples/tr808_fit.py).
 """
 import math
 

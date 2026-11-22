@@ -45,7 +45,15 @@ import elkit_fit as E          # noqa: E402  (drum_mid, theirs, ours, read, meas
 
 KIT = 25
 E.KIT = KIT
-PACK = os.path.expanduser("~/Documents/refs/tr808_fischer/pack/TR808WAV")
+# THE REFERENCE, since 2026-11-22: MckAudio's TR-8 recordings (CC0; GitHub
+# MckAudio/MckSamplePacks, TR8/ -- each one-shot off a Roland TR-8, its 808
+# voices) in ~/Documents/refs/mck_tr8_rd6. A played Roland recorded by its
+# owner under a proper licence (Ben, 2026-11-20: licences.md L10); Fischer's
+# real 808 (no licence) is no longer read. One hit a voice, at the TR-8's
+# own settings: LEVEL ONE (--select, a pick among Fischer's knob positions)
+# has nothing to choose among, and HITS names the take.
+PACK = os.path.expanduser("~/Documents/refs/mck_tr8_rd6/TR8")
+FISCHER = os.path.expanduser("~/Documents/refs/tr808_fischer/pack/TR808WAV")    # (--select's only)
 
 # which of Fischer's voices each note is, and which GM set's sample is an 808
 VOICE = {36: "BD", 37: "RS", 38: "SD", 41: "LT", 43: "LT", 45: "MT", 47: "MT", 48: "HT",
@@ -56,9 +64,13 @@ SELECTOR.update({n: "FluidR3" for n in (36, 41, 43, 45, 47, 48, 50, 62, 63, 64)}
 
 # LEVEL ONE's answer (--select). A tom or conga that FluidR3 plays repitched
 # is fitted at the hit's own pitch and played at FluidR3's (percussion_map).
-HITS = {36: "BD0050", 37: "RS", 38: "SD7575", 41: "LT75", 43: "LT10", 45: "MT50", 47: "MT10",
-        48: "HT75", 50: "HT10", 42: "CH", 44: "CH", 46: "OH75", 49: "CY7500", 56: "CB",
-        62: "HC50", 63: "MC25", 64: "LC25", 70: "MA", 75: "CL"}
+HITS = {36: "BD/001_808_Bass_Drum_1", 37: "PERC/008_808_Rim_Shot", 38: "SD/001_808_Snare_Drum_1",
+        41: "TOMS/001_808_Low_Tom", 43: "TOMS/001_808_Low_Tom", 45: "TOMS/002_808_Mid_Tom",
+        47: "TOMS/002_808_Mid_Tom", 48: "TOMS/003_808_High_Tom", 50: "TOMS/003_808_High_Tom",
+        42: "HATS/002_808_Closed_HiHat", 44: "HATS/002_808_Closed_HiHat", 46: "HATS/001_808_Open_HiHat",
+        49: "HATS/017_808_Crash_Cymbal", 56: "PERC/033_808_Cowbell", 62: "TOMS/021_808_High_Conga",
+        63: "TOMS/020_808_Mid_Conga", 64: "TOMS/019_808_Low_Conga", 70: "PERC/026_808_Maracas",
+        75: "PERC/010_808_Claves_1"}
 
 EDGES = np.array([0, 5, 10, 20, 35, 60, 100, 160, 250, 400, 650, 1000, 1600]) / 1000.0
 TOB = 31.25 * 2 ** (np.arange(0, 28) / 3.0)          # 31 Hz - 16 kHz
@@ -66,7 +78,9 @@ FLOOR = -60.0
 
 
 def hit(name):
-    return E.read(os.path.join(PACK, name[:2], name + ".WAV"))
+    if "/" in name:                         # a TR-8 take (HITS)
+        return E.read(os.path.join(PACK, name + ".wav"))
+    return E.read(os.path.join(FISCHER, name[:2], name + ".WAV"))      # (Fischer's: --select only)
 
 
 def onset(x):
@@ -447,7 +461,7 @@ def osc(d):
     """The six oscillators: the bases whose harmonics explain the cymbal's
     strongest peaks (any harmonic: the oscillators are not 50% duty)."""
     from scipy.signal import find_peaks
-    y, sr = hit("CY5010")
+    y, sr = hit(HITS[49])
     seg = y[onset(y) + int(0.05 * sr):onset(y) + int(1.5 * sr)]
     N = 1 << 20
     X = 20 * np.log10(np.abs(np.fft.rfft(seg * np.hanning(len(seg)), N)) + 1e-9)
