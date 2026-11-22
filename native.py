@@ -2944,6 +2944,10 @@ def _class(cls):
         if c.b_law == 1:
             (c.wound_k, c.wound_p), (c.plain_k, c.plain_p) = cls.wound_B, cls.plain_B
             c.break_hz = cls.upright_break_hz
+        elif c.b_law == 2 and getattr(cls, 'measured_B', None):
+            # (a measured two-part law: the upright's, VoiceInit.b_law 1)
+            c.b_law = 1
+            (c.wound_k, c.wound_p), (c.plain_k, c.plain_p), c.break_hz = cls.measured_B
         elif c.b_law == 2:
             c.scale_constant_hz_m = cls.scale_constant_hz_m
             c.reference_string_max_m, c.case_string_max_m = cls.reference_string_max_m, cls.case_string_max_m

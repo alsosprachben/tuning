@@ -5749,12 +5749,24 @@ class ElectricGrandProperties(GrandPianoProperties):
     # solved against the measurement it wants 0.0885.
 
     def inharmonicity_coefficient_for_frequency(self, frequency):
+        # ...OR ITS OWN, MEASURED (measured_B: (wound k, p), (plain k, p), the
+        # break Hz -- the upright's law with the CP-80's constants)
+        if self.measured_B:
+            (wk, wp), (pk, pp), br = self.measured_B
+            k, p = (wk, wp) if frequency < br else (pk, pp)
+            return k * float(frequency) ** p
         b = super().inharmonicity_coefficient_for_frequency(frequency)
         f = max(float(frequency), 1e-6)
         c = self.scale_constant_hz_m
         long_ = min(c / f, self.reference_string_max_m)
         short = min(c / f, self.case_string_max_m)
         return b * (long_ / short) ** 4
+
+    # THE CP-80'S OWN STIFFNESS (2026-11-21): B read off Sullivan's takes, key by
+    # key (f0 and B searched together, robust_ladder), a power law each side of a
+    # break -- the grand's law scaled to a shorter case had F#2 1.7x too stiff,
+    # F4-G#4 1.4x, D3 0.7x; this one within ~20% (22% rms) from D#1 to C#7
+    measured_B = ((0.584455, -1.67907), (2.77548e-07, 1.29846), 117.3)
 
     # THE WOUND STRINGS' ZING. Below F3 a CP80's strings are wound, and their
     # top starts far over where it settles: 1.6-8 kHz 17-57 dB over its own

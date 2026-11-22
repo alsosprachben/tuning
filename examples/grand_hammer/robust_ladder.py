@@ -5,7 +5,7 @@ import numpy as np, upright_fit as U
 def ladder(x,sr,key,nmax=12,a=0.03,b=0.53):
     t0=U.onset(x,sr); X,f=U.spectrum(x,sr,t0,a,b); df=f[1]-f[0]
     fk=440.0*2**((key-69)/12.0); best=(-1,None,None)
-    Bs=np.concatenate([[0.0],np.logspace(-6,np.log10(2e-3),60)])
+    Bs=np.concatenate([[0.0],np.logspace(-6,np.log10(float(__import__('os').environ.get('BMAX','2e-3'))),80)])
     for f0 in fk*2**(np.linspace(-0.5,0.5,41)/12):
         for B in Bs:
             n=np.arange(1,17); fn=n*f0*np.sqrt(1+B*n*n); fn=fn[fn<0.45*sr]
