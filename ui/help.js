@@ -232,6 +232,15 @@ const HELP = {
       ['CC82', 'A file or a keyboard knob sets it too, on the part\'s channel: 0 the cabinet in the room, 1 to 127 two mics, the value \u00d7 180/127 degrees apart (96 is 136\u00b0, the Rotary effect\'s own scale). A note hears the setting it starts under.'],
     ],
   },
+  spectra: {
+    title: 'Spectra-Tone',
+    intro: 'A 60\'s organ\'s turning speaker: two small speakers back to back on one rotor inside the console. Their beams sweep past you, so the higher a note the more swells it makes each turn, with a slight wobble of pitch. Choose it under Speaker for the part: SPECTRA-TONE sends the manual through the rotor, ST CHORUS through the rotor and the console speakers together.',
+    terms: [
+      ['CATHEDRAL', 'The rocker down: the rotor turning slowly, about one turn in two seconds.'],
+      ['THEATER', 'The rocker up: the rotor turning fast, about three turns a second. It climbs there over several seconds and drops back to Cathedral in about one.'],
+      ['CC80', 'A file or a keyboard sets it too, on the part\'s channel: below 64 Cathedral, 64 and over Theater.'],
+    ],
+  },
   amp: {
     title: 'Amp',
     intro: 'What the selected part\'s voice plays through, as it is modelled: a guitar\'s, a bass\'s or a Clavinet\'s pickups, its valve amplifier, the speaker it drives, and an organ\'s Leslie. An acoustic voice has none of these: it is heard as it is.',
@@ -264,7 +273,7 @@ const HELP = {
       ['LESLIE', 'A tonewheel organ\'s rotating speaker: its horn and drum turning. Only an organ offers it. Its speed and how it is heard are on the AMP card\'s LESLIE.'],
       ['HAMMOND', 'A Hammond\'s own speaker, no rotors: the spinet\'s single 12-inch cone.'],
       ['Level', 'A Leslie coming or going keeps the organ\'s level: the rotors\' path is quieter than a fixed speaker\'s, and that is put back.'],
-      ['CC83', 'A file or a keyboard chooses it too, on the part\'s channel, at once (the next notes). A program change puts it back to the voice\'s own, so a file sends it after the program change, as it would a volume: bank select, program change, then CC83 and CC85. 0 the voice\'s own, 1 direct, 2 a Leslie, 3 the Hammond\'s speaker, 4 a 1x12 guitar combo, 5 a closed 4x12, 6 a JC-120, 7 a bass 4x10, 8 the Rhodes suitcase, 9 the Wurlitzer\'s lid. One the voice does not offer leaves it its own.'],
+      ['CC83', 'A file or a keyboard chooses it too, on the part\'s channel, at once (the next notes). A program change puts it back to the voice\'s own, so a file sends it after the program change, as it would a volume: bank select, program change, then CC83 and CC85. 0 the voice\'s own, 1 direct, 2 a Leslie, 3 the Hammond\'s speaker, 4 a 1x12 guitar combo, 5 a closed 4x12, 6 a JC-120, 7 a bass 4x10, 8 the Rhodes suitcase, 9 the Wurlitzer\'s lid, 10 a Spectra-Tone, 11 its Chorus (a 60\'s organ\'s manuals). One the voice does not offer leaves it its own.'],
     ],
   },
   piano: {
@@ -842,7 +851,7 @@ const HELP_TOC = [
   ['Library', ['library']],
   ['Synth', ['synth', 'synth:LFO 1', 'synth:Left hand', 'synth:Oscillators', 'synth:Mixer', 'synth:Filter', 'synth:Envelopes', 'synth:Delay']],
   ['Stops', ['stops', 'drive', 'rotary']],
-  ['Amp', ['amp', 'pickup', 'drive', 'cabinet', 'rotary']],
+  ['Amp', ['amp', 'pickup', 'drive', 'cabinet', 'rotary', 'spectra']],
   ['Piano', ['piano', 'piano:pedals', 'piano:dampers', 'piano:key']],
   ['Drums', ['drums', 'drums:user']],
   ['Effects', ['effects', 'fx:ins', 'fx:sends', 'fx:rev', 'fx:cho', 'fx:dly', 'fx:eq']],

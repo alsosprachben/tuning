@@ -7554,6 +7554,12 @@ class DividerOrganProperties(TonewheelProperties):
     cabinet = None
     amp_drive = 0.0
     wheel_swell = True
+    # THE SPECTRA-TONE (spectratone.py): None the console speakers; 'rotor'
+    # (SPECTRA-TONE UPPER/LOWER) or 'chorus' -- chosen on the part, CC83
+    # (patch_map.SPECTRA_CHOICES); the rocker up (Theater, fast) by default
+    spectratone = None
+    spectratone_fast = True
+    spectratone_offer = True
     # THE KEYING: no click, no contacts to bounce
     contact_spread_s = 0.0
     contact_noise_db = ()
@@ -7791,6 +7797,7 @@ class DividerPedalProperties(DividerOrganProperties):
     program of its own -- its four tabs, the same keying, the same speakers. On
     the console the pedals are monophonic (a neon latch holds the last pedal
     pressed): not modelled here, the part plays as it is played."""
+    spectratone_offer = False           # (the pedals have no Spectra-Tone tab)
     stop_ranks = [
         ("Bourdon 16'", 0.5, 1.0, DividerBourdon16Properties),
         ("Principal 16'", 0.5, 1.0, DividerPrincipal16Properties),

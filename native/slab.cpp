@@ -247,11 +247,14 @@ static const long long IDLE = 1LL << 62;        // live.IDLE
 static const char *F8[] = {"om", "p0", "p0R", "fmw", "fmp", "fmpR"};
 static const char *F4[] = {"aL", "aR", "nf", "fa", "re", "ch", "logr", "logrA", "aft", "sus", "cv", "cc", "crl",
                            "sj", "csc", "cbw", "tbav", "tau", "tcut", "vd", "vr", "vp", "delL", "delR", "az", "rdl",
-                           "nfr"};
+                           "nfr", "lfl", "lsh"};
 static const char *F4N[] = {"gb", "gt", "gc", "vdl"};
 static const char *I8[] = {"non", "noff"};
-static const char *I4[] = {"gr", "cr", "br", "pl", "fx", "mk"};
-enum { NF8 = 6, NF4 = 27, NF4N = 4, NI8 = 2, NI4 = 6 };
+static const char *I4[] = {"gr", "cr", "br", "pl", "fx", "mk", "lsr"};
+enum { NF8 = 6, NF4 = nv::live::NV_LF4, NF4N = 4, NI8 = 2, NI4 = nv::live::NV_LI4 };
+// THE SPECTRA-TONE's (live.CONE_COLS): its path's azimuth az, its place in
+// the cone table lfl, lsh -1 marking a cone row; lsr its rotor (0, -1 none)
+enum { F4_az = 24, F4_lfl = 27, F4_lsh = 28, I4_lsr = 6 };
 enum { F4_aL = 0, F4_aR = 1, F4_nf = 2, F4_fa = 3, F4_re = 4, F4_ch = 5, F4_logr = 6, F4_logrA = 7, F4_aft = 8, F4_sus = 9, F4_cbw = 15, F4_vd = 19, F4_vr = 20, F4_delL = 22, F4_delR = 23, F4_rdl = 25 };
 enum { F8_om = 0, F8_p0 = 1, F8_p0R = 2, F8_fmw = 3, F8_fmp = 4, F8_fmpR = 5 };
 enum { F4_nfr = 26 };
@@ -624,8 +627,9 @@ struct Slab {
         i4.assign(NI4, std::vector<int32_t>(full, 0));
         // live.Slab's rest: no gate, bend row or Moog filter row (-1); unit
         // gains, harmonic ratio and vibrato scale; the vibrato at 5.5 Hz
-        for (int c : {I4_gr, I4_br, I4_fx})
+        for (int c : {(int)I4_gr, (int)I4_br, (int)I4_fx, (int)I4_lsr})
             i4[c].assign(full, -1);
+        f4[F4_lfl].assign(full, 1.0f);          // (CONE_COLS: on no rotor)
         f4[F4_cbw].assign(full, 100000.0f);     // the wash's width: blockrender.RAND_GRAN, never 0
         sw.assign(full, 1.0f);
         aL0.assign(cap, 0.0f); aR0.assign(cap, 0.0f); sg.assign(cap, 1.0f); sre.assign(cap, 1.0f);
@@ -845,16 +849,16 @@ struct Slab {
                  double scat = NAN)
     {
         const double *f8p[6];
-        const float *f4p[27];
+        const float *f4p[NF4];
         const long long *i8p[2];
-        const int32_t *i4p[6];
+        const int32_t *i4p[NI4];
         for (int c = 0; c < 6; c++)
             f8p[c] = T.f8[c].data();
-        for (int c = 0; c < 27; c++)
+        for (int c = 0; c < NF4; c++)
             f4p[c] = T.f4[c].data();
         for (int c = 0; c < 2; c++)
             i8p[c] = T.i8[c].data();
-        for (int c = 0; c < 6; c++)
+        for (int c = 0; c < NI4; c++)
             i4p[c] = T.i4[c].data();
         return stamp(f8p, f4p, i8p, i4p, T.hrel.data(), T.P, key, n0, vel_scale, T.dur, T.oneshot, T.send, ch,
                      T.sof.empty() ? nullptr : T.sof.data(), T.rof.empty() ? nullptr : T.rof.data(),
@@ -2929,6 +2933,9 @@ struct Part {
         // A HAMMOND'S (live.Patch): on the rotors (leslie), the wheel its
         // swell pedal (wheel_swell), its valve's drive (amp_drive)
         bool leslie = false, wheel_swell = false;
+        // ...or ITS SPECTRA-TONE (live's Patch.spectra: 1 the rotor, 2 Chorus,
+        // 0 none) and its rocker's start (spectra_fast)
+        int spectra = 0, spectra_fast = 1;
         // ...ITS TOUCH (live's Patch.touch_sensitive): whether velocity sets
         // the level -- not on an accordion, whose key only opens a valve
         bool touch = true;
@@ -3066,6 +3073,17 @@ struct Part {
         }
     } rotor_horn, rotor_drum;
     int half_moon = 1;
+    // ...AND ONE SPECTRA-TONE (live's rotor_spectra): one rotor for the
+    // console, its numbers native.spectra_constants' (nv_part_spectra), its
+    // kernel the cone build's synth_voice_lobe; turned only while a cone row
+    // sounds, the kernel handed its angles over the block (cone_block)
+    LRotor rotor_spectra;
+    std::vector<double> spec;
+    double rotor_spectra_mid() const { return spec.size() >= 11 ? 0.5 * (spec[7] + spec[8]) : 1e9; }
+    void *scone = nullptr;
+    bool cone_on = false;
+    std::vector<float> cone_lang, cone_ones;
+    long cone_code = 0;
     std::map<int, bool> pw_armed;
     double ls_rate = -1.0;
 
@@ -3448,21 +3466,21 @@ struct Part {
                 return;
             // each copy: the rank's row, its pitch moved m scan steps, its level and phase by its gain
             std::vector<double> f8c[6], aL64(ns), aR64(ns);
-            std::vector<float> f4c[27], hr(ns);
+            std::vector<float> f4c[NF4], hr(ns);
             std::vector<long long> i8c[2], cofc;
-            std::vector<int32_t> i4c[6];
+            std::vector<int32_t> i4c[NI4];
             std::vector<char> lfl;
             for (int c = 0; c < 6; c++) f8c[c].resize(ns);
-            for (int c = 0; c < 27; c++) f4c[c].resize(ns);
+            for (int c = 0; c < NF4; c++) f4c[c].resize(ns);
             for (int c = 0; c < 2; c++) i8c[c].resize(ns);
-            for (int c = 0; c < 6; c++) i4c[c].resize(ns);
+            for (int c = 0; c < NI4; c++) i4c[c].resize(ns);
             std::vector<double> dwx(ns), nf64(ns);
             for (long j = 0; j < ns; j++) {
                 long q = g.src[j];
                 for (int c = 0; c < 6; c++) f8c[c][j] = R.f8[c][q];
-                for (int c = 0; c < 27; c++) f4c[c][j] = R.f4[c][q];
+                for (int c = 0; c < NF4; c++) f4c[c][j] = R.f4[c][q];
                 for (int c = 0; c < 2; c++) i8c[c][j] = R.i8[c][q];
-                for (int c = 0; c < 6; c++) i4c[c][j] = R.i4[c][q];
+                for (int c = 0; c < NI4; c++) i4c[c][j] = R.i4[c][q];
                 double m = g.mm[j], cr = g.cc[2 * j], ci = g.cc[2 * j + 1];
                 double om1 = R.f8[F8_om][q] + 2.0 * M_PI * scan[0] / rate * m;
                 dwx[j] = om1 - R.f8[F8_om][q];
@@ -3478,11 +3496,11 @@ struct Part {
                 if (!R.cof.empty()) cofc.push_back(R.cof[q]);
                 lfl.push_back(R.lflip.empty() ? 0 : R.lflip[q]);
             }
-            const double *f8p[6]; const float *f4p[27]; const long long *i8p[2]; const int32_t *i4p[6];
+            const double *f8p[6]; const float *f4p[NF4]; const long long *i8p[2]; const int32_t *i4p[NI4];
             for (int c = 0; c < 6; c++) f8p[c] = f8c[c].data();
-            for (int c = 0; c < 27; c++) f4p[c] = f4c[c].data();
+            for (int c = 0; c < NF4; c++) f4p[c] = f4c[c].data();
             for (int c = 0; c < 2; c++) i8p[c] = i8c[c].data();
-            for (int c = 0; c < 6; c++) i4p[c] = i4c[c].data();
+            for (int c = 0; c < NI4; c++) i4p[c] = i4c[c].data();
             Key sk(pid, ch, note, SCANSIDE0 + (rank_layer(patches[cur].organ, ri) - RANK0));
             if (!S.stamp(f8p, f4p, i8p, i4p, hr.data(), ns, sk, n0, scale, 0, false, NAN, ch, nullptr, nullptr, 0.0,
                          0.0, cofc.empty() ? nullptr : cofc.data(), aL64.data(), aR64.data())) {
@@ -3519,11 +3537,11 @@ struct Part {
             return;
         }
         put(dry_slots, g.dry, false);
-        const double *f8p[6]; const float *f4p[27]; const long long *i8p[2]; const int32_t *i4p[6];
+        const double *f8p[6]; const float *f4p[NF4]; const long long *i8p[2]; const int32_t *i4p[NI4];
         for (int c = 0; c < 6; c++) f8p[c] = R.f8[c].data();
-        for (int c = 0; c < 27; c++) f4p[c] = R.f4[c].data();
+        for (int c = 0; c < NF4; c++) f4p[c] = R.f4[c].data();
         for (int c = 0; c < 2; c++) i8p[c] = R.i8[c].data();
-        for (int c = 0; c < 6; c++) i4p[c] = R.i4[c].data();
+        for (int c = 0; c < NI4; c++) i4p[c] = R.i4[c].data();
         Key ck(pid, ch, note, SCAN0 + (rank_layer(patches[cur].organ, ri) - RANK0));
         if (!S.stamp(f8p, f4p, i8p, i4p, R.hrel.data(), R.P, ck, n0, scale, 0, false, NAN, ch,
                      R.sof.empty() ? nullptr : R.sof.data(), R.rof.empty() ? nullptr : R.rof.data(), 0.0, 0.0,
@@ -4323,6 +4341,57 @@ struct Part {
         }
     }
 
+    // numpy's mod (npy_divmod's remainder), for an angle wrapped to a turn
+    static double np_mod(double a, double b)
+    {
+        double m = fmod(a, b);
+        if (m != 0.0) {
+            if ((b < 0) != (m < 0))
+                m += b;
+        } else {
+            m = copysign(0.0, b);
+        }
+        return m;
+    }
+    // THE SPECTRA-TONE, this block (live's _cone_block): while a cone row
+    // sounds its rotor turns and the kernel is handed its angles on the grid
+    // over the block -- one row, from grid point org on, its lgn -(org << 16
+    // | length) (synthkernel.c cone_grid); else none
+    void cone_block(long long n0, long long blk)
+    {
+        if (!scone || spec.size() < 11) {
+            cone_on = false;
+            return;
+        }
+        bool on = false;
+        for (long q = 0; q < S.cap && !on; q++)
+            on = S.busy[q] && S.f4[F4_lsh][q] < 0.0f;
+        if (!on) {
+            cone_on = false;
+            return;
+        }
+        LRotor &r = rotor_spectra;
+        double a0 = r.angle;
+        double a1 = r.advance((double)blk / rate);
+        if (a1 < a0)                        // (advance wrapped it: fmod, far on)
+            a0 = a1 - 2.0 * M_PI * r.rate * (double)blk / rate;
+        const long long mg = (blk % 128 == 0 && blk / 128 <= 64) ? 128 : blk;     // (leslie.rotor_grid)
+        const long long g_lo = (n0 / blk) * blk / mg;
+        const long long g_hi = ((n0 + blk + blk - 1) / blk) * blk / mg + 1;
+        const long long n = g_hi - g_lo + 1;
+        if ((long long)cone_lang.size() < n)
+            cone_lang.assign((size_t)std::max(n, 64LL), 0.0f);
+        for (long long j = 0; j < n; j++) {
+            const double g = (double)(g_lo + j) * (double)mg;
+            const double ang = a0 + (a1 - a0) * (g - (double)n0) / (double)blk;
+            cone_lang[(size_t)j] = (float)np_mod(ang, 2.0 * M_PI);
+        }
+        cone_code = -(long)((g_lo << 16) | n);
+        if (cone_ones.size() < S.f4[F4_az].size())
+            cone_ones.assign(S.f4[F4_az].size(), 1.0f);
+        cone_on = true;
+    }
+
     void leslie_block(long long n0, long long blk)
     {
         if (S.les.empty() || !S.any_leslie())
@@ -4342,6 +4411,8 @@ struct Part {
     {
         const NoteClass *k = p.drums ? nullptr : nv_tcache_class(p.cache, p.program);
         p.leslie = k && k->leslie;
+        p.spectra = k ? k->spectra : 0;
+        p.spectra_fast = k ? k->spectra_fast : 1;
         p.wheel_swell = k && k->wheel_swell;
         p.touch = p.drums || !k || k->touch_sensitive;
         p.wtrem = og ? og->wheel_trem : (k ? k->trem_depth : 0.0);
@@ -6917,10 +6988,10 @@ struct Part {
                     dst.push_back(src[q]);
         };
         for (int c = 0; c < 6; c++) cut(o.f8[c], T.f8[c]);
-        for (int c = 0; c < 27; c++) cut(o.f4[c], T.f4[c]);
+        for (int c = 0; c < NF4; c++) cut(o.f4[c], T.f4[c]);
         for (int c = 0; c < 4; c++) cut(o.f4n[c], T.f4n[c]);
         for (int c = 0; c < 2; c++) cut(o.i8[c], T.i8[c]);
-        for (int c = 0; c < 6; c++) cut(o.i4[c], T.i4[c]);
+        for (int c = 0; c < NI4; c++) cut(o.i4[c], T.i4[c]);
         cut(o.hrel, T.hrel); cut(o.fa_at, T.fa_at); cut(o.rof, T.rof); cut(o.sof, T.sof); cut(o.cof, T.cof);
         cut(o.lflip, T.lflip); cut(o.lhorn, T.lhorn); cut(o.lfl, T.lfl); cut(o.lsh, T.lsh); cut(o.lnrm, T.lnrm);
         cut(o.push, T.push);
@@ -8569,16 +8640,16 @@ struct Part {
         if (patches[cur].organ && patches[cur].organ->n_lvl)        // (its level stops')
             scale *= level_gain(patches[cur].organ, ri, lvl_want ? *lvl_want : patches[cur].drawn);
         const double *f8p[6];
-        const float *f4p[27];
+        const float *f4p[NF4];
         const long long *i8p[2];
-        const int32_t *i4p[6];
+        const int32_t *i4p[NI4];
         for (int c = 0; c < 6; c++)
             f8p[c] = R.f8[c].data();
-        for (int c = 0; c < 27; c++)
+        for (int c = 0; c < NF4; c++)
             f4p[c] = R.f4[c].data();
         for (int c = 0; c < 2; c++)
             i8p[c] = R.i8[c].data();
-        for (int c = 0; c < 6; c++)
+        for (int c = 0; c < NI4; c++)
             i4p[c] = R.i4[c].data();
         if (!S.stamp(f8p, f4p, i8p, i4p, R.hrel.data(), R.P, key, n0, scale, 0, false, NAN, ch,
                      R.sof.empty() ? nullptr : R.sof.data(), R.rof.empty() ? nullptr : R.rof.data(), 0.0, 0.0,
@@ -8702,16 +8773,16 @@ struct Part {
             long long jl = rank_layer(jog, ri) - RANK0;
             const nv::live::Template &J = T.jacks[q];
             const double *f8p[6];
-            const float *f4p[27];
+            const float *f4p[NF4];
             const long long *i8p[2];
-            const int32_t *i4p[6];
+            const int32_t *i4p[NI4];
             for (int c = 0; c < 6; c++)
                 f8p[c] = J.f8[c].data();
-            for (int c = 0; c < 27; c++)
+            for (int c = 0; c < NF4; c++)
                 f4p[c] = J.f4[c].data();
             for (int c = 0; c < 2; c++)
                 i8p[c] = J.i8[c].data();
-            for (int c = 0; c < 6; c++)
+            for (int c = 0; c < NI4; c++)
                 i4p[c] = J.i4[c].data();
             Key key(pid, ch, note, KEYUP0 + jl);
             if (!S.stamp(f8p, f4p, i8p, i4p, J.hrel.data(), J.P, key, n0, scale, J.dur, true, NAN, ch, nullptr,
@@ -9165,16 +9236,16 @@ struct Part {
             return;
         const nv::live::Template &R = T.rel[0];
         const double *f8p[6];
-        const float *f4p[27];
+        const float *f4p[NF4];
         const long long *i8p[2];
-        const int32_t *i4p[6];
+        const int32_t *i4p[NI4];
         for (int c = 0; c < 6; c++)
             f8p[c] = R.f8[c].data();
-        for (int c = 0; c < 27; c++)
+        for (int c = 0; c < NF4; c++)
             f4p[c] = R.f4[c].data();
         for (int c = 0; c < 2; c++)
             i8p[c] = R.i8[c].data();
-        for (int c = 0; c < 6; c++)
+        for (int c = 0; c < NI4; c++)
             i4p[c] = R.i4[c].data();
         Key key(pid, ch, note, KEYUP_REL);
         if (!S.stamp(f8p, f4p, i8p, i4p, R.hrel.data(), R.P, key, n0, scale, R.dur, true, NAN, ch,
@@ -10991,6 +11062,12 @@ struct Part {
                 rotor_horn.target = ladder[half_moon];
                 rotor_drum.target = ladder[half_moon];
             }
+            // ...a Spectra-Tone's rocker: below 64 Cathedral (spectratone.zone)
+            bool spc = false;
+            for (const Patch &p : patches)
+                spc = spc || (p.spectra && (p.channel < 0 || p.channel == pc(ch)));
+            if (spc && spec.size() >= 11)
+                rotor_spectra.target = v < 64 ? spec[7] : spec[8];
         }
         if (cc == 82) {
             // THE ROTARY HEARD (tonelib.ROTARY_CC): the channel's parts switched
@@ -12780,9 +12857,9 @@ struct Part {
         std::vector<long long> bus_saved;
         std::vector<long> rows[3][4];               // (the slab's, the taps', the bus's: keep, fast, damp, moogx)
         std::vector<double> d[6];
-        std::vector<float> f[32];
+        std::vector<float> f[40];
         std::vector<long> l[2];
-        std::vector<int> i[6];
+        std::vector<int> i[8];
         std::vector<float> BL, BR, BSL, BSR, oL, oR;
     } rn;
     void rt_prepare(long frames)
@@ -12842,6 +12919,8 @@ struct Part {
                 S.i8[0][S.bus_hide[q]] = IDLE;
             }
         }
+        if (cone_on)                        // (a Spectra-Tone sounding: the CPU's, cone_grid -- live's)
+            on_gpu = false;
         if (on_gpu && !render_gpu(n0, frames, L, R, SL, SR, blk))
             on_gpu = false;
         if (!on_gpu) {
@@ -12867,14 +12946,22 @@ struct Part {
         for (long q = 0; q < hi; q++)
             if (S.busy[q])
                 (mxq(q) ? mxr : S.dk[q] >= 0 && sd ? dm : fast(q) ? xr : keep).push_back(q);
-#define VOICE_ARGS L, R, (long)n0, frames, (int)blk, 1, (int)n, gd(S.f8[0], 0), gd(S.f8[1], 1), gd(S.f8[2], 2), \
+#define VOICE_HEAD L, R, (long)n0, frames, (int)blk, 1, (int)n, gd(S.f8[0], 0), gd(S.f8[1], 1), gd(S.f8[2], 2), \
     gf(F4[0]), gf(F4[1]), gf(F4[2]), gl(S.i8[0], 0), gl(S.i8[1], 1), gf(F4[3]), gf(F4[4]), gf(F4[5]), gf(F4[6]), \
     gf(F4[7]), gf(F4[8]), gf(F4[9]), gf(F4[10]), gf(F4[11]), gf(F4[12]), gf(F4[13]), gf(F4[14]), gf(F4[15]), \
     gf(F4[16]), gf(F4[17]), gf(F4[18]), gf(F4N[0]), gf(F4N[1]), gf(F4N[2]), gf(F4[19]), gf(F4[20]), gf(F4[21]), \
     gf(F4N[3]), gf(F4[22]), gf(F4[23]), gi(S.i4[0]), gi(S.i4[1]), G.data(), Sx.data(), gi(S.i4[2]), BRt.data(), \
     BCt.data(), BLt.data(), gi(S.i4[4]), FT.data(), KN.data(), 2, kb0, gf(S.aLp), gf(S.aRp), gi(S.i4[5]), \
     MPI.data(), MPC.data(), MPR.data(), MKI.data(), MPK.data(), gd(S.f8[3], 3), gd(S.f8[4], 4), gd(S.f8[5], 5), \
-    sh[0], sh[1], sh[2], sh[3], chunk, SL ? gf(S.sw) : nullptr, SL, SR
+    sh[0], sh[1], sh[2], sh[3]
+#define VOICE_TAIL chunk, SL ? gf(S.sw) : nullptr, SL, SR
+#define VOICE_ARGS VOICE_HEAD, VOICE_TAIL
+        // A SPECTRA-TONE SOUNDING (cone_block): the rows synth_voice would take
+        // through the cone build's synth_voice_lobe instead -- its rotor
+        // columns (lsr, lph = az, lfl, lsh, lnm = 1) and the block's angles,
+        // no moving filter -- as live's slab hands blockrender.synth_partials
+        // its LANG (lobe_fn's cone library)
+        void *svk = cone_on ? scone : sv;
         auto call = [&](void *fn, const long *rows, long n, bool whole, bool damp) {
             if (!n)
                 return;
@@ -12915,26 +13002,32 @@ struct Part {
                 // synth_voice_damp: synth_voice's arguments, then the tracks
                 else
                     ((nv_damp_fn)fn)(VOICE_ARGS, dkr.data(), dgr.data(), DM.data(), DMO.data(), DMB.data(), DMN.data());
+            } else if (cone_on && fn == scone) {
+                const int *lsr_ = gi(S.i4[I4_lsr]);
+                const float *lph_ = gf(F4[F4_az]), *lfl_ = gf(F4[F4_lfl]), *lsh_ = gf(F4[F4_lsh]),
+                            *lnm_ = gf(cone_ones);
+                ((nv_lobe_fn)fn)(VOICE_HEAD, lsr_, lph_, lfl_, lsh_, lnm_, cone_lang.data(), cone_code,
+                                 nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0L, VOICE_TAIL);
             } else {
                 ((nv_voice_fn)fn)(VOICE_ARGS);
             }
         };
         if (!mxr.empty()) {
-            call(sv, keep.data(), (long)keep.size(), false, false);
+            call(svk, keep.data(), (long)keep.size(), false, false);
             call(sx, xr.data(), (long)xr.size(), false, false);
             call(sd, dm.data(), (long)dm.size(), false, true);
             call(smx, mxr.data(), (long)mxr.size(), false, true);
         } else if (!dm.empty()) {
-            call(sv, keep.data(), (long)keep.size(), false, false);
+            call(svk, keep.data(), (long)keep.size(), false, false);
             call(sx, xr.data(), (long)xr.size(), false, false);
             call(sd, dm.data(), (long)dm.size(), false, true);
         } else if (!xr.empty()) {
-            call(sv, keep.data(), (long)keep.size(), false, false);
+            call(svk, keep.data(), (long)keep.size(), false, false);
             call(sx, xr.data(), (long)xr.size(), false, false);
         } else if (2 * (long)keep.size() < hi) {
-            call(sv, keep.data(), (long)keep.size(), false, false);    // (sparse: the busy ones gathered)
+            call(svk, keep.data(), (long)keep.size(), false, false);    // (sparse: the busy ones gathered)
         } else {
-            call(sv, nullptr, hi, true, false);
+            call(svk, nullptr, hi, true, false);
         }
         if (S.tap_m) {                      // the taps' scratch rows (Slab.tap_fill), after
             std::vector<long> &keep2 = rn.rows[1][0], &xr2 = rn.rows[1][1], &dm2 = rn.rows[1][2], &mx2 = rn.rows[1][3];
@@ -12943,16 +13036,16 @@ struct Part {
             for (long q = S.cap; q < S.cap + S.tap_m; q++)
                 (mxq(q) ? mx2 : S.dk[q] >= 0 && sd ? dm2 : fast(q) ? xr2 : keep2).push_back(q);
             if (!mx2.empty()) {
-                call(sv, keep2.data(), (long)keep2.size(), false, false);
+                call(svk, keep2.data(), (long)keep2.size(), false, false);
                 call(sx, xr2.data(), (long)xr2.size(), false, false);
                 call(sd, dm2.data(), (long)dm2.size(), false, true);
                 call(smx, mx2.data(), (long)mx2.size(), false, true);
             } else if (!dm2.empty()) {
-                call(sv, keep2.data(), (long)keep2.size(), false, false);
+                call(svk, keep2.data(), (long)keep2.size(), false, false);
                 call(sx, xr2.data(), (long)xr2.size(), false, false);
                 call(sd, dm2.data(), (long)dm2.size(), false, true);
             } else {
-                call(sv, keep2.data(), (long)keep2.size(), false, false);
+                call(svk, keep2.data(), (long)keep2.size(), false, false);
                 call(sx, xr2.data(), (long)xr2.size(), false, false);
             }
         }
@@ -12976,7 +13069,7 @@ struct Part {
                 const long c1 = S.cap + S.tap_m;
                 for (long q = c1; q < c1 + S.bus_m; q++)
                     (mxq(q) ? mx3 : S.dk[q] >= 0 && sd ? dm3 : fast(q) ? xr3 : keep3).push_back(q);
-                call(sv, keep3.data(), (long)keep3.size(), false, false);
+                call(svk, keep3.data(), (long)keep3.size(), false, false);
                 call(sx, xr3.data(), (long)xr3.size(), false, false);
                 if (!dm3.empty())
                     call(sd, dm3.data(), (long)dm3.size(), false, true);
@@ -13007,6 +13100,8 @@ struct Part {
             }
         }
 #undef VOICE_ARGS
+#undef VOICE_HEAD
+#undef VOICE_TAIL
         }
         // the master gain (float32, as numpy multiplies by a Python float) and
         // the clip; the room's send scaled, not clipped
@@ -13551,9 +13646,10 @@ struct Part {
     std::atomic<long> amp_seq{0};
     void amp_mark()
     {
-        double s = half_moon * 1.0e6;
+        double s = half_moon * 1.0e6 + (rotor_spectra.target > rotor_spectra_mid() ? 5.0e5 : 0.0);
         for (size_t i = 0; i < patches.size(); i++)
-            s += (patches[i].amp * 31.0 + patches[i].drive * 7.0 + (patches[i].leslie ? 3.0 : 0.0)) * (double)(i + 1);
+            s += (patches[i].amp * 31.0 + patches[i].drive * 7.0 + (patches[i].leslie ? 3.0 : 0.0)
+                  + patches[i].spectra * 11.0) * (double)(i + 1);
         for (const auto &d : drive_step)
             s += 1000.0 * d.second * (double)(d.first % 97 + 1);
         if (s != amp_sig) {
@@ -13637,6 +13733,7 @@ struct Part {
         if (!scan_row.empty())                  // the scanners' band rows (live's _scanner_block)
             scanner_block(n0, blk);
         tremolo_block(n0);                      // (live's swing, after the reap)
+        cone_block(n0, blk);                    // ...the Spectra-Tone's rotor (live's _cone_block)
         leslie_block(n0, blk);                  // ...then the rotors'
         if ((efx && nv_efx_live_parts(efx)) || !tone_fx.empty() || S.tap_m)
             efx_rotary_sync();                  // (the Rotary type's rotors: live._efx_rotary_sync)
@@ -14137,6 +14234,9 @@ int nv_part_amp_get(void *h, int pi, double *out)
     out[3] = P->half_moon;
     out[4] = p.leslie ? 1.0 : 0.0;
     out[5] = f;
+    // ...its Spectra-Tone (1 the rotor, 2 Chorus, 0 none) and its rocker (1 up: Theater)
+    out[6] = (double)p.spectra;
+    out[7] = P->spec.size() >= 11 && P->rotor_spectra.target >= 0.5 * (P->spec[7] + P->spec[8]) ? 1.0 : 0.0;
     if (p.drums)
         return 0;
     if (p.leslie || p.wheel_swell)
@@ -14761,6 +14861,29 @@ int nv_part_display(void *h, char *text, double *text_age, int *page, unsigned c
 // THE MOOG EXTENSIONS' KERNELS (blockrender.ensure_moogx_lib, ensure_gpu_moogx_lib):
 // synth_voice_moogx (smx), and the GPU build's voice_block, voice_damp_set and
 // voice_moogx_set (vbm, vmd, vmm; NULL: none)
+// THE SPECTRA-TONE (live's rotor_spectra, Slab.cone_window): its numbers
+// (native.spectra_constants) and the cone build's synth_voice_lobe, its table
+// set (nv_cone_table); its rotor at its spin times, on the first such part's
+// rocker (Theater unless it starts down)
+void nv_part_spectra(void *h, const double *sp, int n, void *scone)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    P->spec.assign(sp, sp + n);
+    P->scone = scone;
+    if (n < 11)
+        return;
+    P->rotor_spectra.up = sp[9];
+    P->rotor_spectra.down = sp[10];
+    P->rotor_spectra.ratio = 1.0;
+    double r0 = sp[8];
+    for (const auto &p : P->patches)
+        if (p.spectra) {
+            r0 = p.spectra_fast ? sp[8] : sp[7];
+            break;
+        }
+    P->rotor_spectra.rate = P->rotor_spectra.target = r0;
+}
+
 void nv_part_moogx(void *h, void *smx, void *vbm, void *vmd, void *vmm)
 {
     nv::slab::Part *P = (nv::slab::Part *)h;

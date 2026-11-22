@@ -589,6 +589,8 @@ struct Export {
     OrganSpec *organs = nullptr;          // ORGA: the registered organs' tables, mapped as the classes
     std::vector<int> cls_organ, prog_organ;   // each class's organ, each program's (-1 none, -2 not the engine's)
     std::vector<double> les;              // LESL: the rotating speaker's constants
+    std::vector<double> spec;             // ...the Spectra-Tone's (native.spectra_constants)
+    std::string cone_lib;                 // ...and its kernel's library (synth_voice_lobe with cone_grid)
     std::string lobe_lib;                 // ...and synth_voice_lobe's library
     std::vector<double> scan;             // SCAN: the scanner's constants and tables
     // VARS (bank select): the slots' classes at each key (cmap's, slot by
@@ -688,6 +690,19 @@ static bool read_export(const char *path, Export &E)
             if (ok) {
                 E.lobe_lib.resize(n);
                 ok = fread(&E.lobe_lib[0], 1, n, f) == (size_t)n;
+            }
+            // ...THE SPECTRA-TONE's numbers and cone table (native.spectra_constants), its kernel's library
+            if (ok) {
+                int ns = 0, nc = 0;
+                ok = fread(&ns, 4, 1, f) == 1 && ns >= 0 && ns < (1 << 24);
+                if (ok) {
+                    E.spec.resize((size_t)ns);
+                    ok = fread(E.spec.data(), 8, (size_t)ns, f) == (size_t)ns && fread(&nc, 4, 1, f) == 1;
+                }
+                if (ok) {
+                    E.cone_lib.resize((size_t)nc);
+                    ok = fread(&E.cone_lib[0], 1, (size_t)nc, f) == (size_t)nc;
+                }
             }
             // SCAN: the scanner's constants and circuit tables (scanner.cpp's)
             pos = ftell(f);
@@ -980,7 +995,7 @@ static int run(int argc, char **argv)
         return 1;
     }
     // (the libraries it records: an app's own copies where it carries them)
-    for (std::string *lp : {&E.libs[0], &E.libs[1], &E.libs[2], &E.lobe_lib})
+    for (std::string *lp : {&E.libs[0], &E.libs[1], &E.libs[2], &E.lobe_lib, &E.cone_lib})
         *lp = nv_reloc_lib(*lp);
     // the variations' keys after the drum sets' (NV_K_VAR + 128 x slot + key)
     E.dmap.resize(256, -1);                 // (the drones' region, NV_K_DRONE: before the variations)
@@ -3177,6 +3192,7 @@ static int run(int argc, char **argv)
     std::vector<long long> lch;
     std::vector<int> lnreq;
     std::vector<double> lreq, lgs;
+    bool spectra = false;                   // (a Spectra-Tone among them: the cone kernel's, below)
     void *lobe[5] = {nullptr};
     const double *LES = E.les.data();
     for (int k = 0, nl = nv_song_leslie(song, -1, nullptr); k < nl; k++) {
@@ -3191,6 +3207,34 @@ static int run(int argc, char **argv)
             return 1;
         }
         int nq = 0;
+        if (kind >= 8) {
+            // A SPECTRA-TONE (spectratone.requests, .channel): its rocker
+            // from CC80 -- below 64 Cathedral -- on its own start from 0; its
+            // record -1, its spin times, its mode and the cone table's
+            // geometry (leslie.cpp's make_rotors and nv_leslie_row read it)
+            const double *SP = E.spec.data();
+            if (E.spec.size() < 11) {
+                fprintf(stderr, "nvrender: %s is an export from before the Spectra-Tone (native_export.py again)\n",
+                        argv[1]);
+                return 1;
+            }
+            if (nc == 0 || ct[0] > 0.0) {
+                lreq.push_back(0.0);
+                lreq.push_back((kind & 1) ? SP[8] : SP[7]);
+                nq++;
+            }
+            for (int q = 0; q < nc; q++) {
+                lreq.push_back(ct[q]);
+                lreq.push_back(cv[q] < 64 ? SP[7] : SP[8]);     // spectratone.zone
+                nq++;
+            }
+            lch.push_back(c);
+            lnreq.push_back(nq);
+            const double g[10] = {-1.0, SP[9], SP[10], (double)((kind - 8) / 2), SP[2], SP[3], SP[0], 0.0, 0.0, 0.0};
+            lgs.insert(lgs.end(), g, g + 10);
+            spectra = true;
+            continue;
+        }
         if (nc == 0 || ct[0] > 0.0) {
             lreq.push_back(0.0);
             lreq.push_back(kind == 2 ? LES[4] : LES[3]);
@@ -3578,10 +3622,17 @@ static int run(int argc, char **argv)
         LANG.resize((size_t)2 * lch.size() * lgn);
         nv_leslie_angles_gs((int)lch.size(), lnreq.data(), lreq.data(), N, SR, (int)BLK, LES, LANG.data(),
                             lgs.data());
-        void *h = nv::klib_open(E.lobe_lib);
+        // (a Spectra-Tone's rows: the cone kernel's synth_voice_lobe, its table
+        // set -- blockrender.ensure_cone_lib -- else the Leslie's)
+        const std::string &kl = spectra ? E.cone_lib : E.lobe_lib;
+        void *h = nv::klib_open(kl);
         slo = h ? nv::klib_sym(h, "synth_voice_lobe") : nullptr;
         if (!slo) {
-            fprintf(stderr, "nvrender: no synth_voice_lobe in %s\n", E.lobe_lib.c_str());
+            fprintf(stderr, "nvrender: no synth_voice_lobe in %s\n", kl.c_str());
+            return 1;
+        }
+        if (spectra && !nv_cone_table(h, E.spec)) {
+            fprintf(stderr, "nvrender: no cone_table_set in %s\n", kl.c_str());
             return 1;
         }
     }
@@ -5248,7 +5299,9 @@ static int run(int argc, char **argv)
         // (this render's own context, freed at its end: a render in the app is one of many)
         std::unique_ptr<GpuFile> gpuf_own;
         GpuFile *gpuf = nullptr;
-        if (g_gpu) {
+        if (g_gpu && spectra)                   // (a Spectra-Tone's rows: the CPU's, as streamrender's)
+            fprintf(stderr, "nvrender: --gpu: a Spectra-Tone renders on the CPU\n");
+        if (g_gpu && !spectra) {
             // (the setup's builds beside libnative, the kernel's sources there or in ../Resources)
             const char *nd = nv_native_dir();
             std::string dir = nd && *nd ? std::string(nd) : nv_self_exe().substr(0, nv_self_exe().rfind('/'));

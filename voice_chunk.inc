@@ -35,6 +35,25 @@
                 // THE KNEE (voice_block.inc): the attack's own ramp, from its
                 // onset to its end, before the block's line takes over -- a loop
                 // of its own, so the one below is spelled as it always was
+#ifdef SV_CONE
+                // A SPECTRA-TONE ROW (cone_grid; lsh < 0 marks it): its gain
+                // complex, the swirl and the pitch swing; a moving filter's
+                // level on it as on a Leslie row's
+                if(lsr && lsr[p]>=0 && lsh[p]<0.f && !ftr && chBW[p]>=0.f){
+                    float cgr[65], cgi[65]; int njc=BLK/mg+1;
+                    cone_grid(LANG, lgn, lsr[p], lph[p], lfl[p], nf, bs0, mg, njc, cgr, cgi);
+                    if(fsr && fsr[p]>=0){
+                        float lgc[65];
+                        for(int j=0;j<njc;j++) lgc[j]=1.f;
+                        filter_grid(FCT, fgn, fsr[p], fty[p], fpa[p], fpb[p], fpc[p], nf, bs0, mg, njc, lgc);
+                        for(int j=0;j<njc;j++){ cgr[j]*=lgc[j]; cgi[j]*=lgc[j]; }
+                    }
+                    cone_samples(ns, ne, n0, bs0, invb, mg, cgr, cgi, kAl, kNl, kgL, kAr, kNr, kgR,
+                                 mL0, mL1, mR0, mR1, aL, aR, zrL, ziL, zrR, ziR, rr, ri,
+                                 jfa, chk_hi, chk_lo, cc, outL, outR, outSL, outSR, swp);
+                    continue;
+                }
+#endif
 #ifdef SV_LOBE
                 // A ROTOR ROW (leslie_grid): its own loop, its level swung by
                 // the lobe; every other row goes on as it always went
@@ -140,7 +159,11 @@
                 // filter, before its cells read them
                 if(lsr && (lsr[p]>=0 || (fsr && fsr[p]>=0))){
                     float lgm[65]; int njm=BLK/mg+1;
+#ifdef SV_CONE
+                    if(lsr[p]>=0 && lsh[p]>=0.f)    /* a Moog on a Spectra-Tone: not turned */
+#else
                     if(lsr[p]>=0)
+#endif
                         leslie_grid(LANG, lgn, lsr[p], lph[p], lfl[p], lsh[p], lnm[p], bs0, mg, njm, lgm);
                     else
                         for(int j=0;j<njm;j++) lgm[j]=1.f;

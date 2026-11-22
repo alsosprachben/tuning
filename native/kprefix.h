@@ -18,6 +18,7 @@
 #define synth_voice_damp NVK(synth_voice_damp)
 #define synth_voice_moogx NVK(synth_voice_moogx)
 #define synth_voice_lobe NVK(synth_voice_lobe)
+#define cone_table_set NVK(cone_table_set)
 #define synth_organ NVK(synth_organ)
 #define moog_coeff_rows NVK(moog_coeff_rows)
 #define moog_pitch_cells NVK(moog_pitch_cells)

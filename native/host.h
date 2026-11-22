@@ -304,10 +304,12 @@ void nv_host_set_messenger_pre107(nv_host *h, int on);
 /* A TONEWHEEL ORGAN's DRIVE: out [now, the voice's, set (-1 the voice's)];
    1 an organ, 0 not, -1 unread; set v < 0: the voice's */
 int nv_host_drive(nv_host *h, int row, double *out);
-/* A PART's AMP (the AMP card): out[6] -- its valve's drive sounding (the mod
+/* A PART's AMP (the AMP card): out[8] -- its valve's drive sounding (the mod
    wheel's scale on it), the voice's, the knob's (<0 none), the Leslie's
    half-moon (0 stop, 1 slow, 2 fast), a Leslie on it (1/0), the wheel's scale
-   (1 untouched); 1 a tonewheel organ, 2 another amplified voice, 0 neither */
+   (1 untouched), its Spectra-Tone (1 the rotor, 2 Chorus, 0 none) and its
+   rocker (1 up: Theater); 1 a tonewheel organ, 2 another amplified voice, 0
+   neither */
 int nv_host_amp(nv_host *h, int row, double *out);
 long nv_host_amp_seq(nv_host *h);           /* (the amp state's changes so far: the AMP card's push) */
 /* a part's rotary heard (an organ's cabinet, a Rotary type): out[0] -1 its own

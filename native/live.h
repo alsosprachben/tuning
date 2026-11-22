@@ -12,6 +12,10 @@ namespace live {
 // a key's template as live's slab stamps it (live._raw_template's piano
 // fields): its columns in live's groups (F8 om p0 p0R fmw fmp fmpR; F4 the
 // 27; F4_NOTE gb gt gc vdl; I8 non noff; I4 gr cr br pl fx mk), hrel, fa_at
+// A TEMPLATE's AND THE SLAB's F4 AND I4 COLUMNS (live.py's COLS_F4, COLS_I4:
+// their last the Spectra-Tone's -- lfl, lsh; lsr -- CONE_COLS)
+enum { NV_LF4 = 29, NV_LI4 = 7 };
+
 struct Template {
     long P = 0;
     // ITS ROOM's Q (prepare's room_q: each octave's band, Q and direct energy)
@@ -20,9 +24,9 @@ struct Template {
     double room_q[27] = {};
     long seq = 0;
     std::vector<double> f8[6];
-    std::vector<float> f4[27], f4n[4], hrel;
+    std::vector<float> f4[NV_LF4], f4n[4], hrel;
     std::vector<long long> i8[2];
-    std::vector<int32_t> i4[6];
+    std::vector<int32_t> i4[NV_LI4];
     std::vector<char> fa_at;
     long long dur = 0;
     int vel = 0;
@@ -116,6 +120,34 @@ extern "C" typedef void (*nv_voice_fn)(
     const int *MPI, const double *MPC, const float *MPR, const int *MKI, const float *MPK,
     const double *fmw, const double *fmp, const double *fmpR,
     float sfloor, float spow, float shmax, float shref, long CHUNK,
+    const float *sendW, float *outSL, float *outSR);
+
+// ...and synth_voice_lobe (-DLESLIE_KERNEL; the Spectra-Tone's cone build,
+// -DCONE_KERNEL too): synth_voice's arguments to the shutter, then the
+// Leslie's (a cone row's: synthkernel.c cone_grid) and a moving filter's,
+// then CHUNK and the send
+extern "C" typedef void (*nv_lobe_fn)(
+    float *outL, float *outR, long n0, long winlen, int BLK, int nblk, int P,
+    const double *omega, const double *ph0L, const double *ph0R,
+    const float *ampL, const float *ampR, const float *nomfreq,
+    const long *non, const long *noff, const float *fadeS, const float *relS, const float *chiffS,
+    const float *logr, const float *logrA, const float *aftL, const float *susL,
+    const float *chVol, const float *chCyc, const float *chRel, const float *susJit, const float *chScale,
+    const float *chBW, const float *tbav, const float *tau, const float *tcut,
+    const float *gbav, const float *gtau, const float *gcut,
+    const float *vdep, const float *vrate, const float *vph, const float *vdl,
+    const float *delL, const float *delR,
+    const int *grow, const int *crow, const float *G, const float *S,
+    const int *brow, const float *BR, const double *BC, const float *BL,
+    const int *fxr, const float *FT, const float *KN, long knk, long kb0,
+    const float *ampLp, const float *ampRp, const int *mkr,
+    const int *MPI, const double *MPC, const float *MPR, const int *MKI, const float *MPK,
+    const double *fmw, const double *fmp, const double *fmpR,
+    float sfloor, float spow, float shmax, float shref,
+    const int *lsr, const float *lph, const float *lfl, const float *lsh, const float *lnm,
+    const float *LANG, long lgn,
+    const int *fsr, const int *fty, const float *fpa, const float *fpb, const float *fpc,
+    const float *FCT, long fgn, long CHUNK,
     const float *sendW, float *outSL, float *outSR);
 
 // ...and voice_block (-DVOICE_BLOCK, the GPU's block setup): synth_voice's

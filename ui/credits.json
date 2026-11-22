@@ -121,6 +121,16 @@
 },
 {
 "group": "Keyboards and bells",
+"title": "Yamaha CP80 Electric Grand Piano (v1.3)",
+"author": "Greg Sullivan",
+"url": "http://www.sullivang.net/",
+"licence": "CC BY 4.0",
+"licence_url": "https://creativecommons.org/licenses/by/4.0/",
+"how": "fitted",
+"voices": "Electric Grand Piano"
+},
+{
+"group": "Keyboards and bells",
 "title": "Clavinet D6 sound examples (companion to Gabrielli, Valimaki & Bilbao, ICMC 2011)",
 "author": "Aalto University Acoustics Lab (L. Gabrielli, V. Valimaki, S. Bilbao)",
 "url": "http://research.spa.aalto.fi/publications/papers/icmc11-clavinet/",
@@ -1066,6 +1076,16 @@
 "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
 "how": "fitted",
 "voices": "Rabab"
+},
+{
+"group": "Strings from around the world",
+"title": "multisampled taishogoto",
+"author": "msx2plus",
+"url": "https://freesound.org/people/msx2plus/sounds/678381/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Taisho Koto"
 },
 {
 "group": "Strings from around the world",

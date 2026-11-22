@@ -114,7 +114,7 @@ def _NVX():
 COLS_F8 = ("om", "p0", "p0R", "fmw", "fmp", "fmpR")
 COLS_F4 = ("aL", "aR", "nf", "fa", "re", "ch", "logr", "logrA", "aft", "sus",
            "cv", "cc", "crl", "sj", "csc", "cbw", "tbav", "tau", "tcut",
-           "vd", "vr", "vp", "delL", "delR", "az", "rdl", "nfr")
+           "vd", "vr", "vp", "delL", "delR", "az", "rdl", "nfr", "lfl", "lsh")
 # A GLIDE BELONGS TO THE PRESS, NOT TO THE VOICE, so these three are the one
 # group that is NOT copied from the template -- they are zeroed at stamp time
 # and written afterwards if this particular note-on is gliding. Templates are
@@ -123,7 +123,13 @@ COLS_F4 = ("aL", "aR", "nf", "fa", "re", "ch", "logr", "logrA", "aft", "sus",
 # up for a fact that costs three floats to carry instead.
 COLS_F4_NOTE = ("gb", "gt", "gc", "vdl")   # + CC78's vibrato delay: also a press
 COLS_I8 = ("non", "noff")
-COLS_I4 = ("gr", "cr", "br", "pl", "fx", "mk")
+COLS_I4 = ("gr", "cr", "br", "pl", "fx", "mk", "lsr")
+# A SPECTRA-TONE's row (spectratone.py; leslie.lobe_columns): lsr its rotor
+# (0, live's one: Live.rotor_spectra; -1 none), lsh -1 marks it, lfl its place
+# in the cone table -- template columns, so every stamp carries them (a
+# chorus copy, a drawn rank, a tap's scratch row swirl as the note does); its
+# path's azimuth is az. A Leslie row is -1 here: live swings those itself
+CONE_COLS = (("lsr", np.int32, -1), ("lfl", np.float32, 1.0), ("lsh", np.float32, 0.0))
 # THE ORGAN'S WIND, live: how many bend rows the slab keeps for it, one per
 # (part, family of pipe) -- a flue and a reed answer the chest differently.
 WIND_ROWS = 32
@@ -910,13 +916,15 @@ class LiveRotor:
     accumulated from the rate as it actually was, not as it was asked to be.
     """
 
-    def __init__(self, horn):
+    def __init__(self, horn, taus=None, rate=None):
         import leslie as _L
         self.up = _L.HORN_SPIN_UP if horn else _L.DRUM_SPIN_UP
         self.down = _L.HORN_SPIN_DOWN if horn else _L.DRUM_SPIN_DOWN
+        if taus is not None:                # (a Spectra-Tone's: spectratone.SPIN_UP/DOWN)
+            self.up, self.down = taus
         self.ratio = 1.0 if horn else _L.DRUM_RATIO
-        self.rate = _L.CHORALE
-        self.target = _L.CHORALE
+        self.rate = _L.CHORALE if rate is None else rate
+        self.target = self.rate
         self.angle = 0.0
 
     def advance(self, dt):
@@ -973,6 +981,8 @@ class Slab:
         # channel's `send` does not say, the send bus must run: `odd_until`.
         self.send_said = set()
         self.odd_until = 0
+        self.a["lsr"][:] = -1           # -1 = on no rotor (CONE_COLS)
+        self.a["lfl"][:] = 1.0
         self.a["gr"][:] = -1            # -1 = always on, no organ gate or swell
         self.a["br"][:] = -1            # -1 = no bend row; live bends via retune
         self.a["fx"][:] = -1            # -1 = not a Moog note (moog.py)
@@ -1626,8 +1636,27 @@ class Slab:
                      MPI=self.MPI, MPC=self.MPC, MPR=self.MPR, MKI=self.MKI, MPK=self.MPK,
                      DM=self.DM, DMO=self.DMO, DMB=self.DMB, DMN=self.DMN,
                      MX=self.MX, MXON=self.mx_on)
+            # the Spectra-Tone's columns the kernel takes beside CONE_COLS: its
+            # path's azimuth (az, as leslie.lobe_columns has lph) and the lobe's
+            # norm, unread on a cone row (cone_window sets LANG while one sounds)
+            d['lph'] = d['az']
+            d['lnm'] = np.ones(len(d['az']), np.float32)
             self._prep_cache = d
         return self._prep_cache
+
+    def cone_window(self, lang=None, code=0):
+        """THE SPECTRA-TONE's ROTOR for this callback (Live._cone_block): its
+        angles on the kernel's grid over the block -- LANG, one row, from grid
+        point org on, its lgn -(org << 16 | length) (synthkernel.c cone_grid)
+        -- or None, no cone row sounding: the slab renders as it did."""
+        d = self.prep()
+        if lang is None:
+            for k in ('LANG', 'LGN', 'CONE'):
+                d.pop(k, None)
+        else:
+            d['LANG'] = lang
+            d['LGN'] = int(code)
+            d['CONE'] = True
 
     def stamp(self, tmpl, key, n0, vel_scale, layer='a'):
         """Place one note's partials at absolute sample n0. Returns False if the
@@ -3057,8 +3086,8 @@ class GpuRenderer(Renderer):
         snd = self.send
         b = self.bounds()
         if (b is None or self.act < self.gpu_min or frames != self.frames
-                or B.BLK != frames or n0 % frames):
-            self.on_gpu = False
+                or B.BLK != frames or n0 % frames or self.slab.prep().get('CONE')):
+            self.on_gpu = False         # (a Spectra-Tone sounding: the CPU's, cone_grid)
             L, R = Renderer.render(self, n0, frames)
             return ("done", L.copy(), R.copy(),
                     self.SL[:frames].copy() if snd else None, self.SR[:frames].copy() if snd else None)
@@ -3135,7 +3164,7 @@ class GpuRenderer(Renderer):
     def _render_now(self, n0, frames):
         b = self.bounds()
         if (b is None or self.act < self.gpu_min or frames != self.frames
-                or B.BLK != frames or n0 % frames):
+                or B.BLK != frames or n0 % frames or self.slab.prep().get('CONE')):
             self.on_gpu = False
             return super().render(n0, frames)
         self.on_gpu = True
@@ -3264,6 +3293,11 @@ class Patch:
         # ...and the speed its rotors start at (leslie_fast: 2 tremolo, 1
         # chorale -- the half-moon's place; 0 none): Rock Organ's fast
         self.leslie_speed = (2 if getattr(pc, "leslie_fast", True) else 1) if self.leslie else 0
+        # ...or A SPECTRA-TONE (spectratone.py: the divider organ's, chosen on
+        # the part -- patch_map.SPECTRA_CHOICES): 'rotor', 'chorus' or None,
+        # and whether its rocker starts up (Theater)
+        self.spectra = None if drums else getattr(pc, "spectratone", None)
+        self.spectra_fast = bool(getattr(pc, "spectratone_fast", True))
         # WHAT THE TONE BRINGS OF ITS OWN (Live._tone_fx): its insertion effect
         # (patch_map's insertion_efx: EP Phase, JC Chorus Gt, Bit Hit), the
         # trumpet's plunger, the didgeridoo's mouth -- each on an effect
@@ -3732,7 +3766,14 @@ class Patch:
             B.REGISTER = _wasr
             _L.SIDEBANDS = _was
             _TA.ENABLED = _wasa
-        t = {k: np.array(p[k]) for k in ALL_COLS}
+        t = {k: np.array(p[k]) for k in ALL_COLS if k not in ("lsr", "lfl", "lsh")}
+        # THE SPECTRA-TONE's rows (CONE_COLS): the cone rows' own, every other
+        # row on no rotor -- a Leslie's lobe is live's gain (leslie_swing)
+        _cone = (np.asarray(p["lsh"]) < 0.0) if p.get("lsh") is not None and p.get("LANG") is not None \
+            else np.zeros(int(p["P"]), bool)
+        for _k, _dt, _v in CONE_COLS:
+            t[_k] = (np.where(_cone, np.asarray(p[_k], _dt) if _k != "lsr" else 0, _v).astype(_dt)
+                     if _cone.any() else np.full(int(p["P"]), _v, _dt))
         t["P"] = p["P"]
         t["FT"] = p.get("FT")               # a Moog note's filter row, and
         t["KN"] = p.get("KN")               # its patch's knobs (moog.py)
@@ -4933,6 +4974,15 @@ class Live:
         self.rotor_horn = LiveRotor(True)
         self.rotor_drum = LiveRotor(False)
         self._ls_rate = -1.0    # horn rate the Doppler was last moved to
+        # ...AND ONE SPECTRA-TONE: the console has one rotor, both manuals on
+        # it (spectratone.py), its rocker the first such part's own; it turns
+        # only while a cone row sounds (_cone_block)
+        self._cone_on = False
+        self._cone_lang = None
+        import spectratone as _STl
+        _sp = next((p.patch for p in self.parts if getattr(p.patch, "spectra", None)), None)
+        self.rotor_spectra = LiveRotor(True, taus=(_STl.SPIN_UP, _STl.SPIN_DOWN),
+                                       rate=_STl.FAST_HZ if (_sp is None or _sp.spectra_fast) else _STl.SLOW_HZ)
         self.cc1_count = 0      # how many mod-wheel messages have arrived
         self.cc1_last = -1      # and the last value, so a monitor can see them
         # The half-moon ladder. ONE cabinet, so one position -- but the ARMING
@@ -6247,6 +6297,9 @@ class Live:
                     self.half_moon = _lad.index(_zt)
                     self.rotor_horn.target = _zt
                     self.rotor_drum.target = _zt
+                # ...a Spectra-Tone's rocker: below 64 Cathedral (spectratone.zone)
+                if any(self._listens(p, ch) and getattr(p.patch, "spectra", None) for p in parts):
+                    self.rotor_spectra.target = __import__("spectratone").zone(msg.value)
             if msg.control == T.ROTARY_CC:
                 # THE ROTARY HEARD (CC82): the channel's parts switched as the
                 # cards switch them -- 0 the cabinet in the room, else two mics
@@ -8544,6 +8597,37 @@ class Live:
         part.rotary = mode if mode in ("room", "mics") else None
         part.rotary_sep = None if spread is None else max(0.0, min(math.pi, float(spread)))
         self.dirty = True
+
+    def _cone_block(self, n0, frames):
+        """THE SPECTRA-TONE, this callback: while a cone row sounds (CONE_COLS)
+        its rotor turns and the kernel is handed its angles on the grid over
+        the block (Slab.cone_window) -- the swirl and the pitch swing are the
+        file's own (synthkernel.c cone_grid); else the window is taken away."""
+        sl = self.slab
+        on = (sl.a["lsh"] < 0.0) & sl.busy
+        if not on.any():
+            if self._cone_on:
+                sl.cone_window(None)
+                self._cone_on = False
+            return
+        import leslie as _L
+        r = self.rotor_spectra
+        a0 = r.angle
+        a1 = r.advance(frames / float(self.rate))
+        if a1 < a0:                         # (advance wrapped it: fmod, far on)
+            a0 = a1 - 2.0 * math.pi * r.rate * frames / float(self.rate)
+        blk = B.BLK
+        mg = _L.rotor_grid(blk)
+        g_lo = (n0 // blk) * blk // mg
+        g_hi = ((n0 + frames + blk - 1) // blk) * blk // mg + 1
+        n = g_hi - g_lo + 1
+        g = np.arange(g_lo, g_lo + n, dtype=np.float64) * mg
+        ang = a0 + (a1 - a0) * (g - n0) / float(frames)
+        if self._cone_lang is None or self._cone_lang.shape[1] < n:
+            self._cone_lang = np.zeros((1, max(n, 64)), np.float32)
+        self._cone_lang[0, :n] = np.mod(ang, 2.0 * math.pi)
+        sl.cone_window(self._cone_lang, -((g_lo << 16) | n))
+        self._cone_on = True
 
     def _efx_rotary_arm(self, ex, slots, note, n0, part=None):
         """A ROTARY type's part on live's rotors (Slab.leslie_arm, the organ's
@@ -12942,6 +13026,7 @@ class Live:
                            if p.patch.tremolo_depth > 0.0), 0.0)
                 self.slab.tremolo_swing(2.0 * math.pi * hz * n0 / float(self.rate) if hz > 0.0 else None,
                                         n0, float(self.rate))
+            self._cone_block(n0, frame_count)
             if self.slab.ls_on.any():
                 dt = frame_count / float(self.rate)
                 ah = self.rotor_horn.advance(dt)

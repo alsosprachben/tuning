@@ -457,6 +457,86 @@ static void leslie_samples(long ns, long ne, long n0, long bs0, float invb, int 
     }
 }
 
+#ifdef CONE_KERNEL
+/* A SPECTRA-TONE (spectratone.py): two cones back to back on one rotor, the
+   row's gain COMPLEX -- S = c + g * sum_i A_i(f, theta) exp(j k r_i s_i
+   cos theta), theta the rotor's angle less the row's path azimuth. A_i is the
+   table (TABLE_NA angles by bins, each cone's beam: bilinear here), c and g
+   per bin per mode; the cones' Doppler phase k r cos theta worked from the
+   row's own frequency, since across a bin it turns a radian at 12 kHz. Set
+   once per process (cone_table_set) as voice_moogx_set sets the Moog's: the
+   table is the same for every row of every file. ONLY IN libsynthcone (with
+   -DLESLIE_KERNEL): the lobe's own library is built as it always was. */
+static const float* ct_CA; static const float* ct_CK;
+static int ct_nb, ct_na; static float ct_r1, ct_r2, ct_kc;
+void cone_table_set(const float* CA, const float* CK, int nb, int na, float r1, float r2, float c_sound){
+    ct_CA=CA; ct_CK=CK; ct_nb=nb; ct_na=na; ct_r1=r1; ct_r2=r2; ct_kc=6.2831853f/c_sound;
+}
+/* S at the block's grid points, for a row at bin coordinate u (lfl: mode *
+   nb + the bin), frequency nf, path azimuth ph, on rotor rot of LANG. A
+   NEGATIVE lgn is a window of the grid (live: a callback's few points, from
+   grid point org on) -- -(org << 16 | its length), one rotor; a file's LANG
+   is the whole grid from 0, as leslie_grid reads it. */
+__attribute__((noinline))
+static void cone_grid(const float* LANG, long lgn, int rot, float ph, float u, float nf,
+                      long bs0, int mg, int nj, float* sr, float* si){
+    long org=0;
+    if(lgn<0){ org=(-lgn)>>16; lgn=(-lgn)&0xFFFF; rot=0; }
+    const float* A=LANG+(long)rot*lgn;
+    long g0=bs0/mg-org;
+    int mode=(int)(u/(float)ct_nb); float ub=u-(float)(mode*ct_nb);
+    int b=(int)ub; if(b>ct_nb-2) b=ct_nb-2; float w=ub-(float)b;
+    const float* K=ct_CK+((long)mode*ct_nb+b)*2;
+    float g=K[0]+(K[2]-K[0])*w, c=K[1]+(K[3]-K[1])*w;
+    const float* C0=ct_CA+(long)b*ct_na*2; const float* C1=C0+ct_na*2;
+    float k=ct_kc*nf, na=(float)ct_na, inv2pi=0.15915494f;
+    for(int j=0;j<nj;j++){
+        long gi=g0+j; if(gi>lgn-1) gi=lgn-1; if(gi<0) gi=0;
+        float th=A[gi]-ph;
+        float x=th*inv2pi; x-=floorf(x); x*=na;
+        int ia=(int)x; float fa=x-(float)ia; ia&=ct_na-1; int ib=(ia+1)&(ct_na-1);
+        float a1=(C0[ia*2]+(C0[ib*2]-C0[ia*2])*fa)*(1.f-w)+(C1[ia*2]+(C1[ib*2]-C1[ia*2])*fa)*w;
+        float a2=(C0[ia*2+1]+(C0[ib*2+1]-C0[ia*2+1])*fa)*(1.f-w)+(C1[ia*2+1]+(C1[ib*2+1]-C1[ia*2+1])*fa)*w;
+        float ct=cosf(th);
+        float p1=k*ct_r1*ct, p2=-k*ct_r2*ct;
+        sr[j]=c+g*(a1*cosf(p1)+a2*cosf(p2));
+        si[j]=g*(a1*sinf(p1)+a2*sinf(p2));
+    }
+}
+/* ...and the row's sample loop: leslie_samples' with the complex gain --
+   the output Re(z S) = zr Sr - zi Si per ear, S a line between grid points */
+__attribute__((noinline))
+static void cone_samples(long ns, long ne, long n0, long bs0, float invb, int mg, const float* sr, const float* si,
+                         long kAl, long kNl, float kgL, long kAr, long kNr, float kgR,
+                         float mL0, float mL1, float mR0, float mR1, float aL, float aR,
+                         float zrL, float ziL, float zrR, float ziR, float rr, float ri,
+                         float jfa, uint64_t chk_hi, uint64_t chk_lo, float cc,
+                         float* outL, float* outR, float* outSL, float* outSR, float swp){
+    float invg=1.f/(float)mg;
+    for(long n=ns;n<ne;n++){
+        float t=(float)(n-bs0)*invb, mL, mR;
+        if(n<kNl) mL = (kNl>kAl && n>=kAl) ? kgL*((float)(n-kAl)/(float)(kNl-kAl))*aL : 0.f;
+        else      mL = (mL0+(mL1-mL0)*t)*aL;
+        if(n<kNr) mR = (kNr>kAr && n>=kAr) ? kgR*((float)(n-kAr)/(float)(kNr-kAr))*aR : 0.f;
+        else      mR = (mR0+(mR1-mR0)*t)*aR;
+        long k=n-bs0; long j=k/mg; float q=(float)(k-j*mg)*invg;
+        float gr=sr[j]+(sr[j+1]-sr[j])*q, gi=si[j]+(si[j+1]-si[j])*q;
+        float xL=zrL, yL=ziL, xR=zrR, yR=ziR;
+        if(jfa>0.f){
+            float jit=6.2831853f*(float)hash01(chiff_index(n, chk_hi, chk_lo))*cc;
+            float cj=cosf(jit),sj2=sinf(jit);
+            xL += (zrL*cj - ziL*sj2)*jfa; yL += (zrL*sj2 + ziL*cj)*jfa;
+            xR += (zrR*cj - ziR*sj2)*jfa; yR += (zrR*sj2 + ziR*cj)*jfa;
+        }
+        float sL=xL*gr-yL*gi, sR=xR*gr-yR*gi;
+        outL[n-n0]+=mL*sL; outR[n-n0]+=mR*sR;
+        if(outSL){ outSL[n-n0]+=mL*sL*swp; outSR[n-n0]+=mR*sR*swp; }
+        float tmp; tmp=zrL*rr-ziL*ri; ziL=zrL*ri+ziL*rr; zrL=tmp;
+        tmp=zrR*rr-ziR*ri; ziR=zrR*ri+ziR*rr; zrR=tmp;
+    }
+}
+#endif
+
 /* A FILTER THAT MOVES (efxfilter.py: a Phaser, a wah, a Step Flanger, a
    Humanizer): each grid point's lg multiplied by the filter's |H| at the
    row's own frequency, the filter where its control (FCT: per channel, on
@@ -1212,7 +1292,11 @@ void synth_voice_lobe(
     const float* sendW, float* outSL, float* outSR)
 {
 #define SV_LOBE
+#ifdef CONE_KERNEL
+#define SV_CONE
+#endif
 #include "voice_main.inc"
+#undef SV_CONE
 #undef SV_LOBE
 }
 #endif

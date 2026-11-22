@@ -488,6 +488,45 @@ inline void draw_amp(App &a)
     }
 
     // THE LESLIE: the half-moon's speed (CC80), how the rotors are heard (the part's rotary)
+    // -- or a 60's organ's SPECTRA-TONE (patch_map.SPECTRA_CHOICES 10, 11 under
+    // SPEAKER): its rocker, Cathedral and Theater (CC80 0, 127), as the web's
+    bool offers_st = false;
+    if (const J *cv = p ? p->get("cabinet") : nullptr)
+        if (cv->is(J::ARR) && cv->a.size() >= 3 && cv->a[2].is(J::ARR))
+            for (const J &o : cv->a[2].a)
+                offers_st = offers_st || (int)o.d() == 10 || (int)o.d() == 11;
+    if (organ && offers_st) {
+        const float x = X1 - LW, y = Y0;
+        look::tray(a, x, y, LW, H, 10);
+        heading(a, x + 14, y + 12, "SPECTRA-TONE", "spectra");
+        if ((int)num(&M.st, "spectra", 0) == 0) {
+            const std::string why = "No Spectra-Tone on it now: choose SPECTRA-TONE or ST CHORUS under SPEAKER for "
+                                    "its two speakers turning.";
+            const auto ls = wrap(a, a.font, 14, why, LW - 28);
+            for (size_t i = 0; i < ls.size(); i++)
+                text(a, a.font, 14, x + 14, y + (IP ? 44 : 50) + i * LH, SILK_DIM, ls[i]);
+            return;
+        }
+        int fast = flag(&M.st, "spectra_fast") ? 1 : 0;
+        auto hf = a.hold.find("stfast");
+        if (hf != a.hold.end() && ImGui::GetTime() < hf->second.second)
+            fast = (int)hf->second.first;
+        text(a, a.font, 14, x + 14, y + (IP ? 40 : 48), SILK_DIM, "SPEED");
+        static const char *RN[2] = {"CATHEDRAL", "THEATER"};
+        const float sb = (LW - 28 - 6) / 2, sy = y + (IP ? 60 : 70), bh = 44;
+        for (int f = 0; f < 2; f++) {
+            const std::string id = std::string("ampst") + RN[f];
+            if (button(a, id.c_str(), x + 14 + f * (sb + 6), sy, sb, bh, RN[f], fast == f)) {
+                a.hold["stfast"] = {(double)f, ImGui::GetTime() + 0.8};
+                call(a, "{\"call\":\"part_cc\",\"row\":" + std::to_string(a.row) + ",\"cc\":80,\"v\":" + (f ? "127" : "0") + "}");
+            }
+        }
+        const auto sn = wrap(a, a.font, 14, "The console's rocker: Cathedral slow, Theater fast. The rotor takes several "
+                                            "seconds to climb to Theater and drops back to Cathedral in about one.", LW - 28);
+        for (size_t i = 0; i < sn.size(); i++)
+            text(a, a.font, 14, x + 14, sy + bh + 8 + i * LH, SILK_DIM, sn[i]);
+        return;
+    }
     if (organ) {
         const float x = X1 - LW, y = Y0;
         look::tray(a, x, y, LW, H, 10);

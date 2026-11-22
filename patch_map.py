@@ -3013,7 +3013,12 @@ for _k, _db in VARIATION_TRIM_EAR.items():
 # values (and presets' setup measures, live.preset_midi) -- a new choice goes
 # at the END, none is ever moved or taken out.
 CAB_CHOICES = (None, "direct", "leslie", "hammond", "guitar12", "guitar412", "jc120",
-               "bass410", "rhodes", "wurlitzer")
+               "bass410", "rhodes", "wurlitzer", "spectra", "spectra_chorus")
+# THE SPECTRA-TONE (spectratone.py), on the divider organ's manuals only: its
+# tabs are the console's -- SPECTRA-TONE (the manual through the rotor) and
+# CHORUS (the rotor and the console speakers) -- each manual a part, so each
+# part's choice is that manual's tab; CC80 the THEATER/CATHEDRAL rocker
+SPECTRA_CHOICES = ("spectra", "spectra_chorus")
 # ...what each is, for the cards (what we model and how we know it)
 CAB_ABOUT = {
     None: "the voice's own",
@@ -3026,11 +3031,13 @@ CAB_ABOUT = {
     "bass410": "sealed 4x10 bass cabinet, no tweeter: voiced from its design",
     "rhodes": "Rhodes suitcase, four 12\" speakers: voiced from its design",
     "wurlitzer": "Wurlitzer 200's two lid speakers: voiced from their design",
+    "spectra": "Wurlitzer Spectra-Tone: two 4\" cones back to back on one rotor, measured on a 4500 console",
+    "spectra_chorus": "Spectra-Tone Chorus: the rotor and the console speakers together, measured on a 4500",
 }
 # ...and each one's label on the cards' selector
 CAB_LABELS = {None: "OWN", "direct": "DIRECT", "leslie": "LESLIE", "hammond": "HAMMOND", "guitar12": "1x12",
               "guitar412": "4x12", "jc120": "JC-120", "bass410": "BASS 4x10", "rhodes": "SUITCASE",
-              "wurlitzer": "WURLI LID"}
+              "wurlitzer": "WURLI LID", "spectra": "SPECTRA-TONE", "spectra_chorus": "ST CHORUS"}
 _CAB_CLASSES = {}
 
 
@@ -3227,10 +3234,13 @@ def cab_choices(cls):
     the Leslie only on a tonewheel (its rotors are fitted to one)."""
     if getattr(cls, 'cab_offer', None) is not None:
         return cls.cab_offer                # (a cabinet variant: its voice's)
+    if isinstance(cls, type) and getattr(cls, 'spectratone_offer', False):
+        return tuple(i for i, c in enumerate(CAB_CHOICES) if c in SPECTRA_CHOICES)
     if not amplified(cls):
         return ()
     tw = issubclass(cls, __import__("tonelib").TonewheelProperties)
-    return tuple(i for i, c in enumerate(CAB_CHOICES) if i and (c != "leslie" or tw))
+    return tuple(i for i, c in enumerate(CAB_CHOICES)
+                 if i and (c != "leslie" or tw) and c not in SPECTRA_CHOICES)
 
 
 def cabinet_class(base, choice):
@@ -3246,7 +3256,9 @@ def cabinet_class(base, choice):
     attrs = {'cab_choice': name, 'cab_offer': cab_choices(base),
              # (the same players: their seeds the voice's -- only the speaker changes)
              'section_salt_name': getattr(base, 'section_salt_name', base.__name__)}
-    if name == "leslie":
+    if name in SPECTRA_CHOICES:
+        attrs.update(leslie=False, cabinet=None, spectratone='rotor' if name == "spectra" else 'chorus')
+    elif name == "leslie":
         attrs.update(leslie=True, cabinet=None)
     else:
         attrs.update(leslie=False, cabinet=None if name == "direct" else name)

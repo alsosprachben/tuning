@@ -164,6 +164,7 @@ void nv_part_rt_prepare(void *h, long frames);
 void nv_part_busy_stats(void *h, long *out);
 void nv_part_amp_async(void *h);
 void nv_tcache_leslie(void *h, const double *L, int n);
+void nv_tcache_spectra(void *h, const double *sp, int n);
 int nv_tuning_table(const char *name, int ref_note, double ref_hz, double *out, int *have);
 int nv_raga_info(const char *spec, double sa_hz, double *out, int *have, int *sa_note, double *sw, int *nsw);
 extern "C" const char *nv_raga_system_name(int i);
@@ -198,6 +199,7 @@ int nv_rt_feed(void *h, int type, int ch, int a, int b, int *out, int cap);
 void nv_part_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, void *cl, long gpu_min, int nthr);
 // the Moog extensions' kernels: synth_voice_moogx, the GPU build's voice_block, voice_damp_set, voice_moogx_set
 void nv_part_moogx(void *h, void *smx, void *vbm, void *vmd, void *vmm);
+void nv_part_spectra(void *h, const double *sp, int n, void *scone);
 // the maps' own drum sets: their keys' region of K, how many (live.cpp's) and the song's
 void nv_tcache_mapk(int base, int n, const int *ids);
 // a melodic cache's drum sets' tables, for a note that borrows a kit key's strokes

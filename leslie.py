@@ -45,6 +45,8 @@ import math
 
 import numpy as np
 
+import spectratone as _ST
+
 # A 122-style cabinet.
 # ...MEASURED against hammondman's "Rok organ" on the fast rotor, partial by
 # partial over 630 Hz-4 kHz (each partial's pitch wobble and level swing): the
@@ -358,6 +360,7 @@ def expand(A, channels, sr, cols, meta=None, loudest=None, rotors=None, flips=No
     # the kernel's lobe: (row, rotor, azimuth, frequency, on the horn?) for
     # every row put on a rotor -- its position in the table as it ends
     lobe = [] if (SIDEBANDS and KERNEL_LOBE) else None
+    cone = []
     rank = {c: k for k, c in enumerate(channels)}
 
     def rotate(r, horn, i, kbase):
@@ -436,6 +439,16 @@ def expand(A, channels, sr, cols, meta=None, loudest=None, rotors=None, flips=No
             continue
         f = A['nf'][i]
         if f <= 0.0:
+            continue
+        # A SPECTRA-TONE (spectratone.py): two cones on one rotor, its gain
+        # complex -- the swirl and the pitch swing both from the table the
+        # kernel reads (cone_grid). No crossover, no Doppler columns, no
+        # sidebands: the row keeps its level and is told its rotor, its
+        # path's azimuth and its place in the table (cone_columns)
+        if _ST.is_spectra(channels[ch]):
+            if lobe is not None:
+                cone.append((i, 2 * rank[ch], float(A['az'][i]), float(f),
+                             _ST.MODES.index(channels[ch].get('mode', 'rotor'))))
             continue
         horn = f >= CROSSOVER_HZ
         # the cabinet's own colour, on every row it radiates -- applied here,
@@ -520,7 +533,7 @@ def expand(A, channels, sr, cols, meta=None, loudest=None, rotors=None, flips=No
     for k in cols:
         A[k].extend(extra[k])
     if lobe is not None:
-        A.update(lobe_columns(lobe, n + len(extra['om'])))
+        A.update(lobe_columns(lobe, n + len(extra['om']), cone))
     return made
 
 
@@ -575,9 +588,12 @@ def lobe_params(nf, horn):
     return fl, (0.5 * sh).astype(np.float32), (1.0 / nrm).astype(np.float32)
 
 
-def lobe_columns(lobe, n):
+def lobe_columns(lobe, n, cone=()):
     """The table's LOBE_COLS for n rows, from expand's (row, rotor, azimuth,
-    frequency, horn?) records; every other row on no rotor."""
+    frequency, horn?) records; every other row on no rotor. A Spectra-Tone's
+    rows (cone: (row, rotor, azimuth, frequency, mode)) are cone rows: lsh
+    -1 marks them, lfl is the row's place in spectratone.table() (its
+    bin_coord), lnm 1 -- the kernel reads them in cone_grid."""
     out = {k: np.full(n, v, dt) for k, dt, v in LOBE_COLS}
     if lobe:
         pos = np.array([x[0] for x in lobe], np.int64)
@@ -585,7 +601,20 @@ def lobe_columns(lobe, n):
         out['lsr'][pos] = [x[1] for x in lobe]
         out['lph'][pos] = [x[2] for x in lobe]
         out['lfl'][pos], out['lsh'][pos], out['lnm'][pos] = fl, sh, nm
+    if cone:
+        pos = np.array([x[0] for x in cone], np.int64)
+        out['lsr'][pos] = [x[1] for x in cone]
+        out['lph'][pos] = [x[2] for x in cone]
+        out['lfl'][pos] = [_ST.bin_coord(x[3], x[4]) for x in cone]
+        out['lsh'][pos] = -1.0
+        out['lnm'][pos] = 1.0
     return out
+
+
+def has_cones(channels):
+    """Whether any of a file's rotor channels is a Spectra-Tone (the kernel
+    then takes libsynthcone's synth_voice_lobe, with the cone table set)."""
+    return any(_ST.is_spectra(v) for v in (channels or {}).values())
 
 
 def rotor_grid(blk):

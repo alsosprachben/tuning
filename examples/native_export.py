@@ -428,8 +428,13 @@ def main(argv):
         # SCAN: the scanner's constants and its circuit's tables (native/scanner.cpp's)
         scn = N.scan_constants()
         lobe = os.fsencode(B.ensure_lobe_lib()._name)
+        # ...and THE SPECTRA-TONE's numbers and cone table (native.spectra_constants), its kernel's library
+        spc = N.spectra_constants()
+        cone = os.fsencode(B.ensure_cone_lib()._name)
         f.write(b"LESL" + struct.pack("<i", len(les)) + struct.pack("<%dd" % len(les), *[float(x) for x in les])
-                + struct.pack("<i", len(lobe)) + lobe)
+                + struct.pack("<i", len(lobe)) + lobe
+                + struct.pack("<i", len(spc)) + struct.pack("<%dd" % len(spc), *spc)
+                + struct.pack("<i", len(cone)) + cone)
         f.write(b"SCAN" + struct.pack("<i", len(scn)) + struct.pack("<%dd" % len(scn), *scn))
         # VBOD: the voice parts a track's name declares (tonelib.VOICE_BODIES,
         # VOICE_CLUSTER, _NOT_A_VOICE: nv_voice_bodies_set's)

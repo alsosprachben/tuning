@@ -873,6 +873,8 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
         }
         if (k && k->leslie)
             nv_song_add_leslie(song, ch, k->leslie);
+        else if (k && k->spectra)                       // (a Spectra-Tone: kind 8 + 2 x its mode + its rocker up)
+            nv_song_add_leslie(song, ch, 8 + 2 * (k->spectra - 1) + (k->spectra_fast ? 1 : 0));
         if (k && k->cab_set)                            // (_CAB_CH: the channel's, set once)
             nv_song_add_cab(song, ch, k);
         if (k && k->clav_panel) {                       // (_CLAV_CH: the part's first CC70, the rockers swept)

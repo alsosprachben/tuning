@@ -179,6 +179,8 @@ CAB_ABOUT = {
     "bass410": "sealed 4x10 bass cabinet",
     "rhodes": "Rhodes suitcase: four 12-inch speakers",
     "wurlitzer": "Wurlitzer 200's two lid speakers",
+    "spectra": "Spectra-Tone: two small speakers back to back, turning on one rotor",
+    "spectra_chorus": "Spectra-Tone Chorus: the turning speakers and the console's together",
 }
 
 # what the interfaces must not show: how a sound was made, or from whose recording

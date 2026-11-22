@@ -144,6 +144,19 @@ bool read_export(const char *path, Export &E)
                 E.lobe_lib.resize(n);
                 ok = fread(&E.lobe_lib[0], 1, n, f) == (size_t)n;
             }
+            // ...THE SPECTRA-TONE's numbers and cone table (native.spectra_constants), its kernel's library
+            if (ok) {
+                int ns = 0, nc = 0;
+                ok = fread(&ns, 4, 1, f) == 1 && ns >= 0 && ns < (1 << 24);
+                if (ok) {
+                    E.spec.resize((size_t)ns);
+                    ok = fread(E.spec.data(), 8, (size_t)ns, f) == (size_t)ns && fread(&nc, 4, 1, f) == 1;
+                }
+                if (ok) {
+                    E.cone_lib.resize((size_t)nc);
+                    ok = fread(&E.cone_lib[0], 1, (size_t)nc, f) == (size_t)nc;
+                }
+            }
             // SCAN: the scanner's constants and circuit tables (scanner.cpp's)
             pos = ftell(f);
             if (ok && fread(lt, 1, 4, f) == 4 && !memcmp(lt, "SCAN", 4)) {
@@ -592,7 +605,8 @@ int nv_host::open(int argc, char **argv)
         return 1;
     }
     // (the libraries and kernel sources it records: an app's own copies where it carries them)
-    for (std::string *lp : {&E.libs[0], &E.libs[1], &E.libs[2], &E.gpu_lib, &E.gpu_damp_lib, &E.conv_lib, &E.lobe_lib})
+    for (std::string *lp : {&E.libs[0], &E.libs[1], &E.libs[2], &E.gpu_lib, &E.gpu_damp_lib, &E.conv_lib, &E.lobe_lib,
+                            &E.cone_lib})
         *lp = nv_reloc_lib(*lp);
     E.gpu_dir = nv_reloc_kernels(E.gpu_dir);
     // each class's organ, its table here (the export's pointer was the exporter's),
@@ -843,6 +857,8 @@ int nv_host::open(int argc, char **argv)
                        E.kit_spar.data(), 100.0);       // (live.ONESHOT_FLOOR_DB)
     if (!E.les.empty())                         // a rotary voice's templates through its cabinet
         nv_tcache_leslie(cache, E.les.data(), (int)E.les.size());
+    if (!E.spec.empty())                        // ...a Spectra-Tone's, their cone rows
+        nv_tcache_spectra(cache, E.spec.data(), (int)E.spec.size());
     int speeds[3] = {pp[3], pp[4], pp[5]};
     built = drums ? nv_tcache_warm(cache, program, 0, 127, 1, speeds, 1) : nv_tcache_warm(cache, program, 21, 108, pp[1], speeds, pp[2]);   // (MELODIC_RANGE: A0 to C8)
     fprintf(stderr, "nvlive: %s %d, %ld templates\n", drums ? "drum set" : "program", program, built);
@@ -854,6 +870,12 @@ int nv_host::open(int argc, char **argv)
     part = nv_part_new(cache, 1, 0.0, pp[1], pp[6], pp[7], pp[8], pp[9], SR, E.k[K_RETRIGGER], slots, E.headroom, E.pan.data(), E.beta);
     if (!E.les.empty())                         // the room's Leslie: its rotors, on chorale
         nv_part_leslie(part, E.les.data(), (int)E.les.size());
+    if (!E.spec.empty() && !E.cone_lib.empty()) {   // ...and the console's Spectra-Tone: its rotor, its kernel
+        void *hc = nv::klib_open(E.cone_lib);
+        void *sc = hc ? nv::klib_sym(hc, "synth_voice_lobe") : nullptr;
+        if (sc && nv_cone_table(hc, E.spec))
+            nv_part_spectra(part, E.spec.data(), (int)E.spec.size(), sc);
+    }
     if (E.k.size() > (size_t)K_EFX + 132)       // the module's insertion effect (an export with its tables)
         nv_part_efx(part, E.k.data() + K_EFX, SR);
     if (E.has_p3d)                              // (a 3D type's place: live.pan_at's head)
@@ -1497,6 +1519,8 @@ int nv_host::open(int argc, char **argv)
         } else {
             if (!E.les.empty())
                 nv_tcache_leslie(c, E.les.data(), (int)E.les.size());
+            if (!E.spec.empty())
+                nv_tcache_spectra(c, E.spec.data(), (int)E.spec.size());
             {                                   // (a note that borrows a kit key's strokes: the sets' tables)
                 const NoteClass *k60 = cls60(prog, var);
                 if (k60 && k60->sfx_prog >= 0)
@@ -3862,14 +3886,14 @@ void nv_host::part_drive(size_t row, double v)
 }
 
 // ...and what it is, read between two blocks (nv_part_drive_get's out)
-// ...THE AMP CARD's: nv_part_amp_get's five, read between two blocks
+// ...THE AMP CARD's: nv_part_amp_get's eight, read between two blocks
 int nv_host::amp_state(size_t row, double *out)
 {
     const int pi = part_pi(*this, row);
     if (pi < 0)
         return 0;
     struct Got {
-        double o[6];
+        double o[8];
         int r = 0;
         std::atomic<bool> done{false};
     };

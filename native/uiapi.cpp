@@ -1019,7 +1019,7 @@ J build_of(nv_host *h)
 // the knob's], the half-moon, a Leslie on it, the mod wheel's scale
 J amp_of(nv_host *h, int row)
 {
-    double ao[6] = {0, 0, 0, 0, 0, 1};
+    double ao[8] = {0, 0, 0, 0, 0, 1, 0, 1};
     const int kind = nv_host_amp(h, row, ao);
     J o = sess::obj();
     o.o["row"] = sess::integer(row);
@@ -1031,6 +1031,8 @@ J amp_of(nv_host *h, int row)
     o.o["speed"] = sess::integer((long)ao[3]);
     o.o["leslie"] = sess::boolean(ao[4] != 0.0);
     o.o["wheel"] = num(ao[5]);              // (the mod wheel's scale on the drive: what sounds is the drive times it)
+    o.o["spectra"] = sess::integer((long)ao[6]);    // (a Spectra-Tone on it: 1 the rotor, 2 Chorus, 0 none)
+    o.o["spectra_fast"] = sess::boolean(ao[7] != 0.0);  // (...its rocker up: Theater)
     return o;
 }
 

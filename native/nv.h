@@ -1237,6 +1237,11 @@ typedef struct NoteClass {
     double ring_vp[48];
     int ring_reg_n;
     double ring_reg_hz[16], ring_reg_db[16];
+    // ITS SPECTRA-TONE (spectratone.py: the divider organ's, a part's speaker
+    // choice -- patch_map.SPECTRA_CHOICES): 0 the console speakers, 1 the
+    // rotor, 2 the rotor and the console (Chorus); whether its rocker starts
+    // up (Theater: spectratone_fast)
+    int spectra, spectra_fast;
 } NoteClass;
 
 // A note, as its file and channel give it, and the emitter's state for it.

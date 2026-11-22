@@ -17,7 +17,7 @@ bad = ok = 0
 for p in range(128):
     for v in [0] + sorted(vv for (pp, vv) in dict.keys(P.VARIATIONS) if pp == p):
         base = P.variation_class(p, v) if v else P.PROGRAM_CLASS.get(p)
-        if not isinstance(base, type) or not P.amplified(base): continue
+        if not isinstance(base, type) or not (P.amplified(base) or P.cab_choices(base)): continue   # (a divider organ's Spectra-Tone too)
         kb = N.note_class(base)
         if kb is None: continue
         for c in P.cab_choices(base):

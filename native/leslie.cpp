@@ -164,6 +164,11 @@ long make_rotors(int k, const int *nreq, const double *req, long q, const double
         out.emplace_back(false, rq, L);
         return q;
     }
+    if (G[0] < 0.0) {                       // A SPECTRA-TONE (spectratone.channel): one rotor, its spin times
+        out.emplace_back(G[1], G[2], 1.0, rq, L);
+        out.emplace_back(G[1], G[2], -1.0, rq, L);
+        return q;
+    }
     std::vector<std::pair<double, double>> rd;
     for (int j = 0; j < (int)G[9]; j++, q++)
         rd.push_back(std::make_pair(req[2 * q], req[2 * q + 1]));
@@ -377,6 +382,25 @@ int nv_leslie_row(void *hv, double *r, double *cp, float *lob, int *on)
     if (f <= 0.0)
         return 0;
     *on = 1;
+    // A SPECTRA-TONE's row (leslie.expand's branch, lobe_columns' cone): its
+    // level its own, no Doppler columns, no copies -- its rotor, its path's
+    // azimuth, its place in the cone table (spectratone.bin_coord: G[3] its
+    // mode, G[4..6] the table's F0, bins an octave, bins), lsh -1, lnm 1
+    {
+        const double *Gs = gs && gs[GSW * it->second] < 0.0 ? gs + GSW * it->second : nullptr;
+        if (Gs) {
+            const double f0 = Gs[4], bpo = Gs[5], nb = Gs[6];
+            double u = log2((f > f0 ? f : f0) / f0) * bpo;
+            if (u > nb - 1.001)
+                u = nb - 1.001;
+            lob[0] = (float)(2 * it->second);
+            lob[1] = (float)r[cAZ];
+            lob[2] = (float)(Gs[3] * nb + u);
+            lob[3] = -1.0f;
+            lob[4] = 1.0f;
+            return 0;
+        }
+    }
     bool horn = f >= L[L_XOVER_HZ];
     double cg = cabinet_gain(f, L);
     double x4 = pow((f > 1e-9 ? f : 1e-9) / L[L_XOVER_HZ], 4.0);

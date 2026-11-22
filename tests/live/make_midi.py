@@ -551,7 +551,35 @@ def stab_chords():
     return mid
 
 
-MAKERS = {"stab_chords": stab_chords, "dense_pedal": dense_pedal, "assign_mode": assign_mode, "mpe_organ": lambda: mpe_zone(19), "cmx_live": cmx_live, "userdrums": userdrums, "drumdelay": drumdelay, "moog_cmx": moog_cmx, "two_organs": two_organs, "rhythmpart": rhythmpart, "gsrx_2port": gsrx_2port, "drumnrpn": drumnrpn, "drumnrpn2": drumnrpn2, "gsvsense": gsvsense,
+def spectra(choice):
+    """60's Organ 1 (bank 16) on a Spectra-Tone (CC83: patch_map.SPECTRA_CHOICES,
+    10 the rotor, 11 Chorus): a chord held from 0.5 s on Theater (the rocker
+    up), Cathedral at 3 s (CC80 0) -- the rotor's fall in about a second --
+    Theater again at 6 s (its 13 s climb under the chord), a high C7 struck
+    over it at 7 s and the chord's top lifted at 8 s; all off at 9.5 s."""
+    mid, tr = one_track()
+    ev = [(0.0, mido.Message('control_change', channel=0, control=0, value=16)),
+          (0.0, mido.Message('program_change', channel=0, program=16)),
+          (0.0, mido.Message('control_change', channel=0, control=83, value=choice)),
+          (0.0, mido.Message('control_change', channel=0, control=80, value=127))]
+    for k in (60, 64, 67, 72):
+        ev.append((0.5, mido.Message('note_on', channel=0, note=k, velocity=100)))
+    ev += [(3.0, mido.Message('control_change', channel=0, control=80, value=0)),
+           (6.0, mido.Message('control_change', channel=0, control=80, value=127)),
+           (7.0, mido.Message('note_on', channel=0, note=96, velocity=100)),
+           (8.0, mido.Message('note_off', channel=0, note=72, velocity=0))]
+    for k in (60, 64, 67, 96):
+        ev.append((9.5, mido.Message('note_off', channel=0, note=k, velocity=0)))
+    now = 0
+    for at, msg in sorted(ev, key=lambda e: e[0]):
+        tk = int(round(at * 960))
+        msg.time = tk - now
+        now = tk
+        tr.append(msg)
+    return mid
+
+
+MAKERS = {"stab_chords": stab_chords, "spectra_rotor": lambda: spectra(10), "spectra_chorus": lambda: spectra(11), "dense_pedal": dense_pedal, "assign_mode": assign_mode, "mpe_organ": lambda: mpe_zone(19), "cmx_live": cmx_live, "userdrums": userdrums, "drumdelay": drumdelay, "moog_cmx": moog_cmx, "two_organs": two_organs, "rhythmpart": rhythmpart, "gsrx_2port": gsrx_2port, "drumnrpn": drumnrpn, "drumnrpn2": drumnrpn2, "gsvsense": gsvsense,
           "mpe_zone": mpe_zone}
 
 

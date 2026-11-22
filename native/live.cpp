@@ -262,6 +262,11 @@ static std::vector<const OrganSpec *> g_slot_organ;
 static std::vector<int> g_slot_off;                 // ...and every organ its tone brings (nv_song_slot_orgs')
 static std::vector<const OrganSpec *> g_slot_og;
 static thread_local int g_tmpl_var = 0;
+// THE SPECTRA-TONE's numbers (native.spectra_constants; nv_tcache_spectra) for
+// the templates built on this thread, and each built row's place in its cone
+// table (NAN: on no rotor) -- live's template cut: CONE_COLS from leslie's
+static thread_local const std::vector<double> *g_tmpl_spec = nullptr;
+static thread_local std::vector<float> g_tmpl_cone;
 static thread_local const std::map<int, int> *g_tmpl_cabk = nullptr;     // (the template's cabinet voices: Cache::cabk)
 static long long g_k_n = 0;             // K's length a cache copies (0: the programs' and drum sets' only)
 // THE MAPS' OWN DRUM SETS (the export's MKIT: a drum program 128 + j): their
@@ -796,7 +801,32 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
     // off): the cabinet's colour, the crossover's copies (leslie_flip), each
     // row's Doppler at the rotor's speed from the file's CC1 (fast), else the
     // voice's own -- the swing itself is the slab's
-    if (les && P >= 0 && nv_song_leslie(song, -1, nullptr) > 0) {
+    g_tmpl_cone.clear();
+    long long c_st = 0;
+    if (les && P >= 0 && nv_song_leslie(song, -1, nullptr) > 0 && nv_song_leslie(song, 0, &c_st) >= 8) {
+        // A SPECTRA-TONE (leslie.expand's branch: the rows' levels their own,
+        // no copies): each sounding row of its channel's place in the cone
+        // table -- spectratone.bin_coord, from the row's own nf (live's
+        // template: lfl from p's, lsh -1, lsr 0)
+        long long c;
+        int kind_ = nv_song_leslie(song, 0, &c);
+        const std::vector<double> *sp = g_tmpl_spec;
+        if (sp && sp->size() >= 11) {
+            const double f0 = (*sp)[2], bpo = (*sp)[3], nb = (*sp)[0], mode = (double)((kind_ - 8) / 2);
+            const int cMCH = nv::live::emit_col("mch"), cNF = nv::live::emit_col("nf");
+            g_tmpl_cone.assign((size_t)P, NAN);
+            for (long long i = 0; i < P; i++) {
+                const double *r = *rowsp + (size_t)NCOLS * i;
+                if ((long long)r[cMCH] != c || r[cNF] <= 0.0)
+                    continue;
+                const double f = r[cNF];
+                double u = log2((f > f0 ? f : f0) / f0) * bpo;
+                if (u > nb - 1.001)
+                    u = nb - 1.001;
+                g_tmpl_cone[(size_t)i] = (float)(mode * nb + u);
+            }
+        }
+    } else if (les && P >= 0 && nv_song_leslie(song, -1, nullptr) > 0) {
         long long c;
         int kind_ = nv_song_leslie(song, 0, &c);
         int nc = nv_song_ccs(song, c, NV_CC_LESLIE, nullptr, nullptr, 0);
@@ -838,9 +868,9 @@ namespace live {
 static const char *F8[] = {"om", "p0", "p0R", "fmw", "fmp", "fmpR"};
 static const char *F4[] = {"aL", "aR", "nf", "fa", "re", "ch", "logr", "logrA", "aft", "sus", "cv", "cc", "crl",
                            "sj", "csc", "cbw", "tbav", "tau", "tcut", "vd", "vr", "vp", "delL", "delR", "az", "rdl",
-                           "nfr"};
+                           "nfr", "lfl", "lsh"};        // (the last two the Spectra-Tone's: not emitted, set by build)
 static const char *F4N[] = {"gb", "gt", "gc", "vdl"};
-static const char *I4[] = {"gr", "cr", "br", "pl", "fx", "mk"};
+static const char *I4[] = {"gr", "cr", "br", "pl", "fx", "mk", "lsr"};
 static const char *EMIT[NCOLS] = {
     "om", "p0", "p0R", "aL", "aR", "aM", "mch", "px", "pz", "az", "dr", "nf", "non", "noff", "fa", "re", "ch",
     "logr", "logrA", "aft", "sus", "cv", "cc", "crl", "sj", "csc", "cbw", "tbav", "tau", "tcut", "gb", "gt",
@@ -1680,6 +1710,7 @@ struct Cache {
     }
     Kits kit;
     std::vector<double> les;            // the Leslie's constants (leslie.cpp's L_*), empty: none
+    std::vector<double> spec;           // the Spectra-Tone's (native.spectra_constants), empty: none
     int raga_sa = -1, raga_nsw = 0;     // its tuner's raga (a raga tuner's: Sa's note, -1 none; the swaras)
     int gm2 = 0;                        // its tuner is gm2's: the store's tables over it (_mts_ratio)
     double raga_sw[12];
@@ -1708,6 +1739,7 @@ struct Cache {
         g_raga_sa = raga_sa;                // (the template's prepare: T.raga_sa_note, T.raga_spec)
         g_raga_nsw = raga_nsw;
         g_tmpl_var = drums ? 0 : var;       // (its variation's bank, before its program change)
+        g_tmpl_spec = spec.empty() ? nullptr : &spec;   // (a Spectra-Tone's cone rows: template_rows)
         cab_prep(program);                  // (...through its cabinet: its voices in K, cabk)
         g_tmpl_cabk = cabk.empty() ? nullptr : &cabk;
         g_tmpl_stk = !drums && !kit.f0.empty() ? &kit : nullptr;   // (a melodic cache's borrowed strokes)
@@ -1747,6 +1779,18 @@ struct Cache {
         take("noff", T.i8[1]);
         for (int q = 0; q < 6; q++)
             take(I4[q], T.i4[q]);
+        // THE SPECTRA-TONE's columns (CONE_COLS): a cone row's rotor 0, its
+        // place in the table, lsh -1; every other row on no rotor
+        T.f4[27].assign((size_t)P, 1.0f);
+        T.f4[28].assign((size_t)P, 0.0f);
+        T.i4[6].assign((size_t)P, -1);
+        if ((long long)g_tmpl_cone.size() == P)
+            for (long long r = 0; r < P; r++)
+                if (!std::isnan(g_tmpl_cone[(size_t)r])) {
+                    T.i4[6][r] = 0;
+                    T.f4[27][r] = g_tmpl_cone[(size_t)r];
+                    T.f4[28][r] = -1.0f;
+                }
         {                                   // the other strings' rows (t["ring"]: _RING, dr 0.9 direct, 0.1 an image)
             int cdr = emit_col("dr");
             bool any = false;
@@ -1991,13 +2035,13 @@ struct Cache {
                     D.P = (long)idx.size();
                     for (int c = 0; c < 6; c++)
                         cut(D.f8[c], T.f8[c]);
-                    for (int c = 0; c < 27; c++)
+                    for (int c = 0; c < NV_LF4; c++)
                         cut(D.f4[c], T.f4[c]);
                     for (int c = 0; c < 4; c++)
                         cut(D.f4n[c], T.f4n[c]);
                     for (int c = 0; c < 2; c++)
                         cut(D.i8[c], T.i8[c]);
-                    for (int c = 0; c < 6; c++)
+                    for (int c = 0; c < NV_LI4; c++)
                         cut(D.i4[c], T.i4[c]);
                     cut(D.hrel, T.hrel);
                     if (!T.sof.empty())
@@ -2043,13 +2087,13 @@ struct Cache {
                 slice(K2, keep);
                 for (int c = 0; c < 6; c++)
                     T.f8[c].swap(K2.f8[c]);
-                for (int c = 0; c < 27; c++)
+                for (int c = 0; c < NV_LF4; c++)
                     T.f4[c].swap(K2.f4[c]);
                 for (int c = 0; c < 4; c++)
                     T.f4n[c].swap(K2.f4n[c]);
                 for (int c = 0; c < 2; c++)
                     T.i8[c].swap(K2.i8[c]);
-                for (int c = 0; c < 6; c++)
+                for (int c = 0; c < NV_LI4; c++)
                     T.i4[c].swap(K2.i4[c]);
                 T.hrel = K2.hrel;
                 T.sof = K2.sof; T.rof = K2.rof; T.fa_at = K2.fa_at; T.cof = K2.cof; T.lflip = K2.lflip;
@@ -2101,13 +2145,13 @@ struct Cache {
                 D.P = (long)h.size();
                 for (int c = 0; c < 6; c++)
                     cut(D.f8[c], T.f8[c]);
-                for (int c = 0; c < 27; c++)
+                for (int c = 0; c < NV_LF4; c++)
                     cut(D.f4[c], T.f4[c]);
                 for (int c = 0; c < 4; c++)
                     cut(D.f4n[c], T.f4n[c]);
                 for (int c = 0; c < 2; c++)
                     cut(D.i8[c], T.i8[c]);
-                for (int c = 0; c < 6; c++)
+                for (int c = 0; c < NV_LI4; c++)
                     cut(D.i4[c], T.i4[c]);
                 cut(D.hrel, T.hrel);
                 if (!T.rof.empty())
@@ -2152,13 +2196,13 @@ struct Cache {
                 T.roll_hit.push_back(std::move(D));
                 for (int c = 0; c < 6; c++)
                     T.f8[c].clear();
-                for (int c = 0; c < 27; c++)
+                for (int c = 0; c < NV_LF4; c++)
                     T.f4[c].clear();
                 for (int c = 0; c < 4; c++)
                     T.f4n[c].clear();
                 for (int c = 0; c < 2; c++)
                     T.i8[c].clear();
-                for (int c = 0; c < 6; c++)
+                for (int c = 0; c < NV_LI4; c++)
                     T.i4[c].clear();
                 T.hrel.clear();
                 T.sof.clear(); T.rof.clear(); T.fa_at.clear(); T.cof.clear(); T.lflip.clear();
@@ -2187,13 +2231,13 @@ struct Cache {
                 };
                 for (int c = 0; c < 6; c++)
                     cut(R.f8[c], T.f8[c]);
-                for (int c = 0; c < 27; c++)
+                for (int c = 0; c < NV_LF4; c++)
                     cut(R.f4[c], T.f4[c]);
                 for (int c = 0; c < 4; c++)
                     cut(R.f4n[c], T.f4n[c]);
                 for (int c = 0; c < 2; c++)
                     cut(R.i8[c], T.i8[c]);
-                for (int c = 0; c < 6; c++)
+                for (int c = 0; c < NV_LI4; c++)
                     cut(R.i4[c], T.i4[c]);
                 cut(R.hrel, T.hrel);
                 if (!T.sof.empty())
@@ -2221,13 +2265,13 @@ struct Cache {
                 auto cut = [&](auto &dst, const auto &src) { dst.assign(src.begin() + a, src.begin() + b); };
                 for (int c = 0; c < 6; c++)
                     cut(J.f8[c], T.f8[c]);
-                for (int c = 0; c < 27; c++)
+                for (int c = 0; c < NV_LF4; c++)
                     cut(J.f4[c], T.f4[c]);
                 for (int c = 0; c < 4; c++)
                     cut(J.f4n[c], T.f4n[c]);
                 for (int c = 0; c < 2; c++)
                     cut(J.i8[c], T.i8[c]);
-                for (int c = 0; c < 6; c++)
+                for (int c = 0; c < NV_LI4; c++)
                     cut(J.i4[c], T.i4[c]);
                 cut(J.hrel, T.hrel);
                 long long co = (long long)nearbyint(jrows[q + 3] * SR);
@@ -2274,13 +2318,13 @@ struct Cache {
                 };
                 for (int c = 0; c < 6; c++)
                     split(Rl.f8[c], T.f8[c]);
-                for (int c = 0; c < 27; c++)
+                for (int c = 0; c < NV_LF4; c++)
                     split(Rl.f4[c], T.f4[c]);
                 for (int c = 0; c < 4; c++)
                     split(Rl.f4n[c], T.f4n[c]);
                 for (int c = 0; c < 2; c++)
                     split(Rl.i8[c], T.i8[c]);
-                for (int c = 0; c < 6; c++)
+                for (int c = 0; c < NV_LI4; c++)
                     split(Rl.i4[c], T.i4[c]);
                 split(Rl.hrel, T.hrel);
                 split(Rl.fa_at, T.fa_at);
@@ -2469,6 +2513,8 @@ long nv_tcache_templates(void *h, const void **out, long cap)
 
 // the Leslie's constants for a rotary voice's templates (the export's LESL)
 void nv_tcache_leslie(void *h, const double *L, int n) { ((nv::live::Cache *)h)->les.assign(L, L + n); }
+// ...and the Spectra-Tone's numbers (native.spectra_constants: its templates' cone rows)
+void nv_tcache_spectra(void *h, const double *sp, int n) { ((nv::live::Cache *)h)->spec.assign(sp, sp + n); }
 
 // A DRUM PART'S CACHE: its program the drum set, its keys built on GM's
 // percussion channel from the sets' tables (native.kits: f0, seat, choke,
@@ -2754,6 +2800,7 @@ const NoteClass *nv_cab_variant(const NoteClass *k, int c)
     const double *T = g_cab_terms.data() + 36 * (size_t)c;
     std::unique_ptr<NoteClass> d(new NoteClass(*k));
     d->leslie = T[0] != 0.0 ? (k->leslie ? k->leslie : k->cab_lfast) : 0;
+    d->spectra = (int)T[34];                // (a Spectra-Tone: patch_map.SPECTRA_CHOICES)
     d->cab_set = (int)T[1];
     d->n_cab_fm = (int)T[2];
     d->n_cab_afm = (int)T[3];

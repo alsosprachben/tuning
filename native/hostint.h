@@ -114,6 +114,8 @@ struct Export {
     }
     std::vector<int> cls_organ, prog_organ;   // each class's organ, each program's (-1 none, -2 not the engine's)
     std::vector<double> les;              // LESL: the rotating speaker's constants
+    std::vector<double> spec;             // ...the Spectra-Tone's (native.spectra_constants)
+    std::string cone_lib;                 // ...and its kernel's library (synth_voice_lobe with cone_grid)
     std::string lobe_lib;                 // ...and synth_voice_lobe's library
     std::vector<double> scan;             // SCAN: the scanner's constants and tables
     double beta = 0.0, headroom = 1.0;

@@ -317,7 +317,7 @@ class NoteClass(ctypes.Structure):
                       ('strike_reg_n', I), ('strike_reg_hz', C * 16), ('strike_reg_db', C * 16),
                       ('strike_vp_n', I), ('strike_vp_hz', C * 16), ('strike_vp_p', C * 16),
                       ('ring_tuned', I), ('ring_vp', C * 48), ('ring_reg_n', I), ('ring_reg_hz', C * 16),
-                      ('ring_reg_db', C * 16)])
+                      ('ring_reg_db', C * 16), ('spectra', I), ('spectra_fast', I)])
 
 
 class NoteIn(ctypes.Structure):
@@ -444,6 +444,7 @@ def _build_objects(units, bdir=None, xform=None):
 KRATES = (44100, 48000)
 KVARIANTS = (('synth', []), ('synthxdec', ['-DXDEC_KERNEL']), ('synthdamp', ['-DDAMP_KERNEL']),
              ('synthmoogx', ['-DMOOGX_KERNEL', '-DDAMP_KERNEL']), ('synthlobe', ['-DLESLIE_KERNEL']),
+             ('synthcone', ['-DLESLIE_KERNEL', '-DCONE_KERNEL']),
              ('synthgpu', ['-DVOICE_BLOCK']), ('synthgpudamp', ['-DVOICE_BLOCK', '-DDAMP_KERNEL']),
              ('synthgpumoogx', ['-DVOICE_BLOCK', '-DDAMP_KERNEL', '-DMOOGX_KERNEL']))
 # (blockrender.KERNEL_PARTS, without importing blockrender)
@@ -652,6 +653,7 @@ def _load():
                                    ctypes.c_void_p, C]),
             ('nv_scan_rows', None, [ctypes.c_void_p, ctypes.c_long, I, C, I, I, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_tcache_leslie', None, [ctypes.c_void_p, ctypes.c_void_p, I]),
+            ('nv_tcache_spectra', None, [ctypes.c_void_p, ctypes.c_void_p, I]),
             ('nv_part_leslie', None, [ctypes.c_void_p, ctypes.c_void_p, I]),
             ('nv_part_scan', None, [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long]),
             ('nv_leslie_angles', ctypes.c_long, [I, ctypes.c_void_p, ctypes.c_void_p, ctypes.c_long, C, I,
@@ -3622,6 +3624,9 @@ def note_class(cls):
         k.bendable = int(bool(getattr(cls, 'pitch_bendable', True)))
         # its cabinet and amplifier (blockrender's _LESLIE_CH, _SCAN_CH, _AMP_CH)
         k.leslie = (2 if getattr(cls, 'leslie_fast', True) else 1) if getattr(cls, 'leslie', False) else 0
+        # ...or its Spectra-Tone (spectratone.py): 1 the rotor, 2 Chorus, 0 none
+        k.spectra = {'rotor': 1, 'chorus': 2}.get(getattr(cls, 'spectratone', None), 0)
+        k.spectra_fast = 1 if getattr(cls, 'spectratone_fast', True) else 0
         # (scanner: 0 none; else 1, +2 the switch, +4 x its own depth, +16 its own chorus)
         import scanner as _SCN
         _own = _SCN.parse(getattr(cls, 'scanner', None))
@@ -4690,6 +4695,21 @@ def xrfft(x):
     return out
 
 
+def spectra_constants():
+    """THE SPECTRA-TONE's numbers as native reads them (the export's LESL
+    section, after the lobe's kernel): [0] bins, [1] angles, [2] the first
+    bin's Hz, [3] bins an octave, [4..5] the cones' radii, [6] c, [7..8]
+    Cathedral's and Theater's turns a second, [9..10] its spin times; then
+    spectratone.table()'s CA (bins x angles x 2) and CK (2 x bins x 2), as
+    float32 values (the kernel's cone_table_set takes them so)."""
+    import numpy as _np
+    import spectratone as ST
+    CA, CK = ST.table()
+    head = [ST.TABLE_NB, ST.TABLE_NA, ST.TABLE_F0, ST.TABLE_BPO, ST.CONES[0][1], ST.CONES[1][1], ST.C_SOUND,
+            ST.SLOW_HZ, ST.FAST_HZ, ST.SPIN_UP, ST.SPIN_DOWN]
+    return [float(x) for x in head] + CA.astype(_np.float64).ravel().tolist() + CK.astype(_np.float64).ravel().tolist()
+
+
 def leslie_constants():
     """leslie.py's constants as native/leslie.cpp reads them (its L_*): the
     export's LESL section, and a template cache's and a live part's."""
@@ -5128,9 +5148,11 @@ def template(program, note, vel, tuner='hybrid440'):
 
 LIVE_F8 = ("om", "p0", "p0R", "fmw", "fmp", "fmpR")
 LIVE_F4 = ("aL", "aR", "nf", "fa", "re", "ch", "logr", "logrA", "aft", "sus", "cv", "cc", "crl", "sj", "csc",
-           "cbw", "tbav", "tau", "tcut", "vd", "vr", "vp", "delL", "delR", "az", "rdl", "nfr")
+           "cbw", "tbav", "tau", "tcut", "vd", "vr", "vp", "delL", "delR", "az", "rdl", "nfr", "lfl", "lsh")
 LIVE_F4N = ("gb", "gt", "gc", "vdl")
-LIVE_I4 = ("gr", "cr", "br", "pl", "fx", "mk")
+LIVE_I4 = ("gr", "cr", "br", "pl", "fx", "mk", "lsr")
+# (a template without the Spectra-Tone's columns: on no rotor -- live.CONE_COLS)
+LIVE_DEFAULT = {"lsr": -1, "lfl": 1.0, "lsh": 0.0}
 SLAB_BOOK = ("sw", "aL0", "aR0", "sg", "sre", "hrel", "vbase", "vrbase", "vsc")
 
 
@@ -5156,7 +5178,8 @@ class Slab(object):
         def arr(cols, dt):
             a = (ctypes.c_void_p * len(cols))()
             for j, c in enumerate(cols):
-                v = np.ascontiguousarray(tmpl[c], dt) if c in tmpl and tmpl[c] is not None else np.zeros(n, dt)
+                v = (np.ascontiguousarray(tmpl[c], dt) if c in tmpl and tmpl[c] is not None
+                     else np.full(n, LIVE_DEFAULT.get(c, 0), dt))
                 keep.append(v)
                 a[j] = v.ctypes.data
             return a
@@ -5253,6 +5276,8 @@ class TemplateCache(object):
                                       DM.LN10_20, float(BR.XDEC_NEPERS), float(BR.SR))
         L = leslie_constants()
         self.d.nv_tcache_leslie(self.p, (ctypes.c_double * len(L))(*L), len(L))
+        SPC = spectra_constants()
+        self.d.nv_tcache_spectra(self.p, (ctypes.c_double * len(SPC))(*SPC), len(SPC))
         if drums:
             import live as LV
             _, f0, seat, choke, skind, spar = kits()
@@ -5854,14 +5879,16 @@ def cab_terms():
     exported -- each would carry the whole voice): 36 numbers a
     patch_map.CAB_CHOICES index -- [0] a Leslie, [1] cab_set, [2] n_cab_fm, [3]
     n_cab_afm, [4] cab_floor, [5..16] cab_fm, [17..28] cab_afm, [29] corner,
-    [30] order, [31] cut, [32] bell, [33] ref: note_class's terms for it."""
+    [30] order, [31] cut, [32] bell, [33] ref: note_class's terms for it; [34]
+    a Spectra-Tone (patch_map.SPECTRA_CHOICES: 1 the rotor, 2 Chorus)."""
     import patch_map as P
     import cabinet as _CAB
     out = []
     for name in P.CAB_CHOICES:
         t = [0.0] * 36
         t[0] = 1.0 if name == "leslie" else 0.0
-        cb = _CAB.get(name) if name not in (None, "direct", "leslie") else None
+        t[34] = {"spectra": 1.0, "spectra_chorus": 2.0}.get(name, 0.0)
+        cb = _CAB.get(name) if name not in (None, "direct", "leslie") + P.SPECTRA_CHOICES else None
         if cb is not None and os.environ.get('TUNING_CABINET', '1') != '0':
             t[1], t[2], t[3] = 1.0, float(len(cb.formants)), float(len(cb.antiformants))
             t[4] = float(cb.formant_floor)

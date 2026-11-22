@@ -374,6 +374,41 @@ def ensure_lobe_lib():
     return _build(src, "libsynthlobe_%d.so" % SR, ["-DLESLIE_KERNEL"], ["synth_voice_lobe"])
 
 
+_CONE_LIB = None
+
+
+def ensure_cone_lib():
+    """The lobe kernel built again with the Spectra-Tone's rows (-DLESLIE_KERNEL
+    -DCONE_KERNEL, libsynthcone_<rate>.so): synth_voice_lobe with cone_grid on
+    the rows marked lsh < 0, its table (spectratone.table) set once. A table
+    with no such row takes ensure_lobe_lib's, built as it always was."""
+    global _CONE_LIB
+    if _CONE_LIB is None:
+        import spectratone as _ST
+        src = os.path.join(HERE, "synthkernel.c")
+        dll = _build(src, "libsynthcone_%d.so" % SR, ["-DLESLIE_KERNEL", "-DCONE_KERNEL"],
+                     ["synth_voice_lobe", "cone_table_set"])
+        CA, CK = _ST.table()
+        dll._cone_keep = (np.ascontiguousarray(CA, np.float32), np.ascontiguousarray(CK, np.float32))
+        fp = lambda x: x.ctypes.data_as(ctypes.POINTER(ctypes.c_float))     # noqa: E731
+        dll.cone_table_set(fp(dll._cone_keep[0]), fp(dll._cone_keep[1]), _ST.TABLE_NB, _ST.TABLE_NA,
+                           ctypes.c_float(_ST.CONES[0][1]), ctypes.c_float(_ST.CONES[1][1]),
+                           ctypes.c_float(_ST.C_SOUND))
+        _CONE_LIB = dll
+    return _CONE_LIB
+
+
+def lobe_fn(lsh, cone=None):
+    """synth_voice_lobe for a table with a rotor: the Spectra-Tone's library
+    when any row is a cone row (lsh < 0) -- or as `cone` says, where the
+    table knows (live's slab: Slab.cone_window) -- else the Leslie's."""
+    if cone is not None:
+        return ensure_cone_lib().synth_voice_lobe if cone else ensure_lobe_lib().synth_voice_lobe
+    if lsh is not None and len(lsh) and float(np.min(lsh)) < 0.0:
+        return ensure_cone_lib().synth_voice_lobe
+    return ensure_lobe_lib().synth_voice_lobe
+
+
 # The C argument types, READ OFF THE C. Without argtypes a ctypes call does no
 # checking at all: get the call site and the prototype out of step and you do
 # not get a TypeError, you get a pointer read as a float and whatever memory
@@ -9404,6 +9439,15 @@ def _prepare(path, tuner='hybrid440', sink=None):
                                 if getattr(props, 'leslie_fast', True)
                                 else _LES0.CHORALE))
             _LESLIE_CH[em.channel] = _req
+        elif getattr(props, 'spectratone', None) and em.channel not in _LESLIE_CH:
+            # THE SPECTRA-TONE (spectratone.py): its one rotor, CC80 the
+            # THEATER/CATHEDRAL rocker -- below 64 Cathedral (slow)
+            import spectratone as _ST0
+            _LESLIE_CH[em.channel] = _ST0.channel(
+                _ST0.requests([(t, v) for t, cc, v in in_order(ccs.get(_GSX.part_of(em.channel), []))
+                               if cc == T.WHEEL_CC['leslie']],
+                              getattr(props, 'spectratone_fast', True)),
+                props.spectratone)
         # THE ROTARY HEARD (tonelib.ROTARY_CC, CC82): the part's timeline on
         # each of its rotary channels -- an organ's, an insertion Rotary's, a
         # parallel type's branch B -- once
@@ -9928,10 +9972,18 @@ def render_partials(prep, n0, winlen, L, R):
     _render_partials(prep, n0, winlen, L, R)
 
 
+def cone_rows(prep):
+    """Whether a table has Spectra-Tone rows (leslie.lobe_columns: lsh < 0) --
+    which the GPU's block setup does not draw yet: such a table renders on
+    the CPU, through libsynthcone."""
+    lsh = prep.get('lsh') if prep.get('LANG') is not None else None
+    return lsh is not None and len(lsh) > 0 and float(np.min(lsh)) < 0.0
+
+
 def _render_partials(prep, n0, winlen, L, R):
     if prep['P'] == 0:
         return
-    if RENDER_GPU and n0 == 0 and _gpu() is not None:
+    if RENDER_GPU and n0 == 0 and _gpu() is not None and not cone_rows(prep):
         import gpurender
         gL, gR, _, _ = gpurender.FileRenderer(prep, _gpu()).render(winlen)
         L += gL; R += gR
@@ -10013,7 +10065,7 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R, SndL=None, SndR=None):
         sl = lambda k: a[k]
     # a table with a Leslie: synth_voice_lobe, the rotor rows swung by their lobe
     lobe = a.get('LANG') is not None
-    fn = ensure_lobe_lib().synth_voice_lobe if lobe else lib.synth_voice
+    fn = lobe_fn(sl('lsh'), a.get('CONE')) if lobe else lib.synth_voice
     fn(fp(L),fp(R),ctypes.c_long(n0),ctypes.c_long(winlen),
                     *_voice_args(a, sl, i1-i0, lobe),
                     ctypes.c_long(CHUNK),
@@ -10033,7 +10085,7 @@ def _synth_rows(a, rows, n0, winlen, L, R, SndL, SndR, fn, damp=False, mx=False)
     sl = lambda k: np.ascontiguousarray(a[k][rows])
     lobe = fn is None and a.get('LANG') is not None
     if fn is None:
-        fn = ensure_lobe_lib().synth_voice_lobe if lobe else a['lib'].synth_voice
+        fn = lobe_fn(sl('lsh'), a.get('CONE')) if lobe else a['lib'].synth_voice
     fn(fp(L),fp(R),ctypes.c_long(n0),ctypes.c_long(winlen),
                     *_voice_args(a, sl, len(rows), lobe),
                     ctypes.c_long(_chunk()),
@@ -10088,7 +10140,7 @@ def _voice_args(a, sl, P, lobe=True):
                     # synth_voice_lobe and voice_block's (lobe; synth_voice has none)
                     *(() if not lobe else
                       (ip(sl('lsr')), fp(sl('lph')), fp(sl('lfl')), fp(sl('lsh')), fp(sl('lnm')),
-                       fp(a['LANG']), ctypes.c_long(a['LANG'].shape[1]))
+                       fp(a['LANG']), ctypes.c_long(a.get('LGN', a['LANG'].shape[1])))
                       if a.get('LANG') is not None else (None,) * 6 + (ctypes.c_long(0),)),
                     # ...and a moving filter's (efxfilter: FILTER_COLS, FCT); NULL: none
                     *(() if not lobe else

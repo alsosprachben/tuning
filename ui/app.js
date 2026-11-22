@@ -695,10 +695,12 @@ function drawAmp() {
   const cv = p && p.cabinet ? p.cabinet : [-1, 0, []], offer = cv[2] || [];
   const own = a.cab_own && p ? a.cab_own[p.program + '.' + p.variation] : undefined;
   const organ = kind === 1, les = !!(st && st.leslie);
+  // (a 60's organ's SPECTRA-TONE, chosen under Speaker -- patch_map.SPECTRA_CHOICES 10, 11 -- its rocker CC80)
+  const offersSt = offer.includes(10) || offer.includes(11), spc = st ? (st.spectra || 0) : 0;
   // (its pickup: [chosen, now (0 its own), [the choices offered]] -- the parts push's)
   const pkv = p && p.pickup ? p.pickup : [-1, 0, []], pkOffer = (p && !p.drums && pkv[2]) || [];
   const hasPk = pkOffer.length > 0;
-  const sig = [S.row, kind, organ, les, offer.join(), pkOffer.join()].join('|');
+  const sig = [S.row, kind, organ, les, spc, offer.join(), pkOffer.join()].join('|');
   if (sig !== AMP.sig) {
     AMP.sig = sig; AMP.knob = null; AMP.pkSig = '';
     el.classList.toggle('no-les', !organ);
@@ -719,7 +721,7 @@ function drawAmp() {
       `<section><h3 data-help="cabinet">Speaker</h3><div class="amp-cabs">` +
       [0, ...offer].map(c => `<button class="hb amp-cab" data-kit="1" data-c="${c}"></button>`).join('') +
       `</div><p class="amp-now"></p><p class="pn-note amp-about"></p></section>` +
-      (organ ? `<section><h3 data-help="rotary">Leslie</h3><div class="amp-les"></div></section>` : '');
+      (organ ? `<section><h3 data-help="${offersSt ? 'spectra' : 'rotary'}">${offersSt ? 'Spectra-Tone' : 'Leslie'}</h3><div class="amp-les"></div></section>` : '');
     if (hasPk) {
       el.querySelector('.amp-pksw').addEventListener('click', e => {
         const g = e.target.closest('[data-c]');
@@ -797,9 +799,27 @@ function drawAmp() {
   });
   el.querySelector('.amp-now').textContent = now ? lab(now) : `PATCH'S OWN · ${own !== undefined ? lab(own) : ''}`;
   el.querySelector('.amp-about').textContent = about(now || own || 0);
-  // THE LESLIE
+  // THE LESLIE -- or a 60's organ's SPECTRA-TONE: its rocker, Cathedral and Theater (CC80 0, 127)
   if (!organ) return;
   const lb = el.querySelector('.amp-les');
+  if (offersSt) {
+    if (!spc) {
+      if (lb.dataset.mode !== 'stnone') { lb.dataset.mode = 'stnone'; lb.innerHTML = '<p class="pn-note">No Spectra-Tone on it now: choose SPECTRA-TONE or ST CHORUS under Speaker for its two speakers turning.</p>'; }
+      return;
+    }
+    if (lb.dataset.mode !== 'st') {
+      lb.dataset.mode = 'st';
+      lb.innerHTML = '<h4>SPEED</h4><div class="amp-row two">' + [['CATHEDRAL', 0], ['THEATER', 1]].map(([n, f]) => `<button class="hb amp-st" data-kit="1" data-f="${f}">${n}</button>`).join('') +
+        '</div><p class="pn-note">The console\'s rocker: Cathedral slow, Theater fast. The rotor takes several seconds to climb to Theater and drops back to Cathedral in about one.</p>';
+      lb.querySelectorAll('.amp-st').forEach(b => Kit.press(b, () => {
+        const f = +b.dataset.f; ampHold('stfast', f); drawAmp();
+        Wire.call('part_cc', { row: S.row, cc: 80, v: f ? 127 : 0 });
+      }));
+    }
+    const f = ampHeld('stfast', st.spectra_fast ? 1 : 0);
+    lb.querySelectorAll('.amp-st').forEach(b => b.classList.toggle('on', +b.dataset.f === f));
+    return;
+  }
   if (!les) {
     if (lb.dataset.mode !== 'none') { lb.dataset.mode = 'none'; lb.innerHTML = '<p class="pn-note">No Leslie on it now: choose LESLIE under Speaker for the horn and drum turning.</p>'; }
     return;
