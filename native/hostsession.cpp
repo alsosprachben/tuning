@@ -85,7 +85,7 @@ void nv_host::session_apply()
 // THE CABINET CHOICES by name (patch_map.CAB_CHOICES -- the same order: an
 // index is CC83's value: FIXED, a new one at the end), 0 "own", and a session's name's index (-1 none)
 static const char *const CAB_NAMES[] = {"own", "direct", "leslie", "hammond", "guitar12", "guitar412", "jc120",
-                                        "bass410", "rhodes", "wurlitzer"};
+                                        "bass410", "rhodes", "wurlitzer", "spectra", "spectra_chorus"};
 static int cab_index(const std::string &s)
 {
     for (int i = 0; i < (int)(sizeof CAB_NAMES / sizeof CAB_NAMES[0]); i++)
@@ -718,8 +718,13 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
     if (parts && parts->is(sess::J::ARR) && !parts->a.empty()) {
         const sess::J *dn = parts->a[0].get("drawn"), *pg = parts->a[0].get("program"), *dv = parts->a[0].get("drums");
         const int want_p = pg && pg->is(sess::J::NUM) ? (int)pg->i() & 127 : -1;
-        if (dn && dn->is(sess::J::ARR) && want_p >= 0 && !(dv && dv->d() != 0.0) && !E.stops[want_p].names.empty()) {
-            const auto &names = E.stops[want_p].names;
+        // (its organ's ranks, its VARIATION's where it is one -- the 60's organs are
+        //  bank 16's: their tabs, not the Drawbar Organ's, E.stops_for)
+        const sess::J *bk = parts->a[0].get("bank");
+        const int want_v = bk && bk->is(sess::J::NUM) ? (int)bk->i() & 4095 : 0;
+        const auto *wst = want_p >= 0 ? E.stops_for(want_p, want_v) : nullptr;
+        if (dn && dn->is(sess::J::ARR) && wst && !(dv && dv->d() != 0.0) && !wst->names.empty()) {
+            const auto &names = wst->names;
             std::vector<char> want(names.size(), 0);
             for (size_t ri = 0; ri < names.size(); ri++)
                 for (const sess::J &n : dn->a)
@@ -873,10 +878,11 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
     // AN ORGAN's DRAWN STOPS (live's Part.drawn: its ranks' names, sorted), on
     // patch pi playing program prog; none an empty list; as written when the
     // audio does not answer
-    auto put_drawn = [this](sess::J &pd, int pi, int prog) {
+    auto put_drawn = [this](sess::J &pd, int pi, int prog, int var) {
         sess::J dn = sess::arr();
-        if (prog >= 0 && prog < 128 && !E.stops[prog].names.empty()) {
-            const auto &names = E.stops[prog].names;
+        const auto *st = prog >= 0 && prog < 128 ? E.stops_for(prog, var & 4095) : nullptr;   // (a variation's own: the 60's organs)
+        if (st && !st->names.empty()) {
+            const auto &names = st->names;
             std::vector<char> d;
             if (!drawn_of(pi, d))
                 return;
@@ -997,7 +1003,7 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
             }
         }
         if (k > 0)                              // (the first's below: its program as shown)
-            put_drawn(pd, pa.pi, pa.drums ? -1 : pa.program & 127);
+            put_drawn(pd, pa.pi, pa.drums ? -1 : pa.program & 127, pa.drums ? 0 : pa.var);
             {                                   // (its coupler switches: live's to_dict "couplers")
                 const int cv = pa.drums ? -1 : nv_part_couplers(part, pa.pi);
                 if (cv >= 0)
@@ -1024,7 +1030,7 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
         p0.o["bank"] = sess::integer(sv);
     else
         p0.o.erase("bank");
-    put_drawn(p0, rows.empty() ? 0 : rows[0].pi, sp < 128 ? sp : -1);
+    put_drawn(p0, rows.empty() ? 0 : rows[0].pi, sp < 128 ? sp : -1, sv);
     // A MODULE MODE ON (module.h): what it changes -- the parts, the
     // standard, each channel's mix, the insertion effect, the user drum sets,
     // the room (a sequencer's GS reverb sets it) -- are the module's, not the player's: the setup it set aside is what
