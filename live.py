@@ -21362,9 +21362,8 @@ def _selftest(only=""):
           eg.bridge_force_power == 0.0 and hasattr(eg, "bridge_force_power"),
           "  (bridge force goes as n*A_n, but the A_n here is a generic tilt)")
 
-    # MEASURED on David's CP70 (upright_fit.py --ref=cp70): the thick, clean
-    # bottom is a FUNDAMENTAL that sings over upper partials that do not --
-    # F1's lowest band 13.6 s to fall 20 dB, its upper ones 0.2-0.5 s.
+    # MEASURED on the CP80 takes (upright_fit.py --ref=cp80): the thick, clean
+    # bottom is a FUNDAMENTAL that sings over upper partials that do not.
     _eg, _ag = _T.ElectricGrandProperties(55.0, 0.0, 0.5, 1.0), _T.GrandPianoProperties(55.0, 0.0, 0.5, 1.0)
     check("its fundamental outlasts a concert grand's, its upper partials do not",
           _eg.harmonic_decay(1) < 0.7 * _ag.harmonic_decay(1)

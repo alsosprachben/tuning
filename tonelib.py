@@ -5691,36 +5691,23 @@ class ElectricGrandProperties(GrandPianoProperties):
     strike comb at 1/7, the velocity-dependent hammer low-pass, the unison
     dance and the phantom partials. This is a piano.
 
-    MEASURED since: Pianobook's "David's CP70" (Conner Sawchuk; 31 keys F1-Eb7,
-    4-7 layers each at their recorded levels; measured only), read through
-    examples/upright_fit.py --ref=cp70. The 1/L^4 law held -- F1's B 12.6e-4
-    recorded against 12.0 derived -- and three things were fitted: the decay
-    (a fundamental that sings over fast upper partials, 8.6 -> 6.8 dB on
-    T20), the hammers' brightness swinging far with velocity (13.4 -> 10.3
-    dB on the soft and hard layers' spectra; the bridge's own roll-off came
-    out unneeded), and the register's level (4.3 -> 3.5 dB). What is left,
-    ~10 dB, comes key by key -- one instrument's strings and hammers, not a
-    law (Ben: "simply variation in the physical properties"). How many
-    strings per note a CP-70 uses is still unverified -- the unison
-    behaviour is inherited unchanged. Ben: sounds great.
-
-    REFITTED, 2026-11-20, to Greg Sullivan's Yamaha CP80 (CC BY 4.0; the
-    Pianobook set's terms forbid a model sold as an instrument: licences.md
-    L7), through examples/upright_fit.py --ref=cp80: 21 keys D#1-C#7, mono off
+    FITTED, 2026-11-20, to Greg Sullivan's Yamaha CP80 (CC BY 4.0), through
+    examples/upright_fit.py --ref=cp80: 21 keys D#1-C#7, mono off
     the instrument, four layers, NORMALIZED -- so its spectra, decays and
     stretch are fitted and its levels are not (octave_gain and the velocity
     law stay as voiced). A CP-80 is the 88-key CP-70, its case longer: the
     bass's B fits a 1.25 m case (log rms 0.44 -> 0.24). Its decay, the bands'
-    T20 and the tail at 1 and 2 s: 10.25 -> 5.13 dB, the middle ringing 2-8 s
-    where the CP-70 fit's died in one. Its hammers and bridge on the soft and
+    T20 and the tail at 1 and 2 s: 10.25 -> 5.13 dB, the middle ringing 2-8 s.
+    Its hammers and bridge on the soft and
     hard layers' third-octave spectra: 9.45 -> 7.75 dB; left over, the bass's
-    fundamental 12 dB over ours and its 800 Hz 11 dB under.
+    fundamental 12 dB over ours and its 800 Hz 11 dB under. Its levels and
+    velocity law since, GeneralUser GS's (0f4a6ac). Ben: works great.
     """
 
     # L = C/f until the case runs out. C from a grand's C4 string, 0.62 m.
     scale_constant_hz_m = 162.0
     reference_string_max_m = 1.95   # the Steinway B the inherited fit describes
-    case_string_max_m = 1.25        # FITTED to the CP80 takes' B below 154 Hz (log rms 0.44 -> 0.24; the CP-70's 1.05)
+    case_string_max_m = 1.25        # FITTED to the CP80 takes' B below 154 Hz (log rms 0.44 -> 0.24)
 
     # THE +6 dB/OCTAVE IS DERIVED AND DELIBERATELY NOT APPLIED, which is the
     # most interesting thing in this class. Bridge force for mode n is T times
@@ -5728,7 +5715,7 @@ class ElectricGrandProperties(GrandPianoProperties):
     # would multiply is this engine's generic 1/n^1.1 string tilt, not a
     # measured displacement spectrum, and stacking a full octave-doubling on
     # top of it puts 1-4 kHz +11 dB and the top +15 over the acoustic grand,
-    # measured. A real CP-70 is thick and clean, not brilliant.
+    # measured. A real CP-80 is thick and clean, not brilliant.
     #
     # The physics that rescues it is that a piezo sits under a MASSIVE WOODEN
     # BRIDGE whose mechanical mobility falls with frequency, and that fall
@@ -5851,7 +5838,7 @@ class ElectricGrandProperties(GrandPianoProperties):
     # a piano"): a CP80 is a Yamaha grand action, real hammers and strings,
     # a pickup for a board. So its B law, decay law, aftersound, onset and
     # unisons are the grand's as fitted to the Steinway B (they stood pinned
-    # at the grand's OLD values, the CP-70 fit on top); only what a CP80 has
+    # at the grand's OLD values); only what a CP80 has
     # of its own is here.
     #
     # ITS STRINGING: ONE STRING TO F#2, TWO ABOVE, NEVER THREE. The takes'

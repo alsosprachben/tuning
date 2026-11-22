@@ -146,7 +146,7 @@ store build.
   (uploaded by a third party), Khaled Arman with the Geneva Camerata (with an
   ensemble). Ermlick's is the cleanest; its licence is the uploader's own.
 
-### L7. Fourteen Pianobook libraries — Pianobook's terms forbid it
+### L7. Thirteen Pianobook libraries — Pianobook's terms forbid it
 
 - **The terms** (pianobook.co.uk/terms-conditions, section 5): the samples are
   licensed "only within your own newly-created sound recording(s)"; the
@@ -159,7 +159,6 @@ store build.
   what this clause is written against.
 - **What derives from them:**
   - Electric Piano 2 (Wurlitzer 200A, BaltiWurli);
-  - Electric Grand (David's CP-70; its SFZ key map is CC BY 4.0, the samples are not);
   - Dulcimer (Lite Hammered Dulcimer);
   - the harpsichord's upper 8', 4' and lute (Harpsimachord);
   - the tonewheel organ's 16', 5 1/3', 1 3/5', percussion and speaker (Hammond L102);
@@ -173,8 +172,10 @@ store build.
   - **Refitted 2026-11-20** (A/Bs in ~/Music/licence_refits): Taisho Koto
     to msx2plus's taishogoto (CC0) and the harpsichord's lute stop back to
     VCSL's English Lute row (CC0) -- both APPROVED by Ben's ear. Electric
-    Grand to Greg Sullivan's CP80 (CC BY 4.0): "mostly fits", the wound
-    bass's attack then fitted (cp80_wound_fit.py), awaiting his ear again. Each voice's notes still name
+    Grand to Greg Sullivan's CP80 (CC BY 4.0), the wound bass's attack then
+    fitted (cp80_wound_fit.py), its levels GeneralUser's (0f4a6ac): APPROVED
+    2026-11-22 (Ben: "works great"); the old fit's text and credit gone, the
+    Electric Grand off this list. Each other voice's notes still name
     the old source beside the new until Ben approves and the old fit's text
     goes.
 - **Alternatives (checked 2026-11-20; Freesound licenses each sound, so check
