@@ -39,10 +39,20 @@ NOTES = {0: (27, 28, 29, 30, 31, 32, 33, 34),     # Standard's GS eight (PERCUSS
          56: (47, 58, 70, 72, 78, 82, 79, 80, 81, 83, 84, 63, 66, 68, 69, 64, 65, 67, 71,
              39, 40, 41, 42, 43, 44, 45, 46, 48, 49, 50, 51, 59, 60, 61, 62, 73, 74, 75,
              52, 53, 54, 55, 56, 57, 76, 77),
-         # the CM-64/32L set (percussion_map._cm32l): every key it sounds
+         28: (36, 40, 41, 42, 43, 44, 45, 46, 47, 48, 50),
+        29: (35, 36, 37, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 50),
+        30: (35, 40, 41, 43, 45, 46, 47, 48, 50, 51),
+        # the CM-64/32L set (percussion_map._cm32l): every key it sounds
          127: (35, 36, 37, 38, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 51, 54, 56)
               + tuple(range(60, 74)) + (75,) + tuple(range(76, 109))}
 ANCHOR_STANDARD = {56}
+# THE 606, 707 AND 909 SETS (2026-11-22; Ben: "The tr606 kicks sound quiet"):
+# never balanced -- each voice played at its patch's own loudness, the takes
+# each normalized -- the 606's hats 16 dB over its kick. GeneralUser has no
+# such sets; its 808/909 (program 25) is its drum machine mix, so their keys
+# take that set's level re its snare. The keys other sets borrow, and each
+# set's snare, are lent_balance.py's (re the Standard snare).
+GU_PRESET = {28: 25, 29: 25, 30: 25}
 # A KEY GENERALUSER RENDERS SILENT (timidity plays the SFX set's train as
 # nothing, -94 dBFS; the starship as a 4409 Hz whine, its noise once and
 # under its own attack, -48.8 dB): levelled to a stand-in key of its kind
@@ -83,6 +93,7 @@ def main(argv):
     import percussion_map as P
     kit = int(next((a.split("=")[1] for a in argv if a.startswith("--kit=")), 24))
     E.KIT = kit
+    E.GU_PRESET = GU_PRESET.get(kit)
     miss = {}
     with tempfile.TemporaryDirectory() as d:
         if kit in ANCHOR_STANDARD:

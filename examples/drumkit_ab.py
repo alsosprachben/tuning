@@ -1,6 +1,6 @@
 """A drum machine set, its fit at the last commit against its fit now, for
 Ben's ear: every voice of the set once, then a groove -- 'old' rendered with HEAD's
-tonelib.py (or DRUMKIT_AB_REF's), 'new' with the tree's.
+tonelib.py and percussion_map.py (or DRUMKIT_AB_REF's), 'new' with the tree's.
 
     python3 examples/drumkit_ab.py KIT ATTR NAME    e.g. 25 tr808 tr808
         -> ~/Music/licence_refits/NAME_{old,new}.mp3
@@ -52,9 +52,10 @@ def main(argv):
     import tempfile
     os.makedirs(OUT, exist_ok=True)
     with tempfile.TemporaryDirectory() as d:
-        src = subprocess.run(["git", "show", os.environ.get("DRUMKIT_AB_REF", "HEAD") + ":tonelib.py"], capture_output=True, text=True,
-                             check=True).stdout
-        open(os.path.join(d, "tonelib.py"), "w").write(src)
+        for mod in ("tonelib.py", "percussion_map.py"):     # the patches and the kits' levels
+            src = subprocess.run(["git", "show", os.environ.get("DRUMKIT_AB_REF", "HEAD") + ":" + mod],
+                                 capture_output=True, text=True, check=True).stdout
+            open(os.path.join(d, mod), "w").write(src)
         for tag in ("old", "new"):
             env = dict(os.environ, DRUMKIT_AB_OLD=d) if tag == "old" else dict(os.environ)
             env.pop("DRUMKIT_AB_OLD", None) if tag == "new" else None

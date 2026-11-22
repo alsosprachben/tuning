@@ -335,6 +335,61 @@ store build.
 - **CC BY-SA** (the Piteå organ, the oud and traverso Commons files): see the
   share-alike question above.
 
+### L13. Trademarks: other makers' names in ours
+
+Not a licence question but a naming one (Ben, 2026-11-22: "the labels of a
+brand of thing, how can we label that in a way that is legally okay?"). Not
+legal advice: a lawyer reads this before sale.
+
+- **The rule we follow: referential (nominative) use.** A maker's name may
+  say WHAT a sound models when (1) the name is needed to say it, (2) only the
+  word is used -- no logo, wordmark lettering, panel art, colour scheme or
+  photo of theirs -- and (3) nothing suggests they made, approve or sponsor
+  it. The name describes; it never names OUR product or feature. So "Kit 25,
+  after the TR-808" or "modelled after the Leslie 122", in descriptive text;
+  never a product, pack, preset bank or feature called by the mark alone.
+  The music convention "after" is the right word for it.
+- **Never:** "official", "authentic", "the real X", "licensed", "approved";
+  logos, typefaces or panel layouts copied from theirs (the Moog card is
+  laid out after the Messenger's controls: check it copies no artwork or
+  lettering); the marks in our app name, icons, store keywords as our own.
+- **The GS / MT-32 maps' names** ("808 Bass Drum", "TR-909" set, "Sound
+  Canvas" modes) are Roland's published names for the slots a MIDI file
+  calls for: identification, the same argument -- and our rule already
+  (no-roland-sounds: Roland's NAMES only, never its sounds).
+- **The disclaimer** (Credits screen, About, the store listing, the manual),
+  after the established form (Line 6's):
+
+  > All product names, trademarks and registered trademarks are the property
+  > of their respective owners, who are in no way associated or affiliated
+  > with Clavitone. They are used solely to identify the instruments whose
+  > sounds were studied in building our models, and the MIDI standards'
+  > named sounds a file asks for.
+
+- **The marks, as of 2026-11-22** (counted in ui/about.json, ui/app.js,
+  ui/help.js, nui/*.h, patch_map.py, percussion_map.py; owners to confirm
+  before sale -- several have changed hands):
+  - Roland: Roland, GS, Sound Canvas, SC-55/88/8850, MT-32, CM-64/32L,
+    TR-808/909/707/606, TR-8, CR-78, Jupiter, Juno, JC-120.
+  - Hammond: Hammond, Leslie.
+  - Wurlitzer, Spectra-Tone; Rhodes; Fender, Stratocaster, Telecaster;
+    Gibson's Les Paul; Hohner, Clavinet; Yamaha, CP-80 (one stale CP-70);
+    Moog, Minimoog, Messenger; Simmons, SDS-V; Steinway; Mellotron; Oberheim;
+    Vox; Fairlight.
+  - Plain words, not marks: bandoneon, theremin, General MIDI (the MMA's
+    standard's name). GeneralUser GS is a credited soundfont's name.
+- **To fix before sale (labels that ARE the mark):**
+  - Speaker choices: LESLIE, HAMMOND, JC-120, SPECTRA-TONE, ST CHORUS
+    (patch_map.CAB_LABELS; nui/amp.h's headings "LESLIE", "SPECTRA-TONE").
+    Give each a generic label (ROTARY, CONSOLE, TWIN 12, ROTATING CONES,
+    CONES + CONSOLE) and say "after the Leslie 122" in its help text.
+  - The "Moog" engine and card: call it what it is (the ladder synth; the
+    Messenger card "after the Moog Messenger") -- the hardware Messenger
+    itself, connected by MIDI, may be named: that is identifying a device.
+  - Voice and patch names coined by us (not GS map names) that start with a
+    mark: list and rename descriptively.
+- **Status:** open; the disclaimer and the label pass are ours to do.
+
 ## Recording our own
 
 - **Roland hardware:** a recording of a Roland machine PLAYING, made by its

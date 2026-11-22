@@ -64,6 +64,11 @@ def read(path):
     return x / 32768.0 if np.abs(x).max() > 2 else x, sr
 
 
+# the font's kit when it has none of KIT's own (elkit_balance: GeneralUser's
+# 808/909 for the 606, 707 and 909 sets); None reads KIT
+GU_PRESET = None
+
+
 def theirs(sf, note, d):
     cfg = os.path.join(d, "kit.cfg")
     with open(cfg, "w") as f:
@@ -71,7 +76,7 @@ def theirs(sf, note, d):
         # under "drumset 0" timidity fell back to the system config's FluidR3
         # kit for every set, and three sets measured identically
         f.write("drumset %d\n" % KIT)
-        f.write('%d %%font "%s" 128 %d %d\n' % (note, sf, KIT, note))
+        f.write('%d %%font "%s" 128 %d %d\n' % (note, sf, KIT if GU_PRESET is None else GU_PRESET, note))
     mid, wav = os.path.join(d, "t.mid"), os.path.join(d, "t.wav")
     drum_mid(note, mid)
     subprocess.run(["timidity", "-c", cfg, "-Ow", "-o", wav, "-s", "44100",
