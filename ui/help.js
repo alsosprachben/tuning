@@ -466,7 +466,6 @@ const HELP = {
     terms: [
       ['Off', 'The Indian instruments play the tuning above.'],
       ['A system', 'The raga tuning system to use.'],
-      ['measured ragas…', 'Ragas tuned as measured from recordings.'],
       ['No raga / a raga', 'The raga, which sets each note\'s exact tuning.'],
       ['Sa', 'The key of Sa, the tonic.'],
     ],

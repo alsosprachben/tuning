@@ -113,7 +113,10 @@ store build.
 - **What derives from it:** the `saraga_*` tunings in `ragas.py`, shown on the
   Tuning card under their raga names. These are tables taken straight from the
   data, the most direct derivation of any issue here.
-- **Status:** open. Bel's Todi, just, Pythagorean and equal don't depend on it.
+- **Status:** CLOSED BY DROPPING (Ben, 2026-11-22): the `saraga_*` tunings and
+  Saraga's credit are gone; Bel's Todi, just, Pythagorean and equal remain.
+  `examples/saraga_swaras.py --write` restores them for local study only. To
+  return later: measure them again from an open source below.
 - **Alternatives (checked 2026-11-20):**
   1. The Indian Art Music Raga Recognition Dataset's features (Zenodo
      7278506, CC BY 4.0): pitch contours, tonic and nyas segments for 300

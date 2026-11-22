@@ -363,15 +363,20 @@ inline void draw_tuning(App &a)
                 w.push_back(eastern_name(s));
                 lit.push_back(s == p.system);
             }
-        w.push_back("measured ragas\xe2\x80\xa6");
-        lit.push_back(measured);
+        bool any_meas = false;          // (none ship now: licences.md L5 -- the button only when there are some)
+        for (const auto &s : T.systems)
+            any_meas = any_meas || s.rfind("saraga_", 0) == 0;
+        if (any_meas) {
+            w.push_back("measured ragas\xe2\x80\xa6");
+            lit.push_back(measured);
+        }
         const int h = flow_buttons(a, "tnsys", EX + 12, ey, EW - 24, w, lit);
         if (h == 0) {
             p.system.clear();
             p.raga.clear();
             T.measured = false;
             changed = true;
-        } else if (h == (int)w.size() - 1) {
+        } else if (any_meas && h == (int)w.size() - 1) {
             T.measured = true;
         } else if (h > 0) {
             p.system = sys[(size_t)h - 1];

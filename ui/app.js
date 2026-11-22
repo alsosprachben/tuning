@@ -1503,7 +1503,8 @@ function drawEast() {
   const measured = p.system.startsWith('saraga_') || TN.measured;
   $('tnSys').innerHTML = `<button class="tns${!p.system && !TN.measured ? ' on' : ''}" data-kit="1" data-sys="">Off</button>` +
     L.systems.filter(x => !x.startsWith('saraga_')).map(x => `<button class="tns${x === p.system ? ' on' : ''}" data-kit="1" data-sys="${esc(x)}">${esc(x)}</button>`).join('') +
-    `<button class="tns${measured ? ' on' : ''}" data-kit="1" data-measured="1">measured ragas…</button>`;
+    (L.systems.some(x => x.startsWith('saraga_'))       // (none ship now: licences.md L5)
+      ? `<button class="tns${measured ? ' on' : ''}" data-kit="1" data-measured="1">measured ragas…</button>` : '');
   $('tnRagas').innerHTML = measured
     ? L.systems.filter(x => x.startsWith('saraga_')).map(x => `<button class="tns${x === p.system ? ' on' : ''}" data-kit="1" data-sys="${esc(x)}">${esc(x.slice(7).replace(/_/g, ' '))}</button>`).join('')
     : p.system ? `<button class="tns${!p.raga ? ' on' : ''}" data-kit="1" data-raga="">No raga</button>` +

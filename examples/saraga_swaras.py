@@ -5,6 +5,9 @@
     python3 examples/saraga_swaras.py --write         and write the measured ones into ragas.py
     python3 examples/saraga_swaras.py --harmonium     include the harmonium-accompanied tracks
 
+NOT SHIPPED (licences.md L5, 2026-11-22): Saraga is non-commercial, so its
+tables were dropped from ragas.py; --write puts them back for local study only.
+
 THE DATA (sources.md "Saraga"; Zenodo 4301737, CC BY-NC-SA 4.0): 108 recordings,
 each a predominant-pitch track (4.4 ms frames, Hz) and its tonic. MEASURED ONLY:
 the numbers kept here are cents, never the audio, which was never extracted.

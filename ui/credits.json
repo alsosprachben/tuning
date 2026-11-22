@@ -2449,16 +2449,6 @@
 },
 {
 "group": "Tunings",
-"title": "Saraga 1.5 (Hindustani)",
-"author": "MTG, Universitat Pompeu Fabra (CompMusic)",
-"url": "https://zenodo.org/records/4301737",
-"licence": "CC BY-NC-SA 4.0",
-"licence_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
-"how": "measured",
-"voices": "the measured raga tunings"
-},
-{
-"group": "Tunings",
 "title": "Sankey Bach keyboard MIDI corpus",
 "author": "John Sankey",
 "url": "http://www.jsbach.net/midi/sankey/",
