@@ -3836,26 +3836,21 @@ class HarpsiBase(FormantBody, PluckedStringProperties):
 class HarpsiUpperProperties(HarpsiBase):
     """Upper-manual 8': the jack plucks very close to the nut, so the comb nulls
     start high and the low harmonics are weak -- the classic nasal, reedy colour."""
-    # FITTED to an ENGLISH double, as this voice's 8' is: Knisely's
-    # Harpsimachord (Pianobook; a Brown copy of a 1750 Kirckman), its Upper
-    # takes against its Lower -- one instrument, one room, one EQ chain
-    # (examples/harpsi_fit.py fit --stop=8-upper --grid=strike_point:...).
-    # The two are within +-3 dB at every harmonic to the 12th, no tilt and no
-    # comb between them: the two 8' rows stand side by side and pluck at
-    # nearly one point -- "slightly more nasal", its maker says, and no more.
-    # Scanned (the combs' nulls cross harmonics, so the simplex cannot walk
-    # it): 0.095 7.4 dB rms, 0.105 4.3, 0.110 5.2, 0.115 3.1 -- the lower's own.
-    #
-    # This stood at 0.083, carried from VCSL's FLEMISH pair, recorded one 8'
-    # at a time, whose High is plucked well nearer the nut (comb 0.087 against
-    # the Low's 0.120): 13.1 dB rms here, its nulls 30-50 dB off at m=8-12.
-    # The English instrument's 8's differ in their strings, not their pluck.
+    # FITTED to VCSL's FLEMISH double (CC0), its High 8' takes against its
+    # Low -- one instrument, one room, recorded one 8' at a time
+    # (examples/harpsi_fit.py fit --stop=8-upper REF=flemish_low STOP=
+    # flemish_high), 2026-11-22: the Harpsimachord (Pianobook) it stood on
+    # before, licences.md L7, is no longer read. THE PLUCK the lower's own:
+    # scanned 0.075 11.1 dB rms, 0.083 15.0, 0.090 12.2, 0.100 32.6, 0.115
+    # 9.0 -- the two 8' rows side by side, differing in their strings, as the
+    # English instrument's did. THE COLOUR, at it: tonal_dampening 0.605 (8.66
+    # dB; the old 0.756 gave 9.03 -- a shallow valley).
     strike_point = 0.115
-    tonal_dampening = 0.756
-    # ...and it dies 1.12x as fast as the Lower (median of the 11 keys whose
-    # decay reads on both takes; the Flemish pair's was 1.31), on the 8''s law
-    decay_db = 4.62 * 1.12
-    harmonic_decay_db = 2.29 * 1.12
+    tonal_dampening = 0.605
+    # ...and it dies 1.31x as fast as the Lower (the Flemish pair: the median
+    # of the 10 keys whose decay reads on both), on the 8''s law
+    decay_db = 4.62 * 1.31
+    harmonic_decay_db = 2.29 * 1.31
     # A REGISTER IS ITS OWN ROW OF JACKS, so its decay and its quill's tick are
     # its own and not the 8''s -- borrowing the spectrum only, as an organ's
     # cross-family stop does, left every register ringing exactly as long as

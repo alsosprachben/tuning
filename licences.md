@@ -163,7 +163,7 @@ store build.
 - **What derives from them:**
   - Electric Piano 2 (Wurlitzer 200A, BaltiWurli);
   - Dulcimer (Lite Hammered Dulcimer);
-  - the harpsichord's upper 8' and 4' (Harpsimachord);
+  - the harpsichord's 4' (Harpsimachord);
   - the tonewheel organ's 16', 5 1/3', 1 3/5', percussion and speaker (Hammond L102);
   - Church Bell (St Kathrin's bell);
   - Hawaiian Guitar (lap steel); 12-string Guitar (Fender 12 String);
@@ -174,7 +174,9 @@ store build.
   permission; otherwise each voice needs another source.
   - **Refitted 2026-11-20** (A/Bs in ~/Music/licence_refits): Taisho Koto
     to msx2plus's taishogoto (CC0) and the harpsichord's lute stop back to
-    VCSL's English Lute row (CC0) -- both APPROVED by Ben's ear. Electric
+    VCSL's English Lute row (CC0) -- both APPROVED by Ben's ear. The
+    harpsichord's upper 8' to VCSL's Flemish pair (CC0), 2026-11-22: APPROVED
+    ("They sound good"; harpsi_upper8_{old,new}.mp3). Electric
     Grand to Greg Sullivan's CP80 (CC BY 4.0), the wound bass's attack then
     fitted (cp80_wound_fit.py), its levels GeneralUser's (0f4a6ac): APPROVED
     2026-11-22 (Ben: "works great"); the old fit's text and credit gone, the

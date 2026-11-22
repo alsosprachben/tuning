@@ -180,7 +180,7 @@ SOURCES = [{'id': 'iowa-mis',
   'licence': 'Pianobook terms',
   'licence_url': 'https://www.pianobook.co.uk/terms-conditions/',
   'how': 'fitted',
-  'voices': "Harpsichord stops: upper 8', 4', lute/buff",
+  'voices': "Harpsichord stops: the 4'",
   'issue': 'L7',
   'evidence': 'https://www.pianobook.co.uk/terms-conditions/ (EULA, fetched 2026-11-20) s.5: licence only "to use '
               'the download Sound File(s) only within your own newly-created sound recording(s) and/or '
