@@ -154,7 +154,7 @@ SOURCES = [{'id': 'iowa-mis',
   'licence': 'Pianobook terms',
   'licence_url': 'https://www.pianobook.co.uk/terms-conditions/',
   'how': 'fitted',
-  'voices': 'Electric Grand Piano (CP-70)',
+  'voices': 'Electric Grand Piano (its first fit)',
   'issue': 'L7',
   'evidence': 'https://www.pianobook.co.uk/terms-conditions/ (EULA, fetched 2026-11-20) s.5: licence only "to use '
               'the download Sound File(s) only within your own newly-created sound recording(s) and/or '

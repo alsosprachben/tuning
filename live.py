@@ -21322,7 +21322,7 @@ def _selftest(only=""):
           "  (the unison collapses to a single in-tune string)")
     lvh.shutdown()
 
-    # ---- the electric grand: a CP-70 is a short piano with no board ---------
+    # ---- the electric grand: a CP-80 is a short piano with no board ---------
     check("the electric grand is not the acoustic one",
           _PM.property_class_for_program(2) is _T.ElectricGrandProperties
           and issubclass(_T.ElectricGrandProperties, _T.GrandPianoProperties),
@@ -21346,7 +21346,7 @@ def _selftest(only=""):
     check("...while ABOVE the knee the two are identical, as the scaling says",
           abs(_b(eg, knee * 1.4) / _pub(knee * 1.4) - 1.0) < 1e-9
           and abs(_b(eg, 1046.5) / _pub(1046.5) - 1.0) < 1e-9,
-          "  (the CP-70's case binds below %.0f Hz; above that, same string)" % knee)
+          "  (the CP-80's case binds below %.0f Hz; above that, same string)" % knee)
     # A piezo under the bridge is not a soundboard: no body resonance, and above
     # all no sub-bass RADIATION loss, which is the term a board has and a pickup
     # cannot. That is why an electric grand has more bottom, not less.

@@ -70,8 +70,8 @@ VARIATION_DESC = {
     (0, 8): "wide: keys spread in stereo",
     (0, 16): "dark: worn hammers, soft attack",
     (1, 8): "wide: keys spread in stereo",
-    (2, 1): "CP-70 + Rhodes underneath",
-    (2, 2): "Rhodes + CP-70 underneath",
+    (2, 1): "CP-80 + Rhodes underneath",
+    (2, 2): "Rhodes + CP-80 underneath",
     (2, 8): "wide: keys spread in stereo",
     (3, 8): "the bright upright (= 001)",
     (4, 8): "Rhodes as a detuned pair, ±4 c",
@@ -341,7 +341,7 @@ CAPITAL_DESC = {
 CAPITAL_DESC.update({
     0: "Steinway model B concert grand",
     1: "an upright piano",
-    2: "Yamaha CP-70: strings + piezo",
+    2: "Yamaha CP-80: strings + piezo",
     3: "the upright, unisons 8-20 c apart",
     4: "Fender Rhodes Mark I (1977)",
     5: "Wurlitzer 200A: reed in a slot",
@@ -453,7 +453,7 @@ VARIATION_DESC.update({
 # name (examples/gm_coverage.py has the measurements): the pickers show it
 # after the GM name -- "Electric Piano 1 (Rhodes)". Display only; GM itself
 # stays the GM names (voice_ab.py makes file names of them).
-MODELLED = {0: "Steinway", 2: "CP-70", 4: "Rhodes", 5: "Wurlitzer", 7: "Clavinet",
+MODELLED = {0: "Steinway", 2: "CP-80", 4: "Rhodes", 5: "Wurlitzer", 7: "Clavinet",
             16: "Hammond", 17: "Hammond", 18: "Hammond", 19: "Gr\u00f6nlund",
             26: "Ibanez", 27: "Stratocaster", 28: "Ibanez", 29: "Ibanez", 30: "Ibanez",
             80: "Moog", 81: "Moog", 107: "\u0110\u00e0n Tranh"}

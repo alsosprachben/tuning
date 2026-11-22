@@ -5639,7 +5639,7 @@ class HonkyTonkProperties(UprightPianoProperties):
 
 
 class ElectricGrandProperties(GrandPianoProperties):
-    """GM 2. A Yamaha CP-70: a real grand action and real strings, with no
+    """GM 2. A Yamaha CP-80 (the CP-70's 88-key model): a real grand action and real strings, with no
     soundboard and a piezo under the bridge. It was the acoustic grand, exactly
     -- the same class object, not even a subclass -- and three things about that
     are wrong. All three are derived here rather than fitted, because there is

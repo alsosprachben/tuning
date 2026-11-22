@@ -189,7 +189,7 @@ PROGRAM_CLASS[1] = UprightPianoProperties  # the upright, measured: a small boar
 # already models a unison as one string at pitch and two mistuned around it; a
 # honky-tonk just widens that range from under 2 cents to 8-20.
 PROGRAM_CLASS[3] = HonkyTonkProperties     # the upright, badly tuned
-# ...and 2 (Electric Grand) is a Yamaha CP-70: a real grand action and real
+# ...and 2 (Electric Grand) is a Yamaha CP-80 (the CP-70's 88 keys): a real grand action and real
 # strings, but with NO SOUNDBOARD and a piezo under the bridge, and short enough
 # that its bass strings are a twelfth as stiff-tuned again as a concert grand's.
 PROGRAM_CLASS[2] = ElectricGrandProperties  # short strings, no board, bridge piezo
@@ -2778,7 +2778,7 @@ _SYN_LAYERED = {
     (96, 3): ("Anklung Pad", ((12, 12, 0.0), (96, 0, -6.0))),
     # a shaker over the rain pad
     (96, 4): ("Rattle Pad", ((96, 0, 0.0), (("kit", 82, 9), 0, -6.0))),
-    # keyboards over the warm pad: the Rhodes, the CP-70 (electric grand),
+    # keyboards over the warm pad: the Rhodes, the CP-80 (electric grand),
     # the piano with the atmosphere's noise
     (96, 9): ("EP Pad", ((4, 0, 0.0), (89, 0, -8.0))),
     (96, 11): ("CP Pad", ((2, 0, 0.0), (89, 0, -8.0))),
