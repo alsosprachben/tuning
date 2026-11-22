@@ -136,7 +136,7 @@ class VoiceSnap(ctypes.Structure):
                 ('lid_db', C), ('lid_hz', C), ('lid_order', C), ('decay_board_top_hz', C),
                 ('decay_treble_power', C), ('sp_curve_set', I), ('sp_curve', C * 3),
                 ('phantom_index_power', C), ('phantom_index_ref', C), ('hm_phase', I),
-                ('partial_cents_scatter', C), ('stretch_exact', I)]
+                ('partial_cents_scatter', C), ('stretch_exact', I), ('wound_decay_by_force', I)]
 
 
 class ToneIn(ctypes.Structure):
@@ -2750,6 +2750,7 @@ def snapshot(props):
         s.bridge_force_power = p.bridge_force_power or 0.0
         s.wound_below_hz, s.wound_corner_hz = p.wound_below_hz, p.wound_corner_hz
         s.wound_zing_db, s.wound_decay_db = p.wound_zing_db, p.wound_decay_db
+        s.wound_decay_by_force = int(bool(getattr(p, 'wound_decay_by_force', False)))
         s.bridge_peak_db, s.bridge_peak_hz, s.bridge_peak_width = p.bridge_peak_db, p.bridge_peak_hz, p.bridge_peak_width
     return s
 

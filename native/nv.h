@@ -404,6 +404,8 @@ typedef struct {
     double partial_cents_scatter;
     /* THE STIFF STRING'S LAW EXACTLY (stretch_exact): sqrt((1 + B h^2) / (1 + B)) */
     int stretch_exact;
+    /* THE WOUND ZING'S FALL WITH FORCE (wound_decay_by_force): wound_decay_db x attack_volume */
+    int wound_decay_by_force;
 } VoiceSnap;
 
 /* AN ORGAN PIPE (a class an organ's ranks draw on: the host, a borrowed

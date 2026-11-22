@@ -600,12 +600,15 @@ static double harmonic_volume(const VoiceSnap *v, int harmonic)
         return s;
     }
     double fn = v->frequency_x * pow(2.0, v->octave_position) * harmonic;
-    if (v->hammer_model)                        /* GrandPianoProperties': the simulated hammer's share */
-        return s * (harmonic - 1 < v->hm_n ? v->hm_g[harmonic - 1] : 0.0) * soundboard_gain(v, fn);
-    double av = v->hammer_open_power == 1.0 ? v->attack_volume : pow(v->attack_volume, v->hammer_open_power);
-    double fc = (v->hammer_corner_hz * (v->hammer_open_lo + v->hammer_open_slope * av)
-                 * pow(2.0, v->hammer_register_slope * v->octave_position));
-    double r = s / (1.0 + pow(fn / fc, v->hammer_order)) * soundboard_gain(v, fn);
+    double r;
+    if (v->hammer_model) {                      /* GrandPianoProperties': the simulated hammer's share */
+        r = s * (harmonic - 1 < v->hm_n ? v->hm_g[harmonic - 1] : 0.0) * soundboard_gain(v, fn);
+    } else {
+        double av = v->hammer_open_power == 1.0 ? v->attack_volume : pow(v->attack_volume, v->hammer_open_power);
+        double fc = (v->hammer_corner_hz * (v->hammer_open_lo + v->hammer_open_slope * av)
+                     * pow(2.0, v->hammer_register_slope * v->octave_position));
+        r = s / (1.0 + pow(fn / fc, v->hammer_order)) * soundboard_gain(v, fn);
+    }
     double w = wound_weight(v, harmonic);       /* ElectricGrandProperties': the wound strings' zing */
     return w != 0.0 ? r * pow(10.0, v->wound_zing_db * v->attack_volume * w / 20.0) : r;
 }
@@ -686,7 +689,11 @@ static double harmonic_decay_(const VoiceSnap *v, int harmonic)
             board = board * pow(f0 / 440.0, v->decay_treble_power);
         if (v->decay_board_top_hz != 0.0)       /* the board letting go above its band */
             board = board / (1.0 + pow(f / v->decay_board_top_hz, 2.0));
-        return v->decay_b1 + v->decay_b3 * pow(f / 1000.0, 2.0) + board;
+        double d = v->decay_b1 + v->decay_b3 * pow(f / 1000.0, 2.0) + board;
+        double w = wound_weight(v, harmonic);   /* ElectricGrandProperties': the wound top's faster fall */
+        if (w != 0.0)
+            return d + (v->wound_decay_by_force ? v->wound_decay_db * v->attack_volume : v->wound_decay_db) * w;
+        return d;
     }
     double h = (double)harmonic;                /* mode_ratios None */
     double base = v->decay_db + v->harmonic_decay_db * h * pow(h, v->harmonic_decay_dampening);
@@ -694,7 +701,7 @@ static double harmonic_decay_(const VoiceSnap *v, int harmonic)
     if (v->kind == 0) {                         /* ElectricGrandProperties': the wound top's faster fall */
         double w = wound_weight(v, harmonic);
         if (w != 0.0)
-            return base + v->wound_decay_db * w;
+            return base + (v->wound_decay_by_force ? v->wound_decay_db * v->attack_volume : v->wound_decay_db) * w;
     }
     if (v->pd_max_hz != 0.0) {                  /* PromptDecay: the prompt fall under its corner */
         double f = v->frequency_x * pow(2.0, v->octave_position) * harmonic;

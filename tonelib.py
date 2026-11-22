@@ -5806,7 +5806,13 @@ class ElectricGrandProperties(GrandPianoProperties):
     def harmonic_decay(self, harmonic):
         d = super().harmonic_decay(harmonic)
         w = self._wound_weight(harmonic)
+        if w and self.wound_decay_by_force:
+            # (a harder blow drives the winding harder, and that is what dies fast:
+            # the takes' D#1 flashes 12 dB soft, 34 dB loud)
+            return d + self.wound_decay_db * self.attack_volume * w
         return d + self.wound_decay_db * w if w else d
+
+    wound_decay_by_force = False
 
     def soundboard_gain(self, fn):
         """There is no soundboard. This is the bridge and the piezo on it.
