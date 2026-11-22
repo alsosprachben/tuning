@@ -3460,7 +3460,9 @@ class Patch:
         # A "|" in a row is a line break on the panel, and not a stop.
         _lines = [list(r) for r in getattr(pc, "stop_rows", [])] if pc else []
         _sr = [[n for n in r if n != "|"] for r in _lines]
-        if sorted(n for r in _sr for n in r) != sorted(self.rank_names):
+        # (a coupler's copies are no tabs: drawn by the switches -- tonelib.couple_divider)
+        _cp = set(getattr(pc, "coupler_copies", ()) or ()) if pc else set()
+        if sorted(n for r in _sr for n in r) != sorted(n for n in self.rank_names if n not in _cp):
             _sr = [self.rank_names[i:i + 9] for i in range(0, len(self.rank_names), 9)]
             _lines = _sr
         self.stop_rows = _sr
@@ -3485,6 +3487,10 @@ class Patch:
         # False and every organ Part started on rank 0 regardless of what its
         # class declared. Four classes declare multi-bit registrations.
         self.default_stops = 1 if drums else int(getattr(pc, "default_stops", 1))
+        # ...AND ITS COUPLER SWITCHES (tonelib.couple_divider: the divider organ's
+        # manuals): the switches it has, and where it starts them (COUPLER_CC's bits)
+        self.coupler_switches = () if drums or pc is None else tuple(getattr(pc, "coupler_switches", ()) or ())
+        self.default_couplers = 0 if drums or pc is None else int(getattr(pc, "default_couplers", 0) or 0)
         # The order a crescendo pedal adds them in, which is the organ's own idea
         # of how a registration should grow.
         self.cres_order = list(getattr(pc, "crescendo_order", self.rank_names)) if pc else []
@@ -4331,6 +4337,7 @@ class Part:
         ds = getattr(patch, "default_stops", 1)
         self.drawn = {r for j, r in enumerate(patch.rank_names) if (ds >> j) & 1} \
                       or set(patch.cres_order[:1])   # the voice's own registration
+        self.couplers = int(getattr(patch, "default_couplers", 0) or 0)     # (its coupler switches: COUPLER_CC's bits)
 
     # a Part delegates its patch identity to its patch
     program = property(lambda self: self.patch.program)
@@ -4380,6 +4387,8 @@ class Part:
                  channel=self.channel, lo=self.lo, hi=self.hi,
                  transpose=self.transpose, level_db=self.level_db,
                  muted=self.muted, drawn=sorted(self.drawn))
+        if getattr(self.patch, "coupler_switches", ()):
+            d["couplers"] = int(getattr(self, "couplers", 0))     # (its coupler switches, COUPLER_CC's bits)
         if self.variation:
             d["bank"] = int(self.variation)       # the GS variation; absent = the capital tone
         if self.cab is not None:                  # (its cabinet, chosen on the part: by name)
@@ -4455,6 +4464,10 @@ class Part:
         p.pan = None if d.get("pan") is None else max(0, min(127, int(d["pan"])))
         if d.get("drawn"):
             p.drawn = {T.rank_rename(r, patch.rank_names) for r in d["drawn"]}
+            # (a coupler's copy is no tab: drawn by its switch -- couplers, below)
+            p.drawn -= set(getattr(patch._voice_class(60), "coupler_copies", ()) or ()) if not patch.drums else set()
+        if d.get("couplers") is not None and getattr(patch, "coupler_switches", ()):
+            p.couplers = int(d["couplers"]) & 15
             p.drawn = {r for r in p.drawn if r in patch.rank_names}
         return p
 
@@ -6396,6 +6409,10 @@ class Live:
                                                     / T.harmonium_expression_gain(h, e0)
                                                     ).astype(np.float32))
                         self.xnote[key] = e
+            elif msg.control == T.COUPLER_CC:       # a divider organ's coupler switches
+                for part in parts:
+                    if self._listens(part, ch) and part.organ and getattr(part.patch, "coupler_switches", ()):
+                        self.set_couplers(part, msg.value, n0)
             elif msg.control in (43, 44, 45):       # a harmonium's stop word
                 # CC43 low seven, CC44 the next, CC45 the Debain's three more --
                 # on a voice that says its stop word lives there (the
@@ -7177,8 +7194,9 @@ class Live:
             # (In the stops' own order, not the set's: a set of names iterates
             # by their hashes, which differ from process to process, and the
             # slots -- so the sum -- with them. nvlive stamps in this order.)
+            _snd = self._coupled_ranks(part)    # (the drawn tabs through the coupler switches)
             for rank in part.patch.rank_names:
-                if rank in part.drawn:
+                if rank in _snd:
                     self._draw(part, tmpl, ch, note, rank, n0)
             if tmpl.get("rel_rank"):
                 self.held_tmpl[(part.pid, ch, note)] = (tmpl, None)   # its jacks' clicks, at key-up
@@ -7191,7 +7209,7 @@ class Live:
                 # (in the stops' own order, not the set's: a set of names
                 # iterates by their hashes, process to process, and the
                 # strike's sums with it -- nvlive drives the bridge in this order)
-                drawn = [r for r in part.patch.rank_names if r in part.drawn and (part.pid, ch, note, r) in self.slab.live
+                drawn = [r for r in part.patch.rank_names if r in _snd and (part.pid, ch, note, r) in self.slab.live
                          and pc.rank_choirs.get(r, r) in ci]
                 # ...the pluck's rows only: the quill's catch ends at the slip
                 # (its own noff), and as a driver of the worker's undecaying
@@ -7207,7 +7225,7 @@ class Live:
             # Lo-Fi on an orchestra hit's sections), on every drawn rank -- in
             # the stops' order (a set of names iterates in the hash's order,
             # which changes from process to process)
-            _rs = [s_ for r in part.patch.rank_names if r in part.drawn
+            _rs = [s_ for r in part.patch.rank_names if r in _snd
                    for s_ in self.slab.live.get((part.pid, ch, note, r), ())]
             if _rs:
                 _cp = part.pan if part.pan is not None else self.cpan.get(ch, T.GM_DEFAULT_PAN)
@@ -12217,33 +12235,57 @@ class Live:
         n = int(part.cres * len(part.patch.cres_order) + 1e-9)
         self.set_stops(part, set(part.patch.cres_order[:max(1, n)]), n0)
 
-    def set_stops(self, part, want, n0=None):
-        """Draw and retire ranks to match `want`, on every key already down."""
+    def _coupled_ranks(self, part, drawn=None, couplers=None):
+        """The ranks that SOUND on a part: its drawn tabs through its coupler
+        switches (tonelib.coupled_on: a copy its tab and its switch, a coupled
+        tab not under 8' Off) -- the drawn set itself on any other voice."""
+        d = part.drawn if drawn is None else drawn
+        if part.drums or not getattr(part.patch, "coupler_switches", ()):
+            return d
+        return T.coupled_on(part.patch._voice_class(60),
+                            {r for r in d if r not in part.patch._voice_class(60).coupler_copies},
+                            getattr(part, "couplers", 0) if couplers is None else couplers)
+
+    def set_couplers(self, part, bits, n0=None):
+        """A PART's COUPLER SWITCHES (COUPLER_CC: 1 8' Off, 2 16', 4 4', 8 2'),
+        on every key already down: its copies drawn and retired as a tab is."""
+        if not getattr(part.patch, "coupler_switches", ()):
+            return
+        self.set_stops(part, set(part.drawn), n0, couplers=int(bits) & 15)
+
+    def set_stops(self, part, want, n0=None, couplers=None):
+        """Draw and retire ranks to match `want`, on every key already down --
+        what sounds, the tabs through the coupler switches (_coupled_ranks; with
+        couplers, the switches moved too)."""
         if n0 is None:
             n0 = self.n
         want = {r for r in want if r in part.patch.rank_names} or set(part.patch.cres_order[:1])
+        cpl0 = getattr(part, "couplers", 0)
+        cpl1 = cpl0 if couplers is None else couplers
+        s0, s1 = self._coupled_ranks(part, part.drawn, cpl0), self._coupled_ranks(part, want, cpl1)
         # A LEVEL STOP (the divider organ's Solo, Accent, Volume) moved: the ranks it
         # names, sounding, to their new level at once -- a shunt lifted, no new note
         _lc = part.patch._voice_class(60)
         if getattr(_lc, 'level_stops', None):
-            for rank in [r for r in part.patch.rank_names if r in want and r in part.drawn]:
+            for rank in [r for r in part.patch.rank_names if r in s1 and r in s0]:
                 _r = T.level_gain(_lc, rank, want) / T.level_gain(_lc, rank, part.drawn)
                 if _r != 1.0:
                     _ix = [i for k, sl in self.slab.live.items() if k[0] == part.pid and k[3] == rank for i in sl]
                     if _ix:
                         self.slab.channel_gain(_ix, _r)
         part.lvl_want = want
-        for rank in [r for r in part.patch.rank_names if r in want and r not in part.drawn]:   # (in order)
+        for rank in [r for r in part.patch.rank_names if r in s1 and r not in s0]:   # (in order)
             for (c, note) in self._held_any():
                 if part.matches(self._pc(c), note):
                     t = part.patch.get(note + part.transpose, 127)
                     if t is not None:
                         self._draw(part, t, c, note, rank, n0)
-        for rank in [r for r in part.patch.rank_names if r in part.drawn and r not in want]:
+        for rank in [r for r in part.patch.rank_names if r in s0 and r not in s1]:
             for k in [k for k in list(self.slab.live)
                       if k[0] == part.pid and k[3] == rank]:
                 self.slab.release(k, n0)
         part.drawn = set(want)
+        part.couplers = cpl1
         part.lvl_want = None
         # A drawbar IS a parent, so the amplifier's products are now wrong --
         # drawing all nine bars changes what is intermodulating with what.

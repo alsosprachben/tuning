@@ -3885,6 +3885,19 @@ void nv_host::part_drive(size_t row, double v)
     post([this, pi, v](long long) { nv_part_drive(part, pi, v); });
 }
 
+// A PART's COUPLER SWITCHES (the AMP card's: live.set_couplers), between two blocks
+void nv_host::part_couplers(size_t row, int v)
+{
+    int pi;
+    {
+        std::lock_guard<std::mutex> lk(parts_mu);
+        if (row >= pats.size() || pats[row].gone)
+            return;
+        pi = pats[row].pi;
+    }
+    post([this, pi, v](long long n0) { nv_part_set_couplers(part, pi, v, n0); });
+}
+
 // A PART's ROTOR SPEED (the AMP card's: live.set_rotor_speed), between two blocks
 void nv_host::part_rotor(size_t row, int v)
 {
@@ -3899,14 +3912,14 @@ void nv_host::part_rotor(size_t row, int v)
 }
 
 // ...and what it is, read between two blocks (nv_part_drive_get's out)
-// ...THE AMP CARD's: nv_part_amp_get's eight, read between two blocks
+// ...THE AMP CARD's: nv_part_amp_get's ten, read between two blocks
 int nv_host::amp_state(size_t row, double *out)
 {
     const int pi = part_pi(*this, row);
     if (pi < 0)
         return 0;
     struct Got {
-        double o[8];
+        double o[10];
         int r = 0;
         std::atomic<bool> done{false};
     };

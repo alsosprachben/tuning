@@ -1019,7 +1019,7 @@ J build_of(nv_host *h)
 // the knob's], the half-moon, a Leslie on it, the mod wheel's scale
 J amp_of(nv_host *h, int row)
 {
-    double ao[8] = {0, 0, 0, 0, 0, 1, 0, 1};
+    double ao[10] = {0, 0, 0, 0, 0, 1, 0, 1, -1, 0};
     const int kind = nv_host_amp(h, row, ao);
     J o = sess::obj();
     o.o["row"] = sess::integer(row);
@@ -1033,6 +1033,8 @@ J amp_of(nv_host *h, int row)
     o.o["wheel"] = num(ao[5]);              // (the mod wheel's scale on the drive: what sounds is the drive times it)
     o.o["spectra"] = sess::integer((long)ao[6]);    // (a Spectra-Tone on it: 1 the rotor, 2 Chorus, 0 none)
     o.o["spectra_fast"] = sess::boolean(ao[7] != 0.0);  // (...its rocker up: Theater)
+    o.o["couplers"] = sess::integer((long)ao[8]);       // (a divider organ's coupler switches, -1 none)
+    o.o["coupler_offer"] = sess::integer((long)ao[9]);  // (...the ones its manual has: a bit a switch)
     return o;
 }
 
@@ -1744,6 +1746,8 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         nv_host_set_pickup(h, row, (int)arg_i(q, "choice", -1));
     } else if (call == "rotary_set") {         // (a part's rotary heard: mode -1 its own way, 0 room, 1 mics; spread degrees, <0 the default)
         nv_host_set_rotary(h, row, (int)arg_i(q, "mode", -1), arg_d(q, "spread", -1.0));
+    } else if (call == "couplers_set") {      // (a divider organ's coupler switches: COUPLER_CC's bits)
+        nv_host_set_couplers(h, row, (int)arg_i(q, "v", 0));
     } else if (call == "drive_set") {          // (a valve's drive, 0..40 -- an organ's to 3, a guitar's past 14; <0 the voice's again)
         nv_host_set_drive(h, row, std::min(40.0, arg_d(q, "v", -1.0)));
         if (w)

@@ -30,6 +30,10 @@ I = ctypes.c_int
 LL = ctypes.c_longlong
 
 
+# an organ's ranks at most (native/nv.h NV_MAX_RANK: the divider organ's upper manual is 39 with its couplers' copies)
+NV_MAX_RANK = 64
+
+
 class VoiceSnap(ctypes.Structure):
     """native/voice.c's VoiceSnap, field for field."""
     _fields_ = [('gain', C), ('max_harmonic', I), ('odd_only', I), ('even_db_set', I),
@@ -331,10 +335,10 @@ class NoteIn(ctypes.Structure):
                 + [('room_bands', C * 9), ('reflect', I), ('no_reflections', I), ('ch', LL), ('note', I),
                    ('damper_pedal', I), ('key_off', C), ('planes', C * 6), ('order', I), ('from_song', I), ('song_index', I),
                    ('seat', C), ('held', C), ('rnd_draws', C * 4), ('stroke_tilt', C), ('stroke_mouth', C),
-                   ('stroke_morph', C), ('snd_at', C), ('snd_rt', C), ('rank_gr', C * 32), ('rank_sp', C * 32),
-                   ('rank_skip', I * 32), ('rank_rel1', I * 32), ('organ_cr', C), ('rank_br', C * 32),
+                   ('stroke_morph', C), ('snd_at', C), ('snd_rt', C), ('rank_gr', C * NV_MAX_RANK), ('rank_sp', C * NV_MAX_RANK),
+                   ('rank_skip', I * NV_MAX_RANK), ('rank_rel1', I * NV_MAX_RANK), ('organ_cr', C), ('rank_br', C * NV_MAX_RANK),
                    ('carry_radius', C), ('organ_hx', C), ('organ_perc', I), ('bbr_set', I), ('bbr', C),
-                   ('rank_drawn_off', I * 32), ('snd_moog', I), ('snd_d', C * 8),
+                   ('rank_drawn_off', I * NV_MAX_RANK), ('snd_moog', I), ('snd_d', C * 8),
                    ('sung_hz', C), ('part', I), ('dist', C), ('gliss_lv', C),
                    ('ring_on', I), ('ring_f', C * 48), ('fbr', C),
                    ('sym_drv', ctypes.c_void_p), ('blk', C), ('xp', C),
@@ -3069,27 +3073,29 @@ class OrganRank(ctypes.Structure):
 class OrganSpec(ctypes.Structure):
     """native/nv.h's OrganSpec: a registered organ's pipes and ranks."""
     _fields_ = ([('n_pipe', I), ('n_rank', I), ('spiral', I), ('own_pitch', I), ('pipe', OrganPipe * 24),
-                ('rank', OrganRank * 32), ('spiral_m', C), ('spiral_phase', C), ('drift_m', C),
+                ('rank', OrganRank * NV_MAX_RANK), ('spiral_m', C), ('spiral_phase', C), ('drift_m', C),
                 ('spatial_default', C * 2), ('pipe_scale_divisor', C), ('sound_speed', C),
                 ('mode_lock_spread', C), ('mode_lock_knee', C), ('mode_lock_time', C),
-                ('n_wccs', I), ('wccs', I * 4), ('default_stops', I), ('n_order', I), ('order', I * 32), ('swells', I),
+                ('n_wccs', I), ('wccs', I * 4), ('default_stops', I), ('n_order', I), ('order', I * NV_MAX_RANK), ('swells', I),
                 ('family', I), ('swell_law', C * 4),
                 ('wind', I), ('trem_rank', I), ('has_ra', I)]
                 + [(f, C) for f in ('wsc', 'trem_class_depth', 'wander_rms', 'wa', 'wgain', 'ra', 'reg_restore',
                                     'sag_max', 'sag_per_unit', 'c1', 'c2', 'g', 'trem_hz', 'trem_depth', 'tdecay',
                                     'unit_hz', 'draw_exp', 'blk_s')]
-                + [('fam_a', C * 32), ('fam_b', C * 32), ('expr_rank', I), ('perc_rank', I), ('htrem_rank', I),
+                + [('fam_a', C * NV_MAX_RANK), ('fam_b', C * NV_MAX_RANK), ('expr_rank', I), ('perc_rank', I), ('htrem_rank', I),
                    ('expr_tilt', C), ('perc_attack_s', C), ('afm', C), ('pipe_radius', I), ('wheel_trem', C),
                    ('wtrem_hz', C), ('htrem_depth', C), ('htrem_hz', C), ('wtrem_stereo', I),
                    ('wtrem_scatter', C), ('snd_mask', I), ('n_cn', I), ('leak', I), ('cn_hz', C * 16),
                    ('cn_db', C * 16), ('cn_dbs', C), ('leak_db', C), ('phase_spread', C), ('contact_on', I),
                    ('beat_lo', C), ('beat_hi', C), ('n_choir', I), ('choir_pipe', I * 8), ('choir_bridge', I * 8),
-                   ('choir_beat', I * 8), ('n_buff', I), ('buff', (I * 2) * 8), ('rank_choir', I * 32),
+                   ('choir_beat', I * 8), ('n_buff', I), ('buff', (I * 2) * 8), ('rank_choir', I * NV_MAX_RANK),
                    ('choir_ratio', C * 8), ('cross', C), ('choir_cents', (C * 128) * 8),
                    ('choir_stiff', (C * 128) * 8), ('choir_bname', (ctypes.c_char * 16) * 8),
                    ('siren_up', I), ('n_sus', I), ('sus_rank', I * 4), ('sus_t60', C * 4),
                    ('n_lvl', I), ('lvl_rank', I * 8), ('lvl_group', I * 8), ('lvl_mask', ctypes.c_longlong * 8),
-                   ('lvl_db', (C * 32) * 8)])
+                   ('lvl_db', (C * NV_MAX_RANK) * 8),
+                   ('has_cpl', I), ('cpl_default', I), ('cpl_tab', I * NV_MAX_RANK), ('cpl_bit', I * NV_MAX_RANK),
+                   ('cpl_want', I * NV_MAX_RANK)])
 
 
 _ORGAN = {}
@@ -3104,7 +3110,7 @@ def siren_host(cls):
     (kind 2) whose rows of holes are registered ranks, its rotor fed by air,
     its upper disc's ranks on the crank's row (nvrender's)."""
     return (getattr(cls, 'siren_rotor', None) == 'helmholtz' and getattr(cls, 'registerable', False)
-            and kit_drum(cls) == 2 and len(getattr(cls, 'stop_ranks', ())) <= 32)
+            and kit_drum(cls) == 2 and len(getattr(cls, 'stop_ranks', ())) <= NV_MAX_RANK)
 
 
 def organ(cls):
@@ -3138,7 +3144,7 @@ def organ(cls):
         return p if pipes[i] is cls else _class(pipes[i])[2]
     try:
         ranks = list(p.stop_ranks)
-        if len(ranks) > 32:
+        if len(ranks) > NV_MAX_RANK:
             return None
         for i, (key, ratio, gain, *rest) in enumerate(ranks):
             r = o.rank[i]
@@ -3307,7 +3313,7 @@ def organ(cls):
     wccs = tuple(getattr(p, 'stop_word_ccs', (11, 43)))
     keys = [r[0] for r in ranks]
     order = getattr(p, 'crescendo_order', keys)
-    if len(wccs) > 4 or len(order) > 32 or any(k not in keys for k in order) or len(set(keys)) != len(keys):
+    if len(wccs) > 4 or len(order) > NV_MAX_RANK or any(k not in keys for k in order) or len(set(keys)) != len(keys):
         return None
     o.n_wccs = len(wccs)
     o.wccs[:len(wccs)] = list(wccs)
@@ -3318,6 +3324,15 @@ def organ(cls):
     o.swell_law[:] = [float(p.swell_floor), float(p.swell_gain_power), float(p.swell_hf_max),
                       float(p.swell_hf_ref_hz)]
     o.family = _FAMILIES.setdefault(BR.organ_family(cls), len(_FAMILIES))
+    # ITS COUPLER SWITCHES (tonelib.couple_divider: coupler_gate, each rank's rule)
+    gate = getattr(p, 'coupler_gate', None)
+    o.has_cpl = int(bool(gate))
+    o.cpl_default = int(getattr(p, 'default_couplers', 0) or 0)
+    for i, k in enumerate(keys):
+        g = gate.get(k) if gate else None
+        o.cpl_tab[i] = keys.index(g[0]) if g else -1
+        o.cpl_bit[i] = int(g[1]) if g else 0
+        o.cpl_want[i] = int(bool(g[2])) if g else 0
     # ITS CHEST'S WIND (_prep_chest_wind's: a pipe organ's, wind.py's constants)
     o.trem_rank = keys.index('tremulant') if 'tremulant' in keys else -1
     # A REED ORGAN'S EFFECT STOPS (the harmonium's Expression, Percussion, Tremolo)
@@ -3355,7 +3370,7 @@ def organ(cls):
         o.sus_rank[q], o.sus_t60[q] = i, t
     # ITS LEVEL STOPS (level_stops, level_groups; tonelib.level_db): in the class's order
     _ls = getattr(cls, 'level_stops', None) or {}
-    if len(_ls) > 8 or (_ls and len(keys) > 32):
+    if len(_ls) > 8 or (_ls and len(keys) > NV_MAX_RANK):     # (lvl_mask: 64 bits)
         return None
     _lg = getattr(cls, 'level_groups', None) or {}
     _gids = []

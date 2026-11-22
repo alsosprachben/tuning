@@ -497,17 +497,27 @@ struct Song {
         for (int i = 0; i < nw; i++)
             wb[i] = (spec->default_stops >> (7 * i)) & 0x7F;
         double cres = 0.0, vol = 1.0;
+        int cpl = spec->cpl_default;                // (the coupler switches: COUPLER_CC's bits)
         auto emit = [&](double t) {
             long long mask = 0;
             for (int i = 0; i < nw; i++)
                 mask |= (long long)wb[i] << (7 * i);
             int nd = (int)(cres * spec->n_order + 1e-9);
+            bool base[NV_MAX_RANK];
             for (int ri = 0; ri < nr; ri++) {
                 bool drawn = false;
                 for (int q = 0; q < nd && q < spec->n_order; q++)
                     if (spec->order[q] == ri)
                         drawn = true;
-                o.rank_ev[ri].push_back(std::make_pair(t, ((mask >> ri) & 1) || drawn ? 1.0 : 0.0));
+                base[ri] = ((mask >> ri) & 1) || drawn;
+            }
+            // (THE COUPLER SWITCHES, tonelib.coupled_on: a copy sounds with its tab
+            //  and its switch, a coupled tab not under its manual's 8' Off)
+            for (int ri = 0; ri < nr; ri++) {
+                bool on = base[ri];
+                if (spec->has_cpl && spec->cpl_tab[ri] >= 0)
+                    on = base[spec->cpl_tab[ri]] && (((cpl >> spec->cpl_bit[ri]) & 1) != 0) == (spec->cpl_want[ri] != 0);
+                o.rank_ev[ri].push_back(std::make_pair(t, on ? 1.0 : 0.0));
             }
             // (a LEVEL STOP drawn raises the ranks it names: tonelib.level_gain, its
             //  groups' loudest summed in the order they first come)
@@ -565,6 +575,8 @@ struct Song {
                     wb[i] = (e.v >> (7 * i)) & 0x7F;
             } else if (wi >= 0)
                 wb[wi] = e.v;
+            else if (e.cc == 87 && spec->has_cpl)      // (tonelib.COUPLER_CC)
+                cpl = e.v;
             else if (e.cc == 4)
                 cres = e.v / 127.0;
             else if (e.cc == 7 && spec->swells)

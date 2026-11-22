@@ -604,7 +604,33 @@ def spectra_sustain(choice):
     return mid
 
 
-MAKERS = {"stab_chords": stab_chords, "spectra_rotor": lambda: spectra(10), "spectra_chorus": lambda: spectra(11),
+def couplers(variation, steps):
+    """A 60's organ manual (bank 16, program 16: 16 the upper's 60's Organ 1, 41
+    the lower) holding a chord from 0.3 s while its COUPLER SWITCHES change
+    (CC87, tonelib.COUPLER_CC: 1 8' Off, 2 16', 4 4', 8 2') at each step's
+    time, a second chord struck at 5 s under the last; all off at 7.5 s."""
+    mid, tr = one_track()
+    ev = [(0.0, mido.Message('control_change', channel=0, control=0, value=variation)),
+          (0.0, mido.Message('program_change', channel=0, program=16))]
+    for k in (60, 64, 67):
+        ev += [(0.3, mido.Message('note_on', channel=0, note=k, velocity=100)),
+               (7.5, mido.Message('note_off', channel=0, note=k, velocity=0))]
+    ev += [(5.0, mido.Message('note_on', channel=0, note=72, velocity=100)),
+           (7.5, mido.Message('note_off', channel=0, note=72, velocity=0))]
+    for at, v in steps:
+        ev.append((at, mido.Message('control_change', channel=0, control=87, value=v)))
+    now = 0
+    for at, msg in sorted(ev, key=lambda e: e[0]):
+        tk = int(round(at * 960))
+        msg.time = tk - now
+        now = tk
+        tr.append(msg)
+    return mid
+
+
+MAKERS = {"stab_chords": stab_chords,
+          "couplers_upper": lambda: couplers(16, ((1.5, 0), (2.5, 1 | 4), (3.5, 2), (4.5, 2 | 4 | 8), (6.0, 1 | 2 | 8))),
+          "couplers_lower": lambda: couplers(41, ((1.5, 4), (3.0, 1 | 4), (4.5, 0), (6.0, 4))), "spectra_rotor": lambda: spectra(10), "spectra_chorus": lambda: spectra(11),
           "spectra_sustain": lambda: spectra_sustain(10), "spectra_sustain_chorus": lambda: spectra_sustain(11), "dense_pedal": dense_pedal, "assign_mode": assign_mode, "mpe_organ": lambda: mpe_zone(19), "cmx_live": cmx_live, "userdrums": userdrums, "drumdelay": drumdelay, "moog_cmx": moog_cmx, "two_organs": two_organs, "rhythmpart": rhythmpart, "gsrx_2port": gsrx_2port, "drumnrpn": drumnrpn, "drumnrpn2": drumnrpn2, "gsvsense": gsvsense,
           "mpe_zone": mpe_zone}
 

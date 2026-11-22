@@ -2205,6 +2205,11 @@ def registration_blocks(ch, prop, ccs, nblk, amp=None, recalls=()):
     swells = wccs[0] == 11
     rank_ev = {r[0]: [] for r in ranks}; swell_ev = []
     lvl = bool(getattr(prop, 'level_stops', None))
+    # THE COUPLER SWITCHES (tonelib.couple_divider, COUPLER_CC): the ranks that
+    # sound from those drawn, through coupler_gate -- a copy its tab and its
+    # switch, a coupled tab not under its manual's 8' Off
+    cgate = getattr(prop, 'coupler_gate', None)
+    cpl = [int(getattr(prop, 'default_couplers', 0) or 0)]
     def emit(t):
         mask = 0
         for i, b in enumerate(wbytes):
@@ -2213,6 +2218,8 @@ def registration_blocks(ch, prop, ccs, nblk, amp=None, recalls=()):
         # (a LEVEL STOP -- the divider organ's Solo, Accent, Volume -- drawn raises the
         #  ranks it names: their target past 1, T.level_gain)
         on = {r[0] for i, r in enumerate(ranks) if (mask >> i) & 1 or r[0] in drawn}
+        if cgate:
+            on = T.coupled_on(prop, {k for k in on if k not in prop.coupler_copies}, cpl[0])
         for i, r in enumerate(ranks):
             k = r[0]; rank_ev[k].append((t, (T.level_gain(prop, k, on) if lvl else 1.0) if k in on else 0.0))
         swell_ev.append((t, vol))
@@ -2229,6 +2236,7 @@ def registration_blocks(ch, prop, ccs, nblk, amp=None, recalls=()):
         if cc == -1:
             wbytes = [(val >> (7 * i)) & 0x7F for i in range(len(wccs))]
         elif cc in wccs: wbytes[wccs.index(cc)] = val
+        elif cc == T.COUPLER_CC and cgate: cpl[0] = int(val)
         elif cc==4: cres=val/127.0
         elif cc==7 and swells: vol=val/127.0
         else: continue

@@ -2929,6 +2929,7 @@ struct Part {
         // (a rank each), the crescendo's place (part.cres)
         const OrganSpec *organ = nullptr;
         std::vector<char> drawn = {};
+        int cpl = 0;                        // ...its coupler switches (live's part.couplers: COUPLER_CC's bits)
         double cres = 0.0;
         // A HAMMOND'S (live.Patch): on the rotors (leslie), the wheel its
         // swell pedal (wheel_swell), its valve's drive (amp_drive)
@@ -4434,6 +4435,7 @@ struct Part {
         if (!og)
             return;
         p.drawn.assign(og->n_rank, 0);
+        p.cpl = og->has_cpl ? og->cpl_default : 0;
         bool any = false;
         for (int i = 0; i < og->n_rank; i++)
             if ((og->default_stops >> i) & 1) {
@@ -7457,6 +7459,7 @@ struct Part {
         const bool keep_reg = og_new && og_new == p.organ && w.program == p.program && !p.drums && !w.drums
                               && (int)p.drawn.size() == og_new->n_rank;
         std::vector<char> kept = keep_reg ? p.drawn : std::vector<char>();
+        const int kept_cpl = p.cpl;
         p.cache = w.cache;
         p.program = w.program;
         p.drums = w.drums != 0;
@@ -7475,8 +7478,10 @@ struct Part {
             moog_sync_build(p);
         if (p.leslie && new_prog)
             rotor_own(p, !had_les);             // (a new organ's rotors at its own speed: live._swap_patch)
-        if (keep_reg)
+        if (keep_reg) {
             p.drawn = kept;
+            p.cpl = kept_cpl;
+        }
         if (w.pi == 0) {
             detune_wheel = w.detune_wheel != 0;
             if (!w.reg_note.empty())
@@ -8603,6 +8608,26 @@ struct Part {
     // the channel's, and the key's touch -- on its chest's row
     // A LEVEL STOP's gain on rank ri at registration dr (tonelib.level_gain: each group's
     // loudest drawn, summed in the order the groups first come)
+    // THE RANKS THAT SOUND (live._coupled_ranks, tonelib.coupled_on): the drawn
+    // tabs through the coupler switches -- a copy its tab and its switch, a
+    // coupled tab not under its manual's 8' Off; any other organ its drawn
+    static std::vector<char> coupled(const OrganSpec *og, const std::vector<char> &dr, int cpl)
+    {
+        if (!og || !og->has_cpl)
+            return dr;
+        const int n = (int)dr.size();
+        std::vector<char> base(dr), out((size_t)n, 0);
+        for (int ri = 0; ri < n && ri < og->n_rank; ri++)
+            if (og->cpl_tab[ri] >= 0 && og->cpl_tab[ri] != ri)
+                base[ri] = 0;                   // (a copy is no tab: its own bit draws nothing)
+        for (int ri = 0; ri < n; ri++) {
+            const int t = ri < og->n_rank ? og->cpl_tab[ri] : -1;
+            out[ri] = t < 0 ? base[ri]
+                            : (char)(t < n && base[t] && ((((cpl >> og->cpl_bit[ri]) & 1) != 0) == (og->cpl_want[ri] != 0)));
+        }
+        return out;
+    }
+
     static double level_gain(const OrganSpec *og, int ri, const std::vector<char> &dr)
     {
         if (!og || !og->n_lvl)
@@ -8704,7 +8729,7 @@ struct Part {
     void organ_strike(const nv::live::Template &T, int ch, int note, int vel, long long n0, double tf = 1.0)
     {
         note_touch[std::make_pair(ch, note)] = tf;
-        const std::vector<char> &dr = patches[cur].drawn;
+        const std::vector<char> dr = coupled(patches[cur].organ, patches[cur].drawn, patches[cur].cpl);   // (what sounds)
         for (int ri = 0; ri < (int)dr.size(); ri++)
             if (dr[ri])
                 draw_rank(T, ch, note, ri, n0);
@@ -8802,7 +8827,7 @@ struct Part {
 
     // live.set_stops: draw and retire ranks to match want, on every key
     // already down (each drawn at velocity 127's template), in the stops' order
-    void set_stops(int pi, std::vector<char> want, long long n0)
+    void set_stops(int pi, std::vector<char> want, long long n0, int cpl1 = -1)
     {
         Use u(*this, pi);
         const OrganSpec *og = patches[cur].organ;
@@ -8812,10 +8837,16 @@ struct Part {
         if (!any && og->n_order)
             want[og->order[0]] = 1;
         std::vector<char> &dr = patches[cur].drawn;
+        // WHAT SOUNDS, before and after (coupled: the tabs through the coupler
+        // switches -- cpl1 the switches moved, -1 as they stand)
+        const int cpl0 = patches[cur].cpl;
+        if (cpl1 < 0)
+            cpl1 = cpl0;
+        const std::vector<char> s0 = coupled(og, dr, cpl0), s1 = coupled(og, want, cpl1);
         // A LEVEL STOP moved: the ranks it names, sounding, to their new level at once
         if (og->n_lvl)
             for (int ri = 0; ri < og->n_rank; ri++) {
-                if (!want[ri] || !dr[ri])
+                if (!s1[ri] || !s0[ri])
                     continue;
                 double r = level_gain(og, ri, want) / level_gain(og, ri, dr);
                 if (r == 1.0)
@@ -8829,7 +8860,7 @@ struct Part {
             }
         lvl_want = &want;
         for (int ri = 0; ri < og->n_rank; ri++) {
-            if (!want[ri] || dr[ri])
+            if (!s1[ri] || s0[ri])
                 continue;
             for (auto &d : down) {
                 if (!claims(pi, d.first, d.second))
@@ -8843,7 +8874,7 @@ struct Part {
             }
         }
         for (int ri = 0; ri < og->n_rank; ri++) {
-            if (!dr[ri] || want[ri])
+            if (!s0[ri] || s1[ri])
                 continue;
             std::vector<Key> ks;
             long long rl = rank_layer(og, ri);
@@ -8855,6 +8886,7 @@ struct Part {
         }
         lvl_want = nullptr;
         dr = want;
+        patches[cur].cpl = cpl1;
         amp_touch(pi);                      // a drawbar is a parent: the valve's products are stale
     }
 
@@ -11051,6 +11083,15 @@ struct Part {
                 if (k && k->flt_set == 2 && k->flt_k == 4)
                     job_at[std::make_pair(ch, (int)NV_CC_MOUTH)] = v;     // (the mouth, routed)
             }
+        if (cc == 87) {
+            // A DIVIDER ORGAN's COUPLER SWITCHES (tonelib.COUPLER_CC: live's
+            // set_couplers): each listening organ's copies drawn and retired
+            for (int pi = 0; pi < (int)patches.size(); pi++) {
+                const Patch &p = patches[pi];
+                if (p.organ && p.organ->has_cpl && (p.channel < 0 || p.channel == pc(ch)))
+                    set_stops(pi, p.drawn, n0, v & 15);
+            }
+        }
         if (cc == NV_CC_LESLIE) {
             // THE ROTOR's SPEED (CC80): the file's zones (leslie.zone), the
             // rotors aimed there as the half-moon aims them
@@ -13662,7 +13703,7 @@ struct Part {
         double s = half_moon * 1.0e6 + (rotor_spectra.target > rotor_spectra_mid() ? 5.0e5 : 0.0);
         for (size_t i = 0; i < patches.size(); i++)
             s += (patches[i].amp * 31.0 + patches[i].drive * 7.0 + (patches[i].leslie ? 3.0 : 0.0)
-                  + patches[i].spectra * 11.0) * (double)(i + 1);
+                  + patches[i].spectra * 11.0 + patches[i].cpl * 13.0) * (double)(i + 1);
         for (const auto &d : drive_step)
             s += 1000.0 * d.second * (double)(d.first % 97 + 1);
         if (s != amp_sig) {
@@ -14250,6 +14291,17 @@ int nv_part_amp_get(void *h, int pi, double *out)
     // ...its Spectra-Tone (1 the rotor, 2 Chorus, 0 none) and its rocker (1 up: Theater)
     out[6] = (double)p.spectra;
     out[7] = P->spec.size() >= 11 && P->rotor_spectra.target >= 0.5 * (P->spec[7] + P->spec[8]) ? 1.0 : 0.0;
+    // ...its COUPLER SWITCHES (COUPLER_CC's bits, -1 none) and the ones its manual has (a bit a switch)
+    out[8] = -1.0;
+    out[9] = 0.0;
+    if (!p.drums && p.organ && p.organ->has_cpl) {
+        int offer = 1;                          // (8' Off: every manual with couplers)
+        for (int ri = 0; ri < p.organ->n_rank; ri++)
+            if (p.organ->cpl_tab[ri] >= 0 && p.organ->cpl_want[ri])
+                offer |= 1 << p.organ->cpl_bit[ri];
+        out[8] = (double)p.cpl;
+        out[9] = (double)offer;
+    }
     if (p.drums)
         return 0;
     if (p.leslie || p.wheel_swell)
@@ -14291,6 +14343,24 @@ void nv_part_switches(void *h, int ch, int *out)
     out[2] = P->soft[ch] ? 1 : 0;
     out[3] = P->porta_on[ch] ? 1 : 0;
     out[4] = P->mono[ch] ? 1 : 0;
+}
+
+// A DIVIDER ORGAN's COUPLER SWITCHES (live's part.couplers, COUPLER_CC's
+// bits): patch pi's, -1 where it has none; and set (between two blocks, at
+// n0: its copies drawn and retired on the keys down -- live.set_couplers)
+int nv_part_couplers(void *h, int pi)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (pi < 0 || pi >= (int)P->patches.size() || !P->patches[pi].organ || !P->patches[pi].organ->has_cpl)
+        return -1;
+    return P->patches[pi].cpl;
+}
+void nv_part_set_couplers(void *h, int pi, int v, long long n0)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (pi < 0 || pi >= (int)P->patches.size() || !P->patches[pi].organ || !P->patches[pi].organ->has_cpl)
+        return;
+    P->set_stops(pi, P->patches[pi].drawn, n0, v & 15);
 }
 
 // THE WHOLE REGISTRATION at once (a session's: want[rank] 1 drawn): one post,

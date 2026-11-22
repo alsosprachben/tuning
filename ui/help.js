@@ -232,6 +232,17 @@ const HELP = {
       ['CC82', 'A file or a keyboard knob sets it too, on the part\'s channel: 0 the cabinet in the room, 1 to 127 two mics, the value \u00d7 180/127 degrees apart (96 is 136\u00b0, the Rotary effect\'s own scale). A note hears the setting it starts under.'],
     ],
   },
+  couplers: {
+    title: 'Couplers',
+    intro: 'A 60\'s organ\'s coupler switches, on the left of its console: each makes the voices it takes sound again at another octave, on the manual it belongs to. The upper\'s take its six 8\' voices (Flute, Diapason, String, Oboe, Trumpet, Kinura); the lower\'s every voice but its Quint. A Solo tab raises the coupled pitches with their voice.',
+    terms: [
+      ['16\'', 'Upper to Upper 16\': each voice an octave lower as well.'],
+      ['4\'', 'Upper to Upper 4\', Lower to Lower 4\': each voice an octave higher as well.'],
+      ['2\'', 'Upper to Upper 2\': each voice two octaves higher as well.'],
+      ['8\' OFF', 'The coupled voices\' own pitch silenced, their couplers\' kept: with 4\', a voice at 4\' alone.'],
+      ['CC87', 'A file or a keyboard sets them too, on the part\'s channel, a bit a switch: 1 8\' Off, 2 16\', 4 4\', 8 2\' (add them up). A program change puts back the preset\'s.'],
+    ],
+  },
   spectra: {
     title: 'Spectra-Tone',
     intro: 'A 60\'s organ\'s turning speaker: two small speakers back to back on one rotor inside the console. Their beams sweep past you, so the higher a note the more swells it makes each turn, with a slight wobble of pitch. Choose it under Speaker for the part: SPECTRA-TONE sends the manual through the rotor, ST CHORUS through the rotor and the console speakers together.',
@@ -851,7 +862,7 @@ const HELP_TOC = [
   ['Library', ['library']],
   ['Synth', ['synth', 'synth:LFO 1', 'synth:Left hand', 'synth:Oscillators', 'synth:Mixer', 'synth:Filter', 'synth:Envelopes', 'synth:Delay']],
   ['Stops', ['stops', 'drive', 'rotary']],
-  ['Amp', ['amp', 'pickup', 'drive', 'cabinet', 'rotary', 'spectra']],
+  ['Amp', ['amp', 'pickup', 'drive', 'cabinet', 'rotary', 'spectra', 'couplers']],
   ['Piano', ['piano', 'piano:pedals', 'piano:dampers', 'piano:key']],
   ['Drums', ['drums', 'drums:user']],
   ['Effects', ['effects', 'fx:ins', 'fx:sends', 'fx:rev', 'fx:cho', 'fx:dly', 'fx:eq']],

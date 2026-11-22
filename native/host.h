@@ -308,8 +308,9 @@ int nv_host_drive(nv_host *h, int row, double *out);
    wheel's scale on it), the voice's, the knob's (<0 none), the Leslie's
    half-moon (0 stop, 1 slow, 2 fast), a Leslie on it (1/0), the wheel's scale
    (1 untouched), its Spectra-Tone (1 the rotor, 2 Chorus, 0 none) and its
-   rocker (1 up: Theater); 1 a tonewheel organ, 2 another amplified voice, 0
-   neither */
+   rocker (1 up: Theater), its coupler switches (COUPLER_CC's bits, -1 none)
+   and those its manual has (out[10]); 1 a tonewheel organ, 2 another
+   amplified voice, 0 neither */
 int nv_host_amp(nv_host *h, int row, double *out);
 long nv_host_amp_seq(nv_host *h);           /* (the amp state's changes so far: the AMP card's push) */
 /* a part's rotary heard (an organ's cabinet, a Rotary type): out[0] -1 its own
@@ -329,6 +330,9 @@ void nv_host_set_drive(nv_host *h, int row, double v);
 /* a part's rotor speed (the AMP card's), v as CC80's value -- a Leslie's
    half-moon, a Spectra-Tone's rocker -- straight to its rotors */
 void nv_host_set_rotor(nv_host *h, int row, int v);
+/* a divider organ part's coupler switches (the AMP card's): COUPLER_CC's bits --
+   1 its 8' Off, 2 16', 4 4', 8 2' */
+void nv_host_set_couplers(nv_host *h, int row, int v);
 
 /* ---- THE CONTROLLER MATRIX (livetui's C): a channel's sources to destinations ----
    sources 0 mod wheel, 1 pitch bend, 2 channel aftertouch, 3 poly aftertouch,

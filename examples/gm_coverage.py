@@ -1442,14 +1442,17 @@ def _sc88_var_rated():
         elif kind == "cls" and how[1].__name__ == "DividerOrganProperties":
             # THE DIVIDER ORGAN (tonelib.DividerOrganProperties), its tabs fitted
             r = 4
-            _st = how[2]["stop_ranks"]
+            _st = how[1].stop_ranks                 # (its couplers the switches: how[2]["default_couplers"])
+            _cn = [c for c, b in __import__("tonelib").COUPLER_BITS.items()
+                   if how[2].get("default_couplers", 0) >> b & 1]
             note = ("the DIVIDER ORGAN (tonelib.DividerOrganProperties): twelve oscillators, every octave "
                     "divided down, so its ranks lock in phase and a chord stands still -- each tab ITS CIRCUIT, "
                     "Ben's own Wurlitzer 4500 (its 1965 service schematics: every R, C and L of each tab's "
                     "network, the dividers' squares, the complex and flute signals; examples/wurlitzer_circuit.py), "
                     "its levels, duty and speaker fitted to his recordings, bounded to the parts (3.5-7.8 dB rms "
                     "from takes made in a garage: the shapes kept dry); its couplers measured on it; drawing "
-                    + ", ".join(_st[i][0] for i in range(len(_st)) if how[2]["default_stops"] >> i & 1))
+                    + ", ".join(_st[i][0] for i in range(len(_st)) if how[2]["default_stops"] >> i & 1)
+                    + ("; couplers " + ", ".join(_cn) if _cn else ""))
         elif kind == "set":
             r = RATED[how[1]][0]
             note = "GM %d %s with %s" % (how[1], names[how[1]], ", ".join(

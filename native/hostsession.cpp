@@ -726,6 +726,12 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
                     want[ri] = want[ri] || (n.is(sess::J::STR) && rank_rename(n.s, names) == names[ri]);   // (old names too)
             if (want_p == shown_program)
                 post([this, want](long long) { nv_part_set_drawn(part, 0, want.data(), (int)want.size()); });
+            // ...and its COUPLER SWITCHES (live's from_dict "couplers"), its organ in
+            const sess::J *cj = parts->a[0].get("couplers");
+            if (cj && cj->is(sess::J::NUM) && want_p == shown_program) {
+                const int cv = (int)cj->i() & 15;
+                post([this, cv](long long n0) { nv_part_set_couplers(part, 0, cv, n0); });
+            }
             if (!at_start || want_p != shown_program) {
                 std::vector<std::string> w;
                 for (size_t ri = 0; ri < names.size(); ri++)
@@ -992,6 +998,13 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
         }
         if (k > 0)                              // (the first's below: its program as shown)
             put_drawn(pd, pa.pi, pa.drums ? -1 : pa.program & 127);
+            {                                   // (its coupler switches: live's to_dict "couplers")
+                const int cv = pa.drums ? -1 : nv_part_couplers(part, pa.pi);
+                if (cv >= 0)
+                    pd.o["couplers"] = sess::integer(cv);
+                else
+                    pd.o.erase("couplers");
+            }
         if (anyk)
             pd.o["synth_units"] = sess::integer(6);
         else if (!pd.get("synth") && !pd.get("synth_b"))
@@ -1846,6 +1859,12 @@ void nv_host_set_drive(nv_host *h, int row, double v)
 {
     size_t i;
     if (row_index(h, row, i)) h->part_drive(i, v);
+}
+
+void nv_host_set_couplers(nv_host *h, int row, int v)
+{
+    size_t i;
+    if (row_index(h, row, i)) h->part_couplers(i, v & 15);
 }
 
 void nv_host_set_rotor(nv_host *h, int row, int v)

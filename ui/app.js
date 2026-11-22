@@ -697,10 +697,12 @@ function drawAmp() {
   const organ = kind === 1, les = !!(st && st.leslie);
   // (a 60's organ's SPECTRA-TONE, chosen under Speaker -- patch_map.SPECTRA_CHOICES 10, 11 -- its rocker CC80)
   const offersSt = offer.includes(10) || offer.includes(11), spc = st ? (st.spectra || 0) : 0;
+  // (and its COUPLER SWITCHES -- tonelib.COUPLER_CC's bits: 1 8' Off, 2 16', 4 4', 8 2' -- the manual's own)
+  const cplOffer = st && st.couplers >= 0 ? (st.coupler_offer || 0) : 0;
   // (its pickup: [chosen, now (0 its own), [the choices offered]] -- the parts push's)
   const pkv = p && p.pickup ? p.pickup : [-1, 0, []], pkOffer = (p && !p.drums && pkv[2]) || [];
   const hasPk = pkOffer.length > 0;
-  const sig = [S.row, kind, organ, les, spc, offer.join(), pkOffer.join()].join('|');
+  const sig = [S.row, kind, organ, les, spc, cplOffer, offer.join(), pkOffer.join()].join('|');
   if (sig !== AMP.sig) {
     AMP.sig = sig; AMP.knob = null; AMP.pkSig = '';
     el.classList.toggle('no-les', !organ);
@@ -721,7 +723,16 @@ function drawAmp() {
       `<section><h3 data-help="cabinet">Speaker</h3><div class="amp-cabs">` +
       [0, ...offer].map(c => `<button class="hb amp-cab" data-kit="1" data-c="${c}"></button>`).join('') +
       `</div><p class="amp-now"></p><p class="pn-note amp-about"></p></section>` +
-      (organ ? `<section><h3 data-help="${offersSt ? 'spectra' : 'rotary'}">${offersSt ? 'Spectra-Tone' : 'Leslie'}</h3><div class="amp-les"></div></section>` : '');
+      (organ ? `<section><h3 data-help="${offersSt ? 'spectra' : 'rotary'}">${offersSt ? 'Spectra-Tone' : 'Leslie'}</h3><div class="amp-les"></div></section>` : '') +
+      (cplOffer ? `<section><h3 data-help="couplers">Couplers</h3><div class="amp-row amp-cpls">` +
+        [[0, "8' OFF"], [1, "16'"], [2, "4'"], [3, "2'"]].filter(([b]) => (cplOffer >> b) & 1)
+          .map(([b, n]) => `<button class="hb amp-cpl" data-kit="1" data-b="${b}">${n}</button>`).join('') +
+        `</div><p class="pn-note">The console\'s coupler switches: every voice they take sounds again an octave down (16\'), up (4\') or two up (2\'); 8\' OFF silences their own pitch, the coupled ones kept.</p></section>` : '');
+    if (cplOffer) el.querySelectorAll('.amp-cpl').forEach(b => Kit.press(b, () => {
+      const cur = ampHeld('cpl', AMP.st ? AMP.st.couplers : 0), v = cur ^ (1 << +b.dataset.b);
+      ampHold('cpl', v); drawAmp();
+      Wire.call('couplers_set', { row: S.row, v });
+    }));
     if (hasPk) {
       el.querySelector('.amp-pksw').addEventListener('click', e => {
         const g = e.target.closest('[data-c]');
@@ -799,6 +810,11 @@ function drawAmp() {
   });
   el.querySelector('.amp-now').textContent = now ? lab(now) : `PATCH'S OWN · ${own !== undefined ? lab(own) : ''}`;
   el.querySelector('.amp-about').textContent = about(now || own || 0);
+  // THE COUPLER SWITCHES, lit as they stand
+  if (cplOffer) {
+    const cv = ampHeld('cpl', st.couplers);
+    el.querySelectorAll('.amp-cpl').forEach(b => b.classList.toggle('on', ((cv >> +b.dataset.b) & 1) === 1));
+  }
   // THE LESLIE -- or a 60's organ's SPECTRA-TONE: its rocker, Cathedral and Theater (CC80 0, 127)
   if (!organ) return;
   const lb = el.querySelector('.amp-les');

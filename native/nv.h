@@ -543,20 +543,24 @@ struct OrganPipe {
     double pp_hz[8], pp_s[8], pp_db, pp_snap_s;
 };
 
+/* AN ORGAN's RANKS AT MOST: the divider organ's upper manual is 39 with its
+   couplers' copies (tonelib.couple_divider); native.py's NV_MAX_RANK */
+#define NV_MAX_RANK 64
+
 /* A REGISTERED ORGAN: its pipes (pipe[0] the host's own), its ranks, the
    case's spiral (rank_position_x), the pipes' scale (pipe_radius), the mode
    lock (mode_lock_*), and whether each rank speaks at its own pitch */
 typedef struct OrganSpec {
     int n_pipe, n_rank, spiral, own_pitch;
     OrganPipe pipe[24];
-    OrganRank rank[32];
+    OrganRank rank[NV_MAX_RANK];
     double spiral_m, spiral_phase, drift_m, spatial_default[2];
     double pipe_scale_divisor, sound_speed, mode_lock_spread, mode_lock_knee, mode_lock_time;
     /* ITS REGISTRATION (registration_blocks): the stop word's controllers
        (wccs; the first 11 for an organ whose CC7 is its swell: swells), its
        default, the crescendo's order (rank indices), the swell's law
        (floor, power, hf_max, hf_ref); its family (organ_family's id) */
-    int n_wccs, wccs[4], default_stops, n_order, order[32], swells, family;
+    int n_wccs, wccs[4], default_stops, n_order, order[NV_MAX_RANK], swells, family;
     double swell_law[4];
     /* ITS CHEST'S WIND (wind.py, its constants as the Python's Wind made
        them for the export's block): a pipe organ's (wind), its scale (wsc),
@@ -566,7 +570,7 @@ typedef struct OrganSpec {
     int wind, trem_rank, has_ra;
     double wsc, trem_class_depth, wander_rms, wa, wgain, ra, reg_restore, sag_max, sag_per_unit, c1, c2, g;
     double trem_hz, trem_depth, tdecay, unit_hz, draw_exp, blk_s;
-    double fam_a[32], fam_b[32];
+    double fam_a[NV_MAX_RANK], fam_b[NV_MAX_RANK];
     /* A REED ORGAN'S EFFECT STOPS (the harmonium's): its Expression,
        Percussion and Tremolo stops' ranks (-1 none), the Expression's tilt,
        the hammer's attack and the attack's share of the note (attack_fraction_max) */
@@ -597,7 +601,7 @@ typedef struct OrganSpec {
        by (a buffed choir's plain one: choir_bname, choir_beat 0 none), its
        cents and wire at every key (choir_cents, choir_stiffness); the
        bridges' cross coupling, the buffs (buffed, plain), each rank's choir */
-    int n_choir, choir_pipe[8], choir_bridge[8], choir_beat[8], n_buff, buff[8][2], rank_choir[32];
+    int n_choir, choir_pipe[8], choir_bridge[8], choir_beat[8], n_buff, buff[8][2], rank_choir[NV_MAX_RANK];
     double choir_ratio[8], cross, choir_cents[8][128], choir_stiff[8][128];
     char choir_bname[8][16];
     int siren_up;           // a double siren's ranks on its upper disc (siren_upper), a bit a rank
@@ -610,7 +614,12 @@ typedef struct OrganSpec {
        counts), the ranks it raises (a bit a rank) and by how much (dB) -- tonelib.level_db */
     int n_lvl, lvl_rank[8], lvl_group[8];
     long long lvl_mask[8];
-    double lvl_db[8][32];
+    double lvl_db[8][NV_MAX_RANK];
+    /* ITS COUPLER SWITCHES (tonelib.couple_divider: the divider organ's manuals,
+       COUPLER_CC): has_cpl, where they start (default_couplers), and each rank's
+       rule -- the tab it follows (-1 none: its own bit alone), the switch's bit,
+       the state it wants (a copy: on; a coupled tab: its 8' Off off) */
+    int has_cpl, cpl_default, cpl_tab[NV_MAX_RANK], cpl_bit[NV_MAX_RANK], cpl_want[NV_MAX_RANK];
 } OrganSpec;
 
 /* what the note setup reads of the voice besides its VoiceSnap */
@@ -1278,10 +1287,10 @@ typedef struct {
     // shut, at the note's onset), whether it is drawn only after the key
     // lifted (skip: it does not speak), or pushed in before the key-up
     // (rel1: its release a sample); and the organ's swell row
-    double rank_gr[32], rank_sp[32];
-    int rank_skip[32], rank_rel1[32];
+    double rank_gr[NV_MAX_RANK], rank_sp[NV_MAX_RANK];
+    int rank_skip[NV_MAX_RANK], rank_rel1[NV_MAX_RANK];
     double organ_cr;
-    double rank_br[32];     // each rank's bend row: its chest's wind (wrow_of), as it stands at that rank
+    double rank_br[NV_MAX_RANK];     // each rank's bend row: its chest's wind (wrow_of), as it stands at that rank
     double carry_radius;    // the emitter's radius from the note before (an organ's last pipe), NaN none
     // a reed organ's at its onset: the Expression stop's bellows (CC11 / 127,
     // NaN: not drawn), and the Percussion stop drawn
@@ -1291,7 +1300,7 @@ typedef struct {
     // its own, bbrow_of's second); else the note's
     int bbr_set;
     double bbr;
-    int rank_drawn_off[32]; // each rank drawn at the key-up (its jack clicks: release_click_db)
+    int rank_drawn_off[NV_MAX_RANK]; // each rank drawn at the key-up (its jack clicks: release_click_db)
     // A MOOG's knobs as GM's sound controllers turn them (moog.apply_gm):
     // CC71-78's offsets at its onset, the class's own; snd_moog 0 none
     int snd_moog;

@@ -495,10 +495,40 @@ inline void draw_amp(App &a)
         if (cv->is(J::ARR) && cv->a.size() >= 3 && cv->a[2].is(J::ARR))
             for (const J &o : cv->a[2].a)
                 offers_st = offers_st || (int)o.d() == 10 || (int)o.d() == 11;
+    // (a divider organ's COUPLER SWITCHES -- tonelib.COUPLER_CC's bits: 1 8' Off,
+    // 2 16', 4 4', 8 2' -- along the column's foot, the manual's own: the web's)
+    auto couplers = [&](float x, float y) {
+        const int offer = (int)num(&M.st, "coupler_offer", 0), cur0 = (int)num(&M.st, "couplers", -1);
+        if (cur0 < 0 || !offer)
+            return;
+        int cur = cur0;
+        auto hc = a.hold.find("cpl");
+        if (hc != a.hold.end() && ImGui::GetTime() < hc->second.second)
+            cur = (int)hc->second.first;
+        static const char *CN[4] = {"8' OFF", "16'", "4'", "2'"};
+        int nb = 0;
+        for (int b = 0; b < 4; b++)
+            nb += (offer >> b) & 1;
+        const float by = y + H - (IP ? 62 : 70), bw = (LW - 28 - (nb - 1) * 6) / (float)nb, bh = 44;
+        text(a, a.font, 14, x + 14, by - (IP ? 20 : 24), SILK_DIM, "COUPLERS");
+        int k = 0;
+        for (int b = 0; b < 4; b++) {
+            if (!((offer >> b) & 1))
+                continue;
+            const std::string id = std::string("ampcpl") + CN[b];
+            if (button(a, id.c_str(), x + 14 + k * (bw + 6), by, bw, bh, CN[b], ((cur >> b) & 1) != 0)) {
+                const int v = cur ^ (1 << b);
+                a.hold["cpl"] = {(double)v, ImGui::GetTime() + 0.8};
+                call(a, "{\"call\":\"couplers_set\",\"row\":" + std::to_string(a.row) + ",\"v\":" + std::to_string(v) + "}");
+            }
+            k++;
+        }
+    };
     if (organ && offers_st) {
         const float x = X1 - LW, y = Y0;
         look::tray(a, x, y, LW, H, 10);
         heading(a, x + 14, y + 12, "SPECTRA-TONE", "spectra");
+        couplers(x, y);
         if ((int)num(&M.st, "spectra", 0) == 0) {
             const std::string why = "No Spectra-Tone on it now: choose SPECTRA-TONE or ST CHORUS under SPEAKER for "
                                     "its two speakers turning.";

@@ -201,6 +201,8 @@ void nv_part_gpu(void *h, void *vb, void *vbd, void *vds, void *vs, void *vz, vo
 void nv_part_moogx(void *h, void *smx, void *vbm, void *vmd, void *vmm);
 void nv_part_spectra(void *h, const double *sp, int n, void *scone);
 void nv_part_rotor(void *h, int pi, int v);
+int nv_part_couplers(void *h, int pi);
+void nv_part_set_couplers(void *h, int pi, int v, long long n0);
 // the maps' own drum sets: their keys' region of K, how many (live.cpp's) and the song's
 void nv_tcache_mapk(int base, int n, const int *ids);
 // a melodic cache's drum sets' tables, for a note that borrows a kit key's strokes
@@ -1528,6 +1530,7 @@ struct nv_host {
     std::chrono::steady_clock::time_point rotary_read{};
     void part_drive(size_t row, double v);          // (an organ's drive knob, live.set_drive: <0 the voice's)
     void part_rotor(size_t row, int v);             // (its rotor's speed, CC80's value: live.set_rotor_speed)
+    void part_couplers(size_t row, int v);          // (a divider organ's coupler switches: live.set_couplers)
     int drive_state(size_t row, double *out);       // (nv_part_drive_get's: 1 an organ's, 0 not, -1 unread)
     int amp_state(size_t row, double *out);         // (nv_part_amp_get's: 1 an organ, 2 amplified, 0 neither, -1 unread)
     void messenger_reading(bool on);                // (livetui's M: every part reads a Messenger's chart)

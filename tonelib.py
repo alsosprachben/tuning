@@ -8168,33 +8168,83 @@ for _div in (DividerOrganProperties, DividerPedalProperties, DividerLowerPropert
 del _div
 
 
+# THE DIVIDER ORGAN'S COUPLER SWITCHES (Ben's 4500, its manual p. 13: switches
+# on the left of the console, not tabs): one controller, a bit a switch --
+# 1 the manual's 8' Off, 2 to 16', 4 to 4', 8 to 2' -- the part's, as CC83 is
+# (couple_divider: which a manual has, which of its voices they take)
+COUPLER_CC = 87
+COUPLER_BITS = {"8' off": 0, "16'": 1, "4'": 2, "2'": 3}
+
+
+def couple_divider(cls, couplers, tabs):
+    """A MANUAL's COUPLER SWITCHES (COUPLER_CC; its manual, p. 13): each coupler a
+    copy of each coupled tab at its octave -- a rank of its own, after the
+    manual's ("Flute 8', 4' coupler": its tab's level stops), sounding when its
+    tab is drawn AND its switch is on; and the manual's 8' Off, the coupled
+    tabs' own pitch silenced, their copies kept. Only the voices the manual
+    names couple (the red-lettered: the upper's six 8' voices, not its
+    Clarinet, 16's, Quint or 4'; every lower voice but its Quint).
+    coupler_gate {rank: (tab, switch bit, the switch's state it wants)}: every
+    engine's rule, the tab's bit in the stop word read through it."""
+    names = [r[0] for r in cls.stop_ranks]
+    ranks = list(cls.stop_ranks)
+    gate = {}
+    for t in tabs:
+        gate[t] = (t, COUPLER_BITS["8' off"], False)
+    for c in couplers:
+        cr, cg = DividerOrganProperties.COUPLERS[c]
+        for t in tabs:
+            r = cls.stop_ranks[names.index(t)]
+            k = "%s, %s coupler" % (t, c)
+            ranks.append((k, r[1] * cr, r[2] * cg) + tuple(r[3:]))
+            gate[k] = (t, COUPLER_BITS[c], True)
+    cls.stop_ranks = ranks
+    cls.coupler_gate = gate
+    cls.coupler_copies = tuple(k for k in gate if k not in tabs)
+    cls.coupler_switches = ("8' off",) + tuple(couplers)
+    cls.coupler_cc = COUPLER_CC
+    cls.default_couplers = 0
+
+
+couple_divider(DividerOrganProperties, ("16'", "4'", "2'"),
+               ("Flute 8'", "Diapason 8'", "String 8'", "Oboe 8'", "Trumpet 8'", "Kinura 8'"))
+couple_divider(DividerLowerProperties, ("4'",),
+               ("Melodia 8'", "Geigen Diapason 8'", "Viole 8'", "Trombone 8'", "Vox Humana 8'", "Cornet 8'"))
+DividerPedalProperties.coupler_gate = None          # (the pedals have no couplers)
+DividerPedalProperties.coupler_copies = ()
+DividerPedalProperties.coupler_switches = ()
+DividerPedalProperties.default_couplers = 0
+
+
+def coupled_on(cls, on, couplers):
+    """The ranks that SOUND (a set of names) from those whose stop-word bit is
+    drawn (on), the manual's coupler switches at `couplers` (COUPLER_CC's
+    bits): coupler_gate's rule. Every engine's (blockrender's registration,
+    live's, native's channel.cpp and slab.cpp)."""
+    gate = getattr(cls, 'coupler_gate', None)
+    if not gate:
+        return set(on)
+    out = {k for k in on if k not in gate}
+    for k, (t, b, want) in gate.items():
+        if t in on and bool((int(couplers) >> b) & 1) == want:
+            out.add(k)
+    return out
+
+
 def divider_registration(tabs, couplers=()):
     """A divider organ's registration as a variation's settings: its TABS drawn
-    and the COUPLERS on -- each coupler a copy of every drawn tab at its
-    octave, ranks of their own after the twelve tabs (so the stop word still
-    reads tab by tab). {stop_ranks, default_stops} for patch_map's ("cls", ...)."""
+    and its COUPLER SWITCHES on (couple_divider: the copies the manual's own,
+    the switches a part's, COUPLER_CC). {default_stops, default_couplers} for
+    patch_map's ("cls", ...)."""
     D = DividerOrganProperties
     names = [r[0] for r in D.stop_ranks]
-    ranks = list(D.stop_ranks)
     bits = 0
     for t in tuple(tabs) + tuple(D.level_fitted):     # (every Solo and the Accent drawn: as recorded)
         bits |= 1 << names.index(t)
+    cpl = 0
     for c in couplers:
-        cr, cg = D.COUPLERS[c]   # (each tab drawn copied; the vibrato is no tab to copy)
-        for t in tabs:
-            r = D.stop_ranks[names.index(t)]
-            bits |= 1 << len(ranks)
-            ranks.append(("%s, %s coupler" % (t, c), r[1] * cr, r[2] * cg, r[3]))
-    rows = [list(r) for r in D.stop_rows]                         # (the tabs', and the Solo and Accent row)
-    if len(ranks) > len(D.stop_ranks):
-        rows.append([r[0] for r in ranks[len(D.stop_ranks):]])     # (the couplers' copies: a row of their own)
-    out = dict(stop_ranks=ranks, default_stops=bits, stop_rows=rows)
-    if len(ranks) > 14:
-        # (past bit 13 the stop word needs its third and fourth controllers, CC44 and
-        #  CC45, as the church organ's recorded ranks do: without them 60's Organ 3's
-        #  2' couplers and its Quint's 4' never sounded)
-        out["stop_word_ccs"] = (11, 43, 44, 45)
-    return out
+        cpl |= 1 << COUPLER_BITS[c]
+    return dict(default_stops=bits, default_couplers=cpl)
 
 
 class OrganProperties(StoppedPipeProperties):
@@ -25223,6 +25273,7 @@ CABINET_CC = 83
 # is still being built until it is in (Live._msgr_flush).
 # Free in General MIDI, GS, the Messenger's chart (fine halves too) and ours.
 MESSENGER_MODE_CC = 86
+# (COUPLER_CC, 87: the divider organ's coupler switches -- beside couple_divider)
 
 # THE PICKUP (patch_map.PICKUP_CHOICES, Ben 2026-11-19): CC85, the same way --
 # its value a choice's index (0 the voice's own, 1 neck, 2 neck+middle, 3
