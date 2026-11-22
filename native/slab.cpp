@@ -12760,7 +12760,8 @@ struct Part {
                 hi = q;
                 act++;
             }
-        bool g = hi >= 0 && gp.vb && !gpu_off && act >= gp.gpu_min && frames == blk && n0 % frames == 0 && !busp;
+        bool g = hi >= 0 && gp.vb && !gpu_off && act >= gp.gpu_min && frames == blk && n0 % frames == 0 && !busp
+                 && !cone_on;                // (a Spectra-Tone sounding: the CPU's, cone_grid -- as render_now's)
         if (g) {
             // set up in this turn's tables and launched, not waited for
             Table &D = turn == 2 ? gp.D3 : turn ? gp.D2 : gp.D, &C = turn == 2 ? gp.C3 : turn ? gp.C2 : gp.C,
