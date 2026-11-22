@@ -1848,6 +1848,12 @@ void nv_host_set_drive(nv_host *h, int row, double v)
     if (row_index(h, row, i)) h->part_drive(i, v);
 }
 
+void nv_host_set_rotor(nv_host *h, int row, int v)
+{
+    size_t i;
+    if (row_index(h, row, i)) h->part_rotor(i, std::max(0, std::min(127, v)));
+}
+
 int nv_host_cmx_state(nv_host *h, int channel, nv_host_cmx *out)
 {
     nv::Cmx m;

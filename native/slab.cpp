@@ -14885,6 +14885,26 @@ void nv_part_spectra(void *h, const double *sp, int n, void *scone)
     P->rotor_spectra.rate = P->rotor_spectra.target = r0;
 }
 
+// A PART's ROTOR SPEED SET ON ITS CARD (live.set_rotor_speed): v as CC80's
+// value -- a Leslie's half-moon (leslie.zone), a Spectra-Tone's rocker
+// (spectratone.zone) -- straight to the rotors, not through the channel: a
+// part reading a Messenger's chart hears CC80 as its filter's velocity switch
+void nv_part_rotor(void *h, int pi, int v)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    if (pi < 0 || pi >= (int)P->patches.size())
+        return;
+    const nv::slab::Part::Patch &p = P->patches[pi];
+    if (p.leslie && P->S.les.size() >= 5) {
+        const double ladder[3] = {0.0, P->S.les[3], P->S.les[4]};
+        P->half_moon = v < 42 ? 0 : v < 85 ? 1 : 2;
+        P->rotor_horn.target = ladder[P->half_moon];
+        P->rotor_drum.target = ladder[P->half_moon];
+    }
+    if (p.spectra && P->spec.size() >= 11)
+        P->rotor_spectra.target = v < 64 ? P->spec[7] : P->spec[8];
+}
+
 void nv_part_moogx(void *h, void *smx, void *vbm, void *vmd, void *vmm)
 {
     nv::slab::Part *P = (nv::slab::Part *)h;

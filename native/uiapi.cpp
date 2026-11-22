@@ -1278,6 +1278,10 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         if (row < 0 || row >= n || (cc != 10 && cc != 80 && cc != 91 && cc != 93 && cc != 94)) {     // (80: the Leslie's half-moon)
             ok = false;
             r.o["error"] = sess::str("no part " + std::to_string(row) + " or cc " + std::to_string(cc));
+        } else if (cc == 80) {
+            // (the rotor's speed straight to the part: on its channel a part
+            // reading a Messenger's chart hears CC80 as its filter's switch)
+            nv_host_set_rotor(h, row, (int)arg_i(q, "v", 64));
         } else {
             nv_host_chan_cc_send(h, ps[(size_t)row].channel, cc, (int)arg_i(q, "v", 64));
         }

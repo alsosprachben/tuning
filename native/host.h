@@ -326,6 +326,9 @@ void nv_host_set_cabinet(nv_host *h, int row, int choice);
 int nv_host_pickup(nv_host *h, int row, int *chosen, int *now, int *offer, int cap);
 void nv_host_set_pickup(nv_host *h, int row, int choice);
 void nv_host_set_drive(nv_host *h, int row, double v);
+/* a part's rotor speed (the AMP card's), v as CC80's value -- a Leslie's
+   half-moon, a Spectra-Tone's rocker -- straight to its rotors */
+void nv_host_set_rotor(nv_host *h, int row, int v);
 
 /* ---- THE CONTROLLER MATRIX (livetui's C): a channel's sources to destinations ----
    sources 0 mod wheel, 1 pitch bend, 2 channel aftertouch, 3 poly aftertouch,

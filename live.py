@@ -8598,6 +8598,22 @@ class Live:
         part.rotary_sep = None if spread is None else max(0.0, min(math.pi, float(spread)))
         self.dirty = True
 
+    def set_rotor_speed(self, part, v):
+        """A PART's ROTOR SPEED SET ON ITS CARD (nv_part_rotor): v as CC80's
+        value -- a Leslie's half-moon (leslie.zone), a Spectra-Tone's rocker
+        (spectratone.zone) -- straight to the rotors, not through the channel,
+        where a part reading a Messenger's chart hears CC80 as its filter's
+        velocity switch."""
+        import leslie as _LESz
+        v = max(0, min(127, int(v)))
+        if getattr(part.patch, "leslie", False):
+            _zt = _LESz.zone(v)
+            self.half_moon = (_LESz.STOP, _LESz.CHORALE, _LESz.TREMOLO).index(_zt)
+            self.rotor_horn.target = _zt
+            self.rotor_drum.target = _zt
+        if getattr(part.patch, "spectra", None):
+            self.rotor_spectra.target = __import__("spectratone").zone(v)
+
     def _cone_block(self, n0, frames):
         """THE SPECTRA-TONE, this callback: while a cone row sounds (CONE_COLS)
         its rotor turns and the kernel is handed its angles on the grid over
