@@ -12745,7 +12745,12 @@ struct Part {
                 G.data(), Sx.data(), S.i4[2].data(), BRt.data(), BCt.data(), BLt.data(), S.i4[4].data(), FT.data(),
                 KN.data(), 2, kb0, S.aLp.data(), S.aRp.data(), S.i4[5].data(), MPI.data(), MPC.data(), MPR.data(),
                 MKI.data(), MPK.data(), S.f8[3].data(), S.f8[4].data(), S.f8[5].data(), sh[0], sh[1], sh[2], sh[3],
-                nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0, nullptr, nullptr, nullptr, nullptr,
+                // (a Spectra-Tone sounding: its rows' columns and the block's
+                //  angles, cone_block's -- the setup's cone_grid; else none)
+                cone_on ? S.i4[I4_lsr].data() : nullptr, cone_on ? F4[F4_az].data() : nullptr,
+                cone_on ? F4[F4_lfl].data() : nullptr, cone_on ? F4[F4_lsh].data() : nullptr,
+                cone_on ? cone_ones.data() : nullptr, cone_on ? cone_lang.data() : nullptr, cone_on ? cone_code : 0,
+                nullptr, nullptr, nullptr, nullptr,
                 nullptr, nullptr, 0, S.sw.data(), snd ? 1 : 0, gidx.data(), (int)nact, D.p, C.p,
                 (int)C.n, SB.p, (int)SB.n, nthr, counts, 1); });
             if (r == 0)
@@ -12802,8 +12807,7 @@ struct Part {
                 hi = q;
                 act++;
             }
-        bool g = hi >= 0 && gp.vb && !gpu_off && act >= gp.gpu_min && frames == blk && n0 % frames == 0 && !busp
-                 && !cone_on;                // (a Spectra-Tone sounding: the CPU's, cone_grid -- as render_now's)
+        bool g = hi >= 0 && gp.vb && !gpu_off && act >= gp.gpu_min && frames == blk && n0 % frames == 0 && !busp;
         if (g) {
             // set up in this turn's tables and launched, not waited for
             Table &D = turn == 2 ? gp.D3 : turn ? gp.D2 : gp.D, &C = turn == 2 ? gp.C3 : turn ? gp.C2 : gp.C,
@@ -12962,8 +12966,6 @@ struct Part {
                 S.i8[0][S.bus_hide[q]] = IDLE;
             }
         }
-        if (cone_on)                        // (a Spectra-Tone sounding: the CPU's, cone_grid -- live's)
-            on_gpu = false;
         if (on_gpu && !render_gpu(n0, frames, L, R, SL, SR, blk))
             on_gpu = false;
         if (!on_gpu) {

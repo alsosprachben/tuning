@@ -64,6 +64,7 @@ static inline u64 v_mulhi(u64 a, u64 b){ return (u64)(((unsigned __int128)a * b)
 #define VD_FMS   8      // 1 -> 2 FM as sidebands, each through the ladder
 #define VD_PM    16     // OSC 2 on its pitch rows: the carrier re-anchored per cell
 #define VD_LESLIE 32    // a rotor row: its level times the lobe, lg (leslie_grid)
+#define VD_CONE  64     // ...a Spectra-Tone's (with VD_LESLIE): its gain complex, lg + i li (cone_grid)
 #define VD_LG    5      // the lobe's grid points a block: a file's 512 over MOOG_GRID, and its end
 
 // ONE PARTIAL'S BLOCK. kind 0: silent this block (skipped); 1: every voice but
@@ -91,6 +92,7 @@ typedef struct {
     float kgL, kgR;              // kind 1: the amplitude at the knee (voice_block.inc), each ear
     float za[12];                // the carrier again at ns+128, +256, +384 (zLr zLi zRr zRi each)
     float lg[VD_LG];             // VD_LESLIE: the lobe at the block's grid points
+    float li[VD_LG];             // VD_CONE: the gain's imaginary part there (lg its real)
     float xr;                    // kind 1: a fast exponential's rate a sample (0: the line);
                                  // mL0/mR0 its anchors' levels, mL1/mR1 their samples
 } vdesc;
@@ -262,7 +264,20 @@ static inline void voice_sample(const VGLOBAL vdesc* d, const VGLOBAL vcell* C, 
     if(d->flags & VD_LESLIE){
         // the rotor's lobe, a line between its grid points (leslie_grid)
         int j=k/mg; float g=d->lg[j]+(d->lg[j+1]-d->lg[j])*((float)(k-j*mg)*invg);
-        mL*=g; mR*=g;
+        if(d->flags & VD_CONE){
+            // A SPECTRA-TONE's (synthkernel.c cone_samples): the gain complex,
+            // the output Re(z S) = x Sr - y Si, the chiff's jitter on both
+            float gi=d->li[j]+(d->li[j+1]-d->li[j])*((float)(k-j*mg)*invg), yL=ziL, yR=ziR;
+            if(d->jfa>0.f){
+                u64 idx=n*d->chk_hi+v_mulhi(n, d->chk_lo);
+                float jit=6.2831853f*v_hash01(idx)*d->cc, cj=VCOS(jit), sj=VSIN(jit);
+                yL+=(zrL*sj+ziL*cj)*d->jfa;
+                yR+=(zrR*sj+ziR*cj)*d->jfa;
+            }
+            sL=sL*g-yL*gi; sR=sR*g-yR*gi;
+        } else {
+            mL*=g; mR*=g;
+        }
     }
     o[0]+=mL*sL; o[1]+=mR*sR;
     if(send){ o[2]+=mL*sL*d->swp; o[3]+=mR*sR*d->swp; }
@@ -371,7 +386,16 @@ static inline void voice_sample_ext(const VGLOBAL vdesc* d, const VGLOBAL vcell*
         sL+=(zrL*cj-ziL*sj)*d->jfa;
         sR+=(zrR*cj-ziR*sj)*d->jfa;
     }
-    if(d->flags & VD_LESLIE){ float g=d->lg[VD_LG-1]; mL*=g; mR*=g; }    // (the lobe held at the block's end)
+    if(d->flags & VD_CONE){                 // (a Spectra-Tone's gain held at the block's end)
+        float g=d->lg[VD_LG-1], gi=d->li[VD_LG-1], yL=ziL, yR=ziR;
+        if(d->jfa>0.f){
+            u64 idx=n*d->chk_hi+v_mulhi(n, d->chk_lo);
+            float jit=6.2831853f*v_hash01(idx)*d->cc, cj=VCOS(jit), sj=VSIN(jit);
+            yL+=(zrL*sj+ziL*cj)*d->jfa;
+            yR+=(zrR*sj+ziR*cj)*d->jfa;
+        }
+        sL=sL*g-yL*gi; sR=sR*g-yR*gi;
+    } else if(d->flags & VD_LESLIE){ float g=d->lg[VD_LG-1]; mL*=g; mR*=g; }    // (the lobe held at the block's end)
     o[0]+=mL*sL; o[1]+=mR*sR;
 }
 #endif

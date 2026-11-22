@@ -96,12 +96,26 @@
             // a rotor row: its lobe at the block's grid points (leslie_grid)
             if(lsr && (lsr[p]>=0 || (fsr && fsr[p]>=0)) && chBW[p]>=0.f && BLK/mg+1<=VD_LG){
                 d->flags|=VD_LESLIE;
+                if(lsr[p]>=0 && lsh[p]<0.f){
+                    // A SPECTRA-TONE's ROW (cone_grid, lsh -1 marks it): its gain
+                    // complex at the grid points, lg + i li; a moving filter's
+                    // level on both, as the CPU's cone branch has it
+                    d->flags|=VD_CONE;
+                    cone_grid(LANG, lgn, lsr[p], lph[p], lfl[p], nf, bn0, mg, BLK/mg+1, d->lg, d->li);
+                    if(fsr && fsr[p]>=0){
+                        float lgc[VD_LG];
+                        for(int j=0;j<BLK/mg+1;j++) lgc[j]=1.f;
+                        filter_grid(FCT, fgn, fsr[p], fty[p], fpa[p], fpb[p], fpc[p], nf, bn0, mg, BLK/mg+1, lgc);
+                        for(int j=0;j<BLK/mg+1;j++){ d->lg[j]*=lgc[j]; d->li[j]*=lgc[j]; }
+                    }
+                } else {
                 if(lsr[p]>=0)
                     leslie_grid(LANG, lgn, lsr[p], lph[p], lfl[p], lsh[p], lnm[p], bn0, mg, BLK/mg+1, d->lg);
                 else
                     for(int j=0;j<BLK/mg+1;j++) d->lg[j]=1.f;
                 if(fsr && fsr[p]>=0)       /* ...and a moving filter (filter_grid) */
                     filter_grid(FCT, fgn, fsr[p], fty[p], fpa[p], fpb[p], fpc[p], nf, bn0, mg, BLK/mg+1, d->lg);
+                }
             }
             d->kind=1; continue;
         }
@@ -110,7 +124,7 @@
         // a Moog row on a rotor or a moving filter: its grid gains times them
         if(lsr && (lsr[p]>=0 || (fsr && fsr[p]>=0))){
             float lgm[65]; int njm=BLK/mg+1;
-            if(lsr[p]>=0)
+            if(lsr[p]>=0 && lsh[p]>=0.f)    /* (a Moog on a Spectra-Tone: not turned, as the cone build's) */
                 leslie_grid(LANG, lgn, lsr[p], lph[p], lfl[p], lsh[p], lnm[p], bn0, mg, njm, lgm);
             else
                 for(int j=0;j<njm;j++) lgm[j]=1.f;

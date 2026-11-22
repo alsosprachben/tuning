@@ -257,8 +257,9 @@ def ensure_gpu_lib():
     GPU renderer's block setup. A library of its own, because compiling them
     beside synth_voice changes how gcc inlines it (see synthkernel.c)."""
     src = os.path.join(HERE, "synthkernel.c")
-    return _build(src, "libsynthgpu_%d.so" % SR, ["-DVOICE_BLOCK"],
-                  ["synth_voice", "voice_block", "voice_samples", "voice_sizes", "voice_pack"])
+    return _cone_set(_build(src, "libsynthgpu_%d.so" % SR, ["-DVOICE_BLOCK"],
+                            ["synth_voice", "voice_block", "voice_samples", "voice_sizes", "voice_pack",
+                             "cone_table_set"]))
 
 
 
@@ -279,8 +280,8 @@ def ensure_gpu_damp_lib():
     src = os.path.join(HERE, "synthkernel.c")
     lib = _build(src, "libsynthgpudamp_%d.so" % SR, ["-DVOICE_BLOCK", "-DDAMP_KERNEL"],
                  ["synth_voice", "voice_block", "voice_samples", "voice_sizes", "voice_pack",
-                  "voice_damp_set"])
-    return lib
+                  "voice_damp_set", "cone_table_set"])
+    return _cone_set(lib)
 
 
 def ensure_moogx_lib():
@@ -297,9 +298,9 @@ def ensure_gpu_moogx_lib():
     -DMOOGX_KERNEL): a table with such rows sets up through it, MX handed over
     by voice_moogx_set (and any damper tracks by voice_damp_set) first."""
     src = os.path.join(HERE, "synthkernel.c")
-    return _build(src, "libsynthgpumoogx_%d.so" % SR, ["-DVOICE_BLOCK", "-DDAMP_KERNEL", "-DMOOGX_KERNEL"],
-                  ["synth_voice", "voice_block", "voice_samples", "voice_sizes", "voice_pack",
-                   "voice_damp_set", "voice_moogx_set"])
+    return _cone_set(_build(src, "libsynthgpumoogx_%d.so" % SR, ["-DVOICE_BLOCK", "-DDAMP_KERNEL", "-DMOOGX_KERNEL"],
+                            ["synth_voice", "voice_block", "voice_samples", "voice_sizes", "voice_pack",
+                             "voice_damp_set", "voice_moogx_set", "cone_table_set"]))
 
 
 def moogx_rows(a, i0, i1):
@@ -375,6 +376,23 @@ def ensure_lobe_lib():
 
 
 _CONE_LIB = None
+_CONE_SET = {}
+
+
+def _cone_set(dll):
+    """A library with the Spectra-Tone's rows (the cone build, the GPU's block
+    setup: cone_grid) with its table set -- spectratone.table(), once a library
+    (its globals are the library's own); returns dll."""
+    if dll._name not in _CONE_SET:
+        import spectratone as _ST
+        CA, CK = _ST.table()
+        keep = (np.ascontiguousarray(CA, np.float32), np.ascontiguousarray(CK, np.float32))
+        fp = lambda x: x.ctypes.data_as(ctypes.POINTER(ctypes.c_float))     # noqa: E731
+        dll.cone_table_set(fp(keep[0]), fp(keep[1]), _ST.TABLE_NB, _ST.TABLE_NA,
+                           ctypes.c_float(_ST.CONES[0][1]), ctypes.c_float(_ST.CONES[1][1]),
+                           ctypes.c_float(_ST.C_SOUND))
+        _CONE_SET[dll._name] = keep
+    return dll
 
 
 def ensure_cone_lib():
@@ -388,13 +406,7 @@ def ensure_cone_lib():
         src = os.path.join(HERE, "synthkernel.c")
         dll = _build(src, "libsynthcone_%d.so" % SR, ["-DLESLIE_KERNEL", "-DCONE_KERNEL"],
                      ["synth_voice_lobe", "cone_table_set", "synth_voice_cone_damp"])
-        CA, CK = _ST.table()
-        dll._cone_keep = (np.ascontiguousarray(CA, np.float32), np.ascontiguousarray(CK, np.float32))
-        fp = lambda x: x.ctypes.data_as(ctypes.POINTER(ctypes.c_float))     # noqa: E731
-        dll.cone_table_set(fp(dll._cone_keep[0]), fp(dll._cone_keep[1]), _ST.TABLE_NB, _ST.TABLE_NA,
-                           ctypes.c_float(_ST.CONES[0][1]), ctypes.c_float(_ST.CONES[1][1]),
-                           ctypes.c_float(_ST.C_SOUND))
-        _CONE_LIB = dll
+        _CONE_LIB = _cone_set(dll)
     return _CONE_LIB
 
 
@@ -9990,18 +10002,10 @@ def render_partials(prep, n0, winlen, L, R):
     _render_partials(prep, n0, winlen, L, R)
 
 
-def cone_rows(prep):
-    """Whether a table has Spectra-Tone rows (leslie.lobe_columns: lsh < 0) --
-    which the GPU's block setup does not draw yet: such a table renders on
-    the CPU, through libsynthcone."""
-    lsh = prep.get('lsh') if prep.get('LANG') is not None else None
-    return lsh is not None and len(lsh) > 0 and float(np.min(lsh)) < 0.0
-
-
 def _render_partials(prep, n0, winlen, L, R):
     if prep['P'] == 0:
         return
-    if RENDER_GPU and n0 == 0 and _gpu() is not None and not cone_rows(prep):
+    if RENDER_GPU and n0 == 0 and _gpu() is not None:
         import gpurender
         gL, gR, _, _ = gpurender.FileRenderer(prep, _gpu()).render(winlen)
         L += gL; R += gR

@@ -136,6 +136,17 @@ struct GpuFile {
             nv_cl_free(cl);
     }
 
+    // THE SPECTRA-TONE's TABLE in the setup's builds (their cone_grid: a
+    // Spectra-Tone's rows drawn on the GPU, nv_cone_table) -- after open
+    void *hlib = nullptr, *hdlib = nullptr;
+    void cone_table(const std::vector<double> &spec)
+    {
+        if (hlib)
+            nv_cone_table(hlib, spec);
+        if (hdlib)
+            nv_cone_table(hdlib, spec);
+    }
+
     // the GPU (OpenCL, gpukernel.cl in dir) and the setup's builds in dir (SR's): "" or why not
     std::string open(const std::string &dir, int SR, const std::string &kdir = "")
     {
@@ -152,6 +163,8 @@ struct GpuFile {
             return "no voice_block / voice_pack / voice_sizes in " + lib;
         vz(sz);
         void *hd = nv::klib_open(dlib);
+        hlib = h;
+        hdlib = hd;
         if (hd) {
             vbd = (gf_vblock_fn)nv::klib_sym(hd, "voice_block");
             vds = (gf_vdamp_fn)nv::klib_sym(hd, "voice_damp_set");
@@ -225,8 +238,8 @@ struct GpuFile {
             }
             if (FCT && t.fsr && t.fmx && t.fsr[r] >= 0)     // (a moving filter can lift a row: at most fmx)
                 lift = lift * (double)t.fmx[r];
-            if (LANG && t.lsr && t.lsr[r] >= 0)
-                lift = lift * (double)t.lob[3][r];
+            if (LANG && t.lsr && t.lsr[r] >= 0)     // (a Spectra-Tone's row, lsh < 0: gpurender.CONE_LIFT)
+                lift = lift * (t.lob[2][r] < 0.0f ? 2.5 : (double)t.lob[3][r]);
             a = a * lift;
             const double sl = t.f[F_sus][r], af = t.f[F_aft][r], lr = t.f[F_logr][r], lrA = t.f[F_logrA][r];
             auto t_to = [&](double c, double rate) -> double {

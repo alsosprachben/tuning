@@ -1171,9 +1171,15 @@ int nv_host::open(int argc, char **argv)
             long gmin = atol(opt(argc, argv, "gpu-min", "100").c_str());
             gpu_nthr = atoi(opt(argc, argv, "gpu-threads", "4").c_str());
             nv_part_gpu(part, vb, vbd, vds, vs, vz, cl, gmin, gpu_nthr);
+            if (!E.spec.empty()) {          // (the Spectra-Tone's table in the setup's builds: its rows on the GPU)
+                nv_cone_table(gl, E.spec);
+                nv_cone_table(gd, E.spec);
+            }
             {                               // (the Moog extensions' build of the setup)
                 std::string gm = beside(E.gpu_damp_lib, "libsynthgpudamp_", "libsynthgpumoogx_");
                 void *hm = gm.empty() ? nullptr : nv::klib_open(gm);
+                if (hm && !E.spec.empty())
+                    nv_cone_table(hm, E.spec);
                 void *smx = nullptr;
                 {
                     std::string ml = beside(E.libs[2], "libsynthdamp_", "libsynthmoogx_");

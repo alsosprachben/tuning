@@ -853,8 +853,6 @@ class Stream:
 
     def _leslie(self, r, channels):
         import leslie as LE
-        if LE.has_cones(channels):
-            self._cones = True                  # a Spectra-Tone: the CPU's (blockrender.cone_rows)
         for ch in channels:
             if ch not in self.rotors:
                 self.rotors.update(LE.make_rotors({ch: channels[ch]}))
@@ -1053,7 +1051,7 @@ class Stream:
         # may sum; the CPU's own row sets would sum in another order (the
         # corpus hashes it), so it keeps the one call.
         big = None
-        if self.gpu is not None and self.stems is None and not getattr(self, '_cones', False) and sum(
+        if self.gpu is not None and self.stems is None and sum(
                 int(((c['nonL'] < w1) & (c['zend'] > w0)).sum()) for c in self.store) > self.slice_rows:
             big = self._render_sliced(wi, w0, w1)
         sel = []
@@ -1266,7 +1264,7 @@ class Stream:
         B = self.B
         n = w1 - w0
         P = prep['P']
-        if self.gpu is not None and P and not B.cone_rows(prep):     # (a Spectra-Tone: the CPU's)
+        if self.gpu is not None and P:
             import gpurender as GR
             g = self.B.send_weights(self.ctx['reverb'], self.ctx.get('reverb_steps'),
                                     prep['mch'], prep['non'])

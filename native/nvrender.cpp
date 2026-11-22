@@ -5299,9 +5299,7 @@ static int run(int argc, char **argv)
         // (this render's own context, freed at its end: a render in the app is one of many)
         std::unique_ptr<GpuFile> gpuf_own;
         GpuFile *gpuf = nullptr;
-        if (g_gpu && spectra)                   // (a Spectra-Tone's rows: the CPU's, as streamrender's)
-            fprintf(stderr, "nvrender: --gpu: a Spectra-Tone renders on the CPU\n");
-        if (g_gpu && !spectra) {
+        if (g_gpu) {
             // (the setup's builds beside libnative, the kernel's sources there or in ../Resources)
             const char *nd = nv_native_dir();
             std::string dir = nd && *nd ? std::string(nd) : nv_self_exe().substr(0, nv_self_exe().rfind('/'));
@@ -5313,6 +5311,8 @@ static int run(int argc, char **argv)
                 quit(1);
             }
             gpuf->bend_levels(BLr.empty() ? nullptr : BLr.data(), (long)nr, (long)nblk + 1);
+            if (spectra)                        // (a Spectra-Tone's rows drawn on the GPU: its table in the setup's builds)
+                gpuf->cone_table(E.spec);
         }
         BusSet bset[2];
         bset[0] = make_set(opath);

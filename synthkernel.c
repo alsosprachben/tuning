@@ -457,7 +457,7 @@ static void leslie_samples(long ns, long ne, long n0, long bs0, float invb, int 
     }
 }
 
-#ifdef CONE_KERNEL
+#if defined(CONE_KERNEL) || defined(VOICE_BLOCK)   /* (the GPU's block setup draws its rows too: voice_items.inc) */
 /* A SPECTRA-TONE (spectratone.py): two cones back to back on one rotor, the
    row's gain COMPLEX -- S = c + g * sum_i A_i(f, theta) exp(j k r_i s_i
    cos theta), theta the rotor's angle less the row's path azimuth. A_i is the
@@ -503,6 +503,7 @@ static void cone_grid(const float* LANG, long lgn, int rot, float ph, float u, f
         si[j]=g*(a1*sinf(p1)+a2*sinf(p2));
     }
 }
+#ifdef CONE_KERNEL
 /* ...and the row's sample loop: leslie_samples' with the complex gain --
    the output Re(z S) = zr Sr - zi Si per ear, S a line between grid points */
 __attribute__((noinline))
@@ -535,6 +536,7 @@ static void cone_samples(long ns, long ne, long n0, long bs0, float invb, int mg
         tmp=zrR*rr-ziR*ri; ziR=zrR*ri+ziR*rr; zrR=tmp;
     }
 }
+#endif
 #endif
 
 /* A FILTER THAT MOVES (efxfilter.py: a Phaser, a wah, a Step Flanger, a

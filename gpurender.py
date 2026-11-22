@@ -31,7 +31,8 @@ VDESC = np.dtype([("chk_hi", "u8"), ("chk_lo", "u8"), ("nk_hi", "u8"), ("nk_lo",
                   ("mL0", "f4"), ("mL1", "f4"), ("mR0", "f4"), ("mR1", "f4"),
                   ("aL", "f4"), ("aR", "f4"), ("aLp", "f4"), ("aRp", "f4"),
                   ("jfa", "f4"), ("cc", "f4"), ("swp", "f4"), ("kgL", "f4"), ("kgR", "f4"),
-                  ("za", "f4", 12), ("lg", "f4", 5), ("xr", "f4")])
+                  ("za", "f4", 12), ("lg", "f4", 5), ("li", "f4", 5), ("xr", "f4"),
+                  ("tail_pad", "f4")])     # (C pads the struct to its u64s: 248)
 VCELL = np.dtype([("s0", "i4"), ("s1", "i4"), ("sb", "i4"), ("nsb", "i4"),
                   ("g", "f4", 4), ("c", "f4", 4), ("z", "f4", 4), ("wc", "f4"),
                   ("z1r", "f4"), ("z1i", "f4"), ("th1", "f4"), ("fmkI", "f4"),
@@ -386,6 +387,7 @@ class FileRenderer:
     # is done. The CPU path keeps every row (its hashes are the corpus's).
     RETIRE_FLOOR = 1e-6
     BEND_RETIRE_FLOOR = 3e-7         # rows on a bend row: see _audible_end
+    CONE_LIFT = 2.5                  # a Spectra-Tone row's gain at most (spectratone.table's |S|: 2.04 measured)
     # A WINDOW'S DESCRIPTORS HAVE A BUDGET: active rows x blocks, a VDESC
     # each. Tokei at 3:44 had ~590 000 rows sounding, and 32 blocks of them
     # asked for a table past the 3.25 GB the Iris allocates in one buffer --
@@ -462,9 +464,12 @@ class FileRenderer:
         # a moving filter can lift a row too, at most fmx (efxfilter.peak)
         if prep.get('FCT') is not None and 'fmx' in prep:
             lift = lift * np.where(np.asarray(prep['fsr'])[:P] >= 0, np.asarray(prep['fmx'], np.float64)[:P], 1.0)
-        # a rotor row's lobe peaks at lnm times its level (leslie.lobe_columns)
+        # a rotor row's lobe peaks at lnm times its level (leslie.lobe_columns); a
+        # Spectra-Tone's gain (lsh < 0: its cone table's |S|) at CONE_LIFT at most
         if prep.get('LANG') is not None:
-            lift = lift * np.where(np.asarray(prep['lsr'])[:P] >= 0, np.asarray(prep['lnm'], np.float64)[:P], 1.0)
+            _lsh = np.asarray(prep['lsh'], np.float64)[:P]
+            lift = lift * np.where(np.asarray(prep['lsr'])[:P] >= 0,
+                                   np.where(_lsh < 0.0, self.CONE_LIFT, np.asarray(prep['lnm'], np.float64)[:P]), 1.0)
         a = a * lift
         sl, af, lr, lrA = g('sus'), g('aft'), g('logr'), g('logrA')
         F = Fr

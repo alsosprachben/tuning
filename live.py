@@ -3086,8 +3086,8 @@ class GpuRenderer(Renderer):
         snd = self.send
         b = self.bounds()
         if (b is None or self.act < self.gpu_min or frames != self.frames
-                or B.BLK != frames or n0 % frames or self.slab.prep().get('CONE')):
-            self.on_gpu = False         # (a Spectra-Tone sounding: the CPU's, cone_grid)
+                or B.BLK != frames or n0 % frames):
+            self.on_gpu = False
             L, R = Renderer.render(self, n0, frames)
             return ("done", L.copy(), R.copy(),
                     self.SL[:frames].copy() if snd else None, self.SR[:frames].copy() if snd else None)
@@ -3164,7 +3164,7 @@ class GpuRenderer(Renderer):
     def _render_now(self, n0, frames):
         b = self.bounds()
         if (b is None or self.act < self.gpu_min or frames != self.frames
-                or B.BLK != frames or n0 % frames or self.slab.prep().get('CONE')):
+                or B.BLK != frames or n0 % frames):
             self.on_gpu = False
             return super().render(n0, frames)
         self.on_gpu = True

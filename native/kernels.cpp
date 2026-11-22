@@ -42,10 +42,10 @@ struct KLib {
 #define NVK_V_synthmoogx(X, T) NVK_BASE(X, T) X(T, synth_voice_damp) X(T, synth_voice_moogx)
 #define NVK_V_synthlobe(X, T) NVK_BASE(X, T) X(T, synth_voice_lobe)
 #define NVK_V_synthcone(X, T) NVK_BASE(X, T) X(T, synth_voice_lobe) X(T, cone_table_set) X(T, synth_voice_cone_damp)
-#define NVK_V_synthgpu(X, T) NVK_BASE(X, T) NVK_GPU(X, T)
-#define NVK_V_synthgpudamp(X, T) NVK_BASE(X, T) NVK_GPU(X, T) X(T, synth_voice_damp) X(T, voice_damp_set)
+#define NVK_V_synthgpu(X, T) NVK_BASE(X, T) NVK_GPU(X, T) X(T, cone_table_set)
+#define NVK_V_synthgpudamp(X, T) NVK_BASE(X, T) NVK_GPU(X, T) X(T, synth_voice_damp) X(T, voice_damp_set) X(T, cone_table_set)
 #define NVK_V_synthgpumoogx(X, T) NVK_BASE(X, T) NVK_GPU(X, T) X(T, synth_voice_damp) X(T, voice_damp_set) \
-    X(T, synth_voice_moogx) X(T, voice_moogx_set)
+    X(T, synth_voice_moogx) X(T, voice_moogx_set) X(T, cone_table_set)
 #define NVK_V_convolver(X, T) X(T, conv_new) X(T, conv_process) X(T, conv_reset) X(T, conv_free)
 
 #define NVK_VARIANTS(V, R) V(synth, R) V(synthxdec, R) V(synthdamp, R) V(synthmoogx, R) V(synthlobe, R) V(synthcone, R) \
