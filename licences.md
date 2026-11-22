@@ -149,7 +149,7 @@ store build.
   (uploaded by a third party), Khaled Arman with the Geneva Camerata (with an
   ensemble). Ermlick's is the cleanest; its licence is the uploader's own.
 
-### L7. Thirteen Pianobook libraries — Pianobook's terms forbid it
+### L7. Eleven Pianobook libraries — Pianobook's terms forbid it
 
 - **The terms** (pianobook.co.uk/terms-conditions, section 5): the samples are
   licensed "only within your own newly-created sound recording(s)"; the
@@ -163,11 +163,11 @@ store build.
 - **What derives from them:**
   - Electric Piano 2 (Wurlitzer 200A, BaltiWurli);
   - Dulcimer (Lite Hammered Dulcimer);
-  - the harpsichord's upper 8', 4' and lute (Harpsimachord);
+  - the harpsichord's upper 8' and 4' (Harpsimachord);
   - the tonewheel organ's 16', 5 1/3', 1 3/5', percussion and speaker (Hammond L102);
   - Church Bell (St Kathrin's bell);
   - Hawaiian Guitar (lap steel); 12-string Guitar (Fender 12 String);
-  - Mandolin (Eclectic Mandolin); Taisho Koto (Taishogoto); Gopichant (The Ektara);
+  - Mandolin (Eclectic Mandolin); Gopichant (The Ektara);
   - Flugel Horn (Dusty Flugelhorn);
   - Guitar Feedback (Gretsch Feedback and Feedbacker).
 - **Status:** open, and the largest issue by count. Each samplist can grant
