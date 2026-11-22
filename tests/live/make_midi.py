@@ -579,7 +579,33 @@ def spectra(choice):
     return mid
 
 
-MAKERS = {"stab_chords": stab_chords, "spectra_rotor": lambda: spectra(10), "spectra_chorus": lambda: spectra(11), "dense_pedal": dense_pedal, "assign_mode": assign_mode, "mpe_organ": lambda: mpe_zone(19), "cmx_live": cmx_live, "userdrums": userdrums, "drumdelay": drumdelay, "moog_cmx": moog_cmx, "two_organs": two_organs, "rhythmpart": rhythmpart, "gsrx_2port": gsrx_2port, "drumnrpn": drumnrpn, "drumnrpn2": drumnrpn2, "gsvsense": gsvsense,
+def spectra_sustain(choice):
+    """60's Organ 1 on a Spectra-Tone (CC83 10 or 11) with SUSTAIN LONG drawn
+    (bit 15 of its stop word: CC44 the bits 14-20, its default's Solo and
+    Accent kept): a chord from 0.5 s lifted at 2.5 s, its tails ringing on
+    their damper track -- still turning -- to 7 s; Cathedral at 4 s."""
+    mid, tr = one_track()
+    ev = [(0.0, mido.Message('control_change', channel=0, control=0, value=16)),
+          (0.0, mido.Message('program_change', channel=0, program=16)),
+          (0.0, mido.Message('control_change', channel=0, control=83, value=choice)),
+          (0.0, mido.Message('control_change', channel=0, control=44, value=124 | 2)),
+          (0.0, mido.Message('control_change', channel=0, control=80, value=127))]
+    for k in (60, 67, 72, 84):
+        ev += [(0.5, mido.Message('note_on', channel=0, note=k, velocity=100)),
+               (2.5, mido.Message('note_off', channel=0, note=k, velocity=0))]
+    ev.append((4.0, mido.Message('control_change', channel=0, control=80, value=0)))
+    ev.append((7.0, mido.Message('control_change', channel=0, control=80, value=0)))
+    now = 0
+    for at, msg in sorted(ev, key=lambda e: e[0]):
+        tk = int(round(at * 960))
+        msg.time = tk - now
+        now = tk
+        tr.append(msg)
+    return mid
+
+
+MAKERS = {"stab_chords": stab_chords, "spectra_rotor": lambda: spectra(10), "spectra_chorus": lambda: spectra(11),
+          "spectra_sustain": lambda: spectra_sustain(10), "spectra_sustain_chorus": lambda: spectra_sustain(11), "dense_pedal": dense_pedal, "assign_mode": assign_mode, "mpe_organ": lambda: mpe_zone(19), "cmx_live": cmx_live, "userdrums": userdrums, "drumdelay": drumdelay, "moog_cmx": moog_cmx, "two_organs": two_organs, "rhythmpart": rhythmpart, "gsrx_2port": gsrx_2port, "drumnrpn": drumnrpn, "drumnrpn2": drumnrpn2, "gsvsense": gsvsense,
           "mpe_zone": mpe_zone}
 
 

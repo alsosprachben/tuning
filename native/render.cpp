@@ -20,6 +20,7 @@
 #include <cstring>
 #include <vector>
 
+#include "kernels.h"
 #include "team.h"
 
 // THE MOOG's columns of a table with one (nv.h's MoogCols, as nvrender passes it)
@@ -103,6 +104,31 @@ typedef void (*lobe_fn)(
     const int *fsr, const int *fty, const float *fpa, const float *fpb, const float *fpc,
     const float *FCT, long fgn, long CHUNK,
     const float *sendW, float *outSL, float *outSR);
+// ...and the cone build's synth_voice_cone_damp: synth_voice_lobe's, then the tracks
+typedef void (*cone_damp_fn)(
+    float *outL, float *outR, long n0, long winlen, int BLK, int nblk, int P,
+    const double *omega, const double *ph0L, const double *ph0R,
+    const float *ampL, const float *ampR, const float *nomfreq,
+    const long *non, const long *noff, const float *fadeS, const float *relS, const float *chiffS,
+    const float *logr, const float *logrA, const float *aftL, const float *susL,
+    const float *chVol, const float *chCyc, const float *chRel, const float *susJit, const float *chScale,
+    const float *chBW, const float *tbav, const float *tau, const float *tcut,
+    const float *gbav, const float *gtau, const float *gcut,
+    const float *vdep, const float *vrate, const float *vph, const float *vdl,
+    const float *delL, const float *delR,
+    const int *grow, const int *crow, const float *G, const float *S,
+    const int *brow, const float *BR, const double *BC, const float *BL,
+    const int *fxr, const float *FT, const float *KN, long knk, long kb0,
+    const float *ampLp, const float *ampRp, const int *mkr,
+    const int *MPI, const double *MPC, const float *MPR, const int *MKI, const float *MPK,
+    const double *fmw, const double *fmp, const double *fmpR,
+    float sfloor, float spow, float shmax, float shref,
+    const int *lsr, const float *lph, const float *lfl, const float *lsh, const float *lnm,
+    const float *LANG, long lgn,
+    const int *fsr, const int *fty, const float *fpa, const float *fpb, const float *fpc,
+    const float *FCT, long fgn, long CHUNK,
+    const float *sendW, float *outSL, float *outSR,
+    const int *drow, const float *dwt, const float *DM, const long *DMO, const long *DMB, const long *DMN);
 
 // The table, column by column in prepare's final types (FINAL_DTYPES):
 // d[0..2] om p0 p0R (float64); f[] the float32 columns in VCOLS_F order; l[0..1]
@@ -299,7 +325,54 @@ int nv_render_win(void *sv, void *sx, void *sd, long N, int BLK, int nblk, long 
         const double *mMPC = moog ? moog->MPC : nullptr;
         const float *mMPR = moog ? moog->MPR : nullptr, *mMPK = moog ? moog->MPK : nullptr;
         auto F = [&](int c) { return g.f[c].data(); };
-        if (LANG && fn == (voice_fn)sv) {
+        // A SPECTRA-TONE's DAMPED ROWS (blockrender.damp_fn): a cone row among
+        // them, and the table's rotor kernel the cone build's -- its
+        // synth_voice_cone_damp, the rotor's columns and the tracks
+        void *cdf = nullptr;
+        if (damp && LANG && slo) {
+            bool cone = false;
+            for (int k = 0; k < n && !cone; k++)
+                cone = lob[2][rows[k]] < 0.0f;
+            if (cone)
+                cdf = nv::klib_beside(slo, "synth_voice_cone_damp");
+        }
+        if (cdf) {
+            std::vector<int> gfs, gft;
+            std::vector<float> gfp[3];
+            if (FCT) {
+                gfs.resize(n);
+                gft.resize(n);
+                for (int q = 0; q < 3; q++)
+                    gfp[q].resize(n);
+                for (int k = 0; k < n; k++) {
+                    gfs[k] = fsr[rows[k]];
+                    gft[k] = fty[rows[k]];
+                    for (int q = 0; q < 3; q++)
+                        gfp[q][k] = fpar[q][rows[k]];
+                }
+            }
+            g.lsr.resize(n);
+            for (int q = 0; q < 4; q++)
+                g.lob[q].resize(n);
+            for (int k = 0; k < n; k++) {
+                g.lsr[k] = lsr[rows[k]];
+                for (int q = 0; q < 4; q++)
+                    g.lob[q][k] = lob[q][rows[k]];
+            }
+            chunked([&](float *L, float *R, long n0, long wn) {
+            ((cone_damp_fn)cdf)(L, R, n0, wn, BLK, nblk, n, g.d[0].data(), g.d[1].data(), g.d[2].data(), F(F_aL),
+                           F(F_aR), F(F_nf), g.l[0].data(), g.l[1].data(), F(F_fa), F(F_re), F(F_ch), F(F_logr),
+                           F(F_logrA), F(F_aft), F(F_sus), F(F_cv), F(F_cc), F(F_crl), F(F_sj), F(F_csc), F(F_cbw),
+                           F(F_tbav), F(F_tau), F(F_tcut), F(F_gb), F(F_gt), F(F_gc), F(F_vd), F(F_vr), F(F_vp),
+                           F(F_vdl), F(F_delL), F(F_delR), g.i[I_gr].data(), g.i[I_cr].data(), G, S,
+                           g.i[I_br].data(), BR, BC, BL, mfx, mFT, mKN, mknk, mkb0, nullptr, nullptr, mmk, mMPI,
+                           mMPC, mMPR, mMKI, mMPK, mw, mp, mpR, sh[0], sh[1], sh[2], sh[3], g.lsr.data(),
+                           g.lob[0].data(), g.lob[1].data(), g.lob[2].data(), g.lob[3].data(), LANG, lgn,
+                           FCT ? gfs.data() : nullptr, FCT ? gft.data() : nullptr, FCT ? gfp[0].data() : nullptr,
+                           FCT ? gfp[1].data() : nullptr, FCT ? gfp[2].data() : nullptr, FCT, FCT ? fgn : 0, CHUNK,
+                           nullptr, nullptr, nullptr, g.i[I_dk].data(), F(F_dg), DM, DMO, DMB, DMN);
+            });
+        } else if (LANG && fn == (voice_fn)sv) {
             // ...and a moving filter's columns (efxfilter: fsr, fty, fpa-c), NULL none
             std::vector<int> gfs, gft;
             std::vector<float> gfp[3];

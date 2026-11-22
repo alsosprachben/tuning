@@ -41,7 +41,7 @@ struct KLib {
 #define NVK_V_synthdamp(X, T) NVK_BASE(X, T) X(T, synth_voice_damp)
 #define NVK_V_synthmoogx(X, T) NVK_BASE(X, T) X(T, synth_voice_damp) X(T, synth_voice_moogx)
 #define NVK_V_synthlobe(X, T) NVK_BASE(X, T) X(T, synth_voice_lobe)
-#define NVK_V_synthcone(X, T) NVK_BASE(X, T) X(T, synth_voice_lobe) X(T, cone_table_set)
+#define NVK_V_synthcone(X, T) NVK_BASE(X, T) X(T, synth_voice_lobe) X(T, cone_table_set) X(T, synth_voice_cone_damp)
 #define NVK_V_synthgpu(X, T) NVK_BASE(X, T) NVK_GPU(X, T)
 #define NVK_V_synthgpudamp(X, T) NVK_BASE(X, T) NVK_GPU(X, T) X(T, synth_voice_damp) X(T, voice_damp_set)
 #define NVK_V_synthgpumoogx(X, T) NVK_BASE(X, T) NVK_GPU(X, T) X(T, synth_voice_damp) X(T, voice_damp_set) \

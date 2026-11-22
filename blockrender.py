@@ -387,7 +387,7 @@ def ensure_cone_lib():
         import spectratone as _ST
         src = os.path.join(HERE, "synthkernel.c")
         dll = _build(src, "libsynthcone_%d.so" % SR, ["-DLESLIE_KERNEL", "-DCONE_KERNEL"],
-                     ["synth_voice_lobe", "cone_table_set"])
+                     ["synth_voice_lobe", "cone_table_set", "synth_voice_cone_damp"])
         CA, CK = _ST.table()
         dll._cone_keep = (np.ascontiguousarray(CA, np.float32), np.ascontiguousarray(CK, np.float32))
         fp = lambda x: x.ctypes.data_as(ctypes.POINTER(ctypes.c_float))     # noqa: E731
@@ -396,6 +396,16 @@ def ensure_cone_lib():
                            ctypes.c_float(_ST.C_SOUND))
         _CONE_LIB = dll
     return _CONE_LIB
+
+
+def damp_fn(a, sl):
+    """(fn, lobe) for a table's damped rows: synth_voice_damp -- or, where the
+    table's rotor rows take the cone build (a Spectra-Tone sounding: lobe_fn's
+    test), its synth_voice_cone_damp with the rotor's columns, so an organ's
+    sustain on a Spectra-Tone still turns."""
+    if a.get('LANG') is not None and lobe_fn(sl('lsh'), a.get('CONE')) is ensure_cone_lib().synth_voice_lobe:
+        return _CONE_LIB.synth_voice_cone_damp, True
+    return ensure_damp_lib().synth_voice_damp, False
 
 
 def lobe_fn(lsh, cone=None):
@@ -10037,7 +10047,7 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R, SndL=None, SndR=None):
         xr = np.intersect1d(_xdec_rows(a, i0, i1), rest)
         _synth_rows(a, np.setdiff1d(rest, xr), n0, winlen, L, R, SndL, SndR, None)
         _synth_rows(a, xr, n0, winlen, L, R, SndL, SndR, ensure_xdec_lib().synth_voice_xdec)
-        _synth_rows(a, dmr, n0, winlen, L, R, SndL, SndR, ensure_damp_lib().synth_voice_damp, damp=True)
+        _synth_damped(a, dmr, n0, winlen, L, R, SndL, SndR, i0, i1)
         _synth_rows(a, mxr, n0, winlen, L, R, SndL, SndR, ensure_moogx_lib().synth_voice_moogx, damp=True, mx=True)
         return
     # ROWS FASTER THAN A BLOCK (_xdec_rows) render through synth_voice_xdec, the
@@ -10051,7 +10061,7 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R, SndL=None, SndR=None):
             xr = np.intersect1d(_xdec_rows(a, i0, i1), rest)
             _synth_rows(a, np.setdiff1d(rest, xr), n0, winlen, L, R, SndL, SndR, None)
             _synth_rows(a, xr, n0, winlen, L, R, SndL, SndR, ensure_xdec_lib().synth_voice_xdec)
-            _synth_rows(a, dmr, n0, winlen, L, R, SndL, SndR, ensure_damp_lib().synth_voice_damp, damp=True)
+            _synth_damped(a, dmr, n0, winlen, L, R, SndL, SndR, i0, i1)
             return
     xr = _xdec_rows(a, i0, i1)
     if len(xr):
@@ -10075,7 +10085,17 @@ def synth_partials(prep, n0, winlen, i0, i1, L, R, SndL=None, SndR=None):
                     fp(SndR) if SndL is not None else None)
 
 
-def _synth_rows(a, rows, n0, winlen, L, R, SndL, SndR, fn, damp=False, mx=False):
+def _synth_damped(a, rows, n0, winlen, L, R, SndL, SndR, i0, i1):
+    """The damped rows (an index array) through damp_fn's kernel -- their own
+    rotor test deciding (a cone row among them; live's slab: its CONE), as
+    lobe_fn decides for the other rows."""
+    if not len(rows):
+        return
+    fn, lobe = damp_fn(a, (lambda k: a[k][rows]))
+    _synth_rows(a, rows, n0, winlen, L, R, SndL, SndR, fn, damp=True, lobe=lobe)
+
+
+def _synth_rows(a, rows, n0, winlen, L, R, SndL, SndR, fn, damp=False, mx=False, lobe=None):
     """Rows `rows` of the table (an index array) through FN, or through the
     table's own function (synth_voice, or the Leslie's) when FN is None; with
     damp, FN is synth_voice_damp and takes the rows' damper tracks."""
@@ -10083,7 +10103,8 @@ def _synth_rows(a, rows, n0, winlen, L, R, SndL, SndR, fn, damp=False, mx=False)
         return
     fp=lambda x:x.ctypes.data_as(ctypes.POINTER(ctypes.c_float))
     sl = lambda k: np.ascontiguousarray(a[k][rows])
-    lobe = fn is None and a.get('LANG') is not None
+    if lobe is None:
+        lobe = fn is None and a.get('LANG') is not None
     if fn is None:
         fn = lobe_fn(sl('lsh'), a.get('CONE')) if lobe else a['lib'].synth_voice
     fn(fp(L),fp(R),ctypes.c_long(n0),ctypes.c_long(winlen),

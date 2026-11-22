@@ -3081,6 +3081,7 @@ struct Part {
     std::vector<double> spec;
     double rotor_spectra_mid() const { return spec.size() >= 11 ? 0.5 * (spec[7] + spec[8]) : 1e9; }
     void *scone = nullptr;
+    void *scone_damp = nullptr;             // (its synth_voice_cone_damp: the damped rows while one sounds)
     bool cone_on = false;
     std::vector<float> cone_lang, cone_ones;
     long cone_code = 0;
@@ -12997,7 +12998,18 @@ struct Part {
                 dkr.resize(n); for (long q = 0; q < n; q++) dkr[q] = S.dk[rows[q]];
                 std::vector<float> &dgr = f[fk++];
                 dgr.resize(n); for (long q = 0; q < n; q++) dgr[q] = S.dg[rows[q]];
-                if (fn == smx)          // synth_voice_moogx: synth_voice_damp's, then the note rows
+                if (cone_on && fn == sd && scone_damp) {
+                    // A SPECTRA-TONE SOUNDING: the damped rows (an organ's
+                    // sustain) through the cone build's synth_voice_cone_damp,
+                    // the rotor's columns and the tracks (blockrender.damp_fn)
+                    const int *lsr_ = gi(S.i4[I4_lsr]);
+                    const float *lph_ = gf(F4[F4_az]), *lfl_ = gf(F4[F4_lfl]), *lsh_ = gf(F4[F4_lsh]),
+                                *lnm_ = gf(cone_ones);
+                    ((nv_cone_damp_fn)scone_damp)(VOICE_HEAD, lsr_, lph_, lfl_, lsh_, lnm_, cone_lang.data(),
+                                                  cone_code, nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, 0L,
+                                                  VOICE_TAIL, dkr.data(), dgr.data(), DM.data(), DMO.data(),
+                                                  DMB.data(), DMN.data());
+                } else if (fn == smx)   // synth_voice_moogx: synth_voice_damp's, then the note rows
                     ((nv_moogx_fn)fn)(VOICE_ARGS, dkr.data(), dgr.data(), DM.data(), DMO.data(), DMB.data(),
                                       DMN.data(), S.MX.data());
                 // synth_voice_damp: synth_voice's arguments, then the tracks
@@ -14871,6 +14883,7 @@ void nv_part_spectra(void *h, const double *sp, int n, void *scone)
     nv::slab::Part *P = (nv::slab::Part *)h;
     P->spec.assign(sp, sp + n);
     P->scone = scone;
+    P->scone_damp = scone ? nv::klib_beside(scone, "synth_voice_cone_damp") : nullptr;
     if (n < 11)
         return;
     P->rotor_spectra.up = sp[9];
