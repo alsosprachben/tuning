@@ -330,8 +330,9 @@ store build.
 ### L12. Smaller questions
 
 - **Ross harpsichord voicing** (`ross.sf2`, John Sankey): no licence for the
-  soundfont. It feeds an optional voicing (`TUNING_HARPSI=ross`); leave it out
-  of the store build or ask.
+  soundfont. CLOSED 2026-11-22: the optional voicing (`TUNING_HARPSI=ross`,
+  `HarpsiRossProperties`) and its credit removed; the default harpsichord
+  (VCSL's, CC0) never used it.
   Open alternative: pjcohen's "Harpsichord" (Freesound, CC0, 60 notes
   D1-G#5, overhead mics, maker unstated).
 - **TimGM6mb** (GPL-2): one of the references in the Orchestra Hit fit. Fitted

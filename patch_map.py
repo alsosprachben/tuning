@@ -79,7 +79,7 @@ from tonelib import (
     SynthBass2Properties,
     SynthBrass2Properties,
     GrandPianoProperties,
-    HarpsichordProperties, HarpsiRossProperties,
+    HarpsichordProperties,
     PluckedStringProperties,
     OrchestraHitProperties,
     NylonGuitarProperties,
@@ -981,17 +981,8 @@ if __import__('os').environ.get('TUNING_MOOG', '1') != '0':
 # Neither is more correct; they are different harpsichords, and which one a file
 # wants is not something a program number can say.
 #
-# TUNING_HARPSI=ross selects the other. Deliberately an env switch rather than a
-# stop: a stop is a register of ONE instrument, the same strings plucked by a
-# different row of jacks, and swapping the whole instrument is not that.
-import os as _os
-_HARPSI = {'ross': HarpsiRossProperties, 'zuckermann': HarpsichordProperties}
-_want = _os.environ.get('TUNING_HARPSI', '').strip().lower()
-if _want:
-    _cls = _HARPSI.get(_want)
-    if _cls is None:
-        raise SystemExit("TUNING_HARPSI=%r; have %s" % (_want, ", ".join(sorted(_HARPSI))))
-    PROGRAM_CLASS[6] = PROGRAM_CLASS[7] = _cls
+# (TUNING_HARPSI=ross chose John Sankey's own instrument instead: removed
+# 2026-11-22 with it -- its soundfont has no licence, licences.md L12.)
 
 
 # THE SFX SET, PLAYED FROM THE KEYBOARD. GS's sound-effect variations (bank
