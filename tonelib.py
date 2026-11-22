@@ -5214,25 +5214,36 @@ class GrandPianoProperties(InharmonicStringProperties):
     # register's level to GeneralUser GS's grand. Fitted on the Steinway B's
     # soft-to-hard change (the microphone cancels), its band T20s and the
     # hard tenor's upper bands; the values as the fits left them.
+    # ---- THE FELT REFITTED FOR BRIGHTNESS WITHOUT A JUMP (2026-11-21, evening;
+    # examples/grand_hammer/grand_bright_fit.py): on renders against the
+    # Steinway B at v40/80/120, nine keys E1-C6, half-octave bands over each
+    # note's first 0.4 s, with a penalty on any kink in the loudness by velocity
+    # at D4-C5. Harder felt, less memory, a faster softest blow, the strike
+    # notch full, the lid's lift small: E2-E3 within 2-7 dB above 1 kHz at v80
+    # and v120 (5-15 short before). LEFT: the soft notes 7-30 dB too bright and
+    # E4 up 10-21 -- no felt setting reaches them (the knock? the phantoms?).
     max_partial_hz = 10000.0
     hammer_model = True
-    hammer_logk = 9.853
-    hammer_logk_slope = 0.58811
-    hammer_logk_curve = 0.043204
-    hammer_p_lo = 2.3
-    hammer_p_hi = 3.0
-    hammer_speed_lo = 0.6
+    hammer_logk = 10.73026
+    hammer_logk_slope = 0.649378
+    hammer_logk_curve = 0.031751
+    hammer_p_lo = 2.285824
+    hammer_p_hi = 2.981369
+    hammer_speed_lo = 0.802307
     hammer_speed_hi = 5.0
-    hammer_alpha = 0.39029
+    hammer_alpha = 0.260472
     hammer_log_tau = -4.1929
-    hammer_core_mm = 0.62859
-    hammer_core_logk = 18.0           # the worn layer harder: loud D2-F#3 short 11-17 dB over 1 kHz (18.5 with the lid and the strike curve: the loud tenor a snare)
-    hammer_core_edge_mm = 1.4439
+    # THE WORN LAYER SHALLOW (Ben: "very quiet to the touch, and then suddenly
+    # get very loud" -- 0.63-1.44 mm at 10^18 engaged like a wall, E4 +9 dB in
+    # one velocity step); the felt refitted round it for brightness, below
+    hammer_core_mm = 0.089476
+    hammer_core_logk = 16.29327
+    hammer_core_edge_mm = 1.0         # ...the layer kept to the worn bass: everywhere, it dipped 4-5 dB at v112, E5-G6
     hammer_wear_center_hz = 159.8
-    hammer_wear_octaves = 1.6         # ...and worn wider, down to D2
-    strike_depth = 0.9                # the strike point's notch 20 dB deep (the Steinway's 25-65)
+    hammer_wear_octaves = 1.0
+    strike_depth = 1.0                # the strike point's notch full depth (the Steinway's 25-65 dB)
     strike_fill_fraction = 0.0
-    tonal_dampening = 0.5
+    tonal_dampening = 0.1             # (the fit's floor: the felt's own loss small)
     strike_noise_vel_power = 0.3
     decay_by_hz = True
     decay_b1 = 0.97097
@@ -5243,7 +5254,7 @@ class GrandPianoProperties(InharmonicStringProperties):
     aftersound_level_2 = 0.3          # (with the unison's depth: the loud bass swelled back at 1.5 s)
     aftersound_level_3 = 0.11174
     aftersound_decay_ratio = 0.326029
-    hammer_level_points = ((27.5, -3.1), (41.2, -4.6), (55.0, -5.4), (82.4, -5.2), (110.0, -5.7), (164.8, -2.8), (220.0, -2.1), (329.6, 1.9), (440.0, -1.4), (659.3, -4.5), (880.0, -1.1), (1318.5, 6.2), (2093.0, -3.1))   # re-matched to GU's grand after the afternoon's voicing: 0.62 dB
+    hammer_level_points = ((27.5, -8.5), (41.2, -7.5), (55.0, -8.0), (82.4, -7.5), (110.0, -7.4), (164.8, -5.3), (220.0, -6.5), (261.6, -3.8), (329.6, -3.3), (440.0, -2.5), (659.3, -7.3), (880.0, -4.2), (1318.5, -0.1), (2093.0, 5.3))   # re-matched to GU's grand after the felt's brightness refit, C4 held by its own point: 0.20 dB
     # the knock 22 dB under the low-pass grand's (its fit under this hammer:
     # soft and hard blows each within ~1 dB of the takes' noise between harmonics)
     strike_noise_db = ((45, -50.2), (57, -46.7), (71, -40.0), (90, -40.8), (113, -34.2), (143, -36.1), (180, -46.0), (226, -47.4), (285, -48.6), (359, -34.1), (453, -36.9), (570, -35.6), (718, -36.3), (905, -35.5), (1140, -33.9), (1437, -41.3), (1810, -41.6), (2281, -46.6), (2874, -49.5), (3620, -51.7), (4561, -57.9), (5747, -61.8), (7241, -74.0), (9123, -77.5), (11494, -87.3))
@@ -5260,7 +5271,7 @@ class GrandPianoProperties(InharmonicStringProperties):
     strike_noise_vel_power_register = ((65.0, 2.0), (130.0, 2.0), (260.0, 0.3))
     # THE OPEN LID: a reflector over the board, +6 dB rising from 2.5 kHz (every
     # register's hard notes 2-13 dB short at 1-8 kHz, in Hz, not by key)
-    lid_db = 6.0
+    lid_db = 1.42149                  # (6 before the felt's refit: the treble over-bright)
     lid_hz = 2500.0
     # THE TREBLE'S THINNER WIRE: its strings drain faster (D6 rang 12 dB long,
     # A#6 15 dB) -- the board's drain x (f0 / 440) above A4
@@ -5474,7 +5485,10 @@ class UprightPianoProperties(GrandPianoProperties):
     decay_treble_power = 0.0
     phantom_max_order = 30
     strike_curve = None
-    ring_register_db = ()
+    # THE CASE'S RING BY REGISTER (Ben: "too much of the cabinet mode volume" --
+    # fitted on the treble keys, it rang 10-20 dB over the takes F4-C#5; measured
+    # key by key A3-A6, each mode under each note's f0, smoothed, never raised)
+    ring_register_db = ((220.0, 0.0), (277.2, 0.0), (349.2, -8.8), (440.0, -15.6), (554.4, -14.0), (698.5, -5.2), (880.0, 0.0), (1108.7, 0.0), (1396.9, 0.0), (1760.0, -7.8))
     # ...BUT ITS PHYSICS CARRIES OVER (Ben, 2026-11-21: "they all sound great"):
     # the stiff string's law exactly (stretch_exact, the grand's -- 17 cents
     # sharp at the bass's partial 30 otherwise), the hammer's phase, each partial
