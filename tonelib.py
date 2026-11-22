@@ -5877,7 +5877,55 @@ class ElectricGrandProperties(GrandPianoProperties):
 
     # THE GRAND'S HAMMER AND DECAY ARE THE NEW GRAND'S OWN (2026-11-21): this
     # voice keeps the low-pass hammer and the decay it was voiced on
-    hammer_model = False
+    # ---- THE CP-80 ON LEATHER (2026-11-21; Ben: "the leather has a better
+    # nature", "sounds great now"; examples/cp80_refit/): its hammers are
+    # leather (Nord's CP80 notes; Yamaha finds leather the closest to felt),
+    # a near-linear spring -- force ~ x^1.3 in the bass to x^1.9 at the top,
+    # no worn layer, little memory -- that opens little with force. Fitted on
+    # renders against Sullivan's takes (soft-to-hard change 7.18 -> 6.80 dB),
+    # the pickup's colour refitted with it.
+    hammer_model = True
+    hammer_core_mm = 0.0
+    hammer_core_edge_mm = 0.0
+    hammer_alpha = 0.05
+    hammer_logk = 9.6239
+    hammer_logk_slope = 0.31274
+    hammer_p_lo = 1.2896
+    hammer_p_hi = 1.9163
+    hammer_speed_lo = 0.33345          # the softest blow slower: soft middle notes 7-11 dB bright at 0.6
+    tonal_dampening = 1.3488
+    # THE NODES: a hard narrow hammer's notch does not fill with force
+    strike_depth = 0.84976
+    strike_point = 0.12309
+    strike_fill_fraction = 0.0
+    bridge_corner_hz = 2970.0
+    bridge_order = 1.5959
+    bridge_peak_db = -8.5287
+    bridge_peak_hz = 800.44
+    # THE WOUND STRINGS FLASH ON A HARD BLOW (Ben: the low end "needs some of
+    # the quick attack"): their top 10-34 dB over its settled level in the
+    # first 40 ms on the takes, ours 0-6; the zing's fall grows with force
+    wound_zing_db = 25.0
+    wound_decay_db = 20.0
+    wound_decay_by_force = True
+    # THE STRINGS' GROWTH WITH FORCE TO GENERALUSER GS'S CP-80 (velocity 40 ->
+    # 120, within ~1.5 dB C2-B7): the old low-pass law, kept as the loudness
+    # reference, filtered soft top notes away -- B7 grew 64 dB, GU's 28
+    hammer_vel_power_points = ((65.4, -0.99), (130.8, -0.53), (261.6, -0.27), (523.2, -0.85), (830.6, -1.29), (1108.7, -1.27), (1568.0, -0.78), (2217.5, -2.06), (2960.0, -2.83), (3951.1, -3.78))
+    # THE KNOCK LEVELLED IN THE TREBLE (the top notes' strike spike 23-29 dB over
+    # their tone, the takes' 10-18): its register in points, not the octave law
+    strike_noise_register_db = ((27.5, -15.5), (440.0, 0.0), (659.0, 1.0), (830.0, -2.0), (1568.0, -5.0), (2217.0, -10.0), (2960.0, -12.0), (3951.0, -17.0))
+    # THE GRAND'S PHYSICS: the stiff string's law exactly (its own measured_B),
+    # the hammer's phase, each partial off the law by its own cents (the takes'
+    # sit ~0.8-4 cents off), and the halo's knock tilted (the pedal's snare)
+    stretch_exact = True
+    hammer_phase = True
+    partial_cents_scatter = 1.2
+    register_knock_tilt = 1.0
+    # THE REGISTER'S LEVEL TO GENERALUSER GS'S CP-80 (K-weighted, each key re its C4,
+    # velocities 64 and 100): within 0.62 dB
+    hammer_level_points = ((27.5, -16.7), (41.2, -12.3), (55.0, -9.2), (82.4, -4.9), (110.0, -8.7), (164.8, -5.9), (220.0, -2.0), (329.6, 0.2), (440.0, 0.2), (659.3, 1.3), (880.0, 1.6), (1318.5, 5.4), (2093.0, 4.0))
+
     # (the grand's afternoon voicing is the grand's: this voice keeps its own)
     lid_db = 0.0
     decay_treble_power = 0.0
@@ -5885,21 +5933,12 @@ class ElectricGrandProperties(GrandPianoProperties):
     phantom_index_power = 0.0
     strike_curve = None
     ring_register_db = ()
-    hammer_phase = False
-    partial_cents_scatter = 0.0
-    stretch_exact = False
-    register_knock_tilt = None
-    hammer_core_logk = 17.38
-    hammer_wear_octaves = 1.1679
     decay_b3 = 1.8427
     board_low_order = None
     ring_db = ()
     strike_noise_vel_power_register = ()
     decay_by_hz = False
     strike_noise_vel_power = 0.0
-    tonal_dampening = 1.1
-    strike_depth = 0.65
-    strike_fill_fraction = 1.0
     aftersound_level_1 = 0.266664
     aftersound_level_2 = 0.3709
     aftersound_level_3 = 0.283217
