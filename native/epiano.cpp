@@ -19,7 +19,7 @@
 namespace {
 
 // the pickup's flux at u (units of the field's width); kind 1 the Rhodes
-// (p: offset, gap, side, side depth, tine arc; op the key's octave), kind 2
+// (p: offset, gap, side, side depth, tine arc, its power; op the key's octave), kind 2
 // the Wurlitzer (p: offset, slot p, slot q); control: flux = u
 struct Flux {
     int kind, control;
@@ -44,7 +44,7 @@ struct Flux {
             fh.push_back(-depth * t);
         }
         fdx = fx[1] - fx[0];
-        r = std::max(p[4], 2.0) * pow(2.0, -0.5 * op);
+        r = std::max(p[4], 2.0) * pow(2.0, -p[5] * op);
         g = std::max(p[1], 0.02);
         norm = field(0.0, g);
     }
@@ -284,7 +284,7 @@ int nv_ep_layers_cached(int kind, const double *p, double a0, double rho, double
 {
     static std::mutex mu;
     static std::map<std::vector<double>, std::vector<double>> got;
-    int np = kind == 1 ? 5 : 3;
+    int np = kind == 1 ? 6 : 3;
     std::vector<double> key(p, p + np);
     key.insert(key.end(), {(double)kind, a0, rho, f0, op, (double)harmonics, (double)terms, max_hz, floor_db,
                            (double)control});

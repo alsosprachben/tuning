@@ -81,13 +81,13 @@
 },
 {
 "group": "Keyboards and bells",
-"title": "jRhodes3d",
-"author": "Jeff Learman",
-"url": "https://github.com/sfzinstruments/jlearman.jRhodes3d",
-"licence": "CC BY-NC 4.0",
-"licence_url": "https://creativecommons.org/licenses/by-nc/4.0/",
+"title": "C_S Fender Rhodes Mark II",
+"author": "tim.kahn",
+"url": "https://freesound.org/people/tim.kahn/packs/3957/",
+"licence": "CC BY 4.0",
+"licence_url": "https://creativecommons.org/licenses/by/4.0/",
 "how": "fitted",
-"voices": "Electric Piano 1 (Rhodes)"
+"voices": "Electric Piano 1 (Rhodes): the pickup pole and the register's level"
 },
 {
 "group": "Keyboards and bells",

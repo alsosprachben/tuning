@@ -21642,9 +21642,8 @@ def _selftest(only=""):
     # the comparison that makes the claim mean something.
     plo, phi = _band(_T.GrandPianoProperties, vel=35), _band(_T.GrandPianoProperties, vel=127)
     rlo, rhi = _band(_T.RhodesProperties, vel=35), _band(_T.RhodesProperties, vel=127)
-    # (Half as much, before the swing was fitted to grow as velocity^2; the
-    # level is taken back to velocity by _level_law, and what is left over is
-    # the growl's own energy above h1 at forte.)
+    # (The level is taken back to velocity by _level_law; what is left over
+    # is the growl's own energy above h1 at forte.)
     check("velocity changes a Rhodes' volume less than a piano's",
           (rhi[0] - rlo[0]) < 0.75 * (phi[0] - plo[0]),
           "  (%+.1f dB against the piano's %+.1f)"
@@ -21767,8 +21766,9 @@ def _selftest(only=""):
         return [20 * _math.log10(max(_env(q, h, t), 1e-300) / _env(q, 1, t))
                 for h in range(1, n + 1)]
     # THE TWO VOICINGS: a Wurlitzer barks at mf already, where a Rhodes is
-    # still a bell and barks only when struck hard (its swing grows as
-    # velocity^2, rhodes_fit.py) -- the two instruments' playing styles.
+    # still a bell and barks only when struck hard (its swing as the hammer's
+    # velocity from CBS's patent's millimetres, tonelib.RhodesProperties) --
+    # the two instruments' playing styles.
     w64, r64 = _rh(261.63, 64, _T.WurlitzerProperties), _rh(261.63, 64)
     check("at mf a Wurlitzer barks where a Rhodes is still a bell",
           _lad(w64, 5)[-1] > _lad(r64, 5)[-1] + 15.0,

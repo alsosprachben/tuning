@@ -35,23 +35,20 @@ Status: `open` until the voice is refitted to an open source, the rights
 holder grants commercial use in writing, or the voice is left out of the
 store build.
 
-### L1. Electric Piano 1 (Rhodes): jRhodes3d — CC BY-NC (samples)
+### L1. Electric Piano 1 (Rhodes): jRhodes3d — CC BY-NC (samples) — CLOSED 2026-11-23
 
-- **Source:** Jeffrey Learman's jRhodes3d, a 1977 Mark I recorded off the harp
-  connector. The samples are CC BY-NC; the control files and clips are CC0, and
-  "music made with it" is CC0, but that clause covers music, not a model.
-- **What derives from it:** `tonelib` Rhodes fit (`examples/rhodes_fit.py`),
-  the EP register levels, and the cabinet notes that cite it.
-- **Status:** open.
-- **Alternatives (checked 2026-11-20):**
-  1. tim.kahn, "C_S Fender Rhodes Mark II", Freesound pack 3957, CC BY 4.0:
-     53 notes from E1, ~12 s each, a Mark II Stage 73 through a Bellari tube
-     preamp. One dynamic. The only open full-range Rhodes found: fits the
-     spectrum and decay per note, not the velocity law.
-  2. NSynth (CC BY 4.0) keyboard_electronic notes: five velocities, but 16 kHz
-     and 4 s, instruments unnamed. For checking a velocity law only.
-  - Rejected: Pianobook's "Matt's Fender Rhodes" (ideal, DI; no licence
-    stated), Keenan's Rhodes bass (CC0, an emulation, C4-E6 only).
+- **Source (was):** Jeffrey Learman's jRhodes3d, a 1977 Mark I recorded off
+  the harp connector (samples CC BY-NC).
+- **What derived from it:** the Rhodes fit (`examples/rhodes_fit.py`), the
+  register level.
+- **Status:** CLOSED. The tine and pickup are now millimetres
+  (`tonelib.RhodesProperties`): the tine's length from the Rhodes service
+  manual's chart, the voicing gap from its ch. 4, the swing from CBS's patent
+  US 4,040,321, the decay from Shear's thesis (UCSB 2011); only the pole's
+  size and face and the tine's rest, and the register's level, are fitted --
+  to tim.kahn's Mark II (Freesound pack 3957, CC BY 4.0;
+  `RHODES_REF=timkahn examples/rhodes_fit.py fit|register`). jRhodes3d stays
+  on disk, read only by `rhodes_fit.py` without RHODES_REF, for comparison.
 
 ### L2. Electric guitars (GM 26-31): Fraunhofer IDMT-SMT-Guitar — CC BY-NC-ND 4.0 — CLOSED 2026-11-23
 

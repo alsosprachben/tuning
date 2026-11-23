@@ -6302,35 +6302,73 @@ class RhodesProperties(ElectricPianoProperties):
 
     "The flattened sides of the frustum focuses the magnet field in the center
     showing an approximate bell curve characteristic" (DAGA 2017) -- and so it
-    was first modelled, as a Gaussian. Against Learman's Mark I that could not
+    was first modelled, as a Gaussian. Against a recorded Mark I that could not
     bark: a Gaussian's harmonics fall off a cliff however wide the swing. The
     field is now the paper's own construction (DAFx-17; pickup_flux below), a
     point tip over the frustum's face on an arc, whose tails let a wide bass
     swing spike each half cycle -- the forte bark -- while a small one stays a
     bell: the Rhodes' range between the two is velocity and register.
 
-    FITTED to Learman's 1977 Mark I off the harp connector (examples/
-    rhodes_fit.py), then voiced by ear for the style: a forte that buzzes,
-    and a buzz that dies away under the tone (pickup_deflection_max,
-    swing_damping).
+    SINCE 2026-11-23 IN MILLIMETRES (licences.md L1): the tine's length, the
+    voicing gap and the swing from the service manual and CBS's patent, the
+    decay Shear's, the pole fitted to tim.kahn's Mark II (CC BY 4.0) -- then
+    voiced by ear for the style: a forte that buzzes, and a buzz that dies
+    away under the tone (pickup_deflection_max, swing_damping).
     """
     # A struck tine keeps the pitch its length gives it.
     pitch_bendable = False
 
-    # FITTED to Learman's 1977 Mark I, harp connector (jRhodes3d, samples CC BY-NC,
-    # measured only; examples/rhodes_fit.py fit), on what his EQ cancels: the
-    # growl a harder layer adds over the softest, the bark's fade from the
-    # strike to 0.6-1.0 s, the hard layer's first 50 ms, h1-h3's decay, and
-    # when the bass's h1 peaks: 8.97 dB rms with the paper's pickup (attack
-    # 9.1, growl 9.7, bark 7.4, decay 4.2, build 1.0), where the Gaussian
-    # started at 19.2 without the attack. The takes' bass h1 BUILDS for seconds -- F1
-    # peaks 3.9 s in, D3 1.1 -- which is the bass tine swinging past the
-    # field's width: the fundamental flattened, coming back as the swing
-    # decays (_pickup_layers). So the swing is far wider than the paper-
-    # derived 0.25 had it, and grows faster than velocity (a hard layer's
-    # h3 is 35-50 dB over the softest's, re h1, where ours made 24).
-    pickup_offset = 0.531
-    pickup_deflection = 0.748
+    # THE TINE AND ITS PICKUP IN MILLIMETRES (since 2026-11-23: jRhodes3d,
+    # CC BY-NC, no longer read -- licences.md L1). Each a variable a player or
+    # a tech could turn; the model's own units (the pole's half-width, 1)
+    # follow from them (_geometry):
+    #   the TINE's free length, the service manual's cutting chart (Rhodes
+    #   Service Manual fig. 6-2, read off its scan; Shear's 18-157 mm agrees):
+    #   53.8 mm at 415 Hz, as 2^(-0.456 octave) -- not the bare cantilever's
+    #   1/2, its tuning spring's mass (rms 0.02 octave over E1-E7);
+    #   the VOICING GAP, the manual's "1/16 inch" (ch. 4: 1/16-1/8");
+    #   the SWING, CBS's patent US 4,040,321: "about 1/8 inch" an octave under
+    #   middle C, "about 1/64 inch" two over, at a typical stroke -- 1.01 mm at
+    #   415 Hz, halving an octave up; taken at velocity 80;
+    #   the HAMMER: the swing as the key's velocity, linearly (a hammer's
+    #   momentum; no measurement of soft against hard).
+    # The pole's half-width -- the unit, its production size not published
+    # (the patent's grooved pole is not the one built) -- and its face's
+    # shape and the tine's rest off its centre are fitted (examples/
+    # rhodes_fit.py, RHODES_REF=timkahn) to tim.kahn's Mark II (Freesound
+    # pack 3957, CC BY 4.0), on what its tube preamp cannot move: each
+    # partial's decay, the bark's fade, when the bass h1 peaks.
+    tine_length_mm = 53.81
+    tine_arc_power = 0.456
+    voicing_gap_mm = 1.588
+    swing_mm = 1.01
+    swing_ref_velocity = 80
+    swing_register_slope = -1.0
+    swing_velocity_power = 1.0
+    # (fitted, 16 of its keys: bark 8.8 -> 8.7 dB, decay 3.4 -> 3.1, the bass's
+    # build 8.0 -> 7.0 -- the millimetres set most of it; the pole 1.76 mm,
+    # a head 1/4" across)
+    pole_halfwidth_mm = 1.7568
+    pickup_offset = 0.6857
+
+    @classmethod
+    def _geometry(cls):
+        """The model's units from the millimetres: lengths over the pole's
+        half-width; the swing at velocity 127 (_deflection's reference)."""
+        w = float(cls.pole_halfwidth_mm)
+        cls.tine_arc = cls.tine_length_mm / w
+        cls.pickup_gap = cls.voicing_gap_mm / w
+        cls.pickup_deflection = (cls.swing_mm / w) / (cls.swing_ref_velocity / 127.0) ** cls.swing_velocity_power
+        cls.deflection_register_slope = cls.swing_register_slope
+        cls.deflection_velocity_power = cls.swing_velocity_power
+
+    def __init_subclass__(cls, **kw):
+        super().__init_subclass__(**kw)
+        if 'pole_halfwidth_mm' in cls.__dict__ or any(k in cls.__dict__ for k in (
+                'tine_length_mm', 'voicing_gap_mm', 'swing_mm', 'swing_ref_velocity', 'swing_velocity_power',
+                'swing_register_slope')):
+            cls._geometry()
+
     # THE PLAYING STYLE, SET BY EAR past the fit (which put this at 3.07):
     # a forte that BUZZES. The ceiling only binds at the bottom of the
     # keyboard played hard, so raising it adds bark to a hard bass note and
@@ -6338,18 +6376,17 @@ class RhodesProperties(ElectricPianoProperties):
     # (Learman's takes -5), at v70 unchanged. Ben: "make sure we can have a
     # buzz-enabled force, because that is the style of playing."
     pickup_deflection_max = 4.5
-    deflection_register_slope = -1.080
-    deflection_velocity_power = 2.058
     # ...and the buzz does not hang on: a wide swing loses itself faster than
     # a small one (_pickup_layers), so the bark collapses while the tone sings
     # on -- F1 hard, h17-h32 -10 dB at the strike, -22 by 1 s, -27 by 2 s,
     # where the linear swing held -12 and -17. By ear (Ben: "the sustain of
     # the buzz is actually too much, even on the low notes").
     swing_damping = 0.15
-    # A tine sings 3-4 times longer than the 10 dB/s had it: B3's h1 at 3.8
-    # dB/s, A5's 7.9, C7's 34.
-    harmonic_decay_db = 4.139
-    decay_register_slope = 0.975
+    # THE TINE'S DECAY, Shear's (UCSB MS thesis 2011, Table 2.1: a 1974 Mark
+    # I's Q at Eb2-Eb6, 2.2 to 19 dB/s): the swing's own, half the envelope's
+    # dB/s at 415 Hz, as (f/415)^0.669 -- each partial's layer then n times it
+    harmonic_decay_db = 3.882
+    decay_register_slope = 0.669
     # THE BASS BUZZES FAR UP ITS SERIES. A hard bass layer holds h17-h32 at
     # up to +10 dB re h1 and h33-h48 near 0 (B1), straight off the harp --
     # no amp to drive -- a swing many field-widths wide crossing the
@@ -6381,32 +6418,30 @@ class RhodesProperties(ElectricPianoProperties):
     # (1 + |u|^p)^-q) could not make the hard bass's spike: crest factor 7-9
     # dB where Learman's takes have 10-13, h17-h48 10-24 dB short (Ben: "the
     # paper model made the biggest leaps").
-    pickup_gap = 0.491
-    pickup_side = 0.713
-    pickup_side_depth = 1.413
-    tine_arc = 33.9
+    pickup_side = 0.2759
+    pickup_side_depth = 1.1619
 
-    # THE REGISTER'S LEVEL. The swing fitted for timbre is far wider in the bass, and
-    # the level rode on it: C2 +14 to C7 -29 dB re C4. Learman's layers are
-    # normalised, so no Rhodes level says otherwise; a voiced Rhodes is set
-    # even, as a Wurlitzer measures (OldBassMan's 200A, CC BY 4.0: within ~3
-    # dB from D2 to D6), and that curve is the target:
-    # rms 12.1 -> 2.1 dB (Ben: "much quieter up higher and much louder
-    # down lower").
-    octave_gain = 8.06
+    # THE REGISTER'S LEVEL. The swing is far wider in the bass, and the level
+    # rides on it; since 2026-11-23 set against a real Rhodes' own balance:
+    # tim.kahn's takes keep the levels he played them at (examples/
+    # rhodes_fit.py register: each key's loudest 100 ms re the keys' mean,
+    # 24 keys, rms 3.6 -> 1.6 dB). (Ben, of the first voicing: "much quieter
+    # up higher and much louder down lower".)
+    octave_gain = 6.1498
     initial_gain = 0.39191886      # C3/C4/C5 at v100 matched on rms to the grand piano (was +8.6 dB over)
     def _flux_key(self):
-        return (self.pickup_gap, self.pickup_side, self.pickup_side_depth, self.tine_arc)
+        return (self.pickup_gap, self.pickup_side, self.pickup_side_depth, self.tine_arc, self.tine_arc_power)
 
     def _native_flux(self):
         if any(_ep_owner(type(self), n) is not RhodesProperties for n in ('pickup_flux', '_face', '_field')):
             return None
-        return 1, (self.pickup_offset, self.pickup_gap, self.pickup_side, self.pickup_side_depth, self.tine_arc)
+        return 1, (self.pickup_offset, self.pickup_gap, self.pickup_side, self.pickup_side_depth, self.tine_arc,
+                   self.tine_arc_power)
 
     def pickup_flux(self, u):
         import numpy as np
         u = np.asarray(u, dtype=float)
-        r = max(self.tine_arc, 2.0) * 2.0 ** (-0.5 * self.octave_position)
+        r = max(self.tine_arc, 2.0) * 2.0 ** (-self.tine_arc_power * self.octave_position)
         g = max(self.pickup_gap, 0.02)
         d = np.clip(u - self.pickup_offset, -0.999 * r, 0.999 * r)
         z = g + r - np.sqrt(r * r - d * d)
@@ -6430,6 +6465,9 @@ class RhodesProperties(ElectricPianoProperties):
         dz = Z.reshape(-1, 1) - h
         out = (dz / ((X.reshape(-1, 1) - x) ** 2 + dz * dz) ** 1.5).sum(1) * dx
         return out.reshape(np.shape(X))
+
+
+RhodesProperties._geometry()
 
 
 class WurlitzerProperties(ElectricPianoProperties):

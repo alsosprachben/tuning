@@ -103,7 +103,7 @@ class VoiceSnap(ctypes.Structure):
                 ('reed_s', C * 1025), ('bank_g', C * 4), ('bank_cents', C * 4), ('bank_oct', C * 4),
                 ('bank_ratio', C * 4), ('sh_exp', C), ('sh_exp_oct', C), ('sh_cap', I),
                 ('skirt', I), ('sk_max', I), ('sk_db', C), ('sk_hdb', C), ('sk_hz', C), ('sk_rel', C),
-                ('ep_kind', I), ('ep_harm', I), ('ep_terms', I), ('n_tb', I), ('n_lay', I), ('ep_p', C * 5),
+                ('ep_kind', I), ('ep_harm', I), ('ep_terms', I), ('n_tb', I), ('n_lay', I), ('ep_p', C * 6),
                 ('ep_defl', C), ('ep_defl_slope', C), ('ep_defl_power', C), ('ep_defl_max', C), ('ep_rho', C),
                 ('ep_max_hz', C), ('ep_floor_db', C), ('ep_share', C), ('tb_coeff', C), ('tb_power', C),
                 ('tb_decay', C), ('tb_ratio', C * 8), ('tb_g', C * 8), ('ep_a0', C), ('ep_r', C * 408),
@@ -4869,7 +4869,7 @@ def ep_layers(kind, params, a0, rho, f0, op, harmonics, terms, max_hz, floor_db,
     d = lib()
     if d is None:
         return None
-    p = (C * 5)(*[float(x) for x in params])
+    p = (C * 6)(*([float(x) for x in params] + [0.0] * (6 - len(params))))
     out = (C * (4 * 512))()
     n = d.nv_ep_layers_cached(int(kind), p, float(a0), float(rho), float(f0), float(op), int(harmonics), int(terms),
                               float(max_hz or 0.0), float(floor_db), int(bool(control)), out, 512)

@@ -6,6 +6,7 @@ same way.
     python3 -I examples/rhodes_fit.py measure [--ours]
     python3 -I examples/rhodes_fit.py fit [--params=a,b] [--maxfev=N]
     python3 -I examples/rhodes_fit.py ab OUT.wav [--note-s=3]   take, then ours, note by note
+    RHODES_REF=timkahn python3 -I examples/rhodes_fit.py register   octave_gain to tim.kahn's own levels
 
 THE HARP CONNECTOR, THROUGH HIS EQ. The takes are the pickups' own output,
 no amp and no speaker -- what tonelib.RhodesProperties makes with the
@@ -41,14 +42,53 @@ import wurli_fit as W
 REFS = os.path.expanduser("~/Documents/refs/rhodes/jrhodes3d_wav")    # sox-decoded jRhodes3d-mono
 PROGRAM = 4
 VEL = {1: 120, 2: 104, 3: 84, 4: 60, 5: 30}
+# THE OPEN REFERENCE (since 2026-11-23, licences.md L1: jRhodes3d is CC BY-NC
+# and no longer read): RHODES_REF=timkahn -- tim.kahn's Mark II Stage 73
+# (Freesound pack 3957, CC BY 4.0), 53 notes from E1 through a Bellari tube
+# preamp, ONE dynamic: each take as "layer 2", played at the swing's
+# reference velocity (RhodesProperties.swing_ref_velocity: the patent's
+# "typical" stroke). Its names drop the sharps (two "c1"s), so each take is
+# keyed by its own pitch. Its growl and attack targets have nothing to set
+# a layer against, and drop out (zero, ours and its); bark, decay and the
+# bass's build remain -- none of which a fixed preamp moves.
+REF = os.environ.get("RHODES_REF", "jrhodes3d")
+TIMKAHN = os.path.expanduser("~/Documents/refs/rhodes/timkahn")
+if REF == "timkahn":
+    VEL = {2: 80}
 
 
 def recordings():
-    """{(layer, key): path}: A_029__F1_5.wav is key 29, layer 5."""
+    """{(layer, key): path}: A_029__F1_5.wav is key 29, layer 5 (or, with
+    RHODES_REF=timkahn, each take at its measured key, layer 2)."""
     out = {}
+    if REF == "timkahn":
+        return timkahn_takes()
     for p in glob.glob(os.path.join(REFS, "A_*.wav")):
         b = os.path.basename(p)[:-4].split("_")
         out[(int(b[-1]), int(b[1]))] = p
+    return out
+
+
+def timkahn_takes():
+    """tim.kahn's takes by their own pitch (voicefit.detect_f0 on 0.3-1.3 s,
+    to the nearest key), decoded once to WAV beside them; the first of two
+    at one key kept."""
+    import subprocess
+    from voicefit import detect_f0
+    out = {}
+    wd = os.path.join(TIMKAHN, "wav")
+    os.makedirs(wd, exist_ok=True)
+    for p in sorted(glob.glob(os.path.join(TIMKAHN, "*.aiff"))):
+        w = os.path.join(wd, os.path.basename(p)[:-5] + ".wav")
+        if not os.path.exists(w):
+            subprocess.run(["sox", p, "-b", "24", w, "remix", "-"], check=True)
+        x, sr = U.load(w)
+        t0 = U.onset(x, sr)
+        f = detect_f0(np.asarray(x[t0 + int(0.3 * sr):t0 + int(1.3 * sr)], float), sr, lo=30.0, hi=2500.0)
+        if f is None or not np.isfinite(f) or f <= 0.0:
+            continue
+        k = int(round(69 + 12 * np.log2(f / 440.0)))
+        out.setdefault((2, k), w)
     return out
 
 
@@ -84,8 +124,13 @@ def h1_peak(x, sr, k):
 
 def source(ours):
     """(layer, key) -> (x, sr): the take, or ours at the layer's velocity
-    (cabinet out, no CC1), 4.5 s -- long enough for the bass's h1 to peak."""
+    (cabinet out, no CC1), 4.5 s -- long enough for the bass's h1 to peak.
+    (RHODES_STEP=N: every Nth key only.)"""
     rs = recordings()
+    st = int(os.environ.get("RHODES_STEP", "1"))
+    if st > 1:
+        keep = sorted({k for _, k in rs})[::st]
+        rs = {lk: p for lk, p in rs.items() if lk[1] in keep}
     memo = {}
 
     def get(L, k):
@@ -142,7 +187,11 @@ FIT = ("pickup_offset,pickup_deflection,pickup_deflection_max,deflection_registe
 STEPS = {"pickup_offset": 0.1, "pickup_deflection": 0.15, "pickup_deflection_max": 0.4,
          "deflection_register_slope": 0.15, "deflection_velocity_power": 0.4,
          "harmonic_decay_db": 2.0, "decay_register_slope": 0.2,
-         "pickup_gap": 0.2, "pickup_side": 0.5, "pickup_side_depth": 0.5, "tine_arc": 15.0}
+         "pickup_gap": 0.2, "pickup_side": 0.5, "pickup_side_depth": 0.5, "tine_arc": 15.0,
+         "pole_halfwidth_mm": 0.4}
+# ...the open reference's: the pole (its size, the unit) and its face, and the
+# tine's rest off its centre -- the rest is the millimetres' (tonelib)
+FIT_TIMKAHN = "pole_halfwidth_mm,pickup_offset,pickup_side,pickup_side_depth"
 
 
 # ...and up the series: the bass's buzz is h17-h48 (B1's hard layer holds
@@ -205,9 +254,11 @@ def fit(opts):
     cls = T.RhodesProperties
     rs, get = source(False)
     rec = targets(get, rs)
-    names = opts.get("--params", FIT).split(",")
+    names = opts.get("--params", FIT_TIMKAHN if REF == "timkahn" else FIT).split(",")
 
     def err():
+        if hasattr(cls, "_geometry"):
+            cls._geometry()                 # (the model's units from the millimetres)
         T._EP_PICKUP_CACHE.clear()
         _, mine = source(True)
         return error(rec, targets(mine, rs))
@@ -217,6 +268,26 @@ def fit(opts):
     D.nelder(cls, names, err, STEPS, int(opts.get("--maxfev", 120)), "rms")
     T._EP_PICKUP_CACHE.clear()
     error(rec, targets(source(True)[1], rs), detail=True)
+
+
+# THE REGISTER'S LEVEL (`register`, RHODES_REF=timkahn): octave_gain against
+# tim.kahn's takes, which keep the levels he played them at -- each key's
+# loudest 100 ms re the keys' mean (wurli_fit.level), ours at the swing's
+# reference velocity, the cabinet out. (Learman's layers were normalised, so
+# the old target was a Wurlitzer's evenness.)
+def fit_register(opts):
+    import tonelib as T
+    import dulcimer_fit as D
+    cls = T.RhodesProperties
+    rs, get = source(False)
+    keys = sorted(k for _, k in rs)
+    rv = np.array([W.level(*get(2, k)) for k in keys])
+
+    def err():
+        T._EP_PICKUP_CACHE.clear()
+        ov = np.array([W.level(*U.render(PROGRAM, k, VEL[2], 0.6)) for k in keys])
+        return float(np.sqrt(np.mean(((ov - ov.mean()) - (rv - rv.mean())) ** 2)))
+    D.nelder(cls, ["octave_gain"], err, {"octave_gain": 2.0}, int(opts.get("--maxfev", 30)), "level rms")
 
 
 def ab(out, note_s):
@@ -245,6 +316,8 @@ def main(argv):
     elif argv[:1] == ["ab"]:
         ab(argv[1], float(dict(a.split("=", 1) for a in argv if a.startswith("--") and "=" in a)
                           .get("--note-s", 3.0)))
+    elif argv[:1] == ["register"]:
+        fit_register(dict(a.split("=", 1) for a in argv if a.startswith("--") and "=" in a))
     elif argv[:1] == ["fit"]:
         fit(dict(a.split("=", 1) for a in argv if a.startswith("--") and "=" in a))
     else:

@@ -862,7 +862,31 @@ def basses_all():
     return mid
 
 
-MAKERS = {"basses_all": basses_all, "eguitars_six": eguitars_six, "stab_chords": stab_chords, "harpsi_four": harpsi_four, "tonewheel_spinet": tonewheel_spinet, "gopichant_compass": gopichant_compass, "hawaiian_compass": hawaiian_compass, "guitar12_compass": guitar12_compass, "flugel_phrase": flugel_phrase, "mandolin_compass": mandolin_compass, "dulcimer_compass": dulcimer_compass, "feedback_held": feedback_held, "clav_compass": clav_compass,
+def rhodes_compass():
+    """GM 4, the Rhodes rebuilt in millimetres (licences.md L1): E1-E7 at
+    three velocities (the swing linear in the hammer, the bark at forte), a
+    held bass note (its h1 building), then a chord with the suitcase's
+    vibrato (CC1)."""
+    mid = mido.MidiFile(type=0, ticks_per_beat=480)
+    tr = mido.MidiTrack(); mid.tracks.append(tr)
+    tr.append(mido.Message("program_change", channel=0, program=4, time=0))
+    for v in (40, 85, 125):
+        for n in (28, 40, 52, 64, 76, 88, 100):
+            tr.append(mido.Message("note_on", channel=0, note=n, velocity=v, time=20))
+            tr.append(mido.Message("note_off", channel=0, note=n, velocity=0, time=300))
+    tr.append(mido.Message("note_on", channel=0, note=29, velocity=110, time=10))
+    tr.append(mido.Message("note_off", channel=0, note=29, velocity=0, time=1920))
+    tr.append(mido.Message("control_change", channel=0, control=1, value=90, time=0))
+    for n in (48, 55, 60, 64, 67):
+        tr.append(mido.Message("note_on", channel=0, note=n, velocity=90, time=8))
+    tr.append(mido.Message("note_off", channel=0, note=48, velocity=0, time=1920))
+    for n in (55, 60, 64, 67):
+        tr.append(mido.Message("note_off", channel=0, note=n, velocity=0, time=0))
+    tr.append(mido.Message("note_off", channel=0, note=0, velocity=0, time=960))
+    return mid
+
+
+MAKERS = {"rhodes_compass": rhodes_compass, "basses_all": basses_all, "eguitars_six": eguitars_six, "stab_chords": stab_chords, "harpsi_four": harpsi_four, "tonewheel_spinet": tonewheel_spinet, "gopichant_compass": gopichant_compass, "hawaiian_compass": hawaiian_compass, "guitar12_compass": guitar12_compass, "flugel_phrase": flugel_phrase, "mandolin_compass": mandolin_compass, "dulcimer_compass": dulcimer_compass, "feedback_held": feedback_held, "clav_compass": clav_compass,
           "couplers_upper": lambda: couplers(16, ((1.5, 0), (2.5, 1 | 4), (3.5, 2), (4.5, 2 | 4 | 8), (6.0, 1 | 2 | 8))),
           "couplers_lower": lambda: couplers(41, ((1.5, 4), (3.0, 1 | 4), (4.5, 0), (6.0, 4))), "spectra_rotor": lambda: spectra(10), "spectra_chorus": lambda: spectra(11),
           "spectra_sustain": lambda: spectra_sustain(10), "spectra_sustain_chorus": lambda: spectra_sustain(11), "dense_pedal": dense_pedal, "assign_mode": assign_mode, "mpe_organ": lambda: mpe_zone(19), "cmx_live": cmx_live, "userdrums": userdrums, "drumdelay": drumdelay, "moog_cmx": moog_cmx, "two_organs": two_organs, "rhythmpart": rhythmpart, "gsrx_2port": gsrx_2port, "drumnrpn": drumnrpn, "drumnrpn2": drumnrpn2, "gsvsense": gsvsense,

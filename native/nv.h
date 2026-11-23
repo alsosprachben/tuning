@@ -228,7 +228,7 @@ typedef struct {
        layers (n_lay: each a mode at ep_r, its term's power ep_n and weight
        ep_w; the tonebar's modes after them, at ep_r too) */
     int ep_kind, ep_harm, ep_terms, n_tb, n_lay;
-    double ep_p[5], ep_defl, ep_defl_slope, ep_defl_power, ep_defl_max, ep_rho, ep_max_hz, ep_floor_db, ep_share;
+    double ep_p[6], ep_defl, ep_defl_slope, ep_defl_power, ep_defl_max, ep_rho, ep_max_hz, ep_floor_db, ep_share;
     double tb_coeff, tb_power, tb_decay, tb_ratio[8], tb_g[8];
     double ep_a0, ep_r[408], ep_n[400], ep_w[400];
     /* AN ELECTRIC GUITAR'S STRING AND MAGNET (elec, on a kind 4 voice:
