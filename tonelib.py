@@ -12388,21 +12388,22 @@ class ElectricGuitarProperties(PluckedStringProperties):
     """
     # ITS PICKUP SWITCH, the part's to set (the AMP card): the Stratocaster's: its 5-way switch (patch_map.PICKUP_FAMILIES)
     pickup_family = 'strat'
-    # THE SPECTRUM, FITTED (examples/egtr_fit.py --ladder=27) to IDMT-SMT-
-    # Guitar's Stratocaster on its NECK single coil, DI, 78 notes each at its
-    # own fret: the ladder's miss 5.33 -> 4.23 dB (median, h2-h10). The coil
-    # moves to where that guitar has it, ~160 mm of 648 (it sat at the middle
-    # one, 0.154); the pick, its notch and the tilt fitted; and the coil's
-    # load, a resonance at 5.0 kHz (Q 1.19) -- measured into a LINE input,
-    # which loads a pickup harder than an amplifier does: through a real amp
-    # the peak would stand sharper. The muted guitar and the harmonics keep
-    # their own pick and coil, and take the string, the tilt and the load.
+    # THE SPECTRUM, since 2026-11-23 FROM PHYSICS (IDMT-SMT-Guitar's
+    # Stratocaster no longer read, licences.md L2). The coil where Fender puts
+    # the neck pickup, ~160 mm of a 648 mm scale (0.247). The coil's load from
+    # its circuit (examples/strat_coil.py): 2.4 H, 5.8 k and 110 pF, the pots
+    # and a DI input, as the Jazz Guitar was fitted -- 5.07 kHz, Q 1.31 (the
+    # IDMT fit had read 5.0 kHz, Q 1.19: the circuit agrees). The pick and the
+    # series' fall are the player's, from the Jazz Guitar's fit to Guitar-
+    # TECHS' P2 -- the same hand, the same 648 mm scale. The muted guitar and
+    # the harmonics keep their own pick and coil, and take the string, the
+    # tilt and the load.
     pickup_points = (0.247,)
-    strike_point = 0.1826
-    strike_depth = 0.842
-    tonal_dampening = 1.865
-    pickup_resonance_hz = 5025.0
-    pickup_q = 1.186
+    strike_point = 0.1833
+    strike_depth = 0.8856
+    tonal_dampening = 1.972
+    pickup_resonance_hz = 5074.0
+    pickup_q = 1.31
     # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
     # consensus, no recording holding a released note -- the median of four
     # sets' releases, 0.54 s (0.60, 0.40, 0.60, 0.48), to our smoothstep's -40 dB at the same
@@ -12428,20 +12429,20 @@ class ElectricGuitarProperties(PluckedStringProperties):
     # wire. Partial frequencies are the one thing a recording gives up
     # unconditionally, so this is worth measuring properly if a steel-string
     # reference ever turns up.
-    # THE STRING, MEASURED (examples/egtr_fit.py --string=guitar): Fraunhofer's
-    # IDMT-SMT-Guitar, DI -- a Stratocaster and an Ibanez RG2820 on four pickup
-    # setups, 306 notes, frets 0-12 on all six strings. It had rung on a flat
-    # harmonic_decay of 1 and nothing else (2 dB/s a harmonic on the envelope)
-    # and a B of 5e-5; the strings measure 5-15 dB/s at the fundamental and
-    # 15-30 above, faster up the neck, and B 4e-4 at E2 falling to 1e-4 at E4
-    # (the wound low strings stiff, the plain top ones not). The decay as
-    # pizz_fit's law, halved to the class's dB (median |log err| 0.30 over 2492
-    # partials: the strings beat); B as k f0^p (0.52).
-    decay_db = 2.685
-    harmonic_decay_db = 1.429
-    decay_register_slope = 0.205
+    # THE STRING, MEASURED (examples/egtr_fit.py --string=guitar), since
+    # 2026-11-22 on Guitar-TECHS (Zenodo, CC BY 4.0; IDMT's CC BY-NC-ND set no
+    # longer read, licences.md L2): its P2, an EVH Wolfgang's nickel
+    # roundwounds (009-042), DI, every fretted note held 4 s -- 697 partial
+    # decays, each line stopped 10 dB over its floor. The low notes ring long
+    # (fundamentals 1.5-4 dB/s in octaves 2-3), the high ones die fast (14-26
+    # in 5-6), each partial up ~2 dB/s more: pizz_fit's law, halved to the
+    # class's dB (median |log err| 0.35). B as k f0^p over 91 notes: 2.9e-4 at
+    # E2 to 1.9e-4 at E4 (IDMT had read 4.1e-4 to 1.1e-4).
+    decay_db = 2.361
+    harmonic_decay_db = 2.174
+    decay_register_slope = 0.468
     inharmonicity_dynamic = True
-    inharmonicity_law = (0.02293, -0.913)
+    inharmonicity_law = (0.00109, -0.303)
 
     def inharmonicity_coefficient_for_frequency(self, frequency):
         k, p = self.inharmonicity_law
@@ -12449,9 +12450,9 @@ class ElectricGuitarProperties(PluckedStringProperties):
 
     # A FRETTED NOTE IS A SHORTER STRING. The pickup and the pick stay where
     # they are -- a fixed distance from the bridge -- so as a finger stops the
-    # string shorter, both become a larger fraction of it: the recorded combs
-    # climb up the neck (a neck coil's 0.18 on the open low strings, 0.31 and
-    # 0.44 higher up; IDMT-SMT-Guitar). The note goes where a player puts it
+    # string shorter, both become a larger fraction of it: the combs climb up
+    # the neck (geometry: a coil 160 mm from the bridge is 0.247 of the open
+    # string and 0.49 of it at the 12th fret). The note goes where a player puts it
     # by default, the lowest fret: the highest open string at or under it.
     # Both fractions scale by 2^(fret/12). () = unfretted (every note open).
     open_strings_hz = (82.41, 110.0, 146.83, 196.0, 246.94, 329.63)
@@ -13066,12 +13067,20 @@ class JazzGuitarProperties(ElectricGuitarProperties):
     """
     # ITS PICKUP SWITCH, the part's to set (the AMP card): the Ibanez RG2820's: neck and bridge humbuckers, each or both
     pickup_family = 'ibanez'
-    # FITTED (--ladder=26) to the RG2820's NECK humbucker, DI: 8.95 -> 5.40 dB.
-    strike_point = 0.1923
-    strike_depth = 0.8113
-    tonal_dampening = 1.95
-    pickup_resonance_hz = 5971.0
-    pickup_q = 1.153
+    # FITTED, since 2026-11-22, to Guitar-TECHS' P2 (Zenodo, CC BY 4.0; IDMT's
+    # RG2820 no longer read, licences.md L2): an EVH Wolfgang on its NECK
+    # humbucker, DI, tone full, 137 notes at their own frets --
+    # --ladder=26: the pick, its notch and the coil's load, 15.4 -> 8.8 dB;
+    # --envelope=26: the top by absolute frequency, 3.71 -> 0.81 dB over
+    # third octaves to -78 dB -- a low-pass at 723 Hz (order 2.3) and the
+    # series' fall back near the old (1.97): warm, ~48 dB down by 2.5 kHz
+    strike_point = 0.1833
+    strike_depth = 0.8856
+    pickup_resonance_hz = 6534.0
+    pickup_q = 0.7663
+    tonal_dampening = 1.972
+    lowpass_hz = 723.3
+    lowpass_order = 2.274
     # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
     # consensus, no recording holding a released note -- the median of four
     # sets' releases, 0.20 s (0.08, 0.38, 0.08, 0.32), to our smoothstep's -40 dB at the same
@@ -13110,18 +13119,15 @@ class MutedGuitarProperties(ElectricGuitarProperties):
     out fast -- fastest from the modes that move most under it, the high ones,
     and the higher up the neck the faster.
 
-    MEASURED (examples/egtr_fit.py --mute, --fit-technique=mute), IDMT-SMT-
-    Guitar's dataset 2: three guitars, five palm-muted notes at the fifth fret
-    of every string, each against the same note open. The mute decays 3.6-5.5
-    x the open string (medians, h1-h4) -- not the order of magnitude this said
-    by ear -- and steeply more up the neck (h1 ~36 dB/s at A2, ~120 at A4). And
-    it IS partly a low-pass: at onset the muted note matches the open one to
-    h4 and then falls away (h5 -22 dB against -14, h6 -30 against -13) -- the
-    palm is on the string before the pick leaves it. So the click survives
-    and the top above it does not.
+    MEASURED (examples/egtr_fit.py --fit-technique=mute) on Guitar-TECHS' P2,
+    DI: 134 palm-muted notes, every string at frets 0-22. A muted note falls
+    20-40 dB in its first 0.2 s -- ~240 dB/s at 415 Hz against the open
+    string's ~5 -- and steeply faster up the neck ((f0/415)^0.81); and its
+    partials go down together, h2-h4 no faster than h1: the palm damps the
+    whole string where it rests, not its top alone.
     """
-    initial_gain = 0.0995397   # held at its level before the IDMT fit (egtr_fit.py), with
-    # amp_reference moving with it -- the drive as voiced (turns x coils x the family's base)
+    initial_gain = 0.0281346   # its strum's peak held (examples/calib_peak.py) through
+    # the 2026-11-23 refit, so the valve is driven as voiced; amp_reference unmoved
     # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
     # consensus, no recording holding a released note -- the median of four
     # sets' releases, 0.32 s (0.40, 0.12, 0.40, 0.24), to our smoothstep's -40 dB at the same
@@ -13131,16 +13137,22 @@ class MutedGuitarProperties(ElectricGuitarProperties):
     pickup_points = (0.10,)             # near the bridge, where the hand is
     pickup_turns = 1.07                 # a bridge coil is wound hotter: 6.2k
     amp_reference = 0.21718210907710012
-    strike_point = 0.1396
-    # FITTED (--fit-technique=mute, 87 notes): the decay law, (a + b m)
-    # (f0/415)^s halved to the class's dB (median |log err| 0.57 -- a palm is
-    # not placed the same twice), and the pick, its notch and the tilt against
-    # the onset ladders (13.5 -> 5.6 dB)
-    decay_db = 48.33
-    harmonic_decay_db = 9.202
-    decay_register_slope = 0.8949
-    strike_depth = 0.7927
-    tonal_dampening = 2.742
+    # FITTED (--fit-technique=mute), since 2026-11-23 to Guitar-TECHS' P2
+    # (CC BY 4.0; IDMT's dataset 2 no longer read, licences.md L2): 134 palm-
+    # muted notes, DI, every string at frets 0-22, each line ended 10 dB over
+    # its floor. The decay law, (a + b m)(f0/415)^s halved to the class's dB
+    # (median |log err| 0.46 over 536 partials): ~240 dB/s at 415 Hz, twice
+    # IDMT's players' -- this palm sits heavier -- and h2-h4 no faster than
+    # h1. The pick, its notch and the tilt against the onset ladders, read
+    # through the pickup P2 played them on (its neck humbucker: their
+    # spectrum is its, within ~5 dB a band), 16.8 -> 8.6 dB; the voice keeps
+    # its own coil by the bridge, where the hand is.
+    strike_point = 0.2021
+    decay_db = 121.1
+    harmonic_decay_db = 0.0
+    decay_register_slope = 0.8075
+    strike_depth = 0.5751
+    tonal_dampening = 1.614
     amp_drive = 1.98
     amp_imbalance = 0.50
 
@@ -13160,15 +13172,24 @@ class OverdrivenGuitarProperties(ElectricGuitarProperties):
     """
     # ITS PICKUP SWITCH, the part's to set (the AMP card): the Ibanez's: neck, both, bridge
     pickup_family = 'ibanez'
-    initial_gain = 0.0741522   # held at its level before the IDMT fit (egtr_fit.py), with
-    # amp_reference moving with it -- the drive as voiced (turns x coils x the family's base)
-    # FITTED to the RG2820's BRIDGE humbucker, DI (the same pickup as GM 30, its fit): the
-    # string and the pickup; the amplifier after it is unchanged.
-    strike_point = 0.165
-    strike_depth = 0.7716
-    tonal_dampening = 2.284
-    pickup_resonance_hz = 4827.0
-    pickup_q = 0.7739
+    initial_gain = 0.0936312   # its strum's peak held (examples/calib_peak.py) through
+    # the 2026-11-23 refit, so the valve is driven as voiced; amp_reference unmoved
+    # THE BRIDGE HUMBUCKER, since 2026-11-23 the Jazz Guitar's fit (Guitar-
+    # TECHS' P2, CC BY 4.0; IDMT's RG2820 no longer read, licences.md L2)
+    # moved to the bridge by geometry alone: the pick, the series' fall, the
+    # load and the low-pass as fitted on the neck, the coils at 0.049/0.077.
+    # CHECKED, NOT FITTED, against P1 -- an Ibanez's bridge humbucker, DI, on
+    # flatwounds (egtr_fit.py --envelope's measure): 1.85 dB by absolute
+    # frequency, where IDMT's fit missed it by 7.2 and P1's own coil (fitted
+    # free, 1.65 kHz) by 5.5 -- the low-pass is the string's and the DI's,
+    # not the neck pickup's. The amplifier after it is unchanged.
+    strike_point = 0.1833
+    strike_depth = 0.8856
+    tonal_dampening = 1.972
+    pickup_resonance_hz = 6534.0
+    pickup_q = 0.7663
+    lowpass_hz = 723.3
+    lowpass_order = 2.274
     # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
     # consensus, no recording holding a released note -- the median of four
     # sets' releases, 0.27 s (0.16, 0.34, 0.30, 0.24), to our smoothstep's -40 dB at the same
@@ -13198,15 +13219,24 @@ class DistortionGuitarProperties(ElectricGuitarProperties):
     """
     # ITS PICKUP SWITCH, the part's to set (the AMP card): the Ibanez's: neck, both, bridge
     pickup_family = 'ibanez'
-    initial_gain = 0.106201   # held at its level before the IDMT fit (egtr_fit.py), with
-    # amp_reference moving with it -- the drive as voiced (turns x coils x the family's base)
-    # FITTED to the RG2820's BRIDGE humbucker, DI (--ladder=30, 6.25 -> 3.40 dB): the
-    # string and the pickup; the amplifier after it is unchanged.
-    strike_point = 0.165
-    strike_depth = 0.7716
-    tonal_dampening = 2.284
-    pickup_resonance_hz = 4827.0
-    pickup_q = 0.7739
+    initial_gain = 0.134099   # its strum's peak held (examples/calib_peak.py) through
+    # the 2026-11-23 refit, so the valve is driven as voiced; amp_reference unmoved
+    # THE BRIDGE HUMBUCKER, since 2026-11-23 the Jazz Guitar's fit (Guitar-
+    # TECHS' P2, CC BY 4.0; IDMT's RG2820 no longer read, licences.md L2)
+    # moved to the bridge by geometry alone: the pick, the series' fall, the
+    # load and the low-pass as fitted on the neck, the coils at 0.049/0.077.
+    # CHECKED, NOT FITTED, against P1 -- an Ibanez's bridge humbucker, DI, on
+    # flatwounds (egtr_fit.py --envelope's measure): 1.85 dB by absolute
+    # frequency, where IDMT's fit missed it by 7.2 and P1's own coil (fitted
+    # free, 1.65 kHz) by 5.5 -- the low-pass is the string's and the DI's,
+    # not the neck pickup's. The amplifier after it is unchanged.
+    strike_point = 0.1833
+    strike_depth = 0.8856
+    tonal_dampening = 1.972
+    pickup_resonance_hz = 6534.0
+    pickup_q = 0.7663
+    lowpass_hz = 723.3
+    lowpass_order = 2.274
     # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
     # consensus, no recording holding a released note -- the median of four
     # sets' releases, 0.31 s (0.24, 0.40, 0.39, 0.19), to our smoothstep's -40 dB at the same
@@ -13244,8 +13274,8 @@ class GuitarHarmonicsProperties(ElectricGuitarProperties):
     It rings, too, because the finger is at a node and a node is not moving:
     the touch selects rather than damps. Decay is left at the base voice's.
     """
-    initial_gain = 0.242078   # held at its level before the IDMT fit (egtr_fit.py), with
-    # amp_reference moving with it -- the drive as voiced (turns x coils x the family's base)
+    initial_gain = 0.233352   # its strum's peak held (examples/calib_peak.py) through
+    # the 2026-11-23 refit, so the valve is driven as voiced; amp_reference unmoved
     amp_reference = 0.49362740621403906
     # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
     # consensus, no recording holding a released note -- the median of four
@@ -13256,7 +13286,7 @@ class GuitarHarmonicsProperties(ElectricGuitarProperties):
     harmonic_touch = 2                  # touched at 1/2: the twelfth fret
     # ...BUT A PLAYER CHOOSES THE TOUCH TO SUIT THE NOTE. Natural harmonics are
     # played on open strings, over the nodes at frets 12, 7, 5 and 4 (or 9) --
-    # harmonics 2, 3, 4, 5 (IDMT-SMT-Guitar's dataset 2 has all of them) -- so
+    # harmonics 2, 3, 4, 5 -- so
     # each note takes a touch that puts its string near the nut. One touch for every note fretted G#6 at the 16th, its coil past
     # the middle of the string and onto every surviving mode's node: silence.
     touches = (2, 3, 4, 5)
@@ -13280,39 +13310,37 @@ class GuitarHarmonicsProperties(ElectricGuitarProperties):
             near = [n for n in self.touches if fret(n) <= 4.0] or list(self.touches)
             self.harmonic_touch = max(near, key=lambda n: (heard(n), -n))
         super().__init__(frequency, *args, **kwargs)
-    # FITTED (examples/egtr_fit.py --fit-technique=harm): 90 natural harmonics
-    # on three guitars, each at its own touch on its open string -- the pick,
-    # its notch, the tilt, and the COIL, since a touched harmonic reads only
-    # modes n m and dataset 2 does not say which pickups were on (it went to
-    # 0.153, a Stratocaster's middle): onset ladder 15.2 -> 8.2 dB. A recorded
-    # harmonic is nearly a sine -- h3 26 dB down, h5 48 in the fifth octave.
-    strike_point = 0.1264
-    strike_depth = 0.7767
-    tonal_dampening = 2.636
-    pickup_points = (0.1529,)
+    # FITTED (examples/egtr_fit.py --fit-technique=harm), since 2026-11-23 to
+    # Guitar-TECHS' P2 (CC BY 4.0; IDMT's dataset 2 no longer read, licences.md
+    # L2): 24 natural harmonics, DI, touched over frets 12, 7 and 5 of every
+    # string -- the pick, its notch and the tilt against the onset ladders
+    # (8.8 -> 6.5 dB), the hand the palm mute's fit found (0.20, 0.58). And
+    # P2's PICKUP, which it played them on: its neck humbucker, the Jazz
+    # Guitar's coils, load and low-pass (IDMT's three guitars had not said
+    # which, and the coil was fitted to 0.153).
+    strike_point = 0.2221
+    strike_depth = 0.5696
+    tonal_dampening = 2.295
+    pickup_family = 'ibanez'
+    pickup_points = (0.230, 0.258)
+    pickup_turns = 0.69
+    pickup_resonance_hz = 6534.0
+    pickup_q = 0.7663
+    lowpass_hz = 723.3
+    lowpass_order = 2.274
     # ...and its decay is the partial HEARD's, not the open string's mode n m.
-    # The fundamental's from a line through each note (360 partials). The
-    # harmonics' NOT: a recorded harmonic grows purer as it sustains -- over
-    # 0.2-0.8 s its h3-h6 stand 50-79 dB under h1, where at onset they stood
-    # 26-48 -- the touching finger's width, damping the high modes that move
-    # inside it. A line through the whole note averaged that early fall with
-    # the floor after it (0.80); fitted instead to the sustained ladder by
-    # render (scratch harmdamp, 45 notes), 7.5: miss 19.4 -> 10.7 dB. Forcing
-    # each note onto the recording's own touch changed nothing (Ben asked):
-    # it was the damping, not the touch. ...And on the HARMONICS ONLY: the law
-    # is decay_db + harmonic_decay_db m, so 7.5 a harmonic took the
-    # fundamental from its measured 4.8 to 11.5 too, and every note decayed
-    # 21-25 dB/s where the recordings' do 6-11 (Ben: the first and last "decayed
-    # faster than the recordings by a significant amount"). decay_db carries
-    # the difference, so h1 keeps the measured 3.999 + 0.796 and only the
-    # partials above it steepen.
-    decay_db = 3.999 + 0.7957 - 7.5
+    # A recorded harmonic grows purer as it sustains: over 0.2-0.8 s its
+    # h2-h5 stand 5-15 dB further under h1 than at onset (P2: h3 -25 -> -30
+    # on touch 2, -35 -> -49 on touch 3) -- the touching finger's width,
+    # damping the high modes that move inside it: ~7 dB a partial over the
+    # half second, 7.5 a harmonic in the class's dB (IDMT's, refitted by
+    # render, was the same 7.5). The fundamental from the whole note's
+    # envelope over 0.2 s to its floor, 23 notes: 5.3 dB/s at 415 Hz (2.64
+    # here), (f0/415)^0.487 -- so decay_db carries the difference, and h1
+    # keeps the measured 2.64 while only the partials above it steepen.
+    decay_db = 2.635 - 7.5
     harmonic_decay_db = 7.5
-    # ...and faster up the neck: the whole note's envelope falls 6.6 dB/s under
-    # 300 Hz, 8.2, 10.9, then 19.8 over 1.2 kHz -- (f0/415)^0.648 over 89
-    # harmonics (median |log err| 0.28); the line through each partial had read
-    # -0.09, its early fall biasing it
-    decay_register_slope = 0.648
+    decay_register_slope = 0.487
 
     def harmonic_decay(self, harmonic):
         return SynthProperties.harmonic_decay(self, harmonic)
@@ -13320,28 +13348,29 @@ class GuitarHarmonicsProperties(ElectricGuitarProperties):
     # THE PLUCK (Ben, on the A/B: "missing the pluck sound"). The pick strikes
     # the WHOLE string; for the first moments every mode sounds, and the pick
     # clicks, before the touching finger kills the modes that have no node
-    # under it -- so a harmonic does not start pure. Measured between the
-    # sounding partials over each recorded harmonic's first 30 ms (90 notes),
-    # third-octave bands fitted (examples/egtr_fit.py --pluck=harm, 23.5 ->
-    # 0.3 dB rms): mostly 250 Hz-2.5 kHz, the killed low modes. And TIGHT:
-    # the recordings' pluck dies 230-280 dB/s in every octave; set to that
-    # rate, ours measured 100-126 above the third octave (Ben: the low notes
-    # "could use a little bit tighter pick"), so the rate is fitted to the
-    # measured fall -- 320 reads 250-260 -- and the bands refitted at it.
-    strike_noise_db = ((157, -40.5), (198, -43.5), (249, -36.4), (314, -48.7), (396, -29.2), (499, -30.7),
-                       (629, -35.6), (792, -33.8), (998, -31.0), (1257, -34.3), (1584, -33.8), (1996, -35.7),
-                       (2514, -40.7), (3168, -45.3), (3991, -48.5), (5029, -59.0), (6336, -62.6),
-                       (7982, -66.6), (10057, -77.3), (12671, -80.4))
+    # under it -- so a harmonic does not start pure. Since 2026-11-23 on
+    # Guitar-TECHS' P2 (24 harmonics; IDMT's 90 no longer read): measured
+    # between the sounding partials over each one's first 30 ms, the DI's
+    # FLOOR TAKEN OUT (egtr_fit.rec_pluck: its hiss and 60 Hz hum, read as
+    # pluck, had made one that never died -- Ben: "picked up the 60Hz buzz",
+    # "constant chiff", the reference's pluck "gentler"), third-octave bands
+    # fitted (--pluck=harm:320, 7.1 -> 0.9 dB rms): the killed low modes
+    # under 300 Hz, a click 30-40 dB down to 1.6 kHz, little above. Floor
+    # out, P2's pluck dies 231 dB/s (halved), as IDMT's players' did
+    # (230-280); 320 reads 156-178 on ours (the killed modes' skirts below).
+    strike_noise_db = ((157, -30.2), (198, -35.5), (249, -24.3), (314, -58.1), (396, -32.2), (499, -30.8),
+                       (629, -40.2), (792, -38.4), (998, -33.7), (1257, -39.8), (1584, -35.1), (1996, -44.7),
+                       (2514, -48.6), (3168, -59.5), (3991, -65.2), (5029, -71.1), (6336, -73.1),
+                       (7982, -73.7), (10057, -75.0), (12671, -76.4))
     strike_noise_dbs = 320.0
     strike_noise_fade_s = 0.001
     # ...AND THE MODES THE FINGER KILLS, as partials at their own frequencies
-    # (k/n of the note) rather than noise: each at the strength the pick and
-    # coil give it untouched, dying 400 dB/s (examples/egtr_fit.py --leak:
-    # the grid's best, 0 dB at 400). By the measures here a tie with the noise
-    # pluck alone (20.1 against 20.0) -- third octaves cannot tell a pitched
-    # mode from noise of its energy; Ben's ear decides.
-    touch_leak_db = 0.0
-    touch_leak_dbs = 400.0
+    # (k/n of the note) rather than noise: each 12 dB under the strength the
+    # pick and coil give it untouched, dying 800 dB/s (examples/egtr_fit.py
+    # --leak with the pluck, floor out, on P2's 24 notes: -12 and -6 dB at
+    # 800 within a point, 21.4 and 20.7; the gentler, for Ben's ear).
+    touch_leak_db = -12.0
+    touch_leak_dbs = 800.0
     amp_drive = 0.45
 
 
@@ -20832,7 +20861,7 @@ class GatedSnareProperties(SnareDrumProperties):
     strike_noise_db = tuple((round(400.0 * 2 ** (k / 3.0)),
                              round(-12.0 + 0.3 * _log(400.0 * 2 ** (k / 3.0) / 1000.0) / _log(2.0), 1))
                             for k in range(15))
-    strike_noise_dbs = 60.0
+    strike_noise_dbs = 320.0
     strike_noise_len_s = 1.0
     strike_noise_fade_s = 0.001
 
@@ -30298,6 +30327,8 @@ class HawaiianGuitarProperties(Plectrum, JazzGuitarProperties):
     # Q = sqrt(L/C)/R = 0.56
     pickup_resonance_hz = 505.0
     pickup_q = 0.56
+    # (not the jazz box's DI low-pass: the lap steel's dark is its own circuit)
+    lowpass_hz = None
     # ITS OTHER OPEN STRINGS ANSWER through the bridge, where their harmonics
     # lie near the note's -- coincidence over a fixed set (sympathetic.py), no
     # narrower than the pluck's spread (sympathetic_width_hz): open E,

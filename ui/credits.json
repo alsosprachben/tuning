@@ -314,13 +314,13 @@
 },
 {
 "group": "Guitars and basses",
-"title": "IDMT-SMT-Guitar",
-"author": "Fraunhofer IDMT",
-"url": "https://zenodo.org/records/7544110",
-"licence": "CC BY-NC-ND 4.0",
-"licence_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
+"title": "Guitar-TECHS: An Electric Guitar Dataset Covering Techniques, Musical Excerpts, Chords and Scales Using a Diverse Array of Hardware",
+"author": "Hegel Pedroza, Termeh Taheri, Wallace Abreu, Ryan Corey and Iran R. Roman (ICASSP 2025)",
+"url": "https://zenodo.org/records/14963133",
+"licence": "CC BY 4.0",
+"licence_url": "https://creativecommons.org/licenses/by/4.0/",
 "how": "fitted",
-"voices": "Electric guitars (string, pickups, mute, harmonics)"
+"voices": "Electric guitars (string, pickups, palm mute, harmonics)"
 },
 {
 "group": "Guitars and basses",

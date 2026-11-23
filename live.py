@@ -16267,15 +16267,15 @@ def _selftest(only=""):
           "  (%.2f < %.2f < %.2f)" % (inst[27].amp_drive, inst[29].amp_drive,
                                       inst[30].amp_drive))
     # A PALM MUTE IS A DAMPER, so it has to be a decay and not a filter.
-    # ...and by what a palm does, MEASURED (egtr_fit.py --mute): against the same
-    # guitar, string and fret unmuted, the mute decays 3.6-5.5 x (medians,
-    # h1-h4), quartiles 1.7-11.6 -- not the order of magnitude this asserted
-    # before there was a recording.
-    # at A2, the fifth fret of the low E, where the palm was measured
+    # ...and by what a palm does, MEASURED (since 2026-11-23 on Guitar-TECHS'
+    # P2): against the same string and fret unmuted, each note's h1 to 10 dB
+    # over its floor, the mute decays x 26 (125 pairs, quartiles 14.5-35),
+    # x 14 under 160 Hz -- a heavier palm than IDMT's players' (x 3.6-5.5).
+    # at A2, the fifth fret of the low E
     _m28, _o27 = _T.MutedGuitarProperties(110.0, 0.0, 1.0, 1.0), _T.ElectricGuitarProperties(110.0, 0.0, 1.0, 1.0)
     check("the muted voice damps, as much as a palm does",
-          3.0 < _m28.harmonic_decay(1) / _o27.harmonic_decay(1) < 12.0,
-          "  (%.1f vs %.1f dB/s at A2, x %.1f; measured x 4.0, quartiles 1.7-11.6)"
+          8.0 < _m28.harmonic_decay(1) / _o27.harmonic_decay(1) < 40.0,
+          "  (%.1f vs %.1f dB/s at A2, x %.1f; measured x 14 under 160 Hz, quartiles 14.5-35 overall)"
           % (_m28.harmonic_decay(1), _o27.harmonic_decay(1),
              _m28.harmonic_decay(1) / _o27.harmonic_decay(1)))
 

@@ -53,21 +53,23 @@ store build.
   - Rejected: Pianobook's "Matt's Fender Rhodes" (ideal, DI; no licence
     stated), Keenan's Rhodes bass (CC0, an emulation, C4-E6 only).
 
-### L2. Electric guitars (GM 26-31): Fraunhofer IDMT-SMT-Guitar — CC BY-NC-ND 4.0
+### L2. Electric guitars (GM 26-31): Fraunhofer IDMT-SMT-Guitar — CC BY-NC-ND 4.0 — CLOSED 2026-11-23
 
-- **Source:** Fraunhofer IDMT's guitar set, DI, the Ibanez 2820 neck humbucker.
-- **What derives from it:** the electric guitars' string, pickups, mute and
+- **Source (was):** Fraunhofer IDMT's guitar set, DI, the Ibanez 2820 neck humbucker.
+- **What derived from it:** the electric guitars' string, pickups, mute and
   harmonics (`JazzGuitar` and the clean, muted, overdriven, distortion and
   harmonics programs that share it; `examples/egtr_fit.py`).
-- **Status:** open. ND as well as NC: even a research licence wouldn't allow
-  an adaptation.
-- **Alternatives (checked 2026-11-20):** no open hollow-body set exists.
-  1. Guitar-TECHS (Zenodo 14963133, CC BY 4.0): 138 single notes per player,
-     true DI at 48 kHz; an EVH Wolfgang on the NECK HUMBUCKER (solid body) and
-     an Ibanez PF300 on the bridge. The neck humbucker is the jazz pickup; the
-     hollow body's resonance would stay our model's.
-  2. FreePats "Clean Electric Guitar" (CC0): a Fender, bridge pickup, DI.
-  - Rejected: MedleyDB (CC BY-NC-SA), EGDB (no licence), IDMT effects set.
+- **Status:** CLOSED. Every number refitted, each approved by Ben's ear:
+  - the string and the Jazz Guitar (26): Guitar-TECHS (Zenodo 14963133, CC BY
+    4.0), P2's neck humbucker, DI;
+  - the Clean Guitar (27): its coil's load from its circuit
+    (`examples/strat_coil.py`), the pick from 26;
+  - Overdrive and Distortion (29, 30): 26's fit moved to the bridge by
+    geometry, checked (not fitted) on Guitar-TECHS' P1;
+  - the palm mute (28) and harmonics (31): Guitar-TECHS' P2 technique takes,
+    DI (the harmonics' pluck with the DI's hum and hiss taken out).
+  IDMT-SMT-Guitar is no longer read (`egtr_fit.TECHNIQUE_SOURCE = "techs"`;
+  the IDMT staging stays only for the basses, L3).
 
 ### L3. Electric basses (GM 33, 34, 36, 37): Fraunhofer IDMT-SMT-Bass — CC BY-NC-ND 4.0
 

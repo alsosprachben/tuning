@@ -1,7 +1,11 @@
 #!/usr/bin/env python3
-"""Fit the electric guitars (GM 26-31) and basses (GM 33-37) to Fraunhofer's
-IDMT-SMT-Guitar and IDMT-SMT-Bass (CC BY-NC-ND 4.0: measured only, never
-redistributed; ~/Documents/refs/idmt, sources.md).
+"""Fit the electric guitars (GM 26-31) and basses (GM 33-37). The GUITARS,
+since 2026-11-23, to Guitar-TECHS (Zenodo 14963133, CC BY 4.0;
+~/Documents/refs/guitar_techs): P2's single notes and techniques, DI, on its
+neck humbucker, P1's bridge humbucker as a check (licences.md L2). The
+BASSES still to Fraunhofer's IDMT-SMT-Bass (CC BY-NC-ND 4.0: measured only,
+never redistributed; ~/Documents/refs/idmt, sources.md; L3) -- and the
+guitar sets below, IDMT-SMT-Guitar's, kept only to read what was.
 
     egtr_fit.py --stage                 link every single note under its sounding name
                                         (and cut GuitarSet's isolated notes, GM 25)
@@ -111,9 +115,128 @@ def stage():
         n += 1
     n += stage_fretless()
     n += stage_guitarset()
+    n += stage_techs()
+    n += stage_techs_tech()
     print("  staged %d notes in %d sets (%d bass files on an unplaceable string 5 left out)"
           % (n, len(sets()), skipped))
 
+
+# GUITAR-TECHS (Zenodo 14963133, CC BY 4.0: Pedroza, Abreu, Corey & Roman,
+# ICASSP 2025), ~/Documents/refs/guitar_techs -- since 2026-11-22 the
+# guitars' source in IDMT's place (CC BY-NC-ND, licences.md L2). Its single
+# notes: every fretted note and open string, each held 4 s, true DI (a
+# splitter into the interface) at 48 kHz, one long file a player with a
+# MIDI track a string ("E" ... "e"). P2: an EVH Wolfgang superstrat on its
+# NECK humbucker, nickel roundwounds 009-042, tone full; P1: an Ibanez PF300
+# Les Paul type on its BRIDGE pickup, FLATWOUNDS 011-050, tone full. Each
+# note cut from its own onset (the envelope's first 10% of the note's peak,
+# 10 ms early -- the MIDI sits up to 100 ms off) to 50 ms before the next.
+TECHS = os.path.expanduser("~/Documents/refs/guitar_techs")
+TECHS_SETS = {"techs_wolfgang_neck_hu": "P2", "techs_ibanez_bridge_flat": "P1"}
+TECHS_STRING = {"E": 1, "A": 2, "D": 3, "G": 4, "B": 5, "e": 6}
+TECHS_OPEN = {1: 40, 2: 45, 3: 50, 4: 55, 5: 59, 6: 64}
+
+
+def stage_techs():
+    import mido
+    from scipy.io import wavfile
+    n = 0
+    for name, player in TECHS_SETS.items():
+        d = os.path.join(TECHS, "%s_singlenotes" % player)
+        sr, x = wavfile.read(os.path.join(d, "audio", "directinput", "directinput_allsinglenotes.wav"))
+        x = x.astype(np.float64)
+        x = x[:, 0] if x.ndim > 1 else x          # (P2's two channels are one)
+        x /= np.abs(x).max()
+        m = mido.MidiFile(os.path.join(d, "midi", "midi_allsinglenotes.mid"))
+        ev = []
+        for tr in m.tracks[1:]:
+            t = 0
+            for msg in tr:
+                t += msg.time
+                if msg.type == "note_on" and msg.velocity > 0:
+                    ev.append((mido.tick2second(t, m.ticks_per_beat, 500000), msg.note, TECHS_STRING[tr.name]))
+        ev.sort()
+        tempo = next((msg.tempo for tr in m.tracks for msg in tr if msg.type == "set_tempo"), 500000)
+        if tempo != 500000:
+            ev = [(t * tempo / 500000.0, k, st) for t, k, st in ev]
+        folder = os.path.join(STAGED, name)
+        os.makedirs(folder, exist_ok=True)
+        w = int(0.005 * sr)
+        for i, (t, key, st) in enumerate(ev):
+            t1 = ev[i + 1][0] - 0.05 if i + 1 < len(ev) else len(x) / sr
+            a0, a1 = max(0, int((t - 0.15) * sr)), int(t1 * sr)
+            seg = x[a0:a1]
+            e = np.sqrt(np.convolve(seg * seg, np.ones(w) / w, "same"))
+            on = max(0, int(np.flatnonzero(e > 0.1 * e.max())[0]) - int(0.01 * sr))
+            fret = key - TECHS_OPEN[st]
+            if not 0 <= fret <= 24:
+                continue
+            dst = os.path.join(folder, "%s.s%df%02d.wav" % (_name(key), st, fret))
+            # (32-bit integer PCM: what roomtail.read_wav reads)
+            wavfile.write(dst, sr, np.round(seg[on:] * 0.98 * 2147483647.0).astype(np.int32))
+            n += 1
+    return n
+
+
+
+# GUITAR-TECHS' TECHNIQUES (since 2026-11-23, IDMT's dataset 2 no longer read,
+# licences.md L2): P2's DI takes of palm-muted notes (every string, frets
+# 0-22) and natural harmonics (touched over frets 12, 7 and 5 -- harmonics 2,
+# 3, 4 -- on each string; the MIDI writes each at its sounding pitch, and two
+# whose pitch is no harmonic of their string are left out), each cut from its
+# onset to the next note's, staged as <note>.s<string>f<fret>.n<touch>.wav
+TECHS_TECH = {"mute": ("PalmMute", "techs_p2_mute"), "harm": ("Harmonics", "techs_p2_harm")}
+TECHS_TOUCH = {12: 2, 19: 3, 24: 4, 28: 5}
+
+
+def stage_techs_tech():
+    import mido
+    from scipy.io import wavfile
+    n = 0
+    d = os.path.join(TECHS, "P2_techniques")
+    for kind, (take, name) in TECHS_TECH.items():
+        sr, x = wavfile.read(os.path.join(d, "audio", "directinput", "directinput_%s.wav" % take))
+        x = x.astype(np.float64)
+        x = x[:, 0] if x.ndim > 1 else x
+        x /= np.abs(x).max()
+        m = mido.MidiFile(os.path.join(d, "midi", "midi_%s.mid" % take))
+        tempo = next((msg.tempo for tr in m.tracks for msg in tr if msg.type == "set_tempo"), 500000)
+        ev = []
+        for tr in m.tracks[1:]:
+            t = 0
+            for msg in tr:
+                t += msg.time
+                if msg.type == "note_on" and msg.velocity > 0:
+                    ev.append((mido.tick2second(t, m.ticks_per_beat, tempo), msg.note, TECHS_STRING[tr.name]))
+        ev.sort()
+        folder = os.path.join(STAGED, name)
+        os.makedirs(folder, exist_ok=True)
+        for f_ in glob.glob(os.path.join(folder, "*.wav")):
+            os.remove(f_)
+        w = int(0.005 * sr)
+        seen = {}
+        for i, (t, key, st) in enumerate(ev):
+            up = key - TECHS_OPEN[st]
+            if kind == "harm":
+                if up not in TECHS_TOUCH:
+                    continue
+                fret, touch = 0, TECHS_TOUCH[up]
+            else:
+                fret, touch = up, 1
+                if not 0 <= fret <= 24:
+                    continue
+            t1 = ev[i + 1][0] - 0.05 if i + 1 < len(ev) else len(x) / sr
+            a0, a1 = max(0, int((t - 0.15) * sr)), int(t1 * sr)
+            seg = x[a0:a1]
+            e = np.sqrt(np.convolve(seg * seg, np.ones(w) / w, "same"))
+            on = max(0, int(np.flatnonzero(e > 0.1 * e.max())[0]) - int(0.01 * sr))
+            k = (key, st, touch)
+            seen[k] = seen.get(k, 0) + 1
+            dst = os.path.join(folder, "%s.s%df%02d.n%d%s.wav" % (_name(key), st, fret, touch,
+                                                                  "" if seen[k] == 1 else "_%d" % seen[k]))
+            wavfile.write(dst, sr, np.round(seg[on:] * 0.98 * 2147483647.0).astype(np.int32))
+            n += 1
+    return n
 
 # THE FRETLESS (GM 35), from Freesound (~/Documents/refs/sources.md): no IDMT
 # fretless. FaireDesVagues' 15 notes (CC BY 3.0), a four-string into a Zoom H2's
@@ -240,6 +363,13 @@ def decays(path, nm=8, t0=0.05, t1=1.8):
         e = 20 * np.log10(np.sqrt(np.convolve(y * y, np.ones(w) / w, "same")) + 1e-12)
         pk = on + int(np.argmax(e[on:on + int(0.3 * sr)]))
         a, b = pk + int(t0 * sr), min(end, pk + int(t1 * sr))
+        if "techs_" in path:
+            # (Guitar-TECHS' notes ring 4 s into their floor: the line stops
+            # 10 dB over the band's own floor, its quietest 5% over the note)
+            fl = np.percentile(e[on:end], 5)
+            low = np.flatnonzero(e[a:b] < fl + 10.0)
+            if len(low):
+                b = a + int(low[0])
         if b - a < int(0.5 * sr) or e[pk] < e.max() - 60:
             out.append(np.nan)
             continue
@@ -267,7 +397,9 @@ def decay_report(paths, title):
 # every guitar setup is pooled for ElectricGuitarProperties (26-31 inherit)
 # and the finger and pick sets of all three basses for ElectricBassProperties.
 STRING_SETS = {
-    "guitar": ("strat_neck_sc", "ibanez_bridge_hu", "ibanez_neck_hu", "ibanez_bridge_neck_sc"),
+    # (since 2026-11-22 Guitar-TECHS' P2, nickel roundwounds, in IDMT's place:
+    # its P1's flatwounds are another string, left out)
+    "guitar": ("techs_wolfgang_neck_hu",),
     "bass": tuple("bass_%s_both_%s" % (b, st) for b in ("fame", "warwick", "yamaha") for st in ("FS", "PK")),
     # the fretless's own string: its STOPPED notes, where the finger on the
     # wood is the termination (FretlessBassProperties)
@@ -327,10 +459,10 @@ def fit_string(family, step=1):
 # bridge humbucker (their amplifier downstream, unchanged), 33/34/36/37 the
 # basses' finger, pick, slap-thumb and slap-pluck on both pickups.
 PROGRAM_SETS = {
-    26: ("ibanez_neck_hu",),
+    26: ("techs_wolfgang_neck_hu",),     # (Guitar-TECHS' P2, since 2026-11-22)
     27: ("strat_neck_sc",),
-    29: ("ibanez_bridge_hu",),
-    30: ("ibanez_bridge_hu",),
+    29: ("techs_ibanez_bridge_flat",),   # (Guitar-TECHS' P1, since 2026-11-23: its
+    30: ("techs_ibanez_bridge_flat",),   #  pickup only, the pick held at 26's)
     33: tuple("bass_%s_both_FS" % b for b in ("fame", "warwick", "yamaha")),
     34: tuple("bass_%s_both_PK" % b for b in ("fame", "warwick", "yamaha")),
     36: tuple("bass_%s_both_ST" % b for b in ("fame", "warwick", "yamaha")),
@@ -733,6 +865,7 @@ def seg_ladder(x, sr, f0, a, b, nm=10):
     return 20 * np.log10(np.maximum(lad, 1e-12) / max(lad[0], 1e-12))
 
 
+TECHNIQUE_SOURCE = "techs"        # (or "idmt": dataset 2, CC BY-NC-ND, no longer read)
 TOUCH = {"XII": 2, "VII": 3, "V": 4, "IV": 5, "IX": 5}
 
 
@@ -742,6 +875,26 @@ def technique_notes(kind):
     5, 4 and 9 -- harmonics 2, 3, 4, 5, 5 -- on each string), three guitars:
     (audio, onset, offset, sounding Hz, fret, touch)."""
     out = []
+    if TECHNIQUE_SOURCE == "techs":
+        from scipy.io import wavfile
+        for p in sorted(glob.glob(os.path.join(STAGED, TECHS_TECH[kind][1], "*.wav"))):
+            g = re.search(r"\.s(\d)f(\d+)\.n(\d)", os.path.basename(p))
+            st, fret, touch = int(g.group(1)), int(g.group(2)), int(g.group(3))
+            sr, y = wavfile.read(p)
+            key = TECHS_OPEN[st] + fret
+            # ...each note ENDS where it first comes within 10 dB of its floor
+            # (the 5th percentile of its 10 ms envelope): the takes run 4 s to
+            # the next note, and a muted note is down 20-40 dB in 0.2 s and then
+            # sits on the floor (-30 to -45), which a line through the whole
+            # read as a decay of 1 dB/s
+            y = y / 2.0 ** 31
+            w = int(0.01 * sr)
+            e = 20 * np.log10(np.sqrt(np.convolve(y * y, np.ones(w) / w, "same")) + 1e-12)
+            pk = int(np.argmax(e[:int(0.1 * sr)]))
+            low = np.flatnonzero(e[pk:] <= np.percentile(e, 5) + 10.0)
+            end = (pk + low[0]) / float(sr) if len(low) else len(y) / float(sr)
+            out.append((p, 0.0, max(end, pk / float(sr) + 0.12), 440.0 * 2 ** ((key - 69) / 12.0) * touch, fret, touch))
+        return out
     pat = "*_muted5.xml" if kind == "mute" else "*_NH_*.xml"
     for x in sorted(glob.glob(os.path.join(G2, "annotation", pat))):
         stem = os.path.basename(x)[:-4]
@@ -867,7 +1020,16 @@ def fit_technique(kind):
     # quarter point: touch 2's h2, string mode 4, came out 37 dB under the
     # recordings'), and dataset 2 does not say which pickups its three
     # guitars were on, so the comb is the data's to place
-    knobs = ("strike_point", "strike_depth", "tonal_dampening") + (("pickup_at",) if kind == "harm" else ())
+    knobs = ("strike_point", "strike_depth", "tonal_dampening") + (
+        ("pickup_at",) if kind == "harm" and TECHNIQUE_SOURCE != "techs" else ())
+    if TECHNIQUE_SOURCE == "techs":
+        # P2 PLAYED THEM ON ITS NECK HUMBUCKER: the hand fitted through that
+        # chain -- the Jazz Guitar's coils, load and low-pass -- so the tilt
+        # does not take up the pickup's dark; the voice keeps its own pickup
+        import tonelib as T_
+        J = getattr(T_, os.environ.get("TECHS_CHAIN", "JazzGuitarProperties"))
+        base = type("P2", (base,), {k: getattr(J, k) for k in (
+            "pickup_points", "pickup_resonance_hz", "pickup_q", "lowpass_hz", "lowpass_order", "pickup_turns")})
 
     def mk(b, vals):
         d = dict(vals)
@@ -901,10 +1063,12 @@ def fit_technique(kind):
     return dict(zip(knobs, v)), dec
 
 
+HUM_HZ = 60.0                     # (None: no mains to mask)
+FLOOR_SUBTRACT = True             # (harm_pluck: the recording's floor taken out of its pluck)
 S3 = 2 ** np.arange(np.log2(140), np.log2(16000), 1 / 3.0)
 
 
-def between(x, sr, f0, t0, a=0.0, b=0.03):
+def between(x, sr, f0, t0, a=0.0, b=0.03, absolute=False):
     """THE PLUCK UNDER A HARMONIC: third-octave bands BETWEEN the sounding
     note's partials (each masked, +-12 % of f0), over A-B seconds after the
     onset T0 (samples), dB re the window's whole energy -- koto_fit.pluck's
@@ -917,9 +1081,16 @@ def between(x, sr, f0, t0, a=0.0, b=0.03):
         if m * f0 > 0.5 * sr:
             break
         near |= np.abs(f - m * f0) < max(0.12 * f0, 15.0)
+    # ...and THE MAINS: Guitar-TECHS' DI carries 60 Hz hum and its harmonics
+    # (60, 120, 180, 540 in every tail), steady -- read as pluck it made a
+    # pluck that never died (Ben: "picked up the 60Hz buzz", a "constant
+    # chiff"). Masked on ours as well, so the measure stays like for like.
+    if HUM_HZ:
+        k = np.round(f / HUM_HZ)
+        near |= (k >= 1) & (np.abs(f - k * HUM_HZ) < 4.0)
     seg = x[t0 + int(a * sr):t0 + int(b * sr)]
     X = np.abs(np.fft.rfft(seg * np.hanning(len(seg)), n)) ** 2 / len(seg)
-    tot = X.sum()
+    tot = 1.0 if absolute else X.sum()
     out = []
     for lo, hi in zip(S3[:-1], S3[1:]):
         m_ = (f >= lo) & (f < hi) & ~near
@@ -932,6 +1103,32 @@ def _onset(x, sr):
     w = max(1, int(0.001 * sr))
     e = np.sqrt(np.convolve(x * x, np.ones(w) / w, "same"))
     return int(np.flatnonzero(e > e.max() * 0.1)[0])
+
+
+def rec_pluck(seg, sr, f0, t0):
+    """A RECORDED harmonic's pluck, its FLOOR TAKEN OUT (Ben: "the reference
+    actually seems to have a gentler pluck"): the DI's hiss and hum sit
+    between the partials all through the note, and a gentle pick is under
+    them within tens of ms -- read whole, the floor became a pluck that never
+    died (66 dB/s halved, 18 in the sixth octave; floor out, 231). Each band's
+    power over the note's last 30 ms windows, the median, subtracted from the
+    onset's; a band under twice its floor shows no pluck, and is set at a
+    quarter of the floor -- an upper bound, which pulls the table down.
+    -> (between()'s bands over 0-30 ms, dB re that window's whole energy;
+    the pluck's power in 0-30 and 30-80 ms, dB)"""
+    rel = between(seg, sr, f0, t0, 0.0, 0.03)[0]
+    P0 = 10 ** (between(seg, sr, f0, t0, 0.0, 0.03, absolute=True)[0] / 10.0)
+    tot = float(np.nanmedian(P0 / 10 ** (rel / 10.0)))       # the window's whole energy, partials and all
+    P1 = 10 ** (between(seg, sr, f0, t0, 0.03, 0.08, absolute=True)[0] / 10.0)
+    tail = [10 ** (between(seg, sr, f0, len(seg) - int(q * sr), 0.0, 0.03, absolute=True)[0] / 10.0)
+            for q in (0.06, 0.1, 0.14, 0.18)]
+    Pf = np.nanmedian(tail, 0)
+    b0 = 10 * np.log10(np.where(P0 > 2.0 * Pf, P0 - Pf, 0.25 * Pf) / tot)
+    # (between()'s are powers, per sample, whatever the window's length)
+    E0 = np.nansum(np.maximum(P0 - Pf, 0.0))
+    E1 = np.nansum(np.maximum(P1 - Pf, 0.0))
+    p0 = 10 * np.log10(E0 + 1e-30)
+    return b0, p0, (10 * np.log10(E1) if E1 > 0 else p0 - 40.0)
 
 
 def harm_pluck(passes=4, dbs=None):
@@ -953,13 +1150,18 @@ def harm_pluck(passes=4, dbs=None):
             x, sr = mono(wav)
             cache[wav] = (np.asarray(x, np.float64), sr)
         x, sr = cache[wav]
-        seg = x[int(a * sr) - int(0.02 * sr):int(b * sr)]
+        seg = x[max(0, int(a * sr) - int(0.02 * sr)):int(b * sr)]
         t0 = _onset(seg, sr)
         b0, e0 = between(seg, sr, f0, t0, 0.0, 0.03)
         _, e1 = between(seg, sr, f0, t0, 0.03, 0.08)
+        if FLOOR_SUBTRACT:
+            b0, e0, e1 = rec_pluck(seg, sr, f0, t0)
         R.append(b0); falls.append((e0 - e1) / 0.05 * 0.5)
         keys.append(int(round(69 + 12 * np.log2(f0 / 440.0))))
     rate = float(np.median(falls))           # dB/s of the inter-partial energy, halved
+    print("  recorded: %d notes, the pluck falls %.0f dB/s (halved; octave medians %s)" % (
+        len(R), rate, " ".join("%.0f" % np.median([q for q, k in zip(falls, keys) if k // 12 == o])
+                               for o in sorted({k // 12 for k in keys}))), flush=True)
     if not getattr(cls, "strike_noise_db", ()):
         cls.strike_noise_db = tuple((int(round(c)), -20.0) for c in cen)
     # THE FALL IS FITTED, NOT TAKEN: between-the-partials energy on OUR render
@@ -984,11 +1186,15 @@ def harm_pluck(passes=4, dbs=None):
                     render_note(31, key, tmp, secs=0.5)
                     y, sr = mono(tmp)
                     y = np.asarray(y, np.float64)
-                    done[key] = between(y, sr, 440.0 * 2 ** ((key - 69) / 12.0), _onset(y, sr))[0]
-                O.append(done[key])
+                    fk, t_ = 440.0 * 2 ** ((key - 69) / 12.0), _onset(y, sr)
+                    b_, e0_ = between(y, sr, fk, t_, 0.0, 0.03)
+                    e1_ = between(y, sr, fk, t_, 0.03, 0.08)[1]
+                    done[key] = (b_, (e0_ - e1_) / 0.05 * 0.5)
+                O.append(done[key][0])
             d = np.nanmedian(np.array(R) - np.array(O), 0)
-            print("  pass %d: pluck bands rec - ours, rms %.1f dB (fall %.0f dB/s halved)"
-                  % (k, np.sqrt(np.nanmean(d ** 2)), cls.strike_noise_dbs), flush=True)
+            print("  pass %d: pluck bands rec - ours, rms %.1f dB (table %.0f dB/s halved; ours reads %.0f, recorded %.0f)"
+                  % (k, np.sqrt(np.nanmean(d ** 2)), cls.strike_noise_dbs,
+                     np.median([done[q][1] for q in keys]), rate), flush=True)
             if k == passes:
                 break
             cls.strike_noise_db = tuple((hz, round(db + (float(dd) if np.isfinite(dd) else 0.0), 1))
@@ -1018,10 +1224,12 @@ def fit_leak(levels=(-20.0, -12.0, -6.0, 0.0), rates=(200.0, 400.0, 800.0), step
             x, sr = mono(wav)
             cache[wav] = (np.asarray(x, np.float64), sr)
         x, sr = cache[wav]
-        seg = x[int(a * sr) - int(0.02 * sr):int(b * sr)]
+        seg = x[max(0, int(a * sr) - int(0.02 * sr)):int(b * sr)]
         t0 = _onset(seg, sr)
         b0, e0 = between(seg, sr, f0, t0)
         _, e1 = between(seg, sr, f0, t0, 0.03, 0.08)
+        if FLOOR_SUBTRACT:
+            b0, e0, e1 = rec_pluck(seg, sr, f0, t0)
         L = seg_ladder(seg, sr, f0, t0 / sr, len(seg) / sr, nm=6)
         R.append((f0, b0, e0 - e1, L))
     base = di_class(31)
@@ -1233,8 +1441,8 @@ def main(argv):
             fit_leak(levels=(None if v[0] == "none" else float(v[0]),), rates=(float(v[1]),),
                      noise=len(v) > 2)
             return 0
-        if a == "--pluck=harm":
-            harm_pluck(dbs=320.0)
+        if a.startswith("--pluck=harm"):
+            harm_pluck(dbs=float(a.split(":")[1]) if ":" in a else 320.0, passes=int(os.environ.get("PASSES", 4)))
             return 0
         if a.startswith("--abtech="):
             k, out = a.split("=", 1)[1].split(":", 1)
@@ -1275,6 +1483,15 @@ def main(argv):
                 # pluck shows the pickup's top best); the hand is the rest.
                 fit_ladder(g, ("strike_point", "strike_depth", "tonal_dampening"),
                            pickup_resonance_hz=BASS_PICKUP[0], pickup_q=BASS_PICKUP[1])
+            elif g in (29, 30):
+                # THE BRIDGE HUMBUCKER, ITS PICKUP ONLY: P1's player and its
+                # flatwounds are not the voice's, so the pick and the series'
+                # fall are held at the Jazz Guitar's (P2, roundwounds) and the
+                # coil's load fitted -- what the flats darken lands in it
+                import tonelib as T_
+                J = T_.JazzGuitarProperties
+                fit_ladder(g, ("pickup_resonance_hz", "pickup_q"), strike_point=J.strike_point,
+                           strike_depth=J.strike_depth, tonal_dampening=J.tonal_dampening)
             else:
                 fit_ladder(g)
             return 0
