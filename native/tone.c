@@ -808,7 +808,10 @@ int nv_tone_rs(const VoiceSnap *v, const ToneIn *t,
            rate, at the fundamental's pluck level */
         if (v->fb_set) {
             int fbk = v->fb_fixed;
-            if (!fbk) {                         /* (the harmonic nearest the loop's band: the first of equals) */
+            if (!fbk && v->fb_table) {          /* (the loop's partial by key: Feedback._fb_table) */
+                int key = (int)rint(69.0 + 12.0 * log(t->f0 / 440.0) / log(2.0));
+                fbk = v->fb_k[key < 0 ? 0 : key > 127 ? 127 : key];
+            } else if (!fbk) {                  /* (the harmonic nearest the loop's band: the first of equals) */
                 double best = 0.0;
                 for (int k = 1; k < 33; k++) {
                     double d = fabs(log2(k * t->f0 / v->fb_band_hz));

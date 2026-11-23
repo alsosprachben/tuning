@@ -488,44 +488,28 @@ SOURCES = [{'id': 'iowa-mis',
               'in or in relation to any competitive products that are sold or relicensed to any third parties." FAQ: '
               'forbidden "to sell or redistribute the sample libraries". Pack readme has no licence of its own.',
   'match': ['Jack\\ Brough']},
- {'id': 'pb-gretsch-feedback',
+ {'id': 'fs-speedy-feedback',
   'group': 'Guitars and basses',
-  'title': 'Gretsch Feedback (OMS-1)',
-  'author': 'Oberton Makes Samples',
-  'url': 'https://www.pianobook.co.uk/packs/gretsch-feedback/',
-  'licence': 'Pianobook terms',
-  'licence_url': 'https://www.pianobook.co.uk/terms-conditions/',
-  'how': 'fitted',
-  'voices': 'Guitar feedback',
-  'issue': 'L7',
-  'evidence': 'https://www.pianobook.co.uk/terms-conditions/ (EULA, fetched 2026-11-20) s.5: licence only "to use '
-              'the download Sound File(s) only within your own newly-created sound recording(s) and/or '
-              'performances"; "expressly forbids resale or other distribution of the Products or their derivatives, '
-              'either as they exist in the library, reformatted ..., or mixed, combined, filtered, re-synthesised or '
-              'otherwise edited, for use as sounds, multi-sounds, samples, multi-samples, sound sets, programmes or '
-              'patches in a sampler, microchip, computer or any sample playback device"; "Products may not be used '
-              'in or in relation to any competitive products that are sold or relicensed to any third parties." FAQ: '
-              'forbidden "to sell or redistribute the sample libraries". Pack readme has no licence of its own.',
-  'match': ['Oberton\\ Makes\\ Samples']},
- {'id': 'pb-feedbacker',
+  'title': 'Dist_Feedback_G-3rd_str_10th_fret',
+  'author': 'SpeedY',
+  'url': 'https://freesound.org/people/SpeedY/sounds/11805/',
+  'licence': 'CC0',
+  'licence_url': 'https://creativecommons.org/publicdomain/zero/1.0/',
+  'how': 'measured',
+  'voices': 'Feedback Gt. and Gt. Feedback: how the loop swells and holds',
+  'evidence': 'https://freesound.org/people/SpeedY/sounds/11805/ (fetched 2026-11-22): Creative Commons 0',
+  'match': ['SpeedY']},
+ {'id': 'fs-airlynx99-feedback',
   'group': 'Guitars and basses',
-  'title': 'The Feedbacker',
-  'author': 'Michael Blake (per the Pianobook pack page)',
-  'url': 'https://www.pianobook.co.uk/packs/the-feedbacker/',
-  'licence': 'Pianobook terms',
-  'licence_url': 'https://www.pianobook.co.uk/terms-conditions/',
-  'how': 'fitted',
-  'voices': 'Guitar feedback',
-  'issue': 'L7',
-  'evidence': 'https://www.pianobook.co.uk/terms-conditions/ (EULA, fetched 2026-11-20) s.5: licence only "to use '
-              'the download Sound File(s) only within your own newly-created sound recording(s) and/or '
-              'performances"; "expressly forbids resale or other distribution of the Products or their derivatives, '
-              'either as they exist in the library, reformatted ..., or mixed, combined, filtered, re-synthesised or '
-              'otherwise edited, for use as sounds, multi-sounds, samples, multi-samples, sound sets, programmes or '
-              'patches in a sampler, microchip, computer or any sample playback device"; "Products may not be used '
-              'in or in relation to any competitive products that are sold or relicensed to any third parties." FAQ: '
-              'forbidden "to sell or redistribute the sample libraries". Pack readme has no licence of its own.',
-  'match': ['Michael\\ Blake']},
+  'title': 'Amp Feedback (Feedback1-6)',
+  'author': 'airlynx99',
+  'url': 'https://freesound.org/people/airlynx99/packs/1365/',
+  'licence': 'CC0',
+  'licence_url': 'https://creativecommons.org/publicdomain/zero/1.0/',
+  'how': 'measured',
+  'voices': "Feedback Gt. and Gt. Feedback: the loop's band and its clean tone",
+  'evidence': 'each sound page 22135-22140 (fetched 2026-11-22): Creative Commons 0; the pack readme',
+  'match': ['airlynx99']},
  {'id': 'pb-fender-12-string',
   'group': 'Guitars and basses',
   'title': 'Fender 12 String',

@@ -29916,55 +29916,94 @@ class Feedback:
     the amp and the speaker a loop -- the speaker's sound driving the string
     at a frequency the loop favours, the string's own decay overcome, so one
     partial SWELLS after the pluck and holds while the note is held.
-    Measured on two Pianobook packs (sources.md; examples/feedback_fit.py):
-      CLEAN (the Gretsch, OMS-1): the fundamental itself, rising ~24 dB over
-      the pluck in a second or two, holding (falling ~0.7 dB/s), its odd
-      harmonics coming up as the amp saturates (h3 -25, h5 -16 dB);
-      CRANKED (a '69 Strat into a Super Reverb, the Feedbacker): the partial
-      nearest the loop's band -- 600-1100 Hz on its takes -- blooming over the
-      fading pluck a second or more in.
+    Measured on open takes (since 2026-11-22; the Pianobook packs, the first
+    references, are no longer read: licences.md L7; examples/feedback_fit.py):
+      SpeedY's distorted F4 (Freesound 11805, CC0): the note's own
+      fundamental, 31 dB under its plateau at the pluck, -20 dB at 0.4 s,
+      -6 at 1.7, within 1 dB by 3 s -- a linear swell of ~3.4 s -- then
+      holding flat (0.00 dB/s) for 18 s; its odd harmonics up (h3 -26, h5
+      -27, h7 -31 dB), the even ones down: the amp clipping.
+      airlynx99's six amp-feedback takes (Freesound pack 1365, CC0): the loop
+      catching 160-500 Hz (E3 to B4), the geometric mean ~290 Hz -- its BAND;
+      two of them nearly clean (h2 -38/-39, h3 -33/-62 dB).
+    WHICH PARTIAL, PHYSICALLY (Ben: "pick the harmonic that physically would
+    be the one"): the one with the most gain round the loop --
+      n                 the body drives the string at the bridge, where a
+                        mode's response grows with its number;
+      |pickup comb|     the voice's own pickups: a partial with a node there
+                        is not heard, so cannot feed back;
+      1 / its damping   a partial that loses less a cycle rings up more;
+      cabinet(f)        the voice's own speaker;
+      coupling band(f)  how the speaker's sound reaches the string, through
+                        the body: not published, MEASURED as where the open
+                        takes' loops caught -- 290 Hz, +-0.8 octave.
+    (The magnet's velocity reading cancels the resonance's 1/omega.) So a low
+    note catches an upper partial near 400-500 Hz, a high one its
+    fundamental, and a partial at the pickup's node is passed over: SpeedY's
+    F4 its fundamental (the octave 1.1 dB behind on a bridge pickup). Chosen
+    per key at its equal-tempered pitch (_fb_table), so the native engine
+    reads the same table.
     Rendered as a late copy of that partial (blockrender: beside the bloom's),
     at its own onset, swell and decay, and its own harmonics over it."""
-    feedback_band_hz = 800.0
+    feedback_band_hz = 290.0            # the coupling band's centre (the takes')
+    feedback_band_oct = 0.8             # ...and its width, octaves (one sigma)
     feedback_fixed_harmonic = None      # 1: the fundamental, whatever the note
-    feedback_delay_s = 1.0              # when the loop takes hold
-    feedback_swell_s = 1.5              # how long it takes to rise
-    feedback_gain = 1.0                 # its level re the fundamental's pluck
-    feedback_dbs = 0.7                  # how fast it sinks while held
+    feedback_delay_s = 0.05             # when the loop takes hold: at once
+    feedback_swell_s = 3.4              # how long it takes to rise (linear)
+    feedback_gain = 35.0                # its plateau re the fundamental's pluck: +31 dB
+    feedback_dbs = 0.0                  # how fast it sinks while held: it holds
     # its own series, (multiple, gain): the tone the loop sustains
     feedback_series = ((1, 1.0),)
 
     def feedback_harmonic(self, frequency):
-        from math import log2
         if self.feedback_fixed_harmonic:
             return int(self.feedback_fixed_harmonic)
-        return max(1, min(range(1, 33), key=lambda k: abs(log2(k * frequency / self.feedback_band_hz))))
+        key = min(127, max(0, int(round(69.0 + 12.0 * _log(float(frequency) / 440.0) / _log(2.0)))))
+        return self._fb_table()[key]
+
+    @classmethod
+    def _fb_table(cls):
+        """the loop's partial for every key, by its gain round the loop (the
+        class's: its pickups, damping and cabinet), once a class"""
+        got = cls.__dict__.get('_fb_table_cache')
+        if got is not None:
+            return got
+        from math import sin, pi, exp, log2
+        import cabinet as _CB
+        cab = _CB.get(getattr(cls, 'cabinet', None)) if getattr(cls, 'cabinet', None) else None
+        table = []
+        for key in range(128):
+            f0 = 440.0 * 2.0 ** ((key - 69) / 12.0)
+            p = cls(f0)
+            best, bk = -1.0, 1
+            for n in range(1, 33):
+                f = n * f0
+                if f > 6000.0 and n > 1:
+                    break
+                comb = abs(sum(sin(n * pi * q) for q in (p.pickup_points or (0.25,))))
+                band = exp(-0.5 * (log2(f / cls.feedback_band_hz) / cls.feedback_band_oct) ** 2)
+                g = n * comb / max(p.harmonic_decay(n), 0.05) * (float(cab.gain(f)) if cab else 1.0) * band
+                if g > best:
+                    best, bk = g, n
+            table.append(bk)
+        cls._fb_table_cache = tuple(table)
+        return cls._fb_table_cache
 
 
 class FeedbackGuitarProperties(Feedback, DistortionGuitarProperties):
     """GS 30.8 "Feedback Gt.": the distortion guitar held into FEEDBACK -- the
-    pluck, and a second or more later the partial nearest the loop's band
-    (~800 Hz) swelling over it, distorted with it by the amp."""
-    feedback_delay_s = 1.2
-    feedback_swell_s = 2.0
-    feedback_gain = 1.0
+    pluck, and the partial nearest the loop's band (~290 Hz) swelling over it
+    within a few seconds and holding, distorted with it by the amp (SpeedY's
+    F4: its own fundamental)."""
 
 
 class GuitarFeedbackProperties(Feedback, ElectricGuitarProperties):
-    """GS 31.8 "Gt. Feedback": the feedback ITSELF, on a clean amp (the
-    Gretsch's): the note's fundamental sustained by the loop, swelling in
-    over the pluck, its odd harmonics rising as the amp saturates."""
-    # ITS PICKUP SWITCH, the part's to set (the AMP card): the Gretsch's own: no switch
+    """GS 31.8 "Gt. Feedback": the feedback ITSELF, on a clean amp: the
+    loop's partial sustained, swelling in over the pluck -- nearly a pure
+    tone, as airlynx99's clean takes hold (h2 -38, h3 -33 dB)."""
+    # ITS PICKUP SWITCH, the part's to set (the AMP card): none
     pickup_family = None
-    # against the Gretsch's clean G4 (examples/feedback_fit.py): the
-    # fundamental ~23 dB over the pluck a second in, its odd harmonics at
-    # -25/-16/-21 dB by 3 s, sinking ~0.7 dB/s while held
-    feedback_fixed_harmonic = 1
-    feedback_delay_s = 0.2
-    feedback_swell_s = 1.2
-    feedback_gain = 16.0
-    feedback_dbs = 0.4
-    feedback_series = ((1, 1.0), (3, 0.056), (5, 0.09), (7, 0.056))
+    feedback_series = ((1, 1.0), (2, 0.013), (3, 0.022))
 
 
 class TaishoKotoProperties(TwelveStringProperties):

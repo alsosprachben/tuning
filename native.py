@@ -132,7 +132,7 @@ class VoiceSnap(ctypes.Structure):
                 ('crs_uni_gain', C), ('crs_uni_cents', C), ('crs_seed', C), ('crs_lo', C), ('crs_hi', C),
                 ('church', I), ('church_slope', C),
                 ('fb_set', I), ('fb_fixed', I), ('n_fbs', I), ('fb_band_hz', C), ('fb_delay', C), ('fb_swell', C),
-                ('fb_gain', C), ('fb_dbs', C), ('fbs', (C * 2) * 8), ('sw_set', I), ('sw_cents', C),
+                ('fb_gain', C), ('fb_dbs', C), ('fbs', (C * 2) * 8), ('fb_table', I), ('fb_k', ctypes.c_ubyte * 128), ('sw_set', I), ('sw_cents', C),
                 ('sw_hz', C * 2), ('mm_pts', I), ('mr_law', I), ('mr_a', C * 2), ('mr_b', C * 2), ('mr_lo', C * 2),
                 ('mr_ref', C), ('mr_body', C * 3), ('crs_ntrio', I), ('crs_trio', C * 4),
                 ('swp_set', I), ('swp_share', C), ('swp_tog', C * 2), ('swp_swept', C * 2), ('swp_step', C),
@@ -2406,6 +2406,9 @@ def snapshot(props):
             s.n_fbs = len(p.feedback_series)
             for i, (k, g) in enumerate(p.feedback_series):
                 s.fbs[i][:] = [float(k), float(g)]
+            if not p.feedback_fixed_harmonic:   # (the loop's partial by key: Feedback._fb_table)
+                s.fb_table = 1
+                s.fb_k[:] = list(type(p)._fb_table())
         if plectrum_voice(type(p)):             # A PICK, and its courses
             s.pick_set, s.pick_hz, s.pick_slope_db = 1, p.pick_hz, p.pick_slope_db
             s.pick_boost_max_db, s.pick_dbs, s.pick_stagger = p.pick_boost_max_db, p.pick_dbs, p.course_stagger_s

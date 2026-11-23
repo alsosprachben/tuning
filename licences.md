@@ -149,7 +149,7 @@ store build.
   (uploaded by a third party), Khaled Arman with the Geneva Camerata (with an
   ensemble). Ermlick's is the cleanest; its licence is the uploader's own.
 
-### L7. Nine Pianobook libraries — Pianobook's terms forbid it
+### L7. Seven Pianobook libraries — Pianobook's terms forbid it
 
 - **The terms** (pianobook.co.uk/terms-conditions, section 5): the samples are
   licensed "only within your own newly-created sound recording(s)"; the
@@ -167,7 +167,6 @@ store build.
   - Hawaiian Guitar (lap steel); 12-string Guitar (Fender 12 String);
   - Mandolin (Eclectic Mandolin); Gopichant (The Ektara);
   - Flugel Horn (Dusty Flugelhorn);
-  - Guitar Feedback (Gretsch Feedback and Feedbacker).
 - **Status:** open, and the largest issue by count. Each samplist can grant
   permission; otherwise each voice needs another source.
   - **Refitted 2026-11-20** (A/Bs in ~/Music/licence_refits): Taisho Koto
@@ -186,7 +185,12 @@ store build.
     2026-11-22 to the lowest bell of Bethesda Church, Saratoga Springs
     (HMTSCCSound, Freesound 554655, CC0; church_bell_fit.py), its click
     fixed (a 4 ms rise): APPROVED ("Click is gone"); St Kathrin's credit
-    gone. Each other voice's notes still name
+    gone. Guitar Feedback (30.8, 31.8) refitted 2026-11-22 to SpeedY's
+    distorted F4 (Freesound 11805, CC0) and airlynx99's amp-feedback takes
+    (Freesound pack 1365, CC0), the loop's partial chosen physically (its
+    gain round the loop: bridge drive, pickup comb, damping, cabinet, the
+    takes' coupling band): APPROVED ("Awesome. This is great"); the Gretsch
+    and Feedbacker credits gone. Each other voice's notes still name
     the old source beside the new until Ben approves and the old fit's text
     goes.
 - **Alternatives (checked 2026-11-20; Freesound licenses each sound, so check

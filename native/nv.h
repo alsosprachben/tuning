@@ -355,6 +355,10 @@ typedef struct {
        fb_delay s after the pluck, swelling over fb_swell s, sinking fb_dbs */
     int fb_set, fb_fixed, n_fbs;
     double fb_band_hz, fb_delay, fb_swell, fb_gain, fb_dbs, fbs[8][2];
+    /* ...the loop's partial by KEY (Feedback._fb_table: its gain round the
+       loop, at the key's equal-tempered pitch), where fb_table is set */
+    int fb_table;
+    unsigned char fb_k[128];
     /* A STRING'S WANDER (the ukulele's voice_vibrato): each voice's depth up
        to sw_cents, rate in sw_hz, phase drawn by the key; sw_set 0 none */
     int sw_set;

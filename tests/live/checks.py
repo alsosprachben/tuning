@@ -70,7 +70,7 @@ CHECKS = [
     ("moog_cmx", "nvrender_check.py", ["@moog_cmx.mid"], {}),
     # a part's speaker and pickup (CC83, CC85: after the program change that
     # puts them back), a channel's Messenger mode (CC86), presets' setup measures
-    ("choices_files", "nvrender_check.py", ["@pk_reset.mid", "@pk_strat_bridge.mid", "@pk_clav_anti.mid", "@clav_compass.mid",
+    ("choices_files", "nvrender_check.py", ["@pk_reset.mid", "@pk_strat_bridge.mid", "@pk_clav_anti.mid", "@clav_compass.mid", "@feedback_held.mid",
                                             "@pk_ibanez_inside.mid", "@cab_gt412.mid", "@cab_org16les.mid",
                                             "@msgr_mode.mid", "@setup_guitar_rig.mid", "@setup_organ_full.mid",
                                             "@setup_moog.mid", "4"], {}),
@@ -88,6 +88,8 @@ CHECKS = [
     ("w_rockers", "nvlive_check.py", ["@wheel/rockers.mid", "9", "--program=7"], {}),
     ("w_drones", "nvlive_check.py", ["@wheel/drones.mid", "9", "--program=109"], {}),
     ("cm32p", "nvlive_check.py", ["@cm32p.mid", "7", "--programs"], {}),
+    # the guitar held into feedback: the loop's partial by key (Feedback._fb_table, native fb_k)
+    ("feedback_live", "nvlive_check.py", ["@feedback_held.mid", "40", "--programs"], {}),
     ("eastern", "nvlive_check.py", ["@eastern.mid", "6", "--program=104",
                                     "--eastern-at=3.2:raga:bel_todi/todi@c#"], {}),
     ("rolls", "nvlive_check.py", ["@rolls.mid", "14", "--drums", "--program=0", "--programs"], {}),

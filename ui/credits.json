@@ -364,23 +364,23 @@
 },
 {
 "group": "Guitars and basses",
-"title": "Gretsch Feedback (OMS-1)",
-"author": "Oberton Makes Samples",
-"url": "https://www.pianobook.co.uk/packs/gretsch-feedback/",
-"licence": "Pianobook terms",
-"licence_url": "https://www.pianobook.co.uk/terms-conditions/",
-"how": "fitted",
-"voices": "Guitar feedback"
+"title": "Dist_Feedback_G-3rd_str_10th_fret",
+"author": "SpeedY",
+"url": "https://freesound.org/people/SpeedY/sounds/11805/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "measured",
+"voices": "Feedback Gt. and Gt. Feedback: how the loop swells and holds"
 },
 {
 "group": "Guitars and basses",
-"title": "The Feedbacker",
-"author": "Michael Blake (per the Pianobook pack page)",
-"url": "https://www.pianobook.co.uk/packs/the-feedbacker/",
-"licence": "Pianobook terms",
-"licence_url": "https://www.pianobook.co.uk/terms-conditions/",
-"how": "fitted",
-"voices": "Guitar feedback"
+"title": "Amp Feedback (Feedback1-6)",
+"author": "airlynx99",
+"url": "https://freesound.org/people/airlynx99/packs/1365/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "measured",
+"voices": "Feedback Gt. and Gt. Feedback: the loop's band and its clean tone"
 },
 {
 "group": "Guitars and basses",

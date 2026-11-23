@@ -1,17 +1,17 @@
 #!/usr/bin/env python3
 """The guitar held into FEEDBACK (tonelib.Feedback: GS 30.8 "Feedback Gt.",
-31.8 "Gt. Feedback"), measured on two Pianobook packs (sources.md) against
-ours -- each harmonic's level over the held note, in 0.2 s frames.
+31.8 "Gt. Feedback"), measured on open takes (since 2026-11-22: the Pianobook
+packs are no longer read, licences.md L7) against ours -- each harmonic's
+level over the held note, in 0.2 s frames.
 
     python3 examples/feedback_fit.py [--ab]
 
-  CLEAN   the Gretsch (OMS-1) "Clean 67-G4": the fundamental sustained by the
-          loop, ~23 dB over the pluck a second in, its odd harmonics up as the
-          amp saturates -> 31.8
-  CRANKED the Feedbacker's '69 Strat into a Super Reverb, E4: the partial
-          nearest the loop's band blooming over the fading pluck -> 30.8
---ab writes each, recorded then ours, to ~/Downloads/feedback_ab (the takes
-are Pianobook's: measured and heard locally, never sent).
+  DISTORTED SpeedY's F4, the G string's 10th fret (Freesound 11805, CC0): its
+          fundamental swelling 31 dB over the pluck in ~3 s, then holding
+          -> 30.8 (and the swell of 31.8)
+  CLEAN   airlynx99's Feedback4/5 (Freesound pack 1365, CC0): the loop's tone
+          nearly pure -> 31.8's series (no pluck in them: the series only)
+--ab writes each, recorded then ours, to ~/Music/licence_refits.
 """
 import os
 import sys
@@ -23,8 +23,8 @@ sys.path[:0] = [HERE, os.path.join(HERE, "examples")]
 
 R = os.path.expanduser("~/Documents/refs/")
 # (reference take, GS program on bank 8, its note, label)
-TAKES = (("feedback_gretsch/x/OMS-1 Gretsch Feedback/Samples/Clean 67-G4.wav", 31, 67, "31_8_vs_gretsch_clean_G4"),
-         ("feedback_feedbacker/x/Feedbacker/The Feedbacker Samples/E4-[4].wav", 30, 64, "30_8_vs_feedbacker_E4"))
+TAKES = (("feedback_open/11805__speedy__dist_feedback_g-3rd_str_10th_fret.wav", 30, 65, "feedback_30_8_vs_speedy_F4"),
+         ("feedback_open/11805__speedy__dist_feedback_g-3rd_str_10th_fret.wav", 31, 65, "feedback_31_8_vs_speedy_F4"))
 TIMES = (0.0, 0.5, 1.0, 2.0, 3.0, 5.0, 7.0)
 
 
@@ -70,7 +70,7 @@ def main(argv):
             from scipy.io import wavfile
             n = int(8 * B.SR)
             y = np.concatenate([r[:n] / np.abs(r[:n]).max(), np.zeros(B.SR), o[:n] / np.abs(o[:n]).max()]) * 0.7
-            d = os.path.expanduser("~/Downloads/feedback_ab")
+            d = os.path.expanduser("~/Music/licence_refits")
             os.makedirs(d, exist_ok=True)
             wavfile.write(os.path.join(d, label + ".wav"), B.SR, (y * 32767).astype(np.int16))
     return 0

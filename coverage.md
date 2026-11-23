@@ -18,16 +18,16 @@ so it cannot drift; the ratings live in that script and can be argued with.
 |---|---|---|---|---|---|---|---|---|
 | GM 1 programs | 128 | 128 | 100% | 119 | 9 | 0 | 0 | 0 |
 | GM 1 percussion keys (35-81) | 47 | 47 | 100% | 47 | 0 | 0 | 0 | 0 |
-| GM 2 tones (MSB 121) | 256 | 256 | 100% | 201 | 55 | 0 | 0 | 0 |
+| GM 2 tones (MSB 121) | 256 | 256 | 100% | 202 | 54 | 0 | 0 | 0 |
 | GM 2 drum sets | 9 | 9 | 100% | 8 | 1 | 0 | 0 | 0 |
-| SC-55 tones | 510 | 510 | 100% | 226 | 281 | 3 | 0 | 0 |
+| SC-55 tones | 510 | 510 | 100% | 227 | 280 | 3 | 0 | 0 |
 | SC-55 drum sets | 10 | 10 | 100% | | | | | |
-| SC-55mkII tones | 226 | 226 | 100% | 178 | 48 | 0 | 0 | 0 |
-| SC-88 tones | 418 | 418 | 100% | 285 | 130 | 3 | 0 | 0 |
+| SC-55mkII tones | 226 | 226 | 100% | 179 | 47 | 0 | 0 | 0 |
+| SC-88 tones | 418 | 418 | 100% | 287 | 128 | 3 | 0 | 0 |
 | SC-88 drum sets | 14 | 14 | 100% | | | | | |
-| SC-88Pro tones | 774 | 774 | 100% | 431 | 334 | 9 | 0 | 0 |
+| SC-88Pro tones | 774 | 774 | 100% | 434 | 331 | 9 | 0 | 0 |
 | SC-88Pro drum sets | 25 | 25 | 100% | | | | | |
-| SC-8850 tones | 1262 | 1262 | 100% | 597 | 584 | 81 | 0 | 0 |
+| SC-8850 tones | 1262 | 1262 | 100% | 600 | 581 | 81 | 0 | 0 |
 | SC-8850 drum sets | 37 | 37 | 100% | | | | | |
 
 A drum set is counted by the program that selects it on a drum channel, in that map; a GM 2 drum set's rating is its set's median key rating. The SC-55mkII has the SC-55's sets.
@@ -2558,8 +2558,8 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 30.3 | SC-88 | Distortion: | `DistortionGuitar_sc88_30_3` | **4** | SC-88 map: GM 30 Distortion Guitar with hammer_legato=True, slur_cuts_release=True |
 | 30.4 | SC-88 | Dist.Fast | `DistortionGuitar_sc88_30_4` | **4** | SC-88 map: GM 30 Distortion Guitar with attack_time=0.0008, strike_point=0.12 |
 | 30.5 | SC-88 | Attack Dist | `DistortionGuitar_sc8850_30_5` | **4** | SC-8850 map: GM 30 Distortion Guitar with strike_point=0.12 |
-| 30.8 | SC-55 | Feedback Gt. | `FeedbackGuitar` | **3** | the distortion guitar HELD INTO FEEDBACK (tonelib.Feedback, examples/feedback_fit.py): a second after the pluck the partial nearest the loop's band (~800 Hz; 600-1100 on the Feedbacker's '69 Strat into a Super Reverb) swells in and holds while the rest dies, the amp distorting it with the note -- GeneralUser's 30.8 has no bloom; ours follows the real thing. Ben: 'They sound great' |
-| 30.9 | SC-88 | FeedbackGt2 | `FeedbackGuitar` | **3** | SC-88 map: 30.8's voice |
+| 30.8 | SC-55 | Feedback Gt. | `FeedbackGuitar` | **4** | the distortion guitar HELD INTO FEEDBACK (tonelib.Feedback, examples/feedback_fit.py): the loop's partial chosen physically, by its gain round the loop -- bridge drive, the voice's pickup comb, its damping, its cabinet, and the coupling band the open takes caught in (290 Hz +-0.8 oct) -- E2 its 5th, E3 its 3rd, F4 up its fundamental; swelling 31 dB over the pluck in ~3 s and holding, as SpeedY's distorted F4 (Freesound, CC0). Ben: "Awesome. This is great" |
+| 30.9 | SC-88 | FeedbackGt2 | `FeedbackGuitar` | **4** | SC-88 map: 30.8's voice |
 | 30.16 | SC-88 | PowerGuitar | `DistortionGuitar_sc88_30_16` | **4** | SC-88 map: GM 30 Distortion Guitar with amp_drive=28.9 |
 | 30.17 | SC-88 | Power Gt.2 | `DistortionGuitar_sc88_30_17` | **4** | SC-88 map: layered: GM 30 + GM 30 -12 st -6 dB |
 | 30.18 | SC-88 | 5th Dist. | `DistortionGuitar_sc88_30_18` | **4** | SC-88 map: layered: GM 30 + GM 30 +7 st -2 dB |
@@ -2567,8 +2567,8 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 30.25 | SC-88 | Rock Rhythm2 | `DistortionGuitar_sc88_30_25` | **4** | SC-88 map: GM 30 Distortion Guitar with decay_db=48.33, harmonic_decay_db=9.202, decay_register_slope=0.8949, strike_depth=0.7927, tonal_dampening=2.742 |
 | 30.26 | SC-88 | Dist Rtm GTR | `DistortionGuitar_sc8850_30_26` | **4** | SC-8850 map: GM 30 Distortion Guitar with decay_db=15.21, harmonic_decay_db=4.369, decay_register_slope=0.6189, strike_depth=0.7843, tonal_dampening=2.559. Ben, on examples/gm2_tones_demo.py: "sound good" |
 | 30.126 | SC-55 | CHOIR 2 | `ChoirAahs` | **4** | the CM-32P's CHOIR 2: the SC-55 map's 52.0 Choir Aahs, rated as that tone |
-| 31.8 | SC-55 | Gt. Feedback | `GuitarFeedback` | **4** | FEEDBACK ITSELF on a clean amp (GuitarFeedbackProperties), fitted to the Gretsch's clean G4 (Pianobook, OMS-1): the fundamental 21 dB over the pluck a second in (the take's 23), its odd harmonics -20/-18/-23 dB as the amp saturates (-25/-16/-21), sinking slowly while held -- as GeneralUser's 31.8 swells. Ben: 'They sound great' |
-| 31.9 | SC-88 | Gt.Feedback2 | `FeedbackGuitar` | **3** | SC-88 map: 30.9's voice |
+| 31.8 | SC-55 | Gt. Feedback | `GuitarFeedback` | **4** | FEEDBACK ITSELF on a clean amp (GuitarFeedbackProperties): the loop's partial chosen as 30.8's, on its neck pickup (A2-A3 the octave, E4 up the fundamental), its tone nearly pure as airlynx99's clean takes (Freesound, CC0: h2 -38, h3 -33 dB), its swell SpeedY's. Ben: "Awesome. This is great" |
+| 31.9 | SC-88 | Gt.Feedback2 | `FeedbackGuitar` | **4** | SC-88 map: 30.9's voice |
 | 31.16 | SC-88 | Ac.Gt.Harm. | `GuitarHarmonics` | **4** | SC-88 map: GM 31 Guitar Harmonics's voice |
 | 31.24 | SC-88 | E.Bass Harm. | `GuitarHarmonics_sc88_31_24` | **4** | SC-88 map: layered: GM 31 -12 st |
 | 31.126 | SC-55 | CHOIR 3 | `ChoirAahs` | **4** | the CM-32P's CHOIR 3: the SC-55 map's 52.0 Choir Aahs, rated as that tone |
