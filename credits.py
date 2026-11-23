@@ -665,25 +665,6 @@ SOURCES = [{'id': 'iowa-mis',
               '~/Documents/refs/sources.md and choir_fit records call it CC BY 4.0 -- that is wrong (the TISMIR '
               'paper is CC BY; the dataset is not)',
   'match': ['(?i)dagstuhl', 'Sebastian\\ Rosenzweig']},
- {'id': 'pb-dusty-flugelhorn',
-  'group': 'Winds',
-  'title': 'Dusty Flugelhorn',
-  'author': 'Chris Cook',
-  'url': 'https://www.pianobook.co.uk/packs/dusty-flugelhorn/',
-  'licence': 'Pianobook terms',
-  'licence_url': 'https://www.pianobook.co.uk/terms-conditions/',
-  'how': 'fitted',
-  'voices': 'Flugel Horn',
-  'issue': 'L7',
-  'evidence': 'https://www.pianobook.co.uk/terms-conditions/ (EULA, fetched 2026-11-20) s.5: licence only "to use '
-              'the download Sound File(s) only within your own newly-created sound recording(s) and/or '
-              'performances"; "expressly forbids resale or other distribution of the Products or their derivatives, '
-              'either as they exist in the library, reformatted ..., or mixed, combined, filtered, re-synthesised or '
-              'otherwise edited, for use as sounds, multi-sounds, samples, multi-samples, sound sets, programmes or '
-              'patches in a sampler, microchip, computer or any sample playback device"; "Products may not be used '
-              'in or in relation to any competitive products that are sold or relicensed to any third parties." FAQ: '
-              'forbidden "to sell or redistribute the sample libraries". Pack readme has no licence of its own.',
-  'match': ['Chris\\ Cook']},
  {'id': 'commons-flugelhorn-pair',
   'group': 'Winds',
   'title': 'Short flugelhorn excerpt.ogg; Trumpet playing short excerpt for comparison with flugelhorn.ogg',

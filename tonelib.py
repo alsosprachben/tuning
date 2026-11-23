@@ -10726,33 +10726,49 @@ class TrumpetProperties(CylindricalBrassProperties):
 
 
 class FlugelhornProperties(TrumpetProperties):
-    """GS 56.8, "Flugel Horn": the flugelhorn -- a trumpet player's
-    mouthpiece and lips on a CONICAL, wider bore and a bigger bell, so the
-    trumpet's source with a darker horn around it. Fitted to Chris Cook's
-    "Dusty Flugelhorn" (Pianobook: a Yamaha 6310z, every note E3-A#5 at one
-    soft dynamic; sources.md) by examples/flugel_fit.py: the trumpet's five
-    colour knobs (the bell's cutoff and order, the bore's corner, the
-    source's roll-off and its register law) refitted to the takes' ladders.
-    """
-    # FITTED (flugel_fit.py --fit, h1-h16 over every third note; 21.2 -> 4.7
-    # dB rms over all 31): a lower bell (the bigger flare) and a source rolling
-    # off faster (the cone). THE TAKES ARE SOFT, so ours is read through the
-    # trumpet's own soft law while fitting (56.25 Warm Tp., Iowa's pp against
-    # its mf) and this is the flugelhorn at our mf; fitted plain, the soft
-    # dynamic's darkness had gone into the colour
-    bell_cutoff_hz = 1216.0
-    bell_order = 4.582
-    bore_corner_hz = 4531.0
-    tonal_dampening = 4.019
-    octave_dampening = -0.2451
-    # (THE OTHER READING, one player's flugelhorn against his trumpet on the
-    # same tune -- Wikimedia Commons, flugel_fit.py --fit=commons -- fits its
-    # own difference to 2.2 dB but misses these takes by 12.4, a few dB darker
-    # than a trumpet where this is twice that; Ben, A/B: "the Pianobook one
-    # sounds more properly like a Flugelhorn")
-    # at its capital's level, the trumpet's
-    initial_gain = TrumpetProperties.initial_gain * 10 ** (-0.9 / 20.0)
+    """GS 56.8, "Flugel Horn": the flugelhorn -- a trumpet player's lips on a
+    deeper cup, a mostly CONICAL bore and a bigger bell, so the trumpet's
+    source with a darker horn around it.
 
+    FROM PHYSICS, as a difference from our trumpet (fitted to Iowa's), since
+    2026-11-22 (Ben, a trumpet player: "Just use physics, and I can tell you
+    if it is right"; Chris Cook's Pianobook takes, the first reference, are
+    no longer read: licences.md L7). Our brass is a band-pass on the lips'
+    source -- a high-pass at the bell's cutoff (the flare cannot radiate
+    under it) times a low-pass at the bore's corner -- and each of the
+    flugelhorn's differences moves one of them:
+      THE BELL    ~155 mm against the trumpet's 125, its flare longer and
+                  more conical: a horn's cutoff goes as the inverse of its
+                  size, 1600 x 62/77 = 1290 Hz, and a gentler flare a softer
+                  slope (order 4 against 5): more fundamental radiated.
+      THE CUP     a deep V cup, its popping frequency well under a bowl
+                  cup's: everything over it darker. In proportion (600/850)
+                  the corner came to 1200 Hz; by Ben's ear, darker -- the cup
+                  rather than the bell, of two takes darkened alike -- 600.
+      THE BORE    mostly conical where a trumpet's is a third cylinder: a
+                  wave steepens far less on the way out at ff (half the
+                  brassiness), so it brightens half as much with effort --
+                  effort_tilt 0.55 x 0.5.
+      THE ATTACK  less back-pressure: the wider, conical bore's resonances
+                  lower and broader, the feedback that locks the lips onto
+                  the note weaker, so the note builds more slowly -- 70 ms
+                  against the trumpet's 40 (Ben: "With a larger bore, there
+                  is less backpressure, so the attack is smoother?") -- and
+                  its upper harmonics, made by the lips' and the wave's
+                  nonlinearity, later still: harmonic m over m^0.3 of it
+                  (speech_harmonic_exp -0.3; G4's 1.5-3 kHz at 70% in 59 ms
+                  against its body's 39). Ben, of the takes: "The highs
+                  later one is closer."
+      THE LIPS    the same player: the trumpet's source, its tilt and its
+                  register law unchanged.
+    The bell and bore are power-normalised by note (colour, not level), so
+    its level is the trumpet's."""
+    bell_cutoff_hz = 1290.0
+    bell_order = 4.0
+    bore_corner_hz = 600.0
+    effort_tilt = 0.275
+    attack_time = 0.07
+    speech_harmonic_exp = -0.3
 
 class MutedTrumpetProperties(TrumpetProperties):
     """GM 59: the trumpet in a HARMON mute, stem out -- the Miles Davis sound,

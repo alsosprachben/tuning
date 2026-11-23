@@ -2494,6 +2494,11 @@ def snapshot(props):
                 s.afm[i][:] = [float(x) for x in row]
             for i, row in enumerate(p.body_trim_db or ()):
                 s.bt[i][:] = [float(x) for x in row]
+        # ITS UPPER HARMONICS LATE (speech_harmonic_exp: the bandoneon's bloom, the
+        # flugelhorn's attack), any voice's -- 0 for the rest
+        s.sh_exp = float(getattr(p, 'speech_harmonic_exp', 0.0) or 0.0)
+        s.sh_exp_oct = float(getattr(p, 'speech_harmonic_exp_per_octave', 0.0) or 0.0)
+        s.sh_cap = int(getattr(p, 'speech_harmonic_cap', None) or 0)
         if reed_voice(type(p)):
             # a free reed: its geometry and laws (the note's series, its init's), its banks
             s.reed, s.reed_points = 1, int(p.reed_points)
@@ -2501,10 +2506,6 @@ def snapshot(props):
                 setattr(s, f, float(getattr(p, f)))
             s.reed_gate_oct, s.reed_spread_oct = float(p.reed_gate_per_octave), float(p.reed_spread_per_octave)
             s.reed_scatter_oct = float(p.reed_scatter_per_octave)
-            # its upper harmonics late (speech_harmonic_exp: the bandoneon's bloom)
-            s.sh_exp = float(getattr(p, 'speech_harmonic_exp', 0.0) or 0.0)
-            s.sh_exp_oct = float(getattr(p, 'speech_harmonic_exp_per_octave', 0.0) or 0.0)
-            s.sh_cap = int(getattr(p, 'speech_harmonic_cap', None) or 0)
             ser = p._reed_series()              # (this voice's: its key's geometry)
             s.n_reed = len(ser)
             s.reed_s[:len(ser)] = [float(x) for x in ser]
@@ -3494,7 +3495,8 @@ def note_class(cls):
             (lambda a: a in ('speech_harmonic_exp', 'speech_harmonic_exp_per_octave', 'wind_skirt_always')) \
             if reed_voice(cls) and getattr(cls, 'wind_attack_db', None) is None \
             else (lambda a: a in ('mode_lock_spread', 'directivity_radius', 'wind_skirt_always',
-                                  'partial_phase_spread')) if _blown(cls) \
+                                  'partial_phase_spread', 'speech_harmonic_exp',
+                                  'speech_harmonic_exp_per_octave')) if _blown(cls) \
             else (lambda a: a in ('partial_phase_spread', 'unison_shares_phase', 'course_keys', 'key_bridge',
                                   'bridge_partner', 'register_knock_tilt', 'register_knock_profile')) \
             if dulcimer_voice(cls) \

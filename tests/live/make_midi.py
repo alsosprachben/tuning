@@ -681,7 +681,23 @@ def dulcimer_compass():
     return mid
 
 
-MAKERS = {"stab_chords": stab_chords, "dulcimer_compass": dulcimer_compass, "feedback_held": feedback_held, "clav_compass": clav_compass,
+def flugel_phrase():
+    """GS 56.8, the flugelhorn: a phrase E3-C6 at three velocities -- its
+    attack slower than the trumpet's, its upper harmonics later
+    (speech_harmonic_exp, native sh_exp on a wind voice)."""
+    mid = mido.MidiFile(type=0, ticks_per_beat=480)
+    tr = mido.MidiTrack(); mid.tracks.append(tr)
+    tr.append(mido.Message("control_change", channel=0, control=0, value=8, time=0))
+    tr.append(mido.Message("program_change", channel=0, program=56, time=0))
+    for v in (50, 90, 120):
+        for n in (52, 60, 67, 72, 79, 84):
+            tr.append(mido.Message("note_on", channel=0, note=n, velocity=v, time=60))
+            tr.append(mido.Message("note_off", channel=0, note=n, velocity=0, time=420))
+    tr.append(mido.Message("note_off", channel=0, note=0, velocity=0, time=960))
+    return mid
+
+
+MAKERS = {"stab_chords": stab_chords, "flugel_phrase": flugel_phrase, "dulcimer_compass": dulcimer_compass, "feedback_held": feedback_held, "clav_compass": clav_compass,
           "couplers_upper": lambda: couplers(16, ((1.5, 0), (2.5, 1 | 4), (3.5, 2), (4.5, 2 | 4 | 8), (6.0, 1 | 2 | 8))),
           "couplers_lower": lambda: couplers(41, ((1.5, 4), (3.0, 1 | 4), (4.5, 0), (6.0, 4))), "spectra_rotor": lambda: spectra(10), "spectra_chorus": lambda: spectra(11),
           "spectra_sustain": lambda: spectra_sustain(10), "spectra_sustain_chorus": lambda: spectra_sustain(11), "dense_pedal": dense_pedal, "assign_mode": assign_mode, "mpe_organ": lambda: mpe_zone(19), "cmx_live": cmx_live, "userdrums": userdrums, "drumdelay": drumdelay, "moog_cmx": moog_cmx, "two_organs": two_organs, "rhythmpart": rhythmpart, "gsrx_2port": gsrx_2port, "drumnrpn": drumnrpn, "drumnrpn2": drumnrpn2, "gsvsense": gsvsense,

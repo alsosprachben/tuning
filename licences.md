@@ -149,7 +149,7 @@ store build.
   (uploaded by a third party), Khaled Arman with the Geneva Camerata (with an
   ensemble). Ermlick's is the cleanest; its licence is the uploader's own.
 
-### L7. Six Pianobook libraries — Pianobook's terms forbid it
+### L7. Five Pianobook libraries — Pianobook's terms forbid it
 
 - **The terms** (pianobook.co.uk/terms-conditions, section 5): the samples are
   licensed "only within your own newly-created sound recording(s)"; the
@@ -165,7 +165,6 @@ store build.
   - the tonewheel organ's 16', 5 1/3', 1 3/5', percussion and speaker (Hammond L102);
   - Hawaiian Guitar (lap steel); 12-string Guitar (Fender 12 String);
   - Mandolin (Eclectic Mandolin); Gopichant (The Ektara);
-  - Flugel Horn (Dusty Flugelhorn);
 - **Status:** open, and the largest issue by count. Each samplist can grant
   permission; otherwise each voice needs another source.
   - **Refitted 2026-11-20** (A/Bs in ~/Music/licence_refits): Taisho Koto
@@ -194,7 +193,10 @@ store build.
     bridge's stiffness and the layout from Musicmakers' published 17/16 kit
     charts, the decay from string physics (the board's conductance by ear:
     "Keep the long one"), the halo held past the takes: APPROVED; Kemp's
-    credit gone. Each other voice's notes still name
+    credit gone. Flugel Horn rebuilt 2026-11-22 FROM PHYSICS as a difference
+    from our Iowa-fitted trumpet (bell, cup, bore, the attack of a
+    low-back-pressure bore), each choice by Ben's ear (a trumpet player):
+    APPROVED ("Go with that one"); the Dusty Flugelhorn credit gone. Each other voice's notes still name
     the old source beside the new until Ben approves and the old fit's text
     goes.
 - **Alternatives (checked 2026-11-20; Freesound licenses each sound, so check
