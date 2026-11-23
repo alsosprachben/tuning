@@ -276,30 +276,18 @@ store build.
     Commons take with its chain documented (CC BY 4.0); Karoryfer's "Black And
     Green Guitars" (CC0, 430 notes of a Gretsch) for the body.
 
-### L8. Choir (GM 52, 53): Dagstuhl ChoirSet — CC BY-NC-SA 4.0
+### L8. Choir (GM 52, 53): Dagstuhl ChoirSet — CC BY-NC-SA 4.0 — CLOSED 2026-11-23
 
-- **Source:** every version on Zenodo is CC BY-NC-SA 4.0. The choir's
-  coverage note gave only VocalSet's CC BY 4.0, which read as covering both;
-  it now names Dagstuhl's own licence.
-- **What derives from it:** the choir section's spread, each singer's detune
-  and vibrato. The voice itself is fitted to VocalSet (CC BY 4.0), which is
-  fine.
-- **Status:** open.
-- **Alternatives (checked 2026-11-20):**
-  1. Choral Singing Dataset **v3** (Zenodo 1286570, CC BY 4.0; v2, 1286487,
-     the same): 16 singers of the Anton Bruckner Choir, four per section
-     singing together, each on a close cardioid mic, three pieces, f0 and note
-     annotations. Exactly the section spread we measure. TRAP: v5 (1286485,
-     2649950) was relicensed NC and the DOI's "latest" link resolves to it;
-     fetch v3 by its record id (md5 f7b33b763187be309631a65d09402c99) and keep
-     a snapshot of the record page. Check bleed per track.
-  2. Cantoría (record 5851070 only, CC BY 4.0; 5878677 is NC): an SATB quartet
-     recorded one singer at a time. Per-singer vibrato, no section spread.
-  - Citable spread: Ternström 2002, 20-30 cents typical; Jers & Ternström
-    2005, 25-30; Cuesta 2018, ~20 (sopranos) to ~26 (basses); Chandna 2020,
-    mean ~20 cents and onsets spread ~0.1 s.
-  - Rejected: ESMUC (NC), MedleyVox (NC-SA), Cambridge-MT (education only),
-    jaCappella (research only).
+- **Source (was):** Dagstuhl ChoirSet (every Zenodo version CC BY-NC-SA 4.0).
+- **What derived from it:** the choir section's spread and each singer's
+  vibrato (the voice itself is VocalSet's, CC BY 4.0).
+- **Status:** CLOSED. The vibrato measured on the Choral Singing Dataset
+  **v3** (Zenodo 1286570, CC BY 4.0, md5 f7b33b76...; record snapshot kept
+  in ~/Documents/refs/csd_v3) by `examples/csd_section.py` (YIN per singer,
+  the four of a part against their median): +/-11 cents, 4.2-5.8 Hz. The
+  spread the published choirs' (Ternström 2002; Jers & Ternström 2005:
+  20-30 cents), +/-24, as Ben's ear chose. `choir_fit.py section` still
+  reads Dagstuhl locally, for comparison only.
 
 ### L9. Percussive Organ (GM 17): Indiginus Real Rotor Organ — EULA
 

@@ -27607,16 +27607,20 @@ class VocalProperties(FormantBody, BowedStringProperties):
     # under the strings while the synth voice sat 3.3 over. All three now land on
     # the string reference, as the equal-velocity convention asks.
 
-    # THE SECTION, MEASURED on Dagstuhl ChoirSet's full choir (examples/
-    # choir_fit.py section): two singers a part on larynx microphones, CREPE
-    # pitch against the time-aligned score of Bruckner's Locus iste. Each
-    # singer sits 14-22 cents (sd) off the note, note to note -- uniform
-    # +/-24 is sd 14; it was +/-8, sd 4.6. Vibrato +/-9-16 cents by part
-    # (median ~12, which 14 x the 0.7-1.0 draw gives) at 4.4-5.5 Hz; it was
-    # +/-7 at 4.8-6.2. An amateur choir, so the edge of plausible -- and the
-    # one Ben's ear preferred, against the old section and the vowels alone.
+    # THE SECTION (since 2026-11-23; Dagstuhl ChoirSet, CC BY-NC-SA, no longer
+    # read -- licences.md L8). Its VIBRATO measured on the Choral Singing
+    # Dataset v3 (Cuesta et al. 2018, Zenodo 1286570, CC BY 4.0;
+    # examples/csd_section.py): the Anton Bruckner Choir, four singers a part
+    # on close mics, YIN pitch, every held note of 0.8 s or more -- depth
+    # +/-11 cents (median, sopranos to tenors, 240 notes; its basses' YIN too
+    # rough to read), which the 0.7-1.0 draw makes 12.9; rates 4.2-5.8 Hz
+    # (the middle half). Its SPREAD the published choirs' (Ternstrom 2002,
+    # 20-30 cents; Jers & Ternstrom 2005, 25-30): uniform +/-24 is sd 14 --
+    # the edge Ben's ear preferred, against a narrower section and the vowels
+    # alone. (The Bruckner choir itself sits closer, sd 8-11 cents a singer,
+    # note to note against its part: +/-16.)
     section_spread_cents = 24.0
-    section_vibrato_cents = 14.0
+    section_vibrato_cents = 12.9
     section_vibrato_hz = (4.2, 5.8)
 
     # (centre Hz, bandwidth Hz, amplitude). Default is "ah".

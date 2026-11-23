@@ -480,13 +480,13 @@
 },
 {
 "group": "Voices",
-"title": "Dagstuhl ChoirSet (V1.2)",
-"author": "Sebastian Rosenzweig, Helena Cuesta, Christof Weiss, Frank Scherbaum, Emilia Gomez, Meinard Mueller",
-"url": "https://zenodo.org/records/4618287",
-"licence": "CC BY-NC-SA 4.0",
-"licence_url": "https://creativecommons.org/licenses/by-nc-sa/4.0/",
+"title": "Choral Singing Dataset (v3)",
+"author": "Helena Cuesta, Emilia Gómez, Agustín Martorell and Felipe Loáiciga (ICMPC 2018, \"Analysis of Intonation in Unison Choir Singing\")",
+"url": "https://zenodo.org/records/1286570",
+"licence": "CC BY 4.0",
+"licence_url": "https://creativecommons.org/licenses/by/4.0/",
 "how": "measured",
-"voices": "Choir Aahs / Voice Oohs section spread: per-singer detune and vibrato"
+"voices": "Choir Aahs, Voice Oohs: the section's vibrato"
 },
 {
 "group": "Winds",
