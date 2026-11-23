@@ -324,16 +324,6 @@
 },
 {
 "group": "Guitars and basses",
-"title": "IDMT-SMT-Bass",
-"author": "Fraunhofer IDMT",
-"url": "https://zenodo.org/records/7188892",
-"licence": "CC BY-NC-ND 4.0",
-"licence_url": "https://creativecommons.org/licenses/by-nc-nd/4.0/",
-"how": "fitted",
-"voices": "Electric basses"
-},
-{
-"group": "Guitars and basses",
 "title": "Dist_Feedback_G-3rd_str_10th_fret",
 "author": "SpeedY",
 "url": "https://freesound.org/people/SpeedY/sounds/11805/",
@@ -381,6 +371,26 @@
 "licence_url": "https://philharmonia.co.uk/resources/sound-samples/",
 "how": "fitted",
 "voices": "Mandolin, its courses and pick"
+},
+{
+"group": "Guitars and basses",
+"title": "BassGuitar-GretschElectromatic-multisampled",
+"author": "quartertone",
+"url": "https://freesound.org/people/quartertone/packs/14708/",
+"licence": "CC BY 4.0",
+"licence_url": "https://creativecommons.org/licenses/by/4.0/",
+"how": "fitted",
+"voices": "Electric basses (the string's losses and stretch)"
+},
+{
+"group": "Guitars and basses",
+"title": "Clean Electric Bass (Bass Guitar YR, finger and pick)",
+"author": "Andrea Biasior (FreePats)",
+"url": "https://freepats.zenvoid.org/ElectricGuitar/clean-electric-bass.html",
+"licence": "CC0 1.0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "fitted",
+"voices": "Electric basses (the string; the finger against the pick)"
 },
 {
 "group": "Guitars and basses",

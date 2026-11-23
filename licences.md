@@ -71,20 +71,24 @@ store build.
   IDMT-SMT-Guitar is no longer read (`egtr_fit.TECHNIQUE_SOURCE = "techs"`;
   the IDMT staging stays only for the basses, L3).
 
-### L3. Electric basses (GM 33, 34, 36, 37): Fraunhofer IDMT-SMT-Bass — CC BY-NC-ND 4.0
+### L3. Electric basses (GM 33, 34, 36, 37): Fraunhofer IDMT-SMT-Bass — CC BY-NC-ND 4.0 — CLOSED 2026-11-23
 
-- **Source:** Fraunhofer IDMT's bass set, DI, three basses.
-- **What derives from it:** `FingeredBass` and the picked and slap basses
+- **Source (was):** Fraunhofer IDMT's bass set, DI, three basses.
+- **What derived from it:** `FingeredBass` and the picked and slap basses
   built on it (`examples/egtr_fit.py`).
-- **Status:** open.
-- **Alternatives (checked 2026-11-20):**
-  1. quartertone, "BassGuitar-GretschElectromatic-multisampled", Freesound
-     pack 14708, CC BY 4.0 (spot-check each note's licence): 250 finger-plucked
-     notes, 8 velocity layers, direct to disk, 48 kHz. Tails past ~4 s are
-     crossfade loops. A 30.3" short scale: check inharmonicity.
-  2. FreePats "Clean Electric Bass" (CC0): a Yamaha RBX, fingered set; a
-     long-scale second source if its notes are dry.
-  - Rejected: Pianobook "Low Fat Bass Clean" (ideal; no licence stated).
+- **Status:** CLOSED. Nothing of IDMT's is read:
+  - the string from its physics (`examples/bass_physics.py`): Issanchou's
+    string losses, Zollner's bearing conductance, the winding's loss and each
+    string's core from the stretch, fitted to quartertone's Gretsch (Freesound
+    pack 14708, CC BY 4.0) and FreePats' Yamaha RBX (CC0) -- and played the
+    same way in every engine;
+  - the pickups' load from their circuit (`examples/jbass_coil.py`, Fender's
+    published coil inductances);
+  - the finger against the pick on FreePats' same bass; the pick the
+    guitar's (Guitar-TECHS, L2);
+  - the damp a variable (`damp_dbs`), set by ear;
+  - slap and pop from a simulation of the string against its frets
+    (`examples/fret_contact.py`, baked to `fretcontact_data.py`).
 
 ### L4. Biwa Stroke (GS 120.12): PARADISEC HDF1-SB33 — CC BY-NC-SA 4.0 and access conditions
 

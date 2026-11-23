@@ -42,28 +42,45 @@ STRINGS = (("E2", 82.41, 0.056, True), ("B2", 123.47, 0.042, True), ("E3", 164.8
 DB = 20.0 / np.log(10.0)
 
 
-def rates(f0, gauge, wound, nh=12):
-    """dB/s of h1..nh (the amplitude's decay)."""
+def rates(f0, gauge, wound, nh=12, L=L, dve=None, G=0.0, mount=None, core=None):
+    """dB/s of h1..nh (the amplitude's decay), on a string of speaking length
+    L sounding f0 (a fretted note: the shorter length at the open string's
+    tension, which is what f0 and L then give). dve: the visco-elastic loss
+    in place of the type's (a wound string's winding loses more than its
+    core alone: Zollner, Physics of the Electric Guitar 7.7.3). G: the two
+    bearings' conductance together, s/kg (Zollner 7.7.4.4): each reflection
+    loses 4 W G of the wave's power, W = sqrt(T mu) the string's wave
+    impedance, at 2 f0 reflections a second -- the same dB/s for every
+    partial (or G(nu), s/kg at each partial's frequency). mount: the solid
+    body's flat rate in place of MOUNT_DBS. core: a wound string's core
+    diameter in inches, in place of 0.40 of its gauge."""
     d = gauge * INCH
     if wound:
-        dc = 0.40 * d
+        dc = 0.40 * d if core is None else core * INCH
         mu = 0.78 * RHO_STEEL * np.pi * d * d / 4.0
         rw, rc = (d - dc) / 4.0, dc / 2.0
         d_air = (np.pi / 2.0) * ((1.0 + 2.0 / np.pi) * 2.0 * rw + 2.0 * rc)
         EI = E_STEEL * np.pi * rc ** 4 / 4.0
-        dve, qte = 0.01, 6e-6
+        dve_, qte = 0.01, 6e-6
     else:
         mu = RHO_STEEL * np.pi * d * d / 4.0
         d_air = d
         EI = E_STEEL * np.pi * (d / 2.0) ** 4 / 4.0
-        dve, qte = 4.5e-3, 2.03e-4
+        dve_, qte = 4.5e-3, 2.03e-4
+    dve = dve_ if dve is None else dve
     T = mu * (2.0 * L * f0) ** 2
+    W = np.sqrt(T * mu)
+    mnt = MOUNT_DBS if mount is None else mount
     out = []
     for k in range(1, nh + 1):
         nu = k * f0
+        # (G may be a function of the partial's frequency: the bearing's
+        # conductance where that partial meets it)
+        g_ = G(nu) if callable(G) else G
+        bear = -10.0 * np.log10(max(1.0 - 4.0 * W * g_, 1e-9)) * 2.0 * f0 if g_ else 0.0
         R = 2 * np.pi * ETA + 2 * np.pi * d_air * np.sqrt(np.pi * ETA * RHO_AIR * nu)
         iq = R / (2 * np.pi * mu * nu) + 4 * np.pi ** 2 * mu * EI * dve * nu ** 2 / T ** 2 + qte
-        out.append(DB * np.pi * nu * iq + MOUNT_DBS)
+        out.append(DB * np.pi * nu * iq + mnt + bear)
     return np.array(out), T
 
 

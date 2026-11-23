@@ -443,6 +443,11 @@ def main(argv):
         f.write(b"VBOD" + struct.pack("<iii", len(vbn), len(T._NOT_A_VOICE), len(blob)) + blob
                 + struct.pack("<%dd" % len(vbn), *[float(T.VOICE_BODIES[x]) for x in vbn])
                 + struct.pack("<%dd" % len(vbn), *[float(T.VOICE_CLUSTER.get(x, 1.0)) for x in vbn]))
+        # FCON: tonelib.FretContact's baked tables (native.fret_contact_blob:
+        # nv_fret_contact_set's) -- a string driven into its frets
+        nt, nk, nv, nm, k0, vels, data = N.fret_contact_blob()
+        f.write(b"FCON" + struct.pack("<iiii", nt, nk, nv, nm) + struct.pack("<d", k0)
+                + struct.pack("<%dd" % nv, *vels) + struct.pack("<%dd" % len(data), *data))
         # VARS: bank select -- the slots (program, variation, layer), their
         # classes at each key, the entries (a slot, or a layered set: each
         # layer's slot, semitones and velocities), GS's and GM 2's tables;

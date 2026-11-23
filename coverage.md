@@ -2065,11 +2065,11 @@ Standard. THE GOAL: every one built.
 | # | patch | class | | notes |
 |---|---|---|---|---|
 | 32 | Acoustic Bass | `AcousticBass` | **4** | Iowa double bass pizzicato, 83 notes: the decay rising with the note, the stretch, the pluck's colour, and a pluck point that rises up each string as the finger shortens it (0.23 of the open string, measured), moved by CC74 from the bridge to the middle. Ben, by ear: so much better |
-| 33 | Electric Bass (finger) | `FingeredBass` | **4** | Fraunhofer IDMT-SMT-Bass (CC BY-NC-ND, measured only), DI, three basses on both coils (examples/egtr_fit.py): the string measured (decay 3-25 dB/s, stretch 1.3e-4), fretted, the Jazz pickups and their load (4.9 kHz, shared by every hand), the finger's pluck fitted (ladder 7.68 -> 4.79 dB), and the player's damp measured as its release (0.39 s, where GM sets gave 0.08). Ben: very, very close; the release sounds good |
-| 34 | Electric Bass (pick) | `PickedBass` | **4** | as 33, the pick: ladder 5.56 -> 4.30 dB, its damp 0.36 s |
+| 33 | Electric Bass (finger) | `FingeredBass` | **4** | the string FROM ITS PHYSICS (examples/bass_physics.py): air, visco- and thermo-elastic losses (Issanchou et al.), the bearings' 4 W G a reflection (Zollner 7.7: G 0.00093 s/kg), the winding's loss and each string's core read from the stretch -- fitted to two open basses' partial decays (quartertone's Gretsch, CC BY 4.0; FreePats' Yamaha RBX, CC0; |log err| 0.29) and played in every engine; the Jazz pickups' load from their circuit (examples/jbass_coil.py, Fender's published coils: 5.46 kHz, Q 1.26); the finger fitted against the pick on the same RBX (172 mm from the bridge, a wide pad); the damp a variable (damp_dbs). Ben: sounds great |
+| 34 | Electric Bass (pick) | `PickedBass` | **4** | as 33, the pick: the guitar's fitted pick (Guitar-TECHS P2) played 75 mm from the bridge |
 | 35 | Fretless Bass | `FretlessBass` | **4** | two fretless basses on Freesound (FaireDesVagues' stopped notes, CC BY 3.0; mrforfs' flatwound open strings, CC0): its decay law measured -- the upper partials do NOT go faster than a fretted bass's (the old 4x was a guess) -- and a LOW-PASS at 644 Hz, ~24 dB/oct, where both fall 10-18 dB under a fretted bass (examples/egtr_fit.py --envelope=35; 9.55 -> 1.19 dB). Ben: perfect |
-| 36 | Slap Bass 1 | `SlapBass` | **4** | as 33, the slap thumb: ladder 10.2 -> 7.9 dB (the rest the string slapping the frets, not modelled), its damp 0.37 s |
-| 37 | Slap Bass 2 | `PoppedBass` | **4** | as 33, the slap pluck: ladder 10.8 -> 6.3 dB, its damp 0.40 s |
+| 36 | Slap Bass 1 | `SlapBass` | **4** | as 33's string, the SLAP SIMULATED (examples/fret_contact.py, tonelib.FretContact): the thumb a 20 g mass on its flesh's spring at the fingerboard's end, driving the string into the frets' Hertzian contact (Issanchou et al., JSV 2017 / JASA 2018) over the setup's action and relief -- each mode's level and two-stage decay baked per key and stroke, in every engine: the pluck's nulls fill, the top stands 20-50 dB over a free string's. Ben: sounds good |
+| 37 | Slap Bass 2 | `PoppedBass` | **4** | as 36, the POP: a finger lifting the string 2-8 mm at the fingerboard's end and letting it snap back onto the frets, simulated and baked the same way. Ben: sounds good |
 | 38 | Synth Bass 1 | `MoogSynthBass1` | **4** | a Messenger patch: a saw over OSC 2 on 16' (an octave, since a detune beats in the bass), the ladder low and a little resonant |
 | 39 | Synth Bass 2 | `MoogSynthBass2` | **4** | a Messenger patch: a square over the SUB's square, the resonance up and the contour snappier -- hollow and edged where 38 is round |
 
@@ -3922,7 +3922,7 @@ each: the GM programs (`GM n`), percussion notes (`n`) and drum-set notes
         - `FingeredBass` -- GM 33 Electric Bass (finger) (4)
         - `FretlessBass` -- GM 35 Fretless Bass (4)
         - `PickedBass` -- GM 34 Electric Bass (pick) (4)
-        - `SlapBass` -- GM 36 Slap Bass 1 (4)
+        - `SlapBass` [FretContact] -- GM 36 Slap Bass 1 (4)
           - `PoppedBass` -- GM 37 Slap Bass 2 (4)
       - `GuitarHarmonics` -- GM 31 Guitar Harmonics (4)
       - `JazzGuitar` -- GM 26 Electric Guitar (jazz) (4)

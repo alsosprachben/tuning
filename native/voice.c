@@ -364,6 +364,15 @@ double nv_series_volume(const VoiceSnap *v, int harmonic)
         }
         return r;
     }
+    if (v->kind == 4 && v->elec && v->fc_tab) {     /* FretContact.series_volume: the baked stroke, the coils */
+        if ((v->max_harmonic && harmonic > v->max_harmonic) || harmonic > v->n_fc)
+            return 0.0;
+        double r = v->gain * v->fc_amp[harmonic - 1];
+        r *= eg_pickup_gain(v, harmonic);
+        if (harmonic % 2 == 0 && v->even_db_set)
+            r *= pow(10.0, v->even_harmonic_db / 20.0);
+        return r;
+    }
     if (v->kind == 4 && v->elec) {              /* ElectricGuitarProperties: the pick's comb, the coils */
         /* (a touched harmonic's partial m is string mode m times the touch) */
         int sm = v->touch ? harmonic * v->touch : harmonic;
@@ -636,6 +645,9 @@ static double mode_decay(const VoiceSnap *v, int harmonic)
 }
 
 static double harmonic_decay_(const VoiceSnap *v, int harmonic);
+static double sp_decay(const VoiceSnap *v, int harmonic);
+static double pymin(double a, double b);
+static double pymax(double a, double b);
 
 double nv_harmonic_decay(const VoiceSnap *v, int harmonic)
 {
@@ -694,6 +706,12 @@ static double harmonic_decay_(const VoiceSnap *v, int harmonic)
         if (w != 0.0)
             return d + (v->wound_decay_by_force ? v->wound_decay_db * v->attack_volume : v->wound_decay_db) * w;
         return d;
+    }
+    if (v->kind == 4 && v->elec && v->sp_decay) {    /* ElectricBassProperties: the string's physics */
+        double slow = sp_decay(v, harmonic);
+        if (v->fc_tab && harmonic <= v->n_fc && v->fc_share[harmonic - 1] < 1.0)
+            return pymax(v->fc_fast[harmonic - 1], slow);   /* FretContact: the contact's fall */
+        return slow;
     }
     double h = (double)harmonic;                /* mode_ratios None */
     double base = v->decay_db + v->harmonic_decay_db * h * pow(h, v->harmonic_decay_dampening);
@@ -1279,7 +1297,14 @@ void nv_partial_decay(const VoiceSnap *v, double f0, int m, double *out)
     double dbps = nv_harmonic_decay(v, m);
     double logr = dbps > 0 ? log(db_ratio(dbps)) : 0.0;
     double a[2];
-    if (v->pick_set) {                          /* Plectrum.aftersound_partial: what rings on under the boost */
+    if (v->fc_tab) {                            /* FretContact.aftersound_partial: the string's own ring */
+        a[0] = 0.0;
+        a[1] = dbps;
+        if (m <= v->n_fc && v->fc_share[m - 1] < 1.0) {
+            a[0] = v->fc_share[m - 1];
+            a[1] = sp_decay(v, m);
+        }
+    } else if (v->pick_set) {                   /* Plectrum.aftersound_partial: what rings on under the boost */
         double b = pick_db(v, m);
         a[0] = b > 0.0 ? pow(10.0, -b / 20.0) : 0.0;
         a[1] = b > 0.0 ? harmonic_decay_(v, m) : dbps;
@@ -1337,6 +1362,128 @@ void nv_random_check(long long seed, int n, double *out)
 
 static double pymin(double a, double b) { return b < a ? b : a; }
 static double pymax(double a, double b) { return b > a ? b : a; }
+
+/* ElectricBassProperties._string_of: the string a note is played on (the
+   highest open string at or under it, else the first) and its stopped length */
+static void sp_string(const VoiceSnap *v, double f0, int *kk, double *oo, double *ls)
+{
+    int k = -1;
+    for (int q = 0; q < v->n_os; q++)
+        if (v->os_hz[q] <= f0 * 1.0001 && (k < 0 || v->os_hz[q] > v->os_hz[k]))
+            k = q;
+    if (k < 0)
+        k = 0;
+    double o = v->os_hz[k];
+    double sc = pymin(pymax(1.0, f0 / o), pow(2.0, v->fret_max / 12.0));
+    *kk = k;
+    *oo = o;
+    *ls = v->sp_scale / sc;
+}
+
+/* ElectricBassProperties._string_mu_t: its gauge (m), mass per length, tension */
+static void sp_mu_t(const VoiceSnap *v, int k, double o, double *d, double *mu, double *t)
+{
+    *d = v->sp_gauge[k] * 0.0254;
+    *mu = v->sp_mass * 7850.0 * PI * *d * *d / 4.0;
+    *t = *mu * pow(2.0 * v->sp_scale * o, 2.0);
+}
+
+/* ElectricBassProperties.harmonic_decay: the string's air, visco- and
+   thermo-elastic losses, the bearings' 4 W G a reflection, the mounting */
+static double sp_decay(const VoiceSnap *v, int harmonic)
+{
+    double f0 = v->frequency_x * pow(2.0, v->octave_position);
+    int k;
+    double o, ls, d, mu, t;
+    sp_string(v, f0, &k, &o, &ls);
+    sp_mu_t(v, k, o, &d, &mu, &t);
+    double dc = v->sp_core[k] * 0.0254;
+    double rc = dc / 2.0;
+    double rw = (d - dc) / 4.0;
+    double d_air = (PI / 2.0) * ((1.0 + 2.0 / PI) * 2.0 * rw + 2.0 * rc);
+    double ei = 2.0e11 * PI * pow(rc, 4.0) / 4.0;
+    double nu = (double)harmonic * f0;
+    double eta = 1.8e-5, rho = 1.2;
+    double r = 2.0 * PI * eta + 2.0 * PI * d_air * sqrt(PI * eta * rho * nu);
+    double iq = r / (2.0 * PI * mu * nu) + 4.0 * pow(PI, 2.0) * mu * ei * v->sp_wind * pow(nu, 2.0) / pow(t, 2.0)
+                + v->sp_qte;
+    double x = 1.0 - ls / v->sp_scale;
+    double g = v->sp_g * (v->sp_body + (1.0 - v->sp_body) * pow(pymax(1.0 - x / v->sp_joint, 0.0), v->sp_fall));
+    g *= pow(nu / 100.0, -v->sp_fexp);
+    double bear = g != 0.0 ? -10.0 * log(pymax(1.0 - 4.0 * sqrt(t * mu) * g, 1e-9)) / log(10.0) * 2.0 * f0 : 0.0;
+    double dbs = (20.0 / log(10.0)) * PI * nu * iq + v->sp_mount + bear;
+    return 0.5 * dbs;
+}
+
+/* tonelib.FretContact's tables (nv_fret_contact_set) */
+static double *FC_DATA, FC_KEY0, FC_VELS[16];
+static int fc_nt, fc_nk, fc_nv, fc_nm;
+
+int nv_fret_contact_set(int nt, int nk, int nv, int nm, double key0, const double *vels, const double *data)
+{
+    if (nt < 1 || nk < 1 || nv < 2 || nv > 16 || nm < 1 || nm > 64)
+        return 0;
+    size_t n = (size_t)nt * nk * nv * nm * 3;
+    double *d = (double *)malloc(n * sizeof(double));
+    if (!d)
+        return 0;
+    memcpy(d, data, n * sizeof(double));
+    free(FC_DATA);
+    FC_DATA = d;
+    FC_KEY0 = key0;
+    memcpy(FC_VELS, vels, nv * sizeof(double));
+    fc_nt = nt; fc_nk = nk; fc_nv = nv; fc_nm = nm;
+    return 1;
+}
+
+/* tonelib.fret_contact_modes: the note's modes, linear in the key and in the
+   stroke (sqrt attack_volume), each held at the table's ends */
+static void fc_modes(VoiceSnap *s, double frequency, double attack_volume)
+{
+    int t = s->fc_tab - 1;
+    if (!FC_DATA || t < 0 || t >= fc_nt) {
+        /* (no table handed over -- an export without its FCON: the string
+           plays as its plain pluck, never silent) */
+        s->fc_tab = 0;
+        s->n_fc = 0;
+        return;
+    }
+    double key = 69.0 + 12.0 * log(frequency / 440.0) / log(2.0);
+    double kf = pymin(pymax(key - FC_KEY0, 0.0), (double)(fc_nk - 1));
+    int i = (int)kf;
+    int i1 = i + 1 < fc_nk - 1 ? i + 1 : fc_nk - 1;
+    double wk = kf - i;
+    double vv = pymin(pymax(sqrt(pymax(attack_volume, 0.0)), FC_VELS[0]), FC_VELS[fc_nv - 1]);
+    int j = 0;
+    while (j + 2 < fc_nv && vv > FC_VELS[j + 1])
+        j++;
+    double wv = (vv - FC_VELS[j]) / (FC_VELS[j + 1] - FC_VELS[j]);
+#define FCV(ii, jj, mm, qq) FC_DATA[((((size_t)t * fc_nk + (ii)) * fc_nv + (jj)) * fc_nm + (mm)) * 3 + (qq)]
+    for (int m = 0; m < fc_nm; m++) {
+        double out[3];
+        for (int q = 0; q < 3; q++) {
+            double a = FCV(i, j, m, q) + (FCV(i, j + 1, m, q) - FCV(i, j, m, q)) * wv;
+            double b = FCV(i1, j, m, q) + (FCV(i1, j + 1, m, q) - FCV(i1, j, m, q)) * wv;
+            out[q] = a + (b - a) * wk;
+        }
+        s->fc_amp[m] = out[0];
+        s->fc_share[m] = out[1];
+        s->fc_fast[m] = out[2];
+    }
+#undef FCV
+    s->n_fc = fc_nm;
+}
+
+/* ElectricBassProperties.inharmonicity_coefficient_for_frequency: from its core */
+static double sp_b(const VoiceSnap *v, double frequency)
+{
+    int k;
+    double o, ls, d, mu, t;
+    sp_string(v, frequency, &k, &o, &ls);
+    sp_mu_t(v, k, o, &d, &mu, &t);
+    double dc = v->sp_core[k] * 0.0254;
+    return pow(PI, 3.0) * 2.0e11 * pow(dc, 4.0) / (64.0 * t * pow(ls, 2.0));
+}
 
 int nv_reed_series_cached(double gate, double edge, double spread, int points, int max_harmonic, double direct,
                           double *out);
@@ -1964,6 +2111,8 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
             s->reed_s[q] = 0.0;                 /* (none past this key's) */
     }
     if (s->kind == 4 && s->elec) {              /* an electric guitar: its fret (ElectricGuitarProperties.__init__) */
+        if (s->fc_tab)                          /* FretContact.__init__: the note's modes from its table */
+            fc_modes(s, frequency, s->attack_volume);
         s->pk_sp = s->eg_sp;
         for (int q = 0; q < s->n_pk; q++)
             s->pk_q[q] = s->pk_q0[q];
@@ -2195,6 +2344,8 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
                 }
             }
         }
+        else if (c->b_law == 6)         /* a bass string's, from its core (ElectricBassProperties) */
+            o->B = sp_b(s, frequency);
         else if (c->b_law == 5) {       /* the Clavinet's published table, linear in the key */
             double key = 69.0 + 12.0 * log(frequency / 440.0) / log(2.0);
             int n = c->n_btab;

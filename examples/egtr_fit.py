@@ -117,6 +117,7 @@ def stage():
     n += stage_guitarset()
     n += stage_techs()
     n += stage_techs_tech()
+    n += stage_open_basses()
     print("  staged %d notes in %d sets (%d bass files on an unplaceable string 5 left out)"
           % (n, len(sets()), skipped))
 
@@ -235,6 +236,51 @@ def stage_techs_tech():
             dst = os.path.join(folder, "%s.s%df%02d.n%d%s.wav" % (_name(key), st, fret, touch,
                                                                   "" if seen[k] == 1 else "_%d" % seen[k]))
             wavfile.write(dst, sr, np.round(seg[on:] * 0.98 * 2147483647.0).astype(np.int32))
+            n += 1
+    return n
+
+
+# THE OPEN BASSES (since 2026-11-23, IDMT-SMT-Bass no longer read, licences.md
+# L3): quartertone's Gretsch Electromatic (Freesound pack 14708, CC BY 4.0) --
+# finger-plucked, direct, 48 kHz, a 30.3" short scale, 8 velocities, frets to
+# the 17th: bsgr<fret>f<string>s<midi>v<vel>, its string 4 the low E (ours 1);
+# past ~4 s each take is a crossfade loop. And FreePats' Yamaha RBX (CC0,
+# Andrea Biasior): finger and pick, E1-E2 one note a semitone, 44.1 kHz --
+# where a player puts them, the lowest fret. Staged as <note>.s<string>f<fret>
+# [.v<vel>].wav links.
+QT_BASS = os.path.expanduser("~/Documents/refs/quartertone_gretsch")
+FP_BASS = os.path.expanduser("~/Documents/refs/freepats_bass_yr")
+FP_SETS = {"open_fp_rbx_finger": ("Finger", "finger"), "open_fp_rbx_pick": ("Picked", "pick")}
+
+
+def stage_open_basses():
+    n = 0
+    folder = os.path.join(STAGED, "open_qt_gretsch")
+    os.makedirs(folder, exist_ok=True)
+    for p in sorted(glob.glob(os.path.join(QT_BASS, "*.wav"))):
+        g = re.search(r"bsgr(\d+)f(\d)s(\d+)v(\d+)", os.path.basename(p))
+        if not g:
+            continue
+        fret, qs, midi, v = (int(q) for q in g.groups())
+        st = 5 - qs
+        if midi - BASS_OPEN[st] != fret:
+            continue
+        dst = os.path.join(folder, "%s.s%df%02d.v%d.wav" % (_name(midi), st, fret, v))
+        if not os.path.lexists(dst):
+            os.symlink(p, dst)
+        n += 1
+    for name, (sub, kind) in FP_SETS.items():
+        sfz = glob.glob(os.path.join(FP_BASS, sub, "*", "*.sfz"))[0]
+        txt = open(sfz).read()
+        for reg in re.split(r"<region>", txt)[1:]:
+            key = re.search(r"pitch_keycenter=(\d+)", reg) or re.search(r"\bkey=(\d+)", reg)
+            smp = re.search(r"sample=(\S+)", reg)
+            if not key or not smp:
+                continue
+            midi = int(key.group(1))
+            src = os.path.join(os.path.dirname(sfz), smp.group(1))
+            st = max([s for s, o in BASS_OPEN.items() if o <= midi] or [1])
+            _link(src, os.path.join(STAGED, name), midi, st, midi - BASS_OPEN[st])
             n += 1
     return n
 
@@ -363,7 +409,7 @@ def decays(path, nm=8, t0=0.05, t1=1.8):
         e = 20 * np.log10(np.sqrt(np.convolve(y * y, np.ones(w) / w, "same")) + 1e-12)
         pk = on + int(np.argmax(e[on:on + int(0.3 * sr)]))
         a, b = pk + int(t0 * sr), min(end, pk + int(t1 * sr))
-        if "techs_" in path:
+        if "techs_" in path or "open_" in path:
             # (Guitar-TECHS' notes ring 4 s into their floor: the line stops
             # 10 dB over the band's own floor, its quietest 5% over the note)
             fl = np.percentile(e[on:end], 5)
@@ -400,7 +446,10 @@ STRING_SETS = {
     # (since 2026-11-22 Guitar-TECHS' P2, nickel roundwounds, in IDMT's place:
     # its P1's flatwounds are another string, left out)
     "guitar": ("techs_wolfgang_neck_hu",),
-    "bass": tuple("bass_%s_both_%s" % (b, st) for b in ("fame", "warwick", "yamaha") for st in ("FS", "PK")),
+    # (since 2026-11-23 two open basses in IDMT's place, a short and a long
+    # scale: their decays agree, ~3x what string physics alone gives --
+    # examples/bass_physics.py -- the neck, frets and magnets taking the rest)
+    "bass": ("open_qt_gretsch", "open_fp_rbx_finger", "open_fp_rbx_pick"),
     # the fretless's own string: its STOPPED notes, where the finger on the
     # wood is the termination (FretlessBassProperties)
     "fretless": ("fretless_fdv_stopped",),
@@ -491,7 +540,7 @@ PICKUP_GEOMETRY = {
     # FaireDesVagues does not say which bass: a Jazz bass's two coils, as 33's
     35: dict(pickup_points=(0.098, 0.168)),
 }
-BASS_PICKUP = (4867.0, 1.046)      # --ladder=34's, the pick's
+BASS_PICKUP = (5456.0, 1.26)       # (since 2026-11-23 the circuit's: examples/jbass_coil.py)
 LADDER_KNOBS = ("strike_point", "strike_depth", "tonal_dampening", "pickup_resonance_hz", "pickup_q")
 BOUNDS = {"strike_point": (0.03, 0.45), "strike_depth": (0.0, 1.0), "tonal_dampening": (0.5, 4.0),
           "pickup_resonance_hz": (800.0, 12000.0), "pickup_q": (0.3, 4.0)}
@@ -649,6 +698,60 @@ def fit_envelope(prog, knobs=("lowpass_hz", "lowpass_order", "tonal_dampening"))
     print("   recorded " + " ".join("%5.0f" % q if np.isfinite(q) else "   --" for q in R))
     print("   ours     " + " ".join("%5.0f" % q if np.isfinite(q) else "   --" for q in M))
     return dict(zip(knobs, v)), r.fun
+
+
+
+# THE HANDS, since 2026-11-23 (IDMT-SMT-Bass no longer read, licences.md L3):
+# FreePats' Yamaha RBX was recorded twice, finger and pick, the same bass,
+# strings and pickup -- so the finger's ladder LESS the pick's, note by note,
+# is the hand's alone: the pickup's comb and load divide out, and they divide
+# out of ours too, whatever chain ours plays through. The PICK is anchored on
+# the guitar's fitted pick (Guitar-TECHS P2, JazzGuitarProperties: its notch
+# and tilt -- a pick is a pick) at a player's place, BASS_PICK_MM from the
+# bridge; the finger's place, width (notch) and tilt fitted to the difference.
+BASS_PICK_MM = 75.0
+
+
+def fit_hands(nm=10):
+    from scipy.optimize import minimize
+    import tonelib as T_
+    import patch_map
+    F = dict((os.path.basename(p), measure(p)) for p in glob.glob(os.path.join(STAGED, "open_fp_rbx_finger", "*.wav")))
+    P = dict((os.path.basename(p), measure(p)) for p in glob.glob(os.path.join(STAGED, "open_fp_rbx_pick", "*.wav")))
+    obs = []
+    for k in sorted(set(F) & set(P)):
+        a, b = F[k], P[k]
+        if a and b and len(a["ladder"]) >= nm and len(b["ladder"]) >= nm:
+            fret = int(re.search(r"f(\d+)\.", k).group(1))
+            obs.append((a["f0"], fret, np.array(a["ladder"][:nm]) - np.array(b["ladder"][:nm])))
+    J = T_.JazzGuitarProperties
+    base = patch_map.property_class_for_program(33)
+    pick = type("Pick", (base,), dict(strike_point=BASS_PICK_MM / 864.0, strike_depth=J.strike_depth,
+                                     tonal_dampening=J.tonal_dampening))
+    knobs = ("strike_point", "strike_depth", "tonal_dampening")
+
+    def err(v):
+        fin = type("Fit", (base,), dict(zip(knobs, v)))
+        e = []
+        for f0, fret, D in obs:
+            M = ladder_at(fin, f0, fret, nm=nm) - ladder_at(pick, f0, fret, nm=nm)
+            e.extend(np.abs(M[1:] - D[1:]))
+        return float(np.median(e))
+    x0 = np.log([0.14, 0.9, 2.5])
+
+    def f(x):
+        v = np.exp(x)
+        pen = sum(max(0.0, BOUNDS[k][0] - q) + max(0.0, q - BOUNDS[k][1]) for k, q in zip(knobs, v))
+        return 100.0 + pen if pen else err(v)
+    sim = np.vstack([x0] + [x0 + 0.4 * np.eye(3)[i] for i in range(3)])
+    r = minimize(f, x0, method="Nelder-Mead", options=dict(maxfev=400, xatol=1e-3, fatol=1e-3, initial_simplex=sim))
+    v = np.exp(r.x)
+    print("  the finger against the pick, %d notes (FreePats RBX): miss %.2f dB (h2-h%d, median)" % (len(obs), r.fun, nm))
+    print("    the pick: strike_point = %.4g (%.0f mm), strike_depth = %.4g, tonal_dampening = %.4g"
+          % (pick.strike_point, BASS_PICK_MM, pick.strike_depth, pick.tonal_dampening))
+    for k, q in zip(knobs, v):
+        print("    finger %s = %.4g%s" % (k, q, "  (%.0f mm)" % (q * 864.0) if k == "strike_point" else ""))
+    return dict(zip(knobs, v)), pick
 
 
 MODEL = os.path.join(REFS, "model")
@@ -1468,6 +1571,9 @@ def main(argv):
         if a.startswith("--ab="):
             g, out = a.split("=", 1)[1].split(":", 1)
             ab(int(g), out)
+            return 0
+        if a == "--hands":
+            fit_hands()
             return 0
         if a.startswith("--envelope="):
             fit_envelope(int(a.split("=")[1]))

@@ -247,6 +247,23 @@ typedef struct {
         fret_max, pk_sp, pk_q[4];
     int n_touch, touches[4], touch0, touch, leak_set;
     double leak_db, leak_dbs;
+    /* A BASS STRING FROM ITS PHYSICS (ElectricBassProperties, string_physics):
+       each partial's decay from the string's own losses, the bearings' and
+       the mounting (sp_decay), and B from its core (sp_B) -- the set (sp_scale,
+       per open string sp_gauge and sp_core, inches), the wound mass share,
+       the winding's visco-elastic loss, the thermo-elastic 1/Q, the bearings'
+       conductance (its fall to the joint, its frequency exponent, the joint,
+       the body's share) and the mounting's dB/s */
+    int sp_decay, sp_B;
+    double sp_scale, sp_gauge[8], sp_core[8], sp_mass, sp_wind, sp_qte, sp_g, sp_fall, sp_fexp, sp_joint,
+        sp_body, sp_mount;
+    /* A STRING DRIVEN INTO ITS FRETS (tonelib.FretContact: the slap, the pop):
+       its baked table (fc_tab, 1 + its index in nv_fret_contact_set's; 0
+       none) and the note's modes from it -- n_fc of them, each its level
+       (over the free string's first), the share ringing on at the string's
+       own rate, the contact's fast fall (the class's dB) */
+    int fc_tab, n_fc;
+    double fc_amp[64], fc_share[64], fc_fast[64];
     /* A PIPE'S MODE LOCK (mode_lock_*: a played pipe's, a reed's, a brass
        instrument's): each harmonic above the first starting sharp by
        ml_spread x/(1+x), x = (m/ml_knee)^2, pulled into lock over ml_time
@@ -1621,6 +1638,11 @@ int nv_song_part(void *s, long long ch);
    VOICE_BODIES' table (native.py hands it over: nv_voice_bodies_set), 0
    none; nv_voice_part its ratio and cluster */
 int nv_voice_bodies_set(int n, const char *names, const double *ratio, const double *cluster, int nn);
+/* tonelib.FretContact's baked tables (fretcontact_data.TABLES, in sorted
+   name order): nt tables of nk keys from key0, nv strokes (vels), nm modes,
+   each (amp, share, fast) -- native.py and the export hand them over. 0 on
+   a table too large */
+int nv_fret_contact_set(int nt, int nk, int nv, int nm, double key0, const double *vels, const double *data);
 int nv_voice_body(const char *name);
 int nv_voice_part(int part, double *ratio, double *cluster);
 void nv_song_note(void *s, long long ch, int note, double on, double off, int vel, double v7, double v11,

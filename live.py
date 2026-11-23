@@ -16535,14 +16535,16 @@ def _selftest(only=""):
         v = [q.harmonic_volume(h) ** 2 for h in range(1, 40)]
         return 10 * np.log10(sum(x for h, x in enumerate(v, 1) if h * f0 > cut) / sum(v) + 1e-30)
     _lp, _nolp = _top(_c35(110.0, 0.0, 1.0, 1.0)), _top(type("NoLP", (_c35,), {"lowpass_hz": None})(110.0, 0.0, 1.0, 1.0))
+    # (since 2026-11-23 the fretted bass's decay is its string's physics,
+    # fitted to two open basses -- examples/bass_physics.py -- and the
+    # fretless's, a fingertip on wood, runs ~1.7 x it at h8 on E1)
     check("fretless: its top decays as a fretted bass's, and is low-passed instead",
-          0.75 < _q35.harmonic_decay(8) / binst[33].harmonic_decay(8) < 1.6
+          0.75 < _q35.harmonic_decay(8) / binst[33].harmonic_decay(8) < 2.0
           and _q35.lowpass_hz and _q35.lowpass_hz < 1000.0 and _lp < _nolp - 10.0,
           "  (h8 decays %.1f vs %.1f dB/s; low-pass %.0f Hz: above 1 kHz %.0f dB, %.0f without)"
           % (_q35.harmonic_decay(8), binst[33].harmonic_decay(8), _q35.lowpass_hz or 0.0, _lp, _nolp))
-    # brighter by what the recordings say: the slap thumb's fit stands 1.26 x
-    # the finger's mean harmonic (egtr_fit.py --ladder=36, 33); the 1.5 here
-    # was asserted before there was a recording
+    # brighter: since 2026-11-23 by the frets (FretContact), the slap's mean
+    # harmonic over 2 x the finger's at E1 (IDMT's fit had read 1.26 x)
     check("a slap is the brightest of them",
           _mean_h(binst[36]) > 1.15 * _mean_h(binst[33])
           and _mean_h(binst[36]) >= max(_mean_h(binst[n]) for n in (33, 35, 37)),
@@ -16661,13 +16663,18 @@ def _selftest(only=""):
     # Read as ENERGY AT THE PICKUP: the gains now hold each voice at its level
     # through a fitted spectrum (egtr_fit.py), so a gain alone says how bright
     # the voice came out, not how hard the string was hit.
-    def _arrives(g, top=40):
-        return math.sqrt(sum(g.harmonic_volume(h) ** 2 for h in range(1, top)))
-    check("a slap arrives harder than a pluck, and says so as momentum",
-          _arrives(binst[36]) > 1.5 * _arrives(binst[33])
-          and _arrives(binst[37]) > _arrives(binst[36]),
-          "  (energy at the pickup: finger %.3f, slap %.3f, pop %.3f)"
-          % (_arrives(binst[33]), _arrives(binst[36]), _arrives(binst[37])))
+    # SINCE 2026-11-23 THE FRETS ARE MODELLED (tonelib.FretContact): a slap's
+    # level is the bank's (PROGRAM_TRIM_DB, to GeneralUser GS's), and what the
+    # model claims is where its energy goes -- the string driven into the
+    # frets throws it up the series, the pop (pulled further, snapping back)
+    # further still: at E1 a finger keeps ~0.2 % above h8, a slap ~10, a pop ~40
+    def _up(g, top=64):
+        v = [g.harmonic_volume(h) ** 2 for h in range(1, top)]
+        return sum(v[8:]) / max(sum(v), 1e-30)
+    check("a slap throws its energy up the series, a pop further",
+          _up(binst[36]) > 20.0 * _up(binst[33]) and _up(binst[37]) > _up(binst[36]),
+          "  (energy above h8 at E1: finger %.3f, slap %.3f, pop %.3f)"
+          % (_up(binst[33]), _up(binst[36]), _up(binst[37])))
     # THE REPO RULE: initial_gain and amp_reference move together, or the
     # louder voice is also a more distorted one.
     # Each family has its own base ratio (a bass rig is not a guitar rig), and

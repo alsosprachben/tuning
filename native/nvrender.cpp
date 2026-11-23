@@ -731,6 +731,22 @@ static bool read_export(const char *path, Export &E)
             } else {
                 fseek(f, vp, SEEK_SET);
             }
+        // FCON: tonelib.FretContact's baked tables (voice.c's: nv_fret_contact_set)
+        {
+            long vp = ftell(f);
+            char vt[4];
+            int vh[4];
+            double k0;
+            if (ok && fread(vt, 1, 4, f) == 4 && !memcmp(vt, "FCON", 4) && fread(vh, 4, 4, f) == 4
+                && fread(&k0, 8, 1, f) == 1) {
+                std::vector<double> vv(vh[2]), fd((size_t)vh[0] * vh[1] * vh[2] * vh[3] * 3);
+                ok = fread(vv.data(), 8, vh[2], f) == (size_t)vh[2] && fread(fd.data(), 8, fd.size(), f) == fd.size();
+                if (ok)
+                    nv_fret_contact_set(vh[0], vh[1], vh[2], vh[3], k0, vv.data(), fd.data());
+            } else {
+                fseek(f, vp, SEEK_SET);
+            }
+        }
         }
         // VARS: bank select (native.variation_tables) -- the slots and their
         // classes at each key, the entries a program change selects, GS's and GM 2's tables

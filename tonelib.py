@@ -12581,29 +12581,129 @@ class ElectricBassProperties(ElectricGuitarProperties):
     """
     # ITS PICKUP SWITCH, the part's to set (the AMP card): the Jazz Bass's: its two coils, each or both
     pickup_family = 'jbass'
-    # THE SPECTRUM, FITTED (examples/egtr_fit.py --ladder=33/34) to IDMT-SMT-
-    # Bass, DI, three basses on both pickups: a Jazz bass's two coils (~85 and
-    # ~145 mm of 864); the pickup's load at 4.87 kHz, Q 1.05, from the PICK's
-    # fit and shared by every hand -- it is electrical, and fitted free the
-    # finger's came out at 2.6 kHz, the fit dulling the pickup for want of a
-    # soft wide finger; the finger itself is the rest (7.68 -> 4.79 dB).
+    # THE PICKUPS: a Jazz bass's two coils (~85 and ~145 mm of 864), both on;
+    # since 2026-11-23 their load FROM THEIR CIRCUIT (examples/jbass_coil.py:
+    # Fender's published '62 coils, 3.2 H / 7.25 k and 3.35 H / 7.5 k, in
+    # parallel, the three 250 k pots and a DI input) -- 5.46 kHz, Q 1.26,
+    # shared by every hand: it is electrical. (IDMT's DI fit had read 4.87
+    # kHz, Q 1.05.)
     pickup_points = (0.098, 0.168)
-    strike_point = 0.09142
-    strike_depth = 1.0
-    tonal_dampening = 2.461
-    pickup_resonance_hz = 4867.0
-    pickup_q = 1.046
+    # THE FINGER, since 2026-11-23 (examples/egtr_fit.py --hands): FreePats'
+    # Yamaha RBX (CC0) recorded finger and pick on the same bass, so the
+    # finger's ladder less the pick's is the hand's alone, the pickup divided
+    # out (finger - pick: h2-h5 -4, -8, -14, -13 dB); the pick anchored as
+    # GM 34's. Fitted, 12 notes, miss 3.5 dB: plucked 172 mm from the bridge,
+    # over the neck pickup, a wide pad (the notch 0.63), a steep fall (2.55;
+    # IDMT's three players had read 2.46).
+    strike_point = 0.1992
+    strike_depth = 0.6324
+    tonal_dampening = 2.546
+    pickup_resonance_hz = 5456.0
+    pickup_q = 1.26
     pickup_width = 0.0116         # ~10 mm coil
-    # THE STRING, MEASURED (examples/egtr_fit.py --string=bass): IDMT-SMT-Bass,
-    # DI -- a Fame Baphomet, a Warwick and a Yamaha BB604, finger and pick on
-    # both pickups, 260 notes. It had inherited the guitar's flat decay and a B
-    # of 2e-5; the strings measure 3-6 dB/s at the fundamental and 10-25 above,
-    # and B 1.3e-4, flat across the neck (median |log err| 0.33 and 0.42).
-    decay_db = 2.007
-    harmonic_decay_db = 1.598
-    decay_register_slope = 0.457
-    inharmonicity_law = (1.538e-4, -0.037)
+    # THE STRING, FROM ITS PHYSICS (since 2026-11-23, IDMT-SMT-Bass no longer
+    # read, licences.md L3; examples/bass_physics.py). Every partial's decay
+    # computed from what the instrument IS, each a variable a player could turn
+    # (Ben: "we want more physical variables than fewer ... instrumentalists
+    # are very knowledgeable about the physics of their instruments"):
+    #   the STRING's own losses -- air, the core's visco-elastic and thermo-
+    #   elastic (Issanchou et al., JSV 2017 / JASA 2018), the WINDING's
+    #   visco-elastic loss fitted (0.035, 3.5x the single wound string's: the
+    #   wraps' friction, Zollner 7.7.3);
+    #   the BEARINGS -- each reflection at fret or nut and bridge loses 4 W G
+    #   of the wave's power (W = sqrt(T mu); Zollner 7.7.4.4), G fitted at
+    #   0.00093 s/kg, his "typical" 0.001; its fall toward the neck joint and
+    #   with frequency both fitted nil on these basses, and kept;
+    #   the BODY's mounting, +1.3 dB/s (Pate, Le Carrou & Fabre 2014);
+    #   the SET -- 34" scale, .100 .080 .065 .045, each string's CORE read from
+    #   the stretch (B = pi^3 E d^4 / 64 T L^2, 107 notes: ~0.021" under
+    #   every string), the mass 0.78 of solid steel at the gauge.
+    # Fitted to two open basses' partial decays (quartertone's Gretsch, CC BY
+    # 4.0; FreePats' Yamaha RBX, CC0), each at its own scale and fret: median
+    # |log err| 0.29, where string physics alone missed by 1.26 and a fitted
+    # empirical law by 0.31.
+    # THE NOTE-OFF IS THE PLAYER'S DAMP (Ben, 2026-11-23: "make the damp a
+    # variable"): the fingertip on the string, damping it at damp_dbs -- a
+    # player's touch, set by ear (no open recording damps a note) -- the
+    # release then the kernel's smoothstep reaching -40 dB where the damp
+    # does, 0.94 of its length (examples/gm_release.py): 40 / (0.94 damp).
+    # Every bass class takes its release from its own damp_dbs.
+    damp_dbs = 150.0
+    release_valve_time = 40.0 / (0.94 * damp_dbs)
+    release_fraction_max = None
+
+    def __init_subclass__(cls, **kw):
+        super().__init_subclass__(**kw)
+        cls.release_valve_time = 40.0 / (0.94 * cls.damp_dbs)
+
+    string_physics = True             # B from the string (and the decay, with decay_physics)
+    decay_physics = True
+    scale_length_m = 0.8636
+    string_gauges_in = (0.100, 0.080, 0.065, 0.045)       # with open_strings_hz
+    string_cores_in = (0.0214, 0.0224, 0.0211, 0.0186)
+    string_mass_share = 0.78          # a wound string's mass against solid steel at its gauge
+    winding_loss = 0.0346             # the visco-elastic loss factor (Issanchou's single string 0.01)
+    thermoelastic_q = 6e-6            # 1/Q, a wound steel bass string's (Issanchou)
+    bearing_conductance = 9.3e-4      # s/kg, nut (or fret) and bridge together, at 100 Hz
+    bearing_fall = 0.0                # toward the neck joint, (1 - x/joint)^fall
+    bearing_freq_exp = 0.0            # with frequency, (f/100 Hz)^-exp
+    neck_joint = 0.53                 # the body joint, a fraction of the scale from the nut
+    bearing_body_share = 0.1          # what is left at the joint: the body's and the bridge's
+    mounting_dbs = 1.3                # the solid body's own, every partial
+    # (the class law, for anything that reads it: the physics above fitted as
+    # (a + b m)(f0/415)^s over E1-G3, median |log err| 0.12)
+    decay_db = 3.094
+    harmonic_decay_db = 0.5292
+    decay_register_slope = 0.1696
     open_strings_hz = (41.2, 55.0, 73.42, 98.0)
+
+    def _string_of(self, f0):
+        """(string index, its open Hz, the stopped length in m) where the note
+        is played: the highest open string at or under it, as __init__ frets."""
+        under = [k for k, o in enumerate(self.open_strings_hz) if o <= f0 * 1.0001]
+        k = max(under, key=lambda q: self.open_strings_hz[q]) if under else 0
+        o = self.open_strings_hz[k]
+        sc = min(max(1.0, f0 / o), 2.0 ** (self.fret_max / 12.0))
+        return k, o, self.scale_length_m / sc
+
+    def _string_mu_t(self, k, o):
+        d = self.string_gauges_in[k] * 0.0254
+        mu = self.string_mass_share * 7850.0 * _pi * d * d / 4.0
+        return d, mu, mu * (2.0 * self.scale_length_m * o) ** 2
+
+    def harmonic_decay(self, harmonic):
+        if not (self.string_physics and self.decay_physics) or not self.open_strings_hz:
+            return super().harmonic_decay(harmonic)
+        f0 = self.frequency_x * 2.0 ** self.octave_position      # (the note's pitch, as the engine has it)
+        k, o, Ls = self._string_of(f0)
+        d, mu, T = self._string_mu_t(k, o)
+        dc = self.string_cores_in[k] * 0.0254
+        rc = dc / 2.0
+        rw = (d - dc) / 4.0
+        d_air = (_pi / 2.0) * ((1.0 + 2.0 / _pi) * 2.0 * rw + 2.0 * rc)
+        EI = 2.0e11 * _pi * rc ** 4 / 4.0
+        nu = harmonic * f0
+        eta, rho = 1.8e-5, 1.2
+        R = 2 * _pi * eta + 2 * _pi * d_air * _sqrt(_pi * eta * rho * nu)
+        iq = (R / (2 * _pi * mu * nu) + 4 * _pi ** 2 * mu * EI * self.winding_loss * nu ** 2 / T ** 2
+              + self.thermoelastic_q)
+        x = 1.0 - Ls / self.scale_length_m
+        g = self.bearing_conductance * (self.bearing_body_share + (1.0 - self.bearing_body_share)
+                                        * max(1.0 - x / self.neck_joint, 0.0) ** self.bearing_fall)
+        g *= (nu / 100.0) ** (-self.bearing_freq_exp)
+        bear = -10.0 * _log(max(1.0 - 4.0 * _sqrt(T * mu) * g, 1e-9)) / _log(10.0) * 2.0 * f0 if g else 0.0
+        dbs = (20.0 / _log(10.0)) * _pi * nu * iq + self.mounting_dbs + bear
+        return 0.5 * dbs              # (the class's dB is half the envelope's, pizz_fit's convention)
+
+    def inharmonicity_coefficient_for_frequency(self, frequency):
+        """B from the string: pi^3 E d_core^4 / (64 T L^2), at the stopped length."""
+        if not self.string_physics or not self.open_strings_hz:
+            return super().inharmonicity_coefficient_for_frequency(frequency)
+        k, o, Ls = self._string_of(float(frequency))
+        d, mu, T = self._string_mu_t(k, o)
+        dc = self.string_cores_in[k] * 0.0254
+        return _pi ** 3 * 2.0e11 * dc ** 4 / (64.0 * T * Ls ** 2)
+
     inharmonicity_coefficient = 2.0e-05
     amp_drive = 0.28
     amp_imbalance = 0.20
@@ -12648,13 +12748,6 @@ class FingeredBassProperties(ElectricBassProperties):
     initial_gain = 0.292777   # held at its level before the IDMT fit (egtr_fit.py), with
     # amp_reference moving with it -- the drive as voiced (turns x coils x the family's base)
     amp_reference = 0.4804061311827956
-    # THE NOTE-OFF IS THE PLAYER'S DAMP, MEASURED (examples/egtr_fit.py --damp):
-    # IDMT-SMT-Bass stops every note by hand at ~2 s; 437 FS damps on three
-    # basses fall a median 109 dB/s, -40 dB in 0.37 s, our smoothstep's -40 dB
-    # at the same time. GM's sets had given it 0.08 s: a bassist's hand is
-    # gentler than their envelopes.
-    release_valve_time = 0.390
-    release_fraction_max = None
 
 
 class PickedBassProperties(ElectricBassProperties):
@@ -12669,17 +12762,13 @@ class PickedBassProperties(ElectricBassProperties):
     initial_gain = 0.113129   # held at its level before the IDMT fit (egtr_fit.py), with
     # amp_reference moving with it -- the drive as voiced (turns x coils x the family's base)
     amp_reference = 0.18562887526881716
-    # FITTED (--ladder=34) to the pick on all three basses: 5.56 -> 4.30 dB.
-    strike_point = 0.09704
-    strike_depth = 0.9494
-    tonal_dampening = 1.784
-    # THE NOTE-OFF IS THE PLAYER'S DAMP, MEASURED (examples/egtr_fit.py --damp):
-    # IDMT-SMT-Bass stops every note by hand at ~2 s; 463 PK damps on three
-    # basses fall a median 120 dB/s, -40 dB in 0.33 s, our smoothstep's -40 dB
-    # at the same time. GM's sets had given it 0.08 s: a bassist's hand is
-    # gentler than their envelopes.
-    release_valve_time = 0.355
-    release_fraction_max = None
+    # THE PICK, since 2026-11-23: a pick is a pick -- its notch and fall the
+    # guitar's, fitted on Guitar-TECHS' P2 (JazzGuitarProperties) -- played
+    # where a picking bassist plays, 75 mm from the bridge (egtr_fit
+    # BASS_PICK_MM: the player's choice), and the finger fitted against it.
+    strike_point = 75.0 / 864.0
+    strike_depth = 0.8856
+    tonal_dampening = 1.972
     # A PICK, 2 ms -- as the electric guitar's (by analogy).
     attack_time = 0.002
 
@@ -12712,15 +12801,13 @@ class FretlessBassProperties(ElectricBassProperties):
     # amp_reference moving with it -- the drive as voiced (turns x coils x the family's base)
     amp_reference = 0.2624992665055191
     # THE NOTE-OFF IS THE PLAYER'S DAMP: the fretless takes ring out, none
-    # damped, and a hand damps it as it damps the fretted bass -- the finger
-    # style's measured release (examples/egtr_fit.py --damp).
-    release_valve_time = 0.390
-    release_fraction_max = None
+    # damped, and a hand damps it as it damps the fretted bass (damp_dbs).
     glide_mechanism = 'stop'
     glide_reach_semitones = 12.0
     # THE FRETLESS'S OWN STRING (egtr_fit.py --string=fretless, its eleven
     # stopped notes, 88 partial decays; median |log err| 0.19): its decay law.
     # The stretch stays the family's -- three stretches read, too few to fit
+    decay_physics = False            # its own decay, fitted to FaireDesVagues' (the stretch from its string)
     decay_db = 6.249
     harmonic_decay_db = 1.741
     decay_register_slope = 0.570
@@ -12744,7 +12831,88 @@ class FretlessBassProperties(ElectricBassProperties):
     tonal_dampening = 2.155
 
 
-class SlapBassProperties(ElectricBassProperties):
+class FretContact:
+    """A STRING DRIVEN INTO ITS FRETS (Ben, 2026-11-23: "build the fret
+    contact physics"): the slap's thumb and the pop's snap, simulated --
+    examples/fret_contact.py, a modal string (this class's own: its stretch,
+    each mode's damping) against the frets' Hertzian contact (Issanchou et
+    al., JSV 2017; JASA 2018), the setup and the stroke named there -- and
+    baked, per key and stroke, into fretcontact_data.py: each mode's level
+    after the contact (over the free string's first, under the same stroke)
+    and its envelope in two stages, the contact's fast fall and the share
+    that rings on at the string's own rate (the kernel's aftersound). The
+    stroke's force is the note's: sqrt(attack_volume) between the table's
+    strokes. The pluck's comb, its notch and tilt, give way to the table;
+    the pickup reads it as it reads any string.
+    """
+    fret_contact = None             # the stroke's table (fretcontact_data.TABLES key); None = off
+
+    def __init__(self, frequency=256.0, *args, **kwargs):
+        super().__init__(frequency, *args, **kwargs)
+        self._fc = fret_contact_modes(self.fret_contact, float(frequency), self.attack_volume) \
+            if self.fret_contact else None
+
+    def series_volume(self, harmonic):
+        fc = self._fc
+        if fc is None:
+            return super().series_volume(harmonic)
+        if (self.max_harmonic and harmonic > self.max_harmonic) or harmonic > len(fc):
+            return 0.0
+        v = self.gain * fc[harmonic - 1][0]
+        if self.pickup_points:
+            v *= self.pickup_gain(harmonic)
+        if harmonic % 2 == 0 and self.even_harmonic_db is not None:
+            v *= 10.0 ** (self.even_harmonic_db / 20.0)
+        return v
+
+    def harmonic_decay(self, harmonic):
+        fc = self._fc
+        slow = super().harmonic_decay(harmonic)
+        if fc is None or harmonic > len(fc) or fc[harmonic - 1][1] >= 1.0:
+            return slow
+        return max(fc[harmonic - 1][2], slow)
+
+    def aftersound_partial(self, f0, m, decay_rate):
+        fc = self._fc
+        if fc is None or m > len(fc) or fc[m - 1][1] >= 1.0:
+            return (0.0, decay_rate)
+        return (fc[m - 1][1], super().harmonic_decay(m))
+
+
+_FC_DATA = None
+
+
+def fret_contact_modes(table, frequency, attack_volume):
+    """[(amp, share, fast)] for each mode of a note, from the baked table:
+    linear in the key (69 + 12 log2(f/440)) and in the stroke
+    (sqrt(attack_volume)), each held at the table's ends."""
+    global _FC_DATA
+    if _FC_DATA is None:
+        import fretcontact_data as _FC_DATA_
+        _FC_DATA = _FC_DATA_
+    keys, vels, grid = _FC_DATA.KEYS, _FC_DATA.VELS, _FC_DATA.TABLES[table]
+    key = 69.0 + 12.0 * _log(frequency / 440.0) / _log(2.0)
+    kf = min(max(key - keys[0], 0.0), float(len(keys) - 1))
+    i = int(kf)
+    i1 = min(i + 1, len(keys) - 1)
+    wk = kf - i
+    vv = min(max(_sqrt(max(attack_volume, 0.0)), vels[0]), vels[-1])
+    j = 0
+    while j + 2 < len(vels) and vv > vels[j + 1]:
+        j += 1
+    wv = (vv - vels[j]) / (vels[j + 1] - vels[j])
+    out = []
+    for m in range(len(grid[i][j])):
+        row = []
+        for q in range(3):
+            a = grid[i][j][m][q] + (grid[i][j + 1][m][q] - grid[i][j][m][q]) * wv
+            b = grid[i1][j][m][q] + (grid[i1][j + 1][m][q] - grid[i1][j][m][q]) * wv
+            row.append(a + (b - a) * wk)
+        out.append(tuple(row))
+    return out
+
+
+class SlapBassProperties(FretContact, ElectricBassProperties):
     """GM 36. The thumb struck against the string, over the fingerboard.
 
     WHAT MAKES A SLAP BRIGHT IS A COLLISION. The thumb drives the string down
@@ -12753,31 +12921,19 @@ class SlapBassProperties(ElectricBassProperties):
     contacts is very nearly an impulse, and an impulse is broadband, which is
     where a slapped bass gets a top end that no amount of plucking produces.
 
-    HONESTLY, THIS APPROXIMATES THAT RATHER THAN MODELLING IT. A string
-    colliding with a fret is a moving boundary condition and this engine has no
-    way to say that. What it can say is the consequence: a hard, narrow, near
-    point-source excitation, which is `strike_depth` 1.0 at a small
-    `strike_point` -- a comb whose first null is past the 16th harmonic instead
-    of at the 8th. That gets the brightness and the attack. It does not get the
-    rattle, which is a separate sound and would want noisegen.
+    SINCE 2026-11-23 IT IS MODELLED (FretContact): the thumb, a mass on its
+    flesh's spring, drives the string down at the fingerboard's end; the
+    string strikes the frets under it and rattles off them, simulated mode by
+    mode against the frets' Hertzian contact (examples/fret_contact.py) and
+    baked -- the pluck's nulls fill, the top stands 20-50 dB over a free
+    string's for its first 50 ms, the fundamental gives some of its energy up.
+    (IDMT's slap no longer read, licences.md L3.)
 
     The drive is up as well, because a slapped bass is the one case where a
     bass player does push the front end.
     """
-    # FITTED (--ladder=36) to the slap thumb on all three basses: 10.2 -> 7.9 dB.
-    # The rest is the string slapping the frets in its first 60 ms, a buzz
-    # this voice does not model.
+    fret_contact = 'SlapBassProperties'      # (fretcontact_data's: the thumb's stroke)
     pickup_points = (0.098, 0.168)
-    strike_point = 0.09256
-    strike_depth = 0.9445
-    tonal_dampening = 1.797
-    # THE NOTE-OFF IS THE PLAYER'S DAMP, MEASURED (examples/egtr_fit.py --damp):
-    # IDMT-SMT-Bass stops every note by hand at ~2 s; 446 ST damps on three
-    # basses fall a median 116 dB/s, -40 dB in 0.34 s, our smoothstep's -40 dB
-    # at the same time. GM's sets had given it 0.08 s: a bassist's hand is
-    # gentler than their envelopes.
-    release_valve_time = 0.368
-    release_fraction_max = None
     # 7.5 kOhm against the Precision split coil's ~5.25 per half. A Jazz bridge
     # pickup is wound hot for the same reason every bridge pickup is: it sits
     # where the string barely moves. Same correction as the guitars'.
@@ -12791,8 +12947,8 @@ class SlapBassProperties(ElectricBassProperties):
     # A factor of two in amplitude is a conservative reading of that, and it
     # is why a bass rig has a compressor on it.
     _thumb = 2.0
-    initial_gain = 0.149728   # held at its level before the IDMT fit (egtr_fit.py), with
-    # amp_reference moving with it -- the drive as voiced (turns x coils x the family's base)
+    initial_gain = 0.120833   # its strum's peak held (examples/calib_peak.py --bass) through
+    # the 2026-11-23 refit, so the valve is driven as voiced; amp_reference unmoved
     amp_reference = 0.3513262871397849
     amp_drive = 1.45
     amp_imbalance = 0.35
@@ -12808,26 +12964,19 @@ class PoppedBassProperties(SlapBassProperties):
     does either, so this is a CONVENTION and is marked as one: 2 is taken as
     the more aggressive of the pair. A pop pulls the string further before it
     releases, so it hits the frets harder and drives the amplifier harder.
-    Nothing here is a measurement.
+    Since 2026-11-23 its stroke is simulated as the slap's is (FretContact,
+    examples/fret_contact.py): a finger hooks the string at the fingerboard's
+    end, pulls it 2-8 mm up by the stroke's force and lets go, and it snaps
+    back onto the frets. (IDMT's pop no longer read, licences.md L3.)
     """
-    # FITTED (--ladder=37) to the slap pluck on all three basses: 10.8 -> 6.3 dB.
-    strike_point = 0.09513
-    strike_depth = 0.6564
-    tonal_dampening = 2.184
-    # THE NOTE-OFF IS THE PLAYER'S DAMP, MEASURED (examples/egtr_fit.py --damp):
-    # IDMT-SMT-Bass stops every note by hand at ~2 s; 458 SP damps on three
-    # basses fall a median 105 dB/s, -40 dB in 0.38 s, our smoothstep's -40 dB
-    # at the same time. GM's sets had given it 0.08 s: a bassist's hand is
-    # gentler than their envelopes.
-    release_valve_time = 0.404
-    release_fraction_max = None
+    fret_contact = 'PoppedBassProperties'    # (fretcontact_data's: the pop)
     # ...and it costs level to take it, because the extra drive compresses.
     # Measured, the harder setting alone put GM 37 1.5 dB UNDER GM 36, which
     # is backwards for the more aggressive of the pair. A pop pulls the string
     # further before it lets go, so it arrives with more of everything.
     _pop = 1.25
-    initial_gain = 0.228738   # held at its level before the IDMT fit (egtr_fit.py), with
-    # amp_reference moving with it -- the drive as voiced (turns x coils x the family's base)
+    initial_gain = 0.0838866   # its strum's peak held (examples/calib_peak.py --bass) through
+    # the 2026-11-23 refit, so the valve is driven as voiced; amp_reference unmoved
     amp_reference = 0.5367177299354837
     amp_drive = 3.41
     amp_imbalance = 0.45

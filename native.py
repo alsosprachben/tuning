@@ -112,7 +112,11 @@ class VoiceSnap(ctypes.Structure):
                 ('pk_q0', C * 4), ('pk_sign', C * 4), ('pk_turns', C), ('pk_width', C), ('pk_res_hz', C),
                 ('pk_qf', C), ('lp_hz', C), ('lp_order', C), ('os_hz', C * 8), ('fret_max', C), ('pk_sp', C),
                 ('pk_q', C * 4), ('n_touch', I), ('touches', I * 4), ('touch0', I), ('touch', I), ('leak_set', I),
-                ('leak_db', C), ('leak_dbs', C), ('ml_spread', C), ('ml_knee', C), ('ml_time', C),
+                ('leak_db', C), ('leak_dbs', C),
+                ('sp_decay', I), ('sp_B', I), ('sp_scale', C), ('sp_gauge', C * 8), ('sp_core', C * 8), ('sp_mass', C),
+                ('sp_wind', C), ('sp_qte', C), ('sp_g', C), ('sp_fall', C), ('sp_fexp', C), ('sp_joint', C), ('sp_body', C),
+                ('sp_mount', C), ('fc_tab', I), ('n_fc', I), ('fc_amp', C * 64), ('fc_share', C * 64),
+                ('fc_fast', C * 64), ('ml_spread', C), ('ml_knee', C), ('ml_time', C),
                 ('n_mute', I), ('mute', (C * 2) * 24), ('n_tube', I), ('tube_ref_hz', C), ('tube', (C * 4) * 32),
                 ('or_set', I), ('or_share', C), ('or_db', C * 2), ('or_lowest_hz', C), ('or_g', C),
                 ('dul_n', I), ('dhz_set', I), ('dul_beat', C * 2), ('dhz_db', C), ('dhz_pow', C), ('pps', C),
@@ -561,6 +565,7 @@ def _load():
             ('nv_voice_init', None, [ctypes.POINTER(VoiceInit), P, C, C, C, C, C, ctypes.POINTER(PyRandomState),
                                      P, ctypes.POINTER(VoiceNote)]),
             ('nv_voice_bodies_set', I, [I, ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p, I]),
+            ('nv_fret_contact_set', I, [I, I, I, I, C, ctypes.c_void_p, ctypes.c_void_p]),
             ('nv_voice_body', I, [ctypes.c_char_p]),
             ('nv_voice_part', I, [I, ctypes.POINTER(C), ctypes.POINTER(C)]),
             ('nv_note', I, [ctypes.POINTER(NoteClass), ctypes.POINTER(NoteIn), ctypes.POINTER(PyRandomState), I,
@@ -1465,9 +1470,23 @@ def electric_voice(cls):
         return False
     touched = bool(cls.harmonic_touch or getattr(cls, 'touches', ()))
     # (GuitarHarmonicsProperties' decay is SynthProperties' own, by the partial heard)
+    # (a bass's string from its physics: ElectricBassProperties' decay -- unless
+    # its own law, decay_physics off: the fretless's -- and its B)
+    sp = bool(getattr(cls, 'string_physics', False))
     own = dict(_HARMONIC_OWN, bore_gain='SynthProperties', _body_trim=None,
-               harmonic_decay='GuitarHarmonicsProperties' if touched else 'ElectricGuitarProperties',
-               pickup_gain='SynthProperties', inharmonicity_coefficient_for_frequency='ElectricGuitarProperties')
+               harmonic_decay='GuitarHarmonicsProperties' if touched else (
+                   'ElectricBassProperties' if sp else 'ElectricGuitarProperties'),
+               pickup_gain='SynthProperties', inharmonicity_coefficient_for_frequency=(
+                   'ElectricBassProperties' if sp else 'ElectricGuitarProperties'))
+    fc = bool(getattr(cls, 'fret_contact', None))
+    if fc:
+        # (a string driven into its frets: FretContact's baked stroke over the
+        # bass's string -- its volume, its fall, the ring under it)
+        if not sp:
+            return False
+        own = dict(own, series_volume='FretContact', harmonic_decay='FretContact')
+        if _owner(cls, 'aftersound_partial') != 'FretContact' or not fret_contacts(lib()):
+            return False
     if plectrum_voice(cls) and not touched:
         # (a pick over the electric's own -- the pedal steel's bar and pick,
         # GM 2's 26.8: Plectrum's boost, fall and ring wrapping them, VoiceSnap.pick_*)
@@ -1478,7 +1497,10 @@ def electric_voice(cls):
         own = dict(own, harmonic_volume='Plectrum', harmonic_decay='Plectrum')
     if any(_owner(cls, n) != o for n, o in own.items()):
         return False
-    inits = ('SynthProperties', 'ElectricGuitarProperties', 'object') + (('GuitarHarmonicsProperties',) if touched else ())
+    inits = ('SynthProperties', 'ElectricGuitarProperties', 'object') + (('GuitarHarmonicsProperties',) if touched else ()) \
+        + (('ElectricBassProperties',) if sp else ()) + (('FretContact',) if fc else ())
+    if sp and not (len(cls.open_strings_hz or ()) == len(cls.string_gauges_in) == len(cls.string_cores_in)):
+        return False
     if any(k.__name__ not in inits for k in cls.__mro__ if '__init__' in k.__dict__):
         return False
     if touched and not (len(getattr(cls, 'touches', ()) or ()) <= 4 and cls.open_strings_hz
@@ -2469,6 +2491,18 @@ def snapshot(props):
             s.touch0, s.touch = int(c.harmonic_touch or 0), int(p.harmonic_touch or 0)
             s.leak_set = int(c.touch_leak_db is not None)
             s.leak_db, s.leak_dbs = float(c.touch_leak_db or 0.0), float(getattr(c, 'touch_leak_dbs', 0.0) or 0.0)
+            if getattr(c, 'string_physics', False):
+                # (a bass's string from its physics: ElectricBassProperties)
+                s.sp_B = 1
+                s.sp_decay = int(bool(c.decay_physics))
+                s.sp_scale = float(c.scale_length_m)
+                s.sp_gauge[:s.n_os] = [float(g) for g in c.string_gauges_in]
+                s.sp_core[:s.n_os] = [float(g) for g in c.string_cores_in]
+                s.sp_mass, s.sp_wind, s.sp_qte = float(c.string_mass_share), float(c.winding_loss), float(c.thermoelastic_q)
+                s.sp_g, s.sp_fall, s.sp_fexp = float(c.bearing_conductance), float(c.bearing_fall), float(c.bearing_freq_exp)
+                s.sp_joint, s.sp_body, s.sp_mount = float(c.neck_joint), float(c.bearing_body_share), float(c.mounting_dbs)
+            if getattr(c, 'fret_contact', None):
+                s.fc_tab = 1 + fret_contact_names().index(c.fret_contact)     # (its modes: the note's, nv_voice_init's)
             if clav_voice(c):
                 # (a Clavinet's coil and key-up by the note: nv_voice_init's)
                 s.clav, s.cl_sel = 1, _CLAV_SEL[c.clav_pickup]
@@ -2806,6 +2840,40 @@ def sung_voice(cls):
 
 
 _VB_SET = [False]
+_FC_SET = [False]
+
+
+def fret_contact_names():
+    """tonelib.FretContact's tables, in the order the engine holds them."""
+    import fretcontact_data as F
+    return sorted(F.TABLES)
+
+
+def fret_contact_blob():
+    """(nt, nk, nv, nm, key0, vels, data): fretcontact_data's tables flat,
+    [table][key][stroke][mode][amp, share, fast], as nv_fret_contact_set takes them."""
+    import fretcontact_data as F
+    names = fret_contact_names()
+    nk, nv = len(F.KEYS), len(F.VELS)
+    nm = len(F.TABLES[names[0]][0][0])
+    data = [float(x) for n in names for krow in F.TABLES[n] for vrow in krow for mode in vrow for x in mode]
+    return len(names), nk, nv, nm, float(F.KEYS[0]), [float(v) for v in F.VELS], data
+
+
+def fret_contacts(d):
+    """FretContact's tables into the engine (nv_fret_contact_set) -- once,
+    the first time a class of it is the engine's."""
+    if _FC_SET[0]:
+        return 1
+    if d is None:
+        return 0
+    try:
+        nt, nk, nv, nm, k0, vels, data = fret_contact_blob()
+    except ImportError:
+        return 0
+    ok = d.nv_fret_contact_set(nt, nk, nv, nm, k0, (C * nv)(*vels), (C * len(data))(*data))
+    _FC_SET[0] = bool(ok)
+    return ok
 
 
 def voice_bodies(d):
@@ -2836,7 +2904,8 @@ def init_supported(cls):
         # (and [RND]'s, RandomStrike: its four draws the caller's, VoiceInit.rnd_draws)
         if any(k.__name__ not in ('SynthProperties', 'object', 'RandomStrike', 'MellotronMixin') for k in cls.__mro__
                if '__init__' in k.__dict__ and not (k.__name__ == 'ElectricPianoProperties' and ep_voice(cls))
-               and not (k.__name__ in ('ElectricGuitarProperties', 'GuitarHarmonicsProperties') and electric_voice(cls))
+               and not (k.__name__ in ('ElectricGuitarProperties', 'GuitarHarmonicsProperties', 'FretContact')
+                        and electric_voice(cls))
                and not (k.__name__ == 'ClavinetProperties' and clav_voice(cls))
                and not (k.__name__ in _STOPPED_INITS and stopped_voice(cls) and harmonic_voice(cls))
                and not (k.__name__ == '_VocalBody' and sung_voice(cls))):
@@ -2919,6 +2988,8 @@ def _class(cls):
         elif c.kind == 4 and cls.inharmonicity_dynamic:
             c.b_law = 3                         # (the steel's law)
             c.law_k, c.law_p = cls.inharmonicity_law
+            if getattr(cls, 'string_physics', False) and electric_voice(cls):
+                c.b_law = 6                     # (...or a bass string's, from its core: the snapshot's sp_*)
             if _owner(cls, 'inharmonicity_coefficient_for_frequency') == 'HammeredDulcimerProperties':
                 c.b_law = 4                     # (...under the dulcimer's bass bridge, its own)
                 c.bb_hz, c.bb_B = float(cls.bass_bridge_hz), float(cls.bass_bridge_B)
