@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """The PLECTRUM (tonelib.Plectrum) fitted to picked takes: the 12-string's
-(markiboy123's melody notes, Freesound CC0), the mandolin's (the Philharmonia's free samples) and the lap steel's
-fingerpicks (Lapsteel Articulations) -- sources.md.
+(markiboy123's melody notes, Freesound CC0), and the mandolin's (the Philharmonia's free samples) -- sources.md. (The lap
+steel's Pianobook takes are no longer read: licences.md L7.)
 
     python3 examples/plectrum_fit.py measure          recorded against ours
     python3 examples/plectrum_fit.py fit              the three stages, printed
@@ -42,11 +42,6 @@ VOICES = {
                  [("philharmonia/Strings/mandolin/wav_normal/mandolin_%s_very-long_piano_normal.wav" % n, k)
                   for n, k in (("G3", 55), ("B3", 59), ("Ds4", 63), ("G4", 67), ("B4", 71),
                                ("Ds5", 75), ("G5", 79), ("B5", 83))], True),
-    # (the lap steel's fingerpicks give no transient -- its top does not fall,
-    # FALL ~0 -- and it is fitted without one: kept here to measure)
-    "lapsteel": ("HawaiianGuitarProperties", 26, 8,
-                 [("lapsteel/x/samples/open/E3.wav", 40), ("lapsteel/x/samples/open/E4.wav", 52),
-                  ("lapsteel/x/samples/open/B4.wav", 59), ("lapsteel/x/samples/open/E5.wav", 64)], True),
 }
 
 

@@ -30302,48 +30302,52 @@ class MandolinProperties(Plectrum, SteelGuitarProperties):
 
 
 class HawaiianGuitarProperties(Plectrum, JazzGuitarProperties):
-    """GS 26.8, "Hawaiian Gt.": a LAP STEEL -- a hollow-body guitar played flat,
-    its strings stopped by a steel bar instead of frets. Fitted to David Long's
-    (Pianobook, Lapsteel Articulations; examples/pluck_fit.py --voice=lapsteel):
-    its six open strings (open E, E2-E4; the pack labels each an octave high,
-    and its "A3" is a note slid into with the bar, left out).
+    """GS 26.8, "Hawaiian Gt.": a LAP STEEL -- a guitar played flat, its
+    strings stopped by a steel bar instead of frets, its pickup a single coil.
+    From PHYSICS since 2026-11-22 (the Pianobook Lapsteel Articulations
+    takes, Jack Brough's on David Long's instrument, no longer read, L7): the strings' own losses and the tone circuit,
+    each from published numbers; Eagledj's steel clips (Commons, CC0) heard
+    as references, too damped and slid to measure.
 
-    IT SUSTAINS: the decay fitted to them, the low harmonics ringing at 2-6
-    dB/s where the archtop's die at 6-8 -- a solid neck, high strings, no
-    frets to damp."""
+    IT SUSTAINS: a solid body, no frets to damp -- the strings' losses
+    (examples/lapsteel_physics.py) ring E2's fundamental at under 2 dB/s and
+    shed a plain string's upper harmonics fast."""
     # ITS PICKUP SWITCH, the part's to set (the AMP card): a lap steel's own: no switch
     pickup_family = None
-    # FINGERPICKS, NOT A FLATPICK: the takes' top does not fall after the
-    # strike (examples/plectrum_fit.py, FALL ~0 dB) -- no transient boost
+    # NO TRANSIENT BOOST: thumb and finger picks, but the tone circuit below
+    # (its resonance at 505 Hz) takes the top a pick would add
     pick_slope_db = 0.0
-    # FITTED (pluck_fit.py --voice=lapsteel --fit=decay): 17.4 -> 10.2 dB/s rms
-    decay_db = 6.629
-    harmonic_decay_db = 0.3713
-    decay_register_slope = 0.6132
-    # ...AND DARK: the tone control rolled back on its pickup, loading the
-    # coil's resonance down and damping it (examples/lapsteel_tone.py, the
-    # open strings' third-octave colour 160 Hz-2.5 kHz: 13 -> 9.5 dB rms; the
-    # rest is each string's own comb, not a colour)
-    pickup_resonance_hz = 500.0
-    pickup_q = 0.5
+    # THE DECAY FROM STRING PHYSICS (examples/lapsteel_physics.py --fit):
+    # Issanchou et al.'s steel-string losses (air, viscoelastic, thermoelastic;
+    # JSV 2017, JASA 2018) on GHS's lap-steel E set at Fender's 22.5" scale,
+    # plus Pate et al.'s solid-body mounting (+1.3 dB/s) -- 6.1 -> 3.9 dB/s
+    # rms over h1-h12 of the six open strings (the rest the step from the
+    # wound E3 to the plain G#3, which one smooth law cannot take)
+    decay_db = 3.471
+    harmonic_decay_db = 1.523
+    decay_register_slope = 1.084
+    # ...AND DARK: THE TONE CONTROL ALL THE WAY DOWN, from the circuit: a lap
+    # steel's single coil, ~3 H and ~7 kOhm, with a 0.033 uF tone capacitor
+    # across it at the pot's end -- 1/(2 pi sqrt(LC)) = 505 Hz, damped by the
+    # coil's and the pot's residual resistance in series (~17 kOhm):
+    # Q = sqrt(L/C)/R = 0.56
+    pickup_resonance_hz = 505.0
+    pickup_q = 0.56
     # ITS OTHER OPEN STRINGS ANSWER through the bridge, where their harmonics
     # lie near the note's -- coincidence over a fixed set (sympathetic.py), no
     # narrower than the pluck's spread (sympathetic_width_hz): open E,
-    # E2 B2 E3 G#3 B3 E4. Measured, under an E3 the E2 string's 2nd harmonic
-    # rings 13 dB under the note -- 1.7 Hz below it, beating, the low E tuned
-    # 15 cents flat of the E3 (each string's tuning on this instrument, cents
-    # against the table that puts its E3 where it was); the others 35-49 under. What Ben heard as
-    # "more inharmonicity on the recording, especially lower": the string's
-    # own stretch is LESS than the archtop's (E2's 10th 19 cents, ours 35).
+    # E2 B2 E3 G#3 B3 E4
     sympathetic_mode = 'coincidence'
     sympathetic_strings = (0, 7, 12, 16, 19, 24)
     sympathetic_tonic = 40
-    sympathetic_string_cents = (-15.0, -3.1, 0.0, -8.8, -3.0, -3.6)   # re E3, as tuned
+    # (tuned true: the offsets once read were one instrument's tuning on the day)
+    sympathetic_string_cents = (0.0, 0.0, 0.0, 0.0, 0.0, 0.0)
     sympathetic_width_hz = 2.0
     sympathetic_per_mode = True
-    # the E2 string's 2nd harmonic under an E3: -14 dB, the take's -13 (its
-    # 4th -52, G#3 -60: the take's -40 and -46); every string coupled alike
-    sympathetic_gain = 0.7
+    # every string coupled alike; the level by Ben's ear (2026-11-22: "a bit
+    # much. Maybe half that?" -- 0.7 halved, the E2 string's 2nd harmonic
+    # ~20 dB under an E3)
+    sympathetic_gain = 0.35
     sympathetic_max = 5
     sympathetic_floor = 0.0
 

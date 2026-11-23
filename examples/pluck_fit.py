@@ -921,7 +921,9 @@ def main(argv):
     BANK = BANKS.get(voice, 0)
     if "--stage" in argv:
         if voice == "lapsteel":
-            stage_files("open", os.path.expanduser("~/Documents/refs/lapsteel/x/samples/open/*.wav"))
+            # (the Pianobook lap-steel takes are no longer read, licences.md L7:
+            # the voice is from physics, examples/lapsteel_physics.py)
+            raise SystemExit("lapsteel: retired 2026-11-22, see examples/lapsteel_physics.py")
         elif voice == "mandolin":
             stage_mandolin()
         elif voice == "ukulele":

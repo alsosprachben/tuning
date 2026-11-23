@@ -149,7 +149,7 @@ store build.
   (uploaded by a third party), Khaled Arman with the Geneva Camerata (with an
   ensemble). Ermlick's is the cleanest; its licence is the uploader's own.
 
-### L7. Three Pianobook libraries — Pianobook's terms forbid it
+### L7. Two Pianobook libraries — Pianobook's terms forbid it
 
 - **The terms** (pianobook.co.uk/terms-conditions, section 5): the samples are
   licensed "only within your own newly-created sound recording(s)"; the
@@ -163,7 +163,6 @@ store build.
 - **What derives from them:**
   - the harpsichord's 4' (Harpsimachord);
   - the tonewheel organ's 16', 5 1/3', 1 3/5', percussion and speaker (Hammond L102);
-  - Hawaiian Guitar (lap steel);
   - Gopichant (The Ektara);
 - **Status:** open, and the largest issue by count. Each samplist can grant
   permission; otherwise each voice needs another source.
@@ -228,10 +227,14 @@ store build.
   - **Taisho Koto:** a direct replacement. msx2plus's "multisampled
     taishogoto" (Freesound, CC0): every note, 48 kHz. Also RutgerMuller's
     improvisation (CC0, 96 kHz, with the drone string).
-  - **Hawaiian Guitar:** no lap-steel multisample. Eagledj's pedal-steel clips
-    (Commons, CC0/PD: all ten open strings plucked singly, and bar slides) and
-    Make Noise's "Drop of Sun" pedal-steel reel (Freesound, CC0). The string,
-    bar and pickup physics are a lap steel's.
+  - **Hawaiian Guitar: rebuilt 2026-11-22 from physics** (no lap-steel
+    multisample is open): the decay from published steel-string losses
+    (Issanchou et al., JSV 2017 / JASA 2018) on GHS's lap-steel E set at
+    Fender's 22.5" scale plus Pate et al.'s solid-body mounting (JASA 2014);
+    the tone from the circuit (tone knob down: 505 Hz, Q 0.56); open strings
+    tuned true; the sympathy's level by Ben's ear (halved). Eagledj's steel
+    clips (Commons, CC0) heard as references. APPROVED ("Sounds good"); the
+    Lapsteel Articulations credit gone.
   - **12-string Guitar: refitted 2026-11-22** from physics and played
     recordings, on our Iowa-fitted steel-string: the courses' detune read off
     markiboy123's "12 String Waves" (Freesound 422047, CC0; six melody notes,

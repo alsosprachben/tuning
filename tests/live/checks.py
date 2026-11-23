@@ -70,7 +70,7 @@ CHECKS = [
     ("moog_cmx", "nvrender_check.py", ["@moog_cmx.mid"], {}),
     # a part's speaker and pickup (CC83, CC85: after the program change that
     # puts them back), a channel's Messenger mode (CC86), presets' setup measures
-    ("choices_files", "nvrender_check.py", ["@pk_reset.mid", "@pk_strat_bridge.mid", "@pk_clav_anti.mid", "@clav_compass.mid", "@feedback_held.mid", "@dulcimer_compass.mid", "@flugel_phrase.mid", "@mandolin_compass.mid", "@guitar12_compass.mid",
+    ("choices_files", "nvrender_check.py", ["@pk_reset.mid", "@pk_strat_bridge.mid", "@pk_clav_anti.mid", "@clav_compass.mid", "@feedback_held.mid", "@dulcimer_compass.mid", "@flugel_phrase.mid", "@mandolin_compass.mid", "@guitar12_compass.mid", "@hawaiian_compass.mid",
                                             "@pk_ibanez_inside.mid", "@cab_gt412.mid", "@cab_org16les.mid",
                                             "@msgr_mode.mid", "@setup_guitar_rig.mid", "@setup_organ_full.mid",
                                             "@setup_moog.mid", "4"], {}),
@@ -98,6 +98,8 @@ CHECKS = [
     ("mandolin_live", "nvlive_check.py", ["@mandolin_compass.mid", "40", "--programs"], {}),
     # the 12-string: octave and unison courses, the pick
     ("guitar12_live", "nvlive_check.py", ["@guitar12_compass.mid", "16", "--programs"], {}),
+    # the lap steel: its sustain and coincidence sympathy
+    ("hawaiian_live", "nvlive_check.py", ["@hawaiian_compass.mid", "22", "--programs"], {}),
     ("eastern", "nvlive_check.py", ["@eastern.mid", "6", "--program=104",
                                     "--eastern-at=3.2:raga:bel_todi/todi@c#"], {}),
     ("rolls", "nvlive_check.py", ["@rolls.mid", "14", "--drums", "--program=0", "--programs"], {}),
