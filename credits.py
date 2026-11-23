@@ -533,25 +533,20 @@ SOURCES = [{'id': 'iowa-mis',
               'in or in relation to any competitive products that are sold or relicensed to any third parties." FAQ: '
               'forbidden "to sell or redistribute the sample libraries". Pack readme has no licence of its own.',
   'match': ['John\\ Magner']},
- {'id': 'pb-eclectic-mandolin',
+ {'id': 'philharmonia-mandolin',
   'group': 'Guitars and basses',
-  'title': 'Eclectic Mandolin',
-  'author': 'Joshua Meltzer',
-  'url': 'https://www.pianobook.co.uk/packs/eclectic-mandolin/',
-  'licence': 'Pianobook terms',
-  'licence_url': 'https://www.pianobook.co.uk/terms-conditions/',
+  'title': 'Sound samples: mandolin',
+  'author': 'the Philharmonia Orchestra',
+  'url': 'https://philharmonia.co.uk/resources/sound-samples/',
+  'licence': 'Philharmonia sound samples licence',
+  'licence_url': 'https://philharmonia.co.uk/resources/sound-samples/',
   'how': 'fitted',
-  'voices': 'Mandolin and plectrum courses',
-  'issue': 'L7',
-  'evidence': 'https://www.pianobook.co.uk/terms-conditions/ (EULA, fetched 2026-11-20) s.5: licence only "to use '
-              'the download Sound File(s) only within your own newly-created sound recording(s) and/or '
-              'performances"; "expressly forbids resale or other distribution of the Products or their derivatives, '
-              'either as they exist in the library, reformatted ..., or mixed, combined, filtered, re-synthesised or '
-              'otherwise edited, for use as sounds, multi-sounds, samples, multi-samples, sound sets, programmes or '
-              'patches in a sampler, microchip, computer or any sample playback device"; "Products may not be used '
-              'in or in relation to any competitive products that are sold or relicensed to any third parties." FAQ: '
-              'forbidden "to sell or redistribute the sample libraries". Pack readme has no licence of its own.',
-  'match': ['Joshua\\ Meltzer']},
+  'voices': 'Mandolin, its courses and pick',
+  'evidence': 'https://philharmonia.co.uk/resources/sound-samples/ (fetched 2026-11-22), Licensing: "You are free '
+              'to use these samples as you wish, including releasing them as part of a commercial work. The only '
+              'restriction is that they must not be sold or made available \'as is\' (i.e. as samples or as a '
+              'sampler instrument)." No samples are shipped: fitted numbers only.',
+  'match': ['Philharmonia']},
  {'id': 'fs-fretless-fairedesvagues',
   'group': 'Guitars and basses',
   'title': 'fretless_bass',

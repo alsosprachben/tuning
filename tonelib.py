@@ -30232,51 +30232,61 @@ class UkuleleProperties(Plectrum, NylonGuitarProperties):
 
 class MandolinProperties(Plectrum, SteelGuitarProperties):
     """GS 25.16, "Mandolin": four UNISON COURSES of steel strings on a small
-    body -- fitted to Joshua Meltzer's late-1800s mandolin (Pianobook, Eclectic
-    Mandolin, carved from its monolith; examples/pluck_fit.py --voice=mandolin),
-    which sounds from D3: an old instrument tuned low. Each note's course is a
-    pair, a voice on every harmonic 5.5 cents off (its doublets 2-13 cents,
-    median ~5.5)."""
+    body -- fitted 2026-11-22 to the Philharmonia's free samples (every note
+    G3-A6 plucked at piano; examples/pluck_fit.py --voice=mandolin, which
+    high-passes a handling thump off each and cuts it where the player damps
+    it), standard tuning G3 D4 A4 E5. Each note's course is a pair, a voice on
+    every harmonic 2.9 cents off. Ben: "Sounds even better than the old." """
     # THE PARTNER ~7 dB UNDER (examples/course_sympathy.py --voice=mandolin,
-    # each harmonic's beating over the 13 notes: 5.4 cents, -7.2 dB median,
-    # which ours at 0.45 reads as -- the measure reads a shallow beat ~0.3 dB
-    # deep, a deep one 1.9): 0.9 before, from the doublets' peaks. The level
-    # held where the 0.9 pair put it
+    # each harmonic's beating over the takes: 2.9 cents, -6.8 dB median, which
+    # ours at 0.45 reads as too). The level held where an older 0.9 pair put it
     unison_partner_gain = 0.45
-    unison_partner_cents = 5.5
+    unison_partner_cents = 2.9
     initial_gain = SteelGuitarProperties.initial_gain * ((1.0 + 0.9 ** 2) / (1.0 + 0.45 ** 2)) ** 0.5
     # ITS OTHER OPEN COURSES ANSWER, KICKED THROUGH THE BRIDGE as the oud's
-    # are (contact over a fixed set): tuned a fourth low, D3 A3 E4 B4. The
-    # D course rings at its own harmonics under 10 of the 13 notes, 29-44 dB
-    # under (its 146.8 Hz under A3, B3, D#4 and B4, where nothing of the note
-    # lands), the A course seldom (35-42 under), the E and B hardly at all
+    # are (contact over a fixed set): G3 D4 A4 E5. In the takes the G and D
+    # courses ring alike (68 and 74 peaks, median 31-33 dB under the note), the
+    # A and E ~8 dB less and a third as often
     sympathetic_mode = 'contact'
     sympathetic_strings = (0, 7, 14, 21)
-    sympathetic_tonic = 50
-    sympathetic_string_db = (0.0, -10.0, -25.0, -25.0)
-    # (fitted to the 19 peaks: mean -0.8 dB, rms 6.9)
-    sympathetic_gain = 0.025
+    sympathetic_tonic = 55
+    sympathetic_string_db = (0.0, 0.0, -8.0, -8.0)
+    # (course_sympathy.py --fit: the rms least at 0.19, 19.4 dB over 206 peaks
+    # -- the takes ring on more peaks than four contact strings make; ours
+    # still read ~9 dB under on the mean)
+    sympathetic_gain = 0.19
     sympathetic_max = 4
     sympathetic_floor = 0.0
-    # THE PICK (examples/plectrum_fit.py, on flatness and how fast the top
-    # falls -- not its level: the take is re-amped dark): a scrape at the
-    # note's level to 5.5 kHz gone at 700 dB/s, and the top partials struck
-    # 12 dB an octave over pick_hz, gone at 400 dB/s -- the take's top falls
-    # 24-42 dB by 0.1 s; the courses crossed 14 ms apart. (+6 dB scored a
-    # little better; the gentler level, after Ben's "too harsh")
+    # THE PICK (examples/plectrum_fit.py fit mandolin --stagger, a clean close
+    # mic so its level counts too): a scrape at the note's level to 7 kHz,
+    # rising 3 dB an octave, gone at 1100 dB/s; no boost on the partials (any
+    # scored worse); the courses crossed 14 ms apart
     pick_noise_db = 0.0
-    pick_noise_tilt_db = 0.0
-    pick_noise_hi_hz = 5500.0
-    pick_noise_dbs = 700.0
-    pick_slope_db = 12.0
+    pick_noise_tilt_db = 3.0
+    pick_noise_hi_hz = 7000.0
+    pick_noise_dbs = 1100.0
+    pick_slope_db = 0.0
     pick_boost_max_db = 24.0
-    pick_dbs = 400.0
+    pick_dbs = 60.0
     course_stagger_s = 0.014
-    # FITTED (pluck_fit.py --voice=mandolin --fit=decay): a short ring, the
-    # treble shorter (register slope 1.35), every harmonic near one rate
-    decay_db = 14.35
-    harmonic_decay_db = 0.01024
-    decay_register_slope = 1.35
+    # FITTED (pluck_fit.py --voice=mandolin --fit=decay, frames 10 dB over the
+    # noise around each harmonic): the treble shorter, each harmonic up ~4 dB/s
+    # faster -- 22 -> 14 dB/s rms, the rest each take's beating
+    decay_db = 3.354
+    harmonic_decay_db = 3.926
+    decay_register_slope = 0.5726
+    # A FLATPICK'S SPECTRUM, NEARLY FLAT (a pluck's displacement falls as
+    # 1/n^2, the bridge force as 1/n, the top radiates rising with frequency;
+    # the takes hold h2-h7 near the fundamental's level): 0.4 by the ladder at
+    # 0.15 s (10.6 dB rms against 10.8 at 0.75 and at 0 -- the rest each
+    # note's own), the colour by absolute frequency in body_trim_db
+    # (pluck_fit.py --fit=body)
+    tonal_dampening = 0.4
+    # (four passes: 9.6 -> 3.7 dB rms, third-octaves 200 Hz-10 kHz; the dip at
+    # 320-400 Hz against the inherited steel-string formants there)
+    body_trim_db = ((202, -2.1), (254, -2.7), (320, -18.9), (403, -24.0), (508, -5.2), (640, 7.5),
+                    (806, 1.8), (1016, -1.6), (1280, -0.2), (1613, 5.4), (2032, -7.0), (2560, -5.5),
+                    (3225, 11.3), (4064, 2.7), (5120, 7.0), (6451, -1.7), (8127, 6.4), (10240, 10.1))
 
     def unison_voices(self, frequency, harmonic, harmonic_decay):
         out = list(super().unison_voices(frequency, harmonic, harmonic_decay))

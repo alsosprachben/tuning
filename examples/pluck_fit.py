@@ -54,7 +54,7 @@ VOICES = {"sitar": (104, "SitarProperties", "sitar"), "banjo": (105, "BanjoPrope
           # GS 26.8 Hawaiian Gt. on David Long's hollow-body lap steel (Pianobook,
           # Lapsteel Articulations; sources.md): its open strings, one pluck a file
           "lapsteel": (26, "HawaiianGuitarProperties", "lapsteel"),
-          # GS 25.16 Mandolin on Joshua Meltzer's (Pianobook, Eclectic Mandolin),
+          # GS 25.16 Mandolin on the Philharmonia's free samples (since 2026-11-22),
           # carved from its monolith: its medium layer's long takes
           "mandolin": (25, "MandolinProperties", "mandolin"),
           # GS 107.8 Taisho Koto on Arthur Chanson's soprano taishogoto
@@ -87,6 +87,7 @@ HOP, WIN = 0.1, 0.2
 # plucks (the shamisen's) ring 0.3-0.7 s before the next, so they are read in
 # short frames over their first 0.3 s (VOICE_OPTS); a sitar's ring for seconds
 T_DECAY, T_END = 0.3, 5.0
+FLOOR_GUARD = False
 # ...and the prompt fall's (--fit=prompt): its bands read over P_SECS, from
 # PROMPT_X0 (the shamisen's knock is on every partial, so from 6 kHz)
 P_SECS = 0.6
@@ -96,7 +97,7 @@ PROMPT_X0 = (15.0, 0.3, 1200.0)
 # instrument was tuned -- its strings follow the table, so a pluck bent to the
 # take's pitch off an A440 table would sit up to 45 cents off its own strings
 TUNER = None
-VOICE_OPTS = {"mandolin": dict(T_END=3.0),
+VOICE_OPTS = {"mandolin": dict(T_END=3.0, FLOOR_GUARD=True),
               # (16 harmonics: its high notes, 929 Hz, have no 24th under Nyquist)
               "taisho": dict(T_END=4.0, NH=16),
               "taishodrone": dict(T_END=6.0),
@@ -192,27 +193,51 @@ def stage_files(label, pat, lo=60.0, hi=1500.0, skip=(), div=1, clear=True):
         print("  %s -> %s" % (os.path.basename(p), name))
 
 
-# the carved mandolin takes (wav/NN.wav, names.txt) with their pitch read by
-# a harmonic sum (their file numbers are not note order): the medium layer's,
-# 2.4 s and longer, across the range
-MANDOLIN = ((57, 149.2), (55, 166.7), (53, 186.4), (52, 197.8), (50, 219.2), (48, 247.8),
-            (58, 260.6), (47, 278.2), (45, 312.4), (44, 331.1), (42, 372.8), (40, 423.4),
-            (37, 496.4))
-
-
+# THE MANDOLIN'S TAKES (since 2026-11-22: Joshua Meltzer's Pianobook pack is no
+# longer read, licences.md L7): the Philharmonia's free samples (their licence:
+# "free to use these samples as you wish, including releasing them as part of a
+# commercial work", only not "sold or made available 'as is'"; Ben: the
+# licence is the written permission) -- every note G3-A6 plucked at piano,
+# mono mp3, decoded to ~/Documents/refs/philharmonia/Strings/mandolin/
+# wav_normal. Named at true pitch, "s" for sharp (As3, Cs4); each note's f0
+# refined near its name. Every other note, across the compass. EACH CUT: a
+# thump under 20 Hz (handling, ~15 dB under the note) comes 0.15-0.2 s before
+# the pick and set the onset early -- high-passed at 40 Hz, started 20 ms
+# before the envelope first reaches half its peak; and each note is HELD ~1.7 s
+# then DAMPED by the player -- cut where the envelope falls 20 dB in 0.1 s
+# (the damp, not the string's decay), with a 10 ms fade.
 def stage_mandolin():
     import shutil
     os.makedirs(STAGED, exist_ok=True)
     for f in glob.glob(os.path.join(STAGED, "*.wav")):
         os.remove(f)
-    d = os.path.expanduser("~/Documents/refs/mandolin_eclectic/wav")
-    for n, (i, f0) in enumerate(MANDOLIN):
-        x, sr = read(os.path.join(d, "%02d.wav" % i))
-        a = int(np.flatnonzero(np.abs(x) > 0.1 * np.abs(x).max())[0])
-        f0 = f0_of(x[a + int(0.1 * sr):a + int(1.1 * sr)], sr, f0 * 0.98, f0 * 1.02)
-        name = "medium_%d_f0_%.2f.wav" % (n, f0)
-        shutil.copy(os.path.join(d, "%02d.wav" % i), os.path.join(STAGED, name))
-        print("  %02d.wav -> %s" % (i, name))
+    pc = {"C": 0, "Cs": 1, "D": 2, "Ds": 3, "E": 4, "F": 5, "Fs": 6, "G": 7, "Gs": 8, "A": 9, "As": 10, "B": 11}
+    d = os.path.expanduser("~/Documents/refs/philharmonia/Strings/mandolin/wav_normal")
+    takes = []
+    for p in glob.glob(os.path.join(d, "mandolin_*_very-long_piano_normal.wav")):
+        m = re.match(r"mandolin_([A-G]s?)(\d)_", os.path.basename(p))
+        takes.append((pc[m.group(1)] + 12 * (int(m.group(2)) + 1), p))
+    from scipy.io import wavfile
+    from scipy.signal import butter, sosfiltfilt
+    for n, (key, p) in enumerate(sorted(takes)[::2]):
+        x, sr = read(p)
+        x = sosfiltfilt(butter(4, 40.0, "hp", fs=sr, output="sos"), np.asarray(x, float).reshape(len(x), -1).mean(1))
+        e = np.sqrt(np.convolve(x * x, np.ones(int(0.025 * sr)) / int(0.025 * sr), "same"))
+        a = max(0, int(np.flatnonzero(e > 0.5 * e.max())[0]) - int(0.02 * sr))
+        el = 20 * np.log10(e + 1e-12)
+        k10 = int(0.1 * sr)
+        # (no sooner than 0.8 s past the pick: a course's beat can dip 20 dB
+        # too, where the level comes back -- the damp's stays down)
+        damp = next((i for i in range(a + int(0.8 * sr), len(x) - k10, int(0.005 * sr))
+                     if el[i] - el[i + k10] > 20.0 and el[i + k10:].max() < el[i] - 15.0), len(x))
+        seg = x[a:damp].copy()
+        fade = int(0.01 * sr)
+        seg[-fade:] *= np.linspace(1.0, 0.0, fade)
+        nom = 440.0 * 2 ** ((key - 69) / 12.0)
+        f0 = f0_of(seg[int(0.05 * sr):int(1.05 * sr)], sr, nom * 0.97, nom * 1.03)
+        name = "normal_%d_f0_%.2f.wav" % (n, f0)
+        wavfile.write(os.path.join(STAGED, name), sr, (seg / max(1.0, np.abs(seg).max()) * 32767).astype(np.int16))
+        print("  %s -> %s  (%.2f s, cut at the damp)" % (os.path.basename(p), name, len(seg) / sr))
 
 
 # BEN'S UKULELE (sources.md, ukulele_ben/): its chromatic take, each string
@@ -433,14 +458,31 @@ def measure(x, sr, f0):
         if len(s) < W:
             break
         X = np.abs(np.fft.rfft(s * win, Nf))
+        # (a harmonic past the Nyquist is missing, not an error: a high note's
+        # 24th -- the Philharmonia mandolin's A6 -- lies past 22 kHz)
         L.append([20 * np.log10(X[np.abs(fs - k * f0) < 4 + 0.01 * k * f0].max() + 1e-9)
-                  for k in range(1, NH + 1)])
+                  if k * f0 < 0.45 * sr else np.nan for k in range(1, NH + 1)])
     L = np.array(L)
     tt = np.arange(len(L)) * HOP + WIN / 2
+    # FLOOR_GUARD (a voice's option -- the Philharmonia mandolin's mp3s): a
+    # harmonic's frames only where they stand 10 dB over the noise around it
+    # (the last frame's median across the harmonic's own band), and none at
+    # all for a harmonic never 25 over it -- the takes' upper harmonics sink
+    # into the floor in a few tenths and read as 1-8 dB/s there, flat noise
+    floor = np.full(NH, -np.inf)
+    if FLOOR_GUARD and len(L):
+        s = x[a + int((len(L) - 1) * HOP * sr): a + int((len(L) - 1) * HOP * sr) + W]
+        X = np.abs(np.fft.rfft(s * win, Nf))
+        for k in range(1, NH + 1):
+            b = np.abs(fs - k * f0) < 0.5 * f0
+            if k * f0 < 0.45 * sr and b.any():
+                floor[k - 1] = 20 * np.log10(np.median(X[b]) + 1e-9)
     rate = []
     for k in range(NH):
         y = L[:, k]
-        ok = (tt > T_DECAY) & (y > y.max() - 45)
+        ok = (tt > T_DECAY) & (y > y.max() - 45) & (y > floor[k] + 10)
+        if FLOOR_GUARD and not (np.nanmax(y) > floor[k] + 25):
+            ok &= False
         rate.append(-np.polyfit(tt[ok], y[ok], 1)[0] if ok.sum() > 5 else np.nan)
     ref = L[0, 0]
     j2 = min(len(L) - 1, int(round((2.0 - WIN / 2) / HOP)))

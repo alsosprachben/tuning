@@ -1,14 +1,15 @@
 """A coursed instrument's courses and its open courses' sympathy, read off
 its takes and ours by one measure: the oud (hammondman's three long notes,
-Freesound, CC0) and the mandolin (Joshua Meltzer's, Pianobook, as
-pluck_fit.py stages them; sources.md).
+Freesound, CC0) and the mandolin (the Philharmonia's free samples, as
+pluck_fit.py stages them; since 2026-11-22 -- Meltzer's Pianobook pack is no
+longer read).
 
   COURSES   each harmonic's envelope beats where the course's two strings
             sit a few cents apart: the beat's rate gives the split, its depth
             (peak to peak) the partner's level
   SYMPATHY  0.4-1.4 s in, the peaks that are not the note's own harmonics,
             each matched to an open course's harmonic (the oud's C2 F2 A2 D3
-            G3 C4, the mandolin's D3 A3 E4 B4 -- tuned a fourth low),
+            G3 C4, the mandolin's G3 D4 A4 E5 -- the standard tuning),
             in dB under the note's 1st -- 25 cents and more off the note's
             own harmonics, past its course partner's (which resolve as peaks
             beside them, 6-9 dB under)
@@ -35,7 +36,7 @@ VOICES = {
     # its staged notes name their pitch (pluck_fit.py --voice=mandolin --stage)
     "mandolin": dict(cls="MandolinProperties",
                      takes="~/Documents/refs/freesound/staged/mandolin/*.wav",
-                     open={"D3": 146.83, "A3": 220.0, "E4": 329.63, "B4": 493.88},
+                     open={"G3": 196.0, "D4": 293.66, "A4": 440.0, "E5": 659.26},
                      f0=None, top_hz=3000.0)}
 V = VOICES["oud"]
 

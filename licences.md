@@ -149,7 +149,7 @@ store build.
   (uploaded by a third party), Khaled Arman with the Geneva Camerata (with an
   ensemble). Ermlick's is the cleanest; its licence is the uploader's own.
 
-### L7. Five Pianobook libraries — Pianobook's terms forbid it
+### L7. Four Pianobook libraries — Pianobook's terms forbid it
 
 - **The terms** (pianobook.co.uk/terms-conditions, section 5): the samples are
   licensed "only within your own newly-created sound recording(s)"; the
@@ -164,7 +164,7 @@ store build.
   - the harpsichord's 4' (Harpsimachord);
   - the tonewheel organ's 16', 5 1/3', 1 3/5', percussion and speaker (Hammond L102);
   - Hawaiian Guitar (lap steel); 12-string Guitar (Fender 12 String);
-  - Mandolin (Eclectic Mandolin); Gopichant (The Ektara);
+  - Gopichant (The Ektara);
 - **Status:** open, and the largest issue by count. Each samplist can grant
   permission; otherwise each voice needs another source.
   - **Refitted 2026-11-20** (A/Bs in ~/Music/licence_refits): Taisho Koto
@@ -235,10 +235,16 @@ store build.
   - **12-string Guitar:** no per-note set. Kuzmanović's solo piece (Commons,
     CC BY-SA 4.0) for the paired-course detune and pick order, on top of the
     six-string fit.
-  - **Mandolin:** no open per-note set. lucasgonze's "Homestyle Mandolin"
-    (Freesound, CC0: 11 solo cues on a 1900 roundback). Philharmonia's single
-    notes are under its own terms: free for commercial use, not to be "sold or
-    made available 'as is'"; fitted numbers look compatible, your call.
+  - **Mandolin: refitted 2026-11-22** to the Philharmonia's free samples
+    (every note G3-A6). Their licence: "free to use these samples as you
+    wish, including releasing them as part of a commercial work", the only
+    restriction not to sell them or make them available "as is" (as samples
+    or a sampler instrument); we ship fitted numbers only. Their site's
+    general terms (clause 4: site content for personal, non-commercial use
+    without written permission) sit beside it; Ben's reading: the samples
+    page's licence IS that written permission, and their invitation to share
+    projects made with them is an opportunity. APPROVED by ear ("Sounds even
+    better than the old"); the Eclectic Mandolin credit gone.
   - **Gopichant (ektara):** nothing clean. A 29 s one-string solo (YouTube,
     CC BY) and Baul gopichand playing with its swoops, mixed with voices
     (YouTube CC BY, Commons CC BY-SA): fit a single pluck, take the bend law

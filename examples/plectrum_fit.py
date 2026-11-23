@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The PLECTRUM (tonelib.Plectrum) fitted to picked takes: the 12-string's
-(Fender, Pianobook), the mandolin's (Eclectic Mandolin) and the lap steel's
+(Fender, Pianobook), the mandolin's (the Philharmonia's free samples) and the lap steel's
 fingerpicks (Lapsteel Articulations) -- sources.md.
 
     python3 examples/plectrum_fit.py measure          recorded against ours
@@ -11,8 +11,8 @@ MEASURED THE SAME WAY ON BOTH SIDES, per note, from the onset (2% of peak):
   FALL   HF0 less the same share at 100-200 ms (the transient's fall)
   FLAT   spectral flatness 1-8 kHz over the first 20 ms (0 = noise)
   RISE   ms from the onset to 90% of the 5 ms envelope's peak (in 80 ms)
-The mandolin's take is darker than a mandolin by 15-20 dB over 2 kHz (re-amped,
-its pack says), so for it HF0 is left out: its FALL and FLAT still count.
+(The mandolin's old take, Pianobook's, was re-amped dark and left HF0 out;
+the Philharmonia's, read since 2026-11-22, is a clean mic and counts it.)
 
 THE STAGES, each on what it moves: (pick_slope_db, pick_dbs) on HF0 and FALL;
 chiff_volume on FLAT; course_stagger_s on RISE (the doubled courses only).
@@ -34,10 +34,12 @@ VOICES = {
                ("guitar12_fender/wav/fender_12_string_A3.wav", 57),
                ("guitar12_fender/wav/fender_12_string_E4.wav", 64),
                ("guitar12_fender/wav/fender_12_string_A4.wav", 69)], True),
+    # the Philharmonia's free samples (since 2026-11-22; a clean close mic,
+    # so HF0 counts): G3-A5 at piano, every fourth note
     "mandolin": ("MandolinProperties", 25, 16,
-                 [("mandolin_eclectic/wav/57.wav", 50), ("mandolin_eclectic/wav/52.wav", 55),
-                  ("mandolin_eclectic/wav/48.wav", 59), ("mandolin_eclectic/wav/45.wav", 63),
-                  ("mandolin_eclectic/wav/40.wav", 68)], False),
+                 [("philharmonia/Strings/mandolin/wav_normal/mandolin_%s_very-long_piano_normal.wav" % n, k)
+                  for n, k in (("G3", 55), ("B3", 59), ("Ds4", 63), ("G4", 67), ("B4", 71),
+                               ("Ds5", 75), ("G5", 79), ("B5", 83))], True),
     # (the lap steel's fingerpicks give no transient -- its top does not fall,
     # FALL ~0 -- and it is fitted without one: kept here to measure)
     "lapsteel": ("HawaiianGuitarProperties", 26, 8,
@@ -55,6 +57,16 @@ def load(path):
     x = x.mean(1) if x.ndim > 1 else x
     if sr != B.SR:
         x = resample_poly(x, B.SR, sr)
+    if "philharmonia" in path:
+        # (a thump under 20 Hz, handling, 0.15-0.2 s before the pick, ~15 dB
+        # under it: past 2% of the peak, it would be the onset)
+        from scipy.signal import butter, sosfiltfilt
+        x = sosfiltfilt(butter(4, 40.0, "hp", fs=B.SR, output="sos"), x)
+        # ...and a softer scuff or two before it on some (G3, G5): started as
+        # pluck_fit.py stages them, 20 ms before the envelope's half peak
+        w = int(0.025 * B.SR)
+        e = np.sqrt(np.convolve(x * x, np.ones(w) / w, "same"))
+        x = x[max(0, int(np.flatnonzero(e > 0.5 * e.max())[0]) - int(0.02 * B.SR)):]
     return x / (np.abs(x).max() + 1e-12)
 
 
