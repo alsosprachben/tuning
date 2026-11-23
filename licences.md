@@ -137,24 +137,15 @@ store build.
   - Rejected: Saraga's annotations are under the same NC licence as its audio;
     IndRaga (CC BY 4.0) has restricted files.
 
-### L6. Rabab (GS 105.8): a Freesound upload that is a GarageBand loop — doubtful CC0
+### L6. Rabab (GS 105.8): a Freesound upload that is a GarageBand loop — doubtful CC0 — CLOSED 2026-11-23
 
-- **Source:** belamalta10's "3 continents" (Freesound 513846), uploaded as CC0,
-  but its rubab opening is an Apple GarageBand loop. Apple's loops may be used
-  in music but not redistributed as loops, and the uploader couldn't put them
-  under CC0, so the CC0 is not the uploader's to give.
-- **What derives from it:** the rabab's numbers (`examples/rabab_fit.py`).
-- **Status:** open.
-- **Alternatives (checked 2026-11-20):** none clean. archive.org's
-  "Acoustic String Instrument Sample Library" (CC BY 4.0) is deliberately
-  lo-fi, of unknown origin, labelled "Mongolian rubab"; Barcroft45's "Rabab
-  (Take 2)" (CC BY-SA 3.0, Jamendo) needs a listen to say what it is; the
-  "CC0" uploads of Ustad Shaida are archival recordings a third party can't
-  release. The way out is a new recording, as for the biwa.
-- **Second search (2026-11-20):** CC BY on YouTube: Rich Ermlick's six-minute
-  solo Afghan rubab (some street noise), Manzoor Jan's four-minute solo
-  (uploaded by a third party), Khaled Arman with the Geneva Camerata (with an
-  ensemble). Ermlick's is the cleanest; its licence is the uploader's own.
+- **Source (was):** belamalta10's "3 continents" (Freesound 513846), its rubab
+  opening a GarageBand loop the uploader could not put under CC0.
+- **Status:** CLOSED. The colour refitted to Rich Ermlick's six-minute solo
+  ("Rich Ermlick plays the Afghan Ru'bab", YouTube o-_CUFyHZ98, CC BY as its
+  uploader marks it; `RABAB_REF=ermlick examples/rabab_fit.py --fit`); the
+  decay and the plectrum's stop as Ben voiced them (the solo's sympathetic
+  strings hold every note, so its decay cannot be read). Ben: fine.
 
 ### L7. Pianobook libraries — Pianobook's terms forbid it: CLOSED 2026-11-22
 

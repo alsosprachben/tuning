@@ -24200,31 +24200,25 @@ class RababProperties(BanjoProperties):
     plucked with a plectrum, and under them a set of SYMPATHETIC strings no
     one touches. So the banjo's drumhead with gut on it, and a halo.
 
-    MEASURED THINLY: the only open rubab found is the solo before the drums
-    come in, in belamalta10's "3 continents" (Freesound 513846, CC0 -- a
-    rubab loop from GarageBand's library under a pandeiro; sources.md):
-    seven notes, 232-277 Hz, 0.12-0.4 s each. They give the colour and
-    nothing else (examples/rabab_fit.py): the fundamental weak, h2-h7 15-30
-    dB over it, little over ~3 kHz. Their decay and the sympathy are too
-    short to read; both ASSUMED.
+    ITS COLOUR from Rich Ermlick's solo (YouTube, CC BY as uploaded; since
+    2026-11-23 -- the GarageBand loop first read, licences.md L6, is not):
+    883 notes over six minutes, ~200 of them read (examples/rabab_fit.py,
+    RABAB_REF=ermlick). Its decay cannot be read there -- the sympathetic
+    strings ring under every note, holding each harmonic level -- so the
+    decay and the stop are as Ben voiced them.
     """
-    # ITS COLOUR (rabab_fit.py --fit: the seven notes' harmonics by third
-    # octave, 0.8 dB rms over 12 bands): the fundamental's band 15 dB under
-    # the banjo's, a lift at 640 Hz, the top falling from 2.5 kHz -- gut on
-    # skin. (A GarageBand loop: whatever EQ Apple's engineer gave it is in it)
-    body_trim_db = ((160, -15.1), (202, -15.1), (254, -15.1), (320, -15.1), (403, 1.1), (508, 1.1),
-                    (640, 9.9), (806, 2.0), (1016, -4.5), (1280, 6.2), (1613, 3.0), (2032, 7.6),
-                    (2560, -6.8), (3225, -4.7), (4064, -1.4), (5120, 0.2))
+    # ITS COLOUR (rabab_fit.py --fit, RABAB_REF=ermlick: his notes' harmonics by
+    # third octave, 3.0 dB rms over 16 bands): the fundamental strong, a dip
+    # at 0.8-1 kHz, the top falling from 1.6 kHz.
+    body_trim_db = ((160, -1.6), (202, 9.3), (254, -2.8), (320, -4.2), (403, -8.1), (508, -7.2), (640, -4.0),
+                    (806, -15.7), (1016, -15.0), (1280, -3.7), (1613, -9.2), (2032, -9.8), (2560, -11.4),
+                    (3225, -7.9), (4064, -2.9), (5120, 3.1))
     # THE PLECTRUM STOPS THE STRING BEFORE IT PLUCKS AGAIN (Ben: "is the
-    # plucking finger stopping the current string before re-plucking?"):
-    # in the take each note's own harmonics dip 1.3-4.4 dB in the 20-35 ms
-    # before the next pluck, and where the next is another pitch (277 ->
-    # 262 Hz) keep falling after it, -3 dB at 20 ms and -8 at 50 -- ~100
-    # dB/s, stopped, not ringing on. So the note-off is a stop, not the
-    # banjo's damping hand: 40 dB in ~0.4 s (0.443 R)
+    # plucking finger stopping the current string before re-plucking?"): the
+    # note-off is a stop, not the banjo's damping hand -- 40 dB in ~0.4 s,
+    # as Ben voiced it.
     release_valve_time = 0.18
-    # ...AND IT DECAYS FASTER THAN THE BANJO (Ben): the two longest notes'
-    # h2-h7 fall 23-25 dB/s where ours fell 19
+    # ...AND IT DECAYS FASTER THAN THE BANJO (Ben, by ear)
     decay_db = BanjoProperties.decay_db * 1.3
     # (at the banjo's level: the faster decay had left it 1 dB under)
     initial_gain = BanjoProperties.initial_gain * 10 ** (1.0 / 20.0)

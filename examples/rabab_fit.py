@@ -27,14 +27,27 @@ from drum_fit import read  # noqa: E402
 
 TAKE = os.path.expanduser("~/Documents/refs/freesound/rubab/513846__*.wav")
 SOLO_END = 2.0
+# THE OPEN TAKE (since 2026-11-23, licences.md L6: the GarageBand loop's CC0
+# was not its uploader's to give): RABAB_REF=ermlick -- Rich Ermlick playing
+# the Afghan rubab alone, 6 min 14 s ("Rich Ermlick plays the Afghan
+# Ru'bab", YouTube o-_CUFyHZ98, CC BY as its uploader marks it; AAC 129
+# kb/s, sound to ~15 kHz; ~/Documents/refs/rabab_ermlick), the whole solo read
+REF = os.environ.get("RABAB_REF", "loop")
+if REF == "ermlick":
+    TAKE = os.path.expanduser("~/Documents/refs/rabab_ermlick/ermlick_rubab.m4a")
+    SOLO_END = 374.0
 CEN = 2 ** np.arange(np.log2(160), np.log2(6000), 1 / 3.0)
 
 
 def load():
     with tempfile.TemporaryDirectory() as d:
         w = os.path.join(d, "t.wav")
-        subprocess.run(["sox", glob.glob(TAKE)[0], "-e", "floating-point", "-b", "32", "-c", "1", w],
-                       check=True)
+        if TAKE.endswith(".m4a"):
+            subprocess.run(["ffmpeg", "-v", "quiet", "-y", "-i", TAKE, "-ac", "1", "-c:a", "pcm_f32le", w],
+                           check=True)
+        else:
+            subprocess.run(["sox", glob.glob(TAKE)[0], "-e", "floating-point", "-b", "32", "-c", "1", w],
+                           check=True)
         x, sr = read(w)
     return x.reshape(len(x), -1).mean(1), sr
 
@@ -62,7 +75,7 @@ def notes(x, sr):
             w = max(2, int(0.006 * hz / f[1]))
             return L[max(0, i - w):i + w + 1].max()
         f0 = max((np.mean([at(c * h) for h in range(1, 9)]) - np.mean([at(c * (h + 0.5)) for h in range(1, 9)]), c)
-                 for c in np.arange(150, 700, 0.25))[1]
+                 for c in np.arange(120, 900, 0.25))[1]
         out.append((a, b, float(f0)))
     return out
 
@@ -99,11 +112,55 @@ def ours(f0, secs):
 def compare():
     x, sr = load()
     R, O = [], []
-    for a, b, f0 in notes(x, sr):
+    ns = notes(x, sr)
+    if REF == "ermlick":
+        # (inside the pitch search, not on its edge: a misread; every 4th note)
+        ns = [n for n in ns if 125.0 < n[2] < 880.0][::int(os.environ.get("RABAB_STEP", "4"))]
+    for a, b, f0 in ns:
         R.append(bands(x[int((a + 0.02) * sr):int((b - 0.01) * sr)], sr, f0))
         y, s2 = ours(f0, b - a)
         O.append(bands(y[int(0.02 * s2):int((b - a - 0.01) * s2)], s2, f0))
     return np.nanmedian(R, 0), np.nanmedian(O, 0)
+
+
+def decays(s, sr, f0, nh=6, t0=0.03):
+    """Harmonics 1-NH's fall, dB/s: a line through each one's 10 ms band
+    envelope from T0 to 30 ms before the segment's end (the next pluck)."""
+    from scipy.signal import butter, sosfiltfilt
+    w = int(0.01 * sr)
+    out = []
+    for h in range(1, nh + 1):
+        fh = h * f0
+        if fh * 1.08 > 0.45 * sr:
+            out.append(np.nan)
+            continue
+        y = sosfiltfilt(butter(2, [fh * 0.95, fh * 1.05], btype="band", fs=sr, output="sos"), s)
+        e = 20 * np.log10(np.sqrt(np.convolve(y * y, np.ones(w) / w, "same")) + 1e-12)
+        a, b = int(t0 * sr), len(e) - int(0.03 * sr)
+        if b - a < int(0.25 * sr) or e[a:b].max() < e.max() - 40:
+            out.append(np.nan)
+            continue
+        t = np.arange(a, b, w) / sr
+        out.append(-float(np.polyfit(t, e[a:b:w], 1)[0]))
+    return np.array(out)
+
+
+def decay_compare(min_len=0.6, step=3):
+    """The take's notes of MIN_LEN or more, each harmonic's fall, against
+    ours at the note's pitch and length: the medians, and ours over the take's."""
+    x, sr = load()
+    ns = [n for n in notes(x, sr) if n[1] - n[0] >= min_len and 125.0 < n[2] < 880.0][::step]
+    R, O = [], []
+    for a, b, f0 in ns:
+        R.append(decays(x[int(a * sr):int((b - 0.01) * sr)], sr, f0))
+        y, s2 = ours(f0, b - a)
+        O.append(decays(y[:int((b - a - 0.01) * s2)], s2, f0))
+    R, O = np.array(R), np.array(O)
+    print("  %d notes of %.1f s or more: h1-h6 dB/s, take | ours | ours/take" % (len(ns), min_len))
+    print("    " + " ".join("%5.1f" % v for v in np.nanmedian(R, 0)) + "  |  "
+          + " ".join("%5.1f" % v for v in np.nanmedian(O, 0)) + "  |  "
+          + " ".join("%4.2f" % v for v in np.nanmedian(O / R, 0)))
+    return R, O
 
 
 def ab(out):
@@ -113,9 +170,10 @@ def ab(out):
     pluck), its release left to ring, at one peak."""
     import blockrender as B
     x, sr = load()
-    ns = notes(x, sr)
+    end = SOLO_END if REF != "ermlick" else 25.0         # (Ermlick's: his first 25 s)
+    ns = [n for n in notes(x, sr) if n[1] <= end and 125.0 < n[2] < 880.0]
     t0 = ns[0][0] - 0.05
-    rec = x[int(t0 * sr):int(SOLO_END * sr)]
+    rec = x[int(t0 * sr):int(end * sr)]
     z = np.zeros(len(rec) + int(0.6 * sr))
     import pluck_fit as P
     P.PROG, P.CLS, P.BANK = 105, "RababProperties", 8
@@ -134,6 +192,9 @@ def ab(out):
 
 
 def main(argv):
+    if "--decay" in argv:
+        decay_compare()
+        return 0
     ab_out = next((a[5:] for a in argv if a.startswith("--ab=")), None)
     if ab_out:
         return ab(ab_out)
