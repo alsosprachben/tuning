@@ -149,7 +149,7 @@ store build.
   (uploaded by a third party), Khaled Arman with the Geneva Camerata (with an
   ensemble). Ermlick's is the cleanest; its licence is the uploader's own.
 
-### L7. Two Pianobook libraries — Pianobook's terms forbid it
+### L7. One Pianobook library — Pianobook's terms forbid it
 
 - **The terms** (pianobook.co.uk/terms-conditions, section 5): the samples are
   licensed "only within your own newly-created sound recording(s)"; the
@@ -163,7 +163,6 @@ store build.
 - **What derives from them:**
   - the harpsichord's 4' (Harpsimachord);
   - the tonewheel organ's 16', 5 1/3', 1 3/5', percussion and speaker (Hammond L102);
-  - Gopichant (The Ektara);
 - **Status:** open, and the largest issue by count. Each samplist can grant
   permission; otherwise each voice needs another source.
   - **Refitted 2026-11-20** (A/Bs in ~/Music/licence_refits): Taisho Koto
@@ -252,10 +251,12 @@ store build.
     page's licence IS that written permission, and their invitation to share
     projects made with them is an opportunity. APPROVED by ear ("Sounds even
     better than the old"); the Eclectic Mandolin credit gone.
-  - **Gopichant (ektara):** nothing clean. A 29 s one-string solo (YouTube,
-    CC BY) and Baul gopichand playing with its swoops, mixed with voices
-    (YouTube CC BY, Commons CC BY-SA): fit a single pluck, take the bend law
-    from the swoops.
+  - **Gopichant: refitted 2026-11-22** from open recordings
+    (examples/ektara_open.py): the scoop from dchucksster's Baul singers
+    (YouTube, CC BY: 342 plucks, 230 cents under, held ~0.2 s and let go by
+    0.3 s), the string, decay and colour from Etnochowa's one-string solo
+    (YouTube, CC BY; labelled "Punjab sound", likely a tumbi). Ben chose to
+    keep it the gopichand, with the Baul timing. The Ektara credit gone.
   - **Flugel Horn:** no open multisample anywhere. Fit it as a difference from
     the Iowa trumpet: one player's flugelhorn and trumpet takes of one tune
     (Commons, CC BY-SA 4.0); a "Taps" take (Freesound, CC0) for held notes.

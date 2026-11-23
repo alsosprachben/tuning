@@ -1303,25 +1303,30 @@ SOURCES = [{'id': 'iowa-mis',
               'in or in relation to any competitive products that are sold or relicensed to any third parties." FAQ: '
               'forbidden "to sell or redistribute the sample libraries". Pack readme has no licence of its own.',
   'match': ['Arthur\\ Chanson']},
- {'id': 'pb-the-ektara',
+ {'id': 'yt-dchucksster-iktara',
   'group': 'Strings from around the world',
-  'title': 'The Ektara',
-  'author': 'Rajobrata (xavier11)',
-  'url': 'https://www.pianobook.co.uk/packs/the-ektara/',
-  'licence': 'Pianobook terms',
-  'licence_url': 'https://www.pianobook.co.uk/terms-conditions/',
+  'title': 'Iktara',
+  'author': 'dchucksster',
+  'url': 'https://www.youtube.com/watch?v=F6IrnHr3WhQ',
+  'licence': 'CC BY 3.0',
+  'licence_url': 'https://creativecommons.org/licenses/by/3.0/',
+  'how': 'measured',
+  'voices': 'Gopichant (its scoop)',
+  'evidence': 'YouTube page licence: "Creative Commons Attribution license (reuse allowed)"; three Baul singers '
+              'at the Kumortully Ghats, Kolkata. The scoop measured from 342 plucks; nothing of the recording ships.',
+  'match': ['dchucksster']},
+ {'id': 'yt-etnochowa-ektara',
+  'group': 'Strings from around the world',
+  'title': 'Solo na jednej strunie (Ektara, Punjab sound)',
+  'author': 'Etnochowa',
+  'url': 'https://www.youtube.com/watch?v=RKdUcrhzmgM',
+  'licence': 'CC BY 3.0',
+  'licence_url': 'https://creativecommons.org/licenses/by/3.0/',
   'how': 'fitted',
-  'voices': 'Gopichant / ektara',
-  'issue': 'L7',
-  'evidence': 'https://www.pianobook.co.uk/terms-conditions/ (EULA, fetched 2026-11-20) s.5: licence only "to use '
-              'the download Sound File(s) only within your own newly-created sound recording(s) and/or '
-              'performances"; "expressly forbids resale or other distribution of the Products or their derivatives, '
-              'either as they exist in the library, reformatted ..., or mixed, combined, filtered, re-synthesised or '
-              'otherwise edited, for use as sounds, multi-sounds, samples, multi-samples, sound sets, programmes or '
-              'patches in a sampler, microchip, computer or any sample playback device"; "Products may not be used '
-              'in or in relation to any competitive products that are sold or relicensed to any third parties." FAQ: '
-              'forbidden "to sell or redistribute the sample libraries". Pack readme has no licence of its own.',
-  'match': ['Rajobrata']},
+  'voices': 'Gopichant (its string, decay and colour)',
+  'evidence': 'YouTube page licence: "Creative Commons Attribution license (reuse allowed)"; a 29 s one-string '
+              'solo. Fitted numbers only.',
+  'match': ['Etnochowa']},
  {'id': 'drskit',
   'group': 'Drums and percussion',
   'title': 'DRSKit 2.1 (DrumGizmo)',

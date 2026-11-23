@@ -1079,13 +1079,23 @@
 },
 {
 "group": "Strings from around the world",
-"title": "The Ektara",
-"author": "Rajobrata (xavier11)",
-"url": "https://www.pianobook.co.uk/packs/the-ektara/",
-"licence": "Pianobook terms",
-"licence_url": "https://www.pianobook.co.uk/terms-conditions/",
+"title": "Iktara",
+"author": "dchucksster",
+"url": "https://www.youtube.com/watch?v=F6IrnHr3WhQ",
+"licence": "CC BY 3.0",
+"licence_url": "https://creativecommons.org/licenses/by/3.0/",
+"how": "measured",
+"voices": "Gopichant (its scoop)"
+},
+{
+"group": "Strings from around the world",
+"title": "Solo na jednej strunie (Ektara, Punjab sound)",
+"author": "Etnochowa",
+"url": "https://www.youtube.com/watch?v=RKdUcrhzmgM",
+"licence": "CC BY 3.0",
+"licence_url": "https://creativecommons.org/licenses/by/3.0/",
 "how": "fitted",
-"voices": "Gopichant / ektara"
+"voices": "Gopichant (its string, decay and colour)"
 },
 {
 "group": "Drums and percussion",

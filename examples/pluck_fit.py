@@ -952,7 +952,9 @@ def main(argv):
             elif voice == "oud":
                 stage_oud()
             elif voice == "gopichant":
-                stage_gopichant()
+                # (the Pianobook ektara takes are no longer read, licences.md L7:
+                # the voice is from open recordings, examples/ektara_open.py)
+                raise SystemExit("gopichant: retired 2026-11-22, see examples/ektara_open.py")
             elif voice == "biwa":
                 # side A's first 8:50 (the rest is blank tape); its lowest
                 # string is A2, 110 Hz
