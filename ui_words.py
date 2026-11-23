@@ -171,16 +171,16 @@ HARPSICHORD_STOP = {"4": "a row of strings an octave up", "8": "the main row of 
 CAB_ABOUT = {
     None: "the voice's own speaker",
     "direct": "no speaker: the amplifier straight to the desk",
-    "leslie": "Leslie 122: horn and drum rotors spinning",
-    "hammond": "Hammond spinet speaker: a single 12-inch cone",
+    "leslie": "after the Leslie 122: horn and drum rotors spinning",
+    "hammond": "after a Hammond spinet's speaker: a single 12-inch cone",
     "guitar12": "open-backed 1x12 guitar combo",
     "guitar412": "closed-back 4x12 guitar cabinet",
-    "jc120": "JC-120: a clean 2x12 combo",
+    "jc120": "after the Roland JC-120: a clean 2x12 combo",
     "bass410": "sealed 4x10 bass cabinet",
-    "rhodes": "Rhodes suitcase: four 12-inch speakers",
-    "wurlitzer": "Wurlitzer 200's two lid speakers",
-    "spectra": "Spectra-Tone: two small speakers back to back, turning on one rotor",
-    "spectra_chorus": "Spectra-Tone Chorus: the turning speakers and the console's together",
+    "rhodes": "after the Rhodes suitcase: four 12-inch speakers",
+    "wurlitzer": "after the Wurlitzer 200's two lid speakers",
+    "spectra": "after the Wurlitzer Spectra-Tone: two small speakers back to back, turning on one rotor",
+    "spectra_chorus": "after the Spectra-Tone's Chorus: the turning speakers and the console's together",
 }
 
 # what the interfaces must not show: how a sound was made, or from whose recording

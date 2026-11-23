@@ -395,7 +395,22 @@ legal advice: a lawyer reads this before sale.
     itself, connected by MIDI, may be named: that is identifying a device.
   - Voice and patch names coined by us (not GS map names) that start with a
     mark: list and rename descriptively.
-- **Status:** open; the disclaimer and the label pass are ours to do.
+- **DONE 2026-11-22 (Ben: "do the trademark label pass"):**
+  - Speaker choices: ROTARY, SPINET, 2x12 CLEAN, LID PAIR, CONE ROTOR, ROTOR
+    CHORUS (patch_map.CAB_LABELS; both UIs' headings and notes); each
+    one's words "after the Leslie 122" / "after a Hammond spinet's" / ...
+  - Pickup panels: Three single coils, Two humbuckers, Two-coil bass,
+    Keyboard, two pickups (PICKUP_FAMILIES; each with its "after"); the
+    help's terms "After the Fender Stratocaster: ..." and so on.
+  - Our variation 16.41: "60's Lower" (was "Wurlitzer Lower").
+  - The picker's words (about.json, gm_coverage.referential): "Moog: ..."
+    is "ladder synth: ..." (396), a sound led by a maker's name reads
+    "after the ..." (183). The tables keep their shorthand; GS's own names
+    are untouched (identification).
+  - The disclaimer, in the Credits topic (both UIs).
+- **Still open:** the owners to confirm, the store listing's and manual's
+  copy of the disclaimer, and the Messenger card (laid out after the
+  Messenger's controls: a lawyer's look at the layout, no artwork copied).
 
 ## Recording our own
 

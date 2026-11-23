@@ -8028,7 +8028,7 @@ _LOWER_GAIN = 10 ** (11.9 / 20.0)
 
 
 class DividerLowerProperties(DividerOrganProperties):
-    """THE DIVIDER ORGAN'S LOWER MANUAL (Wurlitzer Lower): the 4500's lower division
+    """THE DIVIDER ORGAN'S LOWER MANUAL (60's Lower): the 4500's lower division
     as a program of its own -- its seven tabs, the same keying and speakers. Its
     default the console's own Preset I (Melodia 8' and Trombone 8')."""
     stop_ranks = [

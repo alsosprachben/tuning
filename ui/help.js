@@ -244,8 +244,8 @@ const HELP = {
     ],
   },
   spectra: {
-    title: 'Spectra-Tone',
-    intro: 'A 60\'s organ\'s turning speaker: two small speakers back to back on one rotor inside the console. Their beams sweep past you, so the higher a note the more swells it makes each turn, with a slight wobble of pitch. Choose it under Speaker for the part: SPECTRA-TONE sends the manual through the rotor, ST CHORUS through the rotor and the console speakers together.',
+    title: 'Cone rotor',
+    intro: 'A 60\'s organ\'s turning speaker, after the Wurlitzer Spectra-Tone: two small speakers back to back on one rotor inside the console. Their beams sweep past you, so the higher a note the more swells it makes each turn, with a slight wobble of pitch. Choose it under Speaker for the part: SPECTRA-TONE sends the manual through the rotor, ST CHORUS through the rotor and the console speakers together.',
     terms: [
       ['CATHEDRAL', 'The rocker down: the rotor turning slowly, about one turn in two seconds.'],
       ['THEATER', 'The rocker up: the rotor turning fast, about three turns a second. It climbs there over several seconds and drops back to Cathedral in about one.'],
@@ -259,7 +259,7 @@ const HELP = {
       ['PICKUP', 'Which of the instrument\'s pickups it plays on, on a switch drawn as the instrument\'s own: a 5-way blade (the Stratocaster\'s, the Ibanez\'s), a Jazz Bass\'s two volume knobs, a Clavinet\'s two rockers. Under it, the string with its coils where they sit, the ones heard lit.'],
       ['VALVE', 'The amplifier\'s triode stage and its drive: clean at 0, the edge of breakup at 1, a clip past it. DRIVE is the drive set; WITH THE WHEEL beside it is what plays, the mod wheel scaling it (up to four times the patch\'s own). AS THE PATCH puts the patch\'s back.'],
       ['SPEAKER', 'The cabinet: the voice\'s own, or another it can play through. The line under the buttons says what that speaker is.'],
-      ['LESLIE', 'An organ\'s rotating speaker: its speed (STOP, SLOW, FAST -- the half-moon, CC80) and how it is heard (IN THE ROOM, or TWO MICS round it). Shown when the organ plays through one.'],
+      ['ROTARY', 'An organ\'s rotating speaker, after the Leslie 122: its speed (STOP, SLOW, FAST -- the half-moon, CC80) and how it is heard (IN THE ROOM, or TWO MICS round it). Shown when the organ plays through one.'],
       ['Kept', 'The part keeps its valve, speaker and how its Leslie is heard through program changes, and in the session.'],
     ],
   },
@@ -267,10 +267,10 @@ const HELP = {
     title: 'Pickup',
     intro: 'The pickups the part\'s instrument plays on, on the AMP card. A pickup hears the string at the point where it sits: near the bridge it hears the upper harmonics strongly and the fundamental weakly (bright, thin), toward the neck the reverse (round, full). Two coils together add their combs -- and where they hear the string in opposite phase, cancel, which is the in-between positions\' hollow "quack". Choose a position, part by part; the session keeps it, and a program change puts the part back on its new voice\'s own.',
     terms: [
-      ['Stratocaster', 'Its 5-way blade, numbered as a Strat player numbers it: 1 the bridge pickup, 2 bridge and middle, 3 the middle, 4 middle and neck, 5 the neck.'],
-      ['Humbuckers', 'The Ibanez\'s 5-way blade, numbered as Ibanez does: 1 the neck humbucker, 2 its two coils in parallel, 3 both humbuckers, 4 the two inside coils, 5 the bridge humbucker. Overdriven and Distortion Guitar play the bridge; Jazz Guitar the neck.'],
-      ['Jazz Bass', 'No switch: its two volume knobs, neck and bridge. Tap one to turn it fully up or off (one always stays up). Both up is the full sound; the bridge alone the growl, the neck alone the thump.'],
-      ['Clavinet', 'The D6\'s two rocker switches: A/B and C/D. A C the centre pickup alone (warm), B C the bridge pickup (thin), B D both in phase (full), A D both against each other (hollow: the fundamental cancelled -- the funk sound).'],
+      ['Three single coils', 'After the Fender Stratocaster: its 5-way blade, numbered as a Strat player numbers it: 1 the bridge pickup, 2 bridge and middle, 3 the middle, 4 middle and neck, 5 the neck.'],
+      ['Two humbuckers', 'After the Ibanez RG2820: its 5-way blade, numbered as Ibanez numbers it: 1 the neck humbucker, 2 its two coils in parallel, 3 both humbuckers, 4 the two inside coils, 5 the bridge humbucker. Overdriven and Distortion Guitar play the bridge; Jazz Guitar the neck.'],
+      ['Two-coil bass', 'After the Fender Jazz Bass. No switch: its two volume knobs, neck and bridge. Tap one to turn it fully up or off (one always stays up). Both up is the full sound; the bridge alone the growl, the neck alone the thump.'],
+      ['Keyboard, two pickups', 'After the Hohner Clavinet D6: its two rocker switches, A/B and C/D. A C the centre pickup alone (warm), B C the bridge pickup (thin), B D both in phase (full), A D both against each other (hollow: the fundamental cancelled -- the funk sound).'],
       ['Level', 'A bridge pickup is wound hotter, as a real one is, to make up for the string moving less there; parallel coils load each other, which lifts their resonance. The levels follow from that, as on the instrument.'],
       ['CC85', 'A file or a keyboard chooses it too, on the part\'s channel, at once (the next notes). A program change puts it back to the voice\'s own, so a file sends it after the program change, as it would a volume: bank select, program change, then CC83 and CC85. 0 the voice\'s own, 1 neck, 2 the second position (a Strat\'s neck and middle, the Ibanez\'s neck humbucker in parallel), 3 middle, 4 the fourth (a Strat\'s middle and bridge, the Ibanez\'s inside coils), 5 bridge, 6 neck and bridge (both), 7 the Clavinet\'s both in anti-phase. One the instrument does not have leaves it its own.'],
     ],
@@ -281,8 +281,8 @@ const HELP = {
     terms: [
       ['PATCH\'S OWN \u00b7 name', 'The patch\'s own speaker, named. Tap another to play through it; the line under the buttons says what that speaker is.'],
       ['DIRECT', 'No speaker: the amplifier\'s output straight to the desk, as a direct box takes it. Brighter and harder, with nothing rounding the top.'],
-      ['LESLIE', 'A tonewheel organ\'s rotating speaker: its horn and drum turning. Only an organ offers it. Its speed and how it is heard are on the AMP card\'s LESLIE.'],
-      ['HAMMOND', 'A Hammond\'s own speaker, no rotors: the spinet\'s single 12-inch cone.'],
+      ['ROTARY', 'A tonewheel organ\'s rotating speaker, after the Leslie 122: its horn and drum turning. Only an organ offers it. Its speed and how it is heard are on the AMP card\'s ROTARY.'],
+      ['SPINET', 'A tonewheel organ\'s own speaker, after a Hammond spinet\'s: no rotors, a single 12-inch cone.'],
       ['Level', 'A Leslie coming or going keeps the organ\'s level: the rotors\' path is quieter than a fixed speaker\'s, and that is put back.'],
       ['CC83', 'A file or a keyboard chooses it too, on the part\'s channel, at once (the next notes). A program change puts it back to the voice\'s own, so a file sends it after the program change, as it would a volume: bank select, program change, then CC83 and CC85. 0 the voice\'s own, 1 direct, 2 a Leslie, 3 the Hammond\'s speaker, 4 a 1x12 guitar combo, 5 a closed 4x12, 6 a JC-120, 7 a bass 4x10, 8 the Rhodes suitcase, 9 the Wurlitzer\'s lid, 10 a Spectra-Tone, 11 its Chorus (a 60\'s organ\'s manuals). One the voice does not offer leaves it its own.'],
     ],
@@ -837,7 +837,7 @@ Object.assign(HELP, {
 // --about) by creditTerms, here for the web and in help_json.js for native
 HELP.credits = {
   title: 'Credits',
-  intro: 'No recordings are included in Clavitone. Its instruments are models, and many of them were fitted to recordings that musicians, sound recordists, libraries and researchers shared. These are those sources, by kind of instrument, each with its licence and the voices it shaped. Our thanks to all of them; the CC BY and CC BY-SA licences ask that they be named, and the CC0 and public domain sources are named with gratitude.',
+  intro: 'No recordings are included in Clavitone. Its instruments are models, and many of them were fitted to recordings that musicians, sound recordists, libraries and researchers shared. These are those sources, by kind of instrument, each with its licence and the voices it shaped. Our thanks to all of them; the CC BY and CC BY-SA licences ask that they be named, and the CC0 and public domain sources are named with gratitude. All product names, trademarks and registered trademarks are the property of their respective owners, who are in no way associated or affiliated with Clavitone. They are used solely to identify the instruments whose sounds were studied in building our models, and the named sounds of the MIDI standards a file asks for.',
   terms: [],
 };
 // (credits.json's sources as the topic's terms: a heading per group, then

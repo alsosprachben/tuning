@@ -527,10 +527,10 @@ inline void draw_amp(App &a)
     if (organ && offers_st) {
         const float x = X1 - LW, y = Y0;
         look::tray(a, x, y, LW, H, 10);
-        heading(a, x + 14, y + 12, "SPECTRA-TONE", "spectra");
+        heading(a, x + 14, y + 12, "CONE ROTOR", "spectra");
         couplers(x, y);
         if ((int)num(&M.st, "spectra", 0) == 0) {
-            const std::string why = "No Spectra-Tone on it now: choose SPECTRA-TONE or ST CHORUS under SPEAKER for "
+            const std::string why = "No cone rotor on it now: choose CONE ROTOR or ROTOR CHORUS under SPEAKER for "
                                     "its two speakers turning.";
             const auto ls = wrap(a, a.font, 14, why, LW - 28);
             for (size_t i = 0; i < ls.size(); i++)
@@ -560,9 +560,9 @@ inline void draw_amp(App &a)
     if (organ) {
         const float x = X1 - LW, y = Y0;
         look::tray(a, x, y, LW, H, 10);
-        heading(a, x + 14, y + 12, "LESLIE", "rotary");
+        heading(a, x + 14, y + 12, "ROTARY", "rotary");
         if (!les) {
-            const std::string why = "No Leslie on it now: choose LESLIE under SPEAKER for the horn and drum turning.";
+            const std::string why = "No rotary on it now: choose ROTARY under SPEAKER for the horn and drum turning.";
             const auto ls = wrap(a, a.font, 14, why, LW - 28);
             for (size_t i = 0; i < ls.size(); i++)
                 text(a, a.font, 14, x + 14, y + (IP ? 44 : 50) + i * LH, SILK_DIM, ls[i]);

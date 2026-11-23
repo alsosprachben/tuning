@@ -1247,7 +1247,7 @@ VARIATIONS[(61, 8)] = routed_variation(61, "brass2", detuned_pair=(-4.0, 4.0))
 # it): beside Organ Bass, the pedals, at 16.40 -- the 4500's three divisions as three
 # programs, as a console is played over MIDI
 VARIATIONS[(16, 41)] = type("DividerLowerProperties_ours", (DividerLowerProperties,), {})
-VARIATION_NAMES[(16, 41)] = "Wurlitzer Lower"
+VARIATION_NAMES[(16, 41)] = "60's Lower"         # (a name of our own, in the GS set's style -- licences.md L13)
 
 # A LAYERED VARIATION: one key, two (or more) voices -- each routed by its
 # own program at its own transposition and level. blockrender expands such a
@@ -3014,21 +3014,23 @@ SPECTRA_CHOICES = ("spectra", "spectra_chorus")
 CAB_ABOUT = {
     None: "the voice's own",
     "direct": "no speaker: the amplifier's output straight to the desk",
-    "leslie": "Leslie 122: horn and drum rotors, the cabinet's response measured (hammondman's takes)",
-    "hammond": "Hammond spinet speaker (the L-102's): measured 300 Hz-4 kHz, a 12\" cone's physics under",
+    "leslie": "After the Leslie 122: horn and drum rotors, the cabinet's response measured (hammondman's takes)",
+    "hammond": "After a Hammond spinet's speaker (the L-102's): measured 300 Hz-4 kHz, a 12\" cone's physics under",
     "guitar12": "open-backed 1x12 guitar combo: voiced from the speaker's design",
     "guitar412": "closed-back 4x12, Vintage 30s: fitted to measured impulse responses",
-    "jc120": "JC-120 2x12, closed back: voiced from its design, no recording",
+    "jc120": "After the Roland JC-120's 2x12, closed back: voiced from its design, no recording",
     "bass410": "sealed 4x10 bass cabinet, no tweeter: voiced from its design",
-    "rhodes": "Rhodes suitcase, four 12\" speakers: voiced from its design",
-    "wurlitzer": "Wurlitzer 200's two lid speakers: voiced from their design",
-    "spectra": "Wurlitzer Spectra-Tone: two 4\" cones back to back on one rotor, measured on a 4500 console",
-    "spectra_chorus": "Spectra-Tone Chorus: the rotor and the console speakers together, measured on a 4500",
+    "rhodes": "After the Rhodes suitcase's four 12\" speakers: voiced from their design",
+    "wurlitzer": "After the Wurlitzer 200's two lid speakers: voiced from their design",
+    "spectra": "After the Wurlitzer Spectra-Tone: two 4\" cones back to back on one rotor, measured on a 4500 console",
+    "spectra_chorus": "After the Spectra-Tone's Chorus: the rotor and the console speakers together, measured on a 4500",
 }
 # ...and each one's label on the cards' selector
-CAB_LABELS = {None: "OWN", "direct": "DIRECT", "leslie": "LESLIE", "hammond": "HAMMOND", "guitar12": "1x12",
-              "guitar412": "4x12", "jc120": "JC-120", "bass410": "BASS 4x10", "rhodes": "SUITCASE",
-              "wurlitzer": "WURLI LID", "spectra": "SPECTRA-TONE", "spectra_chorus": "ST CHORUS"}
+# (generic names: a maker's name says what a choice is AFTER, in its words
+#  above, never names it -- licences.md L13)
+CAB_LABELS = {None: "OWN", "direct": "DIRECT", "leslie": "ROTARY", "hammond": "SPINET", "guitar12": "1x12",
+              "guitar412": "4x12", "jc120": "2x12 CLEAN", "bass410": "BASS 4x10", "rhodes": "SUITCASE",
+              "wurlitzer": "LID PAIR", "spectra": "CONE ROTOR", "spectra_chorus": "ROTOR CHORUS"}
 _CAB_CLASSES = {}
 
 
@@ -3066,7 +3068,7 @@ _L_MB = _STRAT_BRIDGE_T ** 2 / (1.0 + _STRAT_BRIDGE_T ** 2)       # (middle and 
 _IB_N_RES, _IB_B_RES = 5971.0, 4827.0
 PICKUP_FAMILIES = {
     "strat": {
-        "name": "Stratocaster", "switch": "blade5",
+        "name": "Three single coils", "after": "the Fender Stratocaster", "switch": "blade5",
         1: dict(points=(0.247,), turns=1.0, res=_STRAT_RES, label="5 NECK",
                 about="The neck single coil, 0.247 of the scale from the bridge: round and full. Fitted to recordings (IDMT)."),
         2: dict(points=(0.247, 0.157), turns=0.5, res=_STRAT_RES * _SQ2, label="4",
@@ -3085,7 +3087,7 @@ PICKUP_FAMILIES = {
     # its own confirmed. The inside coils: the neck's bridge-side (0.23) and
     # the bridge's neck-side (0.077), in parallel)
     "ibanez": {
-        "name": "Ibanez RG2820", "switch": "blade5",
+        "name": "Two humbuckers", "after": "the Ibanez RG2820", "switch": "blade5",
         1: dict(points=(0.23, 0.258), turns=0.69, res=_IB_N_RES, q=1.153, label="1 NECK",
                 about="The neck humbucker: warm, its two coils' null darkening the top. Fitted to recordings (IDMT, the RG2820)."),
         2: dict(points=(0.23, 0.258), signs=(0.5, 0.5), turns=0.69, res=2.0 * _IB_N_RES, q=1.153, label="2",
@@ -3104,7 +3106,7 @@ PICKUP_FAMILIES = {
     },
     "jbass": {
         # (no switch: its two volume knobs, each turned fully up or off)
-        "name": "Jazz Bass", "switch": "knobs2",
+        "name": "Two-coil bass", "after": "the Fender Jazz Bass", "switch": "knobs2",
         1: dict(points=(0.168,), turns=2.0, res=4867.0 / _SQ2, label="NECK",
                 about="The neck coil alone: the thump. Derived from the pair fitted."),
         6: dict(points=(0.098, 0.168), turns=1.0, res=4867.0, label="BOTH",
@@ -3113,9 +3115,9 @@ PICKUP_FAMILIES = {
                 about="The bridge coil alone: the growl. Derived from the pair fitted."),
     },
     "clav": {
-        "name": "Clavinet D6", "switch": "rockers",
+        "name": "Keyboard, two pickups", "after": "the Hohner Clavinet D6", "switch": "rockers",
         1: dict(clav="centre", label="A C \xb7 CENTRE",
-                about="The centre pickup alone, above the strings: warm. The one the recordings were played on (fitted)."),
+                about="The centre pickup alone, above the strings: warm. The voice's own."),
         5: dict(clav="bridge", label="B C \xb7 BRIDGE",
                 about="The bridge pickup alone, under the strings 4 cm from their ends: bright and thin."),
         # (the letters the DAFx-12 paper's Table 1: A C centre, B C bridge,

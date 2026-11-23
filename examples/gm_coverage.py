@@ -2270,6 +2270,7 @@ def about_json(path):
     effects = {k: UW.EFFECTS_ABOUT.get(k, UW.EFFECTS_ABOUT.get(k.split(" (")[0], "")) for k, r, note in EFFECTS_RATED}
     # ...the tunings', their systems' and the rooms' names (the engine keeps its keys)
     tuners = {k: list(v) for k, v in UW.TUNERS.items()}
+    desc = {k: referential(v) for k, v in desc.items()}
     doc = {"desc": desc, "kit_desc": kit_desc, "tuners": tuners, "cabinets": cabs, "cab_own": own, "pickups": pickups,
            "pk_own": pk_own, "stops": stop_notes, "perc": perc, "kits": kits,
            "kit_only": sorted(k for k in getattr(PM, "KIT_ONLY", ()) if k < 128), "efx": efx, "effects": effects}
@@ -2333,6 +2334,27 @@ def _voice_notes():
     for ps, panel, rows, controls in stops():
         for bit, n, r, note in rows:
             yield "organ stop %s" % n, note
+
+
+# OTHER MAKERS' NAMES IN THE PICKER'S WORDS (licences.md L13): a name says what
+# a sound is AFTER, never what it is. Our synth engine is a ladder synth, not
+# a "Moog"; a sound that follows an instrument leads with "after the ...".
+# (The tables keep their shorthand; GS's own drum and patch names, which say
+# which slot a file asks for, are not touched.)
+MARK_LEADS = ("Fender Jazz Bass", "Fender Rhodes", "Ibanez RG2820", "Wurlitzer console", "Yamaha CP-80",
+              "Yamaha CS", "Yamaha", "Jupiter-8", "Juno-6", "Minimoog", "Oberheim", "Steinway", "Stratocaster",
+              "Strat", "Ibanez", "Hammond", "Rhodes", "Wurlitzer", "Clavinet", "Hohner", "Mellotron", "Simmons",
+              "TB-303", "SH-101", "SH-5", "D-50")
+
+
+def referential(text):
+    """a picker's few words, a maker's name in them said as what it is after"""
+    if text.startswith("Moog: "):
+        return "ladder synth: " + text[len("Moog: "):]
+    for m in MARK_LEADS:
+        if text.startswith(m) and (len(text) == len(m) or not text[len(m)].isalnum()):
+            return "after the " + text
+    return text
 
 
 def credits_json(path):

@@ -723,7 +723,7 @@ function drawAmp() {
       `<section><h3 data-help="cabinet">Speaker</h3><div class="amp-cabs">` +
       [0, ...offer].map(c => `<button class="hb amp-cab" data-kit="1" data-c="${c}"></button>`).join('') +
       `</div><p class="amp-now"></p><p class="pn-note amp-about"></p></section>` +
-      (organ ? `<section><h3 data-help="${offersSt ? 'spectra' : 'rotary'}">${offersSt ? 'Spectra-Tone' : 'Leslie'}</h3><div class="amp-les"></div></section>` : '') +
+      (organ ? `<section><h3 data-help="${offersSt ? 'spectra' : 'rotary'}">${offersSt ? 'Cone rotor' : 'Rotary'}</h3><div class="amp-les"></div></section>` : '') +
       (cplOffer ? `<section><h3 data-help="couplers">Couplers</h3><div class="amp-row amp-cpls">` +
         [[0, "8' OFF"], [1, "16'"], [2, "4'"], [3, "2'"]].filter(([b]) => (cplOffer >> b) & 1)
           .map(([b, n]) => `<button class="hb amp-cpl" data-kit="1" data-b="${b}">${n}</button>`).join('') +
@@ -820,7 +820,7 @@ function drawAmp() {
   const lb = el.querySelector('.amp-les');
   if (offersSt) {
     if (!spc) {
-      if (lb.dataset.mode !== 'stnone') { lb.dataset.mode = 'stnone'; lb.innerHTML = '<p class="pn-note">No Spectra-Tone on it now: choose SPECTRA-TONE or ST CHORUS under Speaker for its two speakers turning.</p>'; }
+      if (lb.dataset.mode !== 'stnone') { lb.dataset.mode = 'stnone'; lb.innerHTML = '<p class="pn-note">No cone rotor on it now: choose CONE ROTOR or ROTOR CHORUS under Speaker for its two speakers turning.</p>'; }
       return;
     }
     if (lb.dataset.mode !== 'st') {
@@ -837,7 +837,7 @@ function drawAmp() {
     return;
   }
   if (!les) {
-    if (lb.dataset.mode !== 'none') { lb.dataset.mode = 'none'; lb.innerHTML = '<p class="pn-note">No Leslie on it now: choose LESLIE under Speaker for the horn and drum turning.</p>'; }
+    if (lb.dataset.mode !== 'none') { lb.dataset.mode = 'none'; lb.innerHTML = '<p class="pn-note">No rotary on it now: choose ROTARY under Speaker for the horn and drum turning.</p>'; }
     return;
   }
   if (lb.dataset.mode !== 'les') {
