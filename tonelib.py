@@ -4129,9 +4129,14 @@ class HammeredDulcimerProperties(FormantBody, InharmonicStringProperties):
     it is the piano's unison dance on an instrument with no dampers at all to
     stop it. Nothing mutes a dulcimer, so it rings until it stops.
 
-    FITTED TO KEVIN KEMP'S 17/16 DULCIMER (Pianobook "Lite Hammered
-    Dulcimer", measured only; examples/dulcimer_fit.py): 33 notes D3-F6, one
-    take each, one condenser.
+    A 17/16 DULCIMER, rebuilt 2026-11-22 (Kevin Kemp's Pianobook takes, the
+    first reference, no longer read: licences.md L7): FITTED where the open
+    takes reach -- iternetcone's "Multi-sampled Hammered Dulcimer" (Freesound
+    pack 19445, CC BY 4.0: eleven strikes C4-D5, trimmed after 1-3 s;
+    examples/dulcimer_fit.py) -- and from PUBLISHED DATA and PHYSICS past
+    them (examples/dulcimer_physics.py): Musicmakers' 17/16 kit's string
+    chart, tuning chart and box (the bass bridge's stiffness, the layout),
+    the strings' losses (the decay; the board's conductance by Ben's ear).
     """
     wheel_vibrato = False       # a hammer: no vibrato after the attack (Synth.wheel_vibrato)
     # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
@@ -4147,26 +4152,46 @@ class HammeredDulcimerProperties(FormantBody, InharmonicStringProperties):
     # fixed in the action. The 1/5 is kept for the notch a hand would aim for.
     strike_point = 1.0 / 5
     strike_depth = 0.0
-    # THE LADDER, at the partials' peaks (dulcimer_fit.py peaks, every key;
-    # not the bands, which count the sympathy between the partials), after the
-    # decay: 6.70 -> 6.62 dB. The bass rolls off a little more gently.
-    tonal_dampening = 0.798
-    octave_dampening = 0.193
+    # THE LADDER, at the partials' peaks (dulcimer_fit.py peaks, the takes'
+    # keys; not the bands, which count the sympathy between the partials):
+    # 7.46 -> 7.42 dB, the old tilt nearly theirs already.
+    tonal_dampening = 0.6833
+    octave_dampening = 0.1869
     strike_fills_with_force = False
-    # THE STIFFNESS, MEASURED (partial peaks, 33 notes), and it is TWO
-    # BRIDGES: the bass courses D3-A3 at 2-4e-5, then a step at B3 to the
-    # treble bridge's 1.6e-4, rising as k f0^0.65 to 5e-4 at F6 (median |log
-    # err| 0.31). The estimate had 1.5e-4 on every note, five times too stiff
-    # in the bass.
+    # THE STIFFNESS, TWO BRIDGES (since 2026-11-22; Kemp's Pianobook takes no
+    # longer read). THE TREBLE: measured on iternetcone's takes (C4-D5,
+    # partial peaks), k f0^0.73 (median |log err| 0.28). THE BASS BRIDGE, from
+    # a published string chart (Ben: "use a published string chart"):
+    # Musicmakers' 17/16 kit -- its gauges by course, front to rear .032"
+    # and .024" wound, then .022", .020", .018", .016" plain -- and its
+    # published box and bridge (38" and 16" rails; the bass bridge 11.5" and
+    # 4" from the right corner), the side bridges taken 1" in, a wound
+    # string's core half its diameter (assumed); B = pi^3 E dc^4 / (64 T L^2),
+    # T = mu (2 L f)^2. The wound courses come out 2.3-4.7e-5, the plain ones
+    # 2-2.8e-4 (the new takes: 1.4-2.0e-4 there): so the bass bridge steps
+    # from soft to stiff at A3,
+    # its first plain string. Under bass_bridge_hz the table by key (linear,
+    # held past its ends); over it the treble law.
     inharmonicity_coefficient = 1.5e-04
     inharmonicity_dynamic = True
     bass_bridge_hz = 235.0
-    bass_bridge_B = 3.17e-05
-    inharmonicity_law = (4.336e-06, 0.652)
+    bass_bridge_B = 4.70e-05                # (the table's first: what a law without the table reads)
+    bass_bridge_table = ((50, 4.70e-05), (52, 4.35e-05), (54, 2.28e-05), (55, 2.40e-05), (57, 2.78e-04))
+    inharmonicity_law = (2.318e-06, 0.732)
 
     def inharmonicity_coefficient_for_frequency(self, frequency):
         if float(frequency) < self.bass_bridge_hz:
-            return self.bass_bridge_B
+            t = self.bass_bridge_table
+            if not t:
+                return self.bass_bridge_B
+            # (native/voice.c b_law 4 with its table: the same arithmetic)
+            key = 69.0 + 12.0 * _log(float(frequency) / 440.0) / _log(2.0)
+            if key <= t[0][0]:
+                return t[0][1]
+            for (k0, b0), (k1, b1) in zip(t[:-1], t[1:]):
+                if key <= k1:
+                    return b0 + (b1 - b0) * (key - k0) / (k1 - k0)
+            return t[-1][1]
         k, p = self.inharmonicity_law
         return k * float(frequency) ** p
 
@@ -4177,19 +4202,14 @@ class HammeredDulcimerProperties(FormantBody, InharmonicStringProperties):
     # trim alone.
     # THE BOX, KNOCKED (Ben: "some kind of box sound, almost like a banjo").
     # Every stroke puts energy BETWEEN the partials at the same frequencies
-    # whatever the note -- averaged over all 33 keys, 0-40 ms: 140-190 Hz,
-    # 285-410 (strongest, 340-360) and 480-510, falling ~9 dB in 60 ms -- the
-    # case's air and its top, rung by the blow through the bridges. A
-    # sympathetic string would sit at a string's pitch and ring for seconds;
-    # this is fixed in frequency and gone in a tenth of a second. The grand's
-    # strike machinery (GrandPianoProperties.strike_noise_db), fitted by
-    # examples/dulcimer_fit.py strike: 13.2 -> 8.3 dB rms over every key, the
-    # table peaking at 359-453 Hz with the takes, and the hammer's click at
-    # 3.6-7 kHz. Its level climbs 9.6 dB an octave re the note's gain.
-    strike_noise_db = ((45, -45.9), (57, -41.5), (71, -49.7), (90, -45.7), (113, -20.6), (143, -12.3), (180, -17.4), (226, -15.1), (285, -12.5), (359, -0.8), (453, 1.1), (570, -6.2), (718, -15.6), (905, -31.2), (1140, -26.1), (1437, -27.3), (1810, -29.8), (2281, -27.1), (2874, -27.0), (3620, -18.3), (4561, -17.5), (5747, -10.6), (7241, -13.0), (9123, -18.1), (11494, -26.2))
-    strike_noise_slope = 9.647
-    # the slope is the takes', D3-F6: held at their ends past them
-    strike_noise_span_hz = (146.8, 1396.9)
+    # whatever the note -- the case's air and its top, rung by the blow
+    # through the bridges, gone in a tenth of a second. The grand's strike
+    # machinery (GrandPianoProperties.strike_noise_db), fitted by
+    # examples/dulcimer_fit.py strike on the takes' keys: 7.3 dB rms.
+    strike_noise_db = ((45, -16.2), (57, -15.7), (71, -25.3), (90, -24.2), (113, -23.7), (143, -26.2), (180, -26.2), (226, -28.8), (285, -43.4), (359, -7.4), (453, 5.1), (570, -4.1), (718, -1.4), (905, -11.0), (1140, -16.1), (1437, -23.9), (1810, -28.6), (2281, -21.9), (2874, -18.1), (3620, -12.8), (4561, -9.2), (5747, -3.2), (7241, -7.0), (9123, -6.4), (11494, -14.3))
+    strike_noise_slope = 13.006
+    # the slope is the takes', C4-D5: held at their ends past them
+    strike_noise_span_hz = (261.6, 587.3)
     strike_noise_dbs = 150.0
     strike_noise_fade_s = 0.001
     # RUN TO -60 dB (0.45 s at its fall), not the grand's 0.25 s: cut there,
@@ -4202,11 +4222,9 @@ class HammeredDulcimerProperties(FormantBody, InharmonicStringProperties):
     formant_floor = 1.0
     bore_corner_hz = 40000.0
     # THE BODY, read at the partials' own peaks (dulcimer_fit.py peakbody):
-    # the band fit had lifted 0.8-2.5 kHz 2-3 dB to stand in for the
-    # sympathetic strings' energy between the partials (Ben: the takes' mid
-    # "a little bit thinner"). 6.62 -> 6.43 dB; the rest is each take's own
-    # beating, not a shape.
-    body_trim_db = ((160, -3.1), (202, -1.5), (255, -0.2), (321, 2.3), (404, 2.6), (509, 2.2), (641, 0.6), (808, 0.1), (1018, -0.4), (1283, -0.7), (1616, -1.1), (2036, -1.1), (2566, -0.6), (3233, -0.3), (4073, -0.5), (5132, -0.2), (6465, -0.1), (8146, 0.9), (10263, 1.3))
+    # THE BODY at the partials' peaks (dulcimer_fit.py peakbody, the takes'
+    # keys): 7.36 -> 7.23 dB rms -- each take's own beating the rest.
+    body_trim_db = ((160, -1.2), (202, 0.4), (255, 1.7), (321, -0.2), (404, -3.2), (509, 3.2), (641, -1.8), (808, -0.4), (1018, -0.1), (1283, -2.0), (1616, -1.1), (2036, -5.4), (2566, -1.3), (3233, 0.4), (4073, 2.4), (5132, 3.3), (6465, 2.8), (8146, 3.0), (10263, -0.7))
     string_count = 3
     unison_detune = (0.35, 0.5)  # (unused: unison_voices below)
     # EACH PARTIAL BEATS AT ITS OWN SLOW RATE, as the grand's do
@@ -4217,10 +4235,9 @@ class HammeredDulcimerProperties(FormantBody, InharmonicStringProperties):
     # (the fundamental 22 dB down at 1.2 s; the recordings' 2-15). Offset in
     # Hz per string per partial, drawn from the key, the string and the
     # partial, either sign, within unison_beat_hz -- MEASURED (dulcimer_fit
-    # beating stats, every third key, partials 1-6, 0.3-3 s): the takes wobble
-    # 4.8 dB at a median 1.3 Hz, a home-built instrument's courses looser than
-    # a Steinway's unisons (0.05-0.4 Hz gave 3.0 dB at 0.4); 0.2-2.0 gives 4.5
-    # dB at 1.5 Hz.
+    # measure's beating, partials 1-6, 0.3 s on): iternetcone's courses wobble
+    # 3-8 dB at a median ~1.7 Hz, courses looser than a piano's unisons;
+    # 0.2-2.0 gives ~4.5 dB at 1.5 Hz, as it stood.
     unison_beat_hz = (0.2, 2.0)
 
     def unison_voices(self, frequency, harmonic, harmonic_decay):
@@ -4232,17 +4249,19 @@ class HammeredDulcimerProperties(FormantBody, InharmonicStringProperties):
             off = r.uniform(*self.unison_beat_hz) * (1.0 if r.random() < 0.5 else -1.0)
             out.append((self.unison_gain, off, 0.0, harmonic_decay, 0.0))
         return out
-    # THE DECAY GOES BY HERTZ, NOT BY HARMONIC (dulcimer_fit.py decay, every
-    # key's third octaves, 0.05-1.2 s; the takes fade out after ~3 s).
-    # Measured, each register's fundamental falls 7-12 dB/s, and above it the
-    # rate is the same function of the partial's frequency in every register
-    # -- ~17 dB/s at 2-3 kHz, ~40 at 4-5, ~100 at 8-11 -- the string's
-    # losses to the air and the bridge rising with frequency, not with its
-    # index. The m-and-register law could only fake it (a negative floor).
+    # THE DECAY, FROM PHYSICS (examples/dulcimer_physics.py; Ben: "physics
+    # for decay"): each partial loses to the air (Valette), to the steel's own
+    # loss (2e-4, literature order) and through the bridge into the board --
+    # 2 Z0 G f0, the same for every partial of a string, the term that
+    # dominates. G, the board's conductance, is published nowhere and the
+    # trimmed takes scatter (10-68 dB/s): three were heard, and Ben chose
+    # the LONG ring ("Keep the long one"), G = 0.0015 s/kg -- C4's
+    # fundamental 5.7 dB/s, A4's 9.4. The law by hertz fitted to that
+    # physics over D3-F6, partials to 8 kHz (log-rate rms 0.13):
     # dB/s = decay_db + decay_hz_db * (f / 1 kHz) ** decay_hz_power
-    decay_db = 6.55
-    decay_hz_db = 2.12
-    decay_hz_power = 1.60
+    decay_db = 3.499
+    decay_hz_db = 8.246
+    decay_hz_power = 0.928
 
     # The parameters are in the measured unit, a band's level in dB/s; the
     # renderer's figure falls twice that in band level (rendered and read
@@ -4258,11 +4277,10 @@ class HammeredDulcimerProperties(FormantBody, InharmonicStringProperties):
     # A BANK OF STRINGS, AND NO DAMPERS. A dulcimer has nothing to stop a
     # string: every course on the instrument is free all the time, and each
     # stroke drives them all through its bridge (register.py, the piano's
-    # free-string register). The takes carry it -- between the partials, at
-    # 0.5-2.5 s, peaks at nearly every chromatic pitch A2-F#7, 37-50 dB under
-    # the note (dulcimer_fit.py sympathy). damper_top 0: every key free.
-    # The courses are the ones Kemp recorded, D3-F6 (course_keys): the
-    # instrument has strings at those pitches and not at others.
+    # free-string register). damper_top 0: every key free. The courses are
+    # the published 17/16's (Musicmakers' tuning chart: the bass bridge D3-Eb5,
+    # the treble bridge's two sides D#4-F6 and G#3-Bb5): strings at those
+    # pitches and not at others.
     register_gain = 0.02
     # THE STROKE ITSELF, through the bridge: the hammer's impulse kicks every
     # free string at its own pitch whatever the interval (the register's
@@ -4277,16 +4295,15 @@ class HammeredDulcimerProperties(FormantBody, InharmonicStringProperties):
     register_knock_gain = 0.0159
     register_knock_falloff = 1.0
     # ...BY HOW FAR ABOVE OR BELOW, measured (dulcimer_fit.py halo): (signed
-    # semitones from the struck key, dB). The takes ring the strings below,
-    # peaking 7-14 semitones down, the nearest neighbours weak and those above
-    # 50-75 dB under: a bridge's kick gives each string a velocity, and a
-    # mode's displacement goes as velocity over frequency; the higher strings
-    # also die faster. The symmetric 1 dB a semitone rang a chromatic cluster
-    # round the note (Ben: "more chromatic than the recording"). 15.6 ->
-    # 9.4 dB rms over -24..+24; below the note within 1-2 dB, above it held
-    # at -60 where what is left is the drive, not the knock. Past -19 few
-    # courses lie under any note and the fit ran to its clip: held at -20.
-    register_knock_profile = ((-24, -20.0), (-23, -20.0), (-22, -20.0), (-21, -20.0), (-20, -20.0), (-19, -28.0), (-18, -24.2), (-17, -25.7), (-16, -23.4), (-15, -21.3), (-14, -21.5), (-13, -23.0), (-12, -21.8), (-11, -21.0), (-10, -20.9), (-9, -20.8), (-8, -21.1), (-7, -19.5), (-6, -17.0), (-5, -15.4), (-4, -16.1), (-3, -16.7), (-2, -14.5), (-1, -14.8), (0, 0.0), (1, -24.0), (2, -31.3), (3, -31.3), (4, -30.3), (5, -29.9), (6, -29.3), (7, -32.5), (8, -43.2), (9, -46.9), (10, -43.2), (11, -49.8), (12, -54.9), (13, -60.0), (14, -60.0), (15, -60.0), (16, -60.0), (17, -60.0), (18, -60.0), (19, -60.0), (20, -60.0), (21, -60.0), (22, -60.0), (23, -60.0), (24, -60.0))
+    # semitones from the struck key, dB), refitted on iternetcone's takes
+    # (dulcimer_fit.py halo, -14..+24: within a few dB of them there): a
+    # bridge's kick gives each string a velocity, and a mode's displacement
+    # goes as velocity over frequency; the higher strings also die faster.
+    # Further below, the takes' strike keys have no courses under them and the
+    # fit ran to its clip; the takes show the halo there at the same level as
+    # -14..-9, as a bridge carrying the blow to every course alike would:
+    # held at -14's value (as the first fit held its own).
+    register_knock_profile = ((-24, -19.8), (-23, -19.8), (-22, -19.8), (-21, -19.8), (-20, -19.8), (-19, -19.8), (-18, -19.8), (-17, -19.8), (-16, -19.8), (-15, -19.8), (-14, -19.8), (-13, -18.8), (-12, -24.9), (-11, -25.5), (-10, -24.5), (-9, -21.7), (-8, -18.8), (-7, -18.0), (-6, -18.2), (-5, -16.5), (-4, -15.5), (-3, -12.3), (-2, -4.6), (-1, -3.3), (0, 0.0), (1, -15.0), (2, -20.6), (3, -17.2), (4, -18.4), (5, -22.1), (6, -26.2), (7, -34.6), (8, -44.3), (9, -35.7), (10, -23.2), (11, -32.0), (12, -36.0), (13, -40.0), (14, -35.9), (15, -40.2), (16, -46.4), (17, -50.8), (18, -52.1), (19, -52.8), (20, -53.5), (21, -55.3), (22, -52.2), (23, -52.1), (24, -52.1))
     # A KICK MOVES EACH MODE AS ITS VELOCITY OVER ITS FREQUENCY: the knock's
     # level on a mode falls as 1/f (register_knock_tilt 1, from the physics,
     # not fitted). Flat, the kicked strings were as bright as struck ones and
@@ -4298,8 +4315,7 @@ class HammeredDulcimerProperties(FormantBody, InharmonicStringProperties):
     # -60, and they were cut while still heard (register.floor_of)
     register_floor_db = -80.0
     damper_top = 0
-    course_keys = (50, 52, 54, 55, 56, 57, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71,
-                   72, 73, 74, 75, 76, 77, 78, 79, 81, 82, 83, 84, 86, 88, 89)
+    course_keys = (50, 52, 54, 55, 56, 57, 59, 60, 61, 62, 63, 64, 65, 66, 67, 68, 69, 70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 81, 82, 83, 84, 86, 88, 89)
     # TWO BRIDGES: the bass courses (below bass_bridge_hz, D3-A3 -- where the
     # stiffness steps) cross one, the treble courses the other; across them
     # through the soundboard, at cross_bridge_coupling (asserted, as the
@@ -4311,19 +4327,14 @@ class HammeredDulcimerProperties(FormantBody, InharmonicStringProperties):
 
     # THE TREBLE BRIDGE DIVIDES EACH STRING 2:3, and the two lengths are one
     # string: strike one side and the other rings, a fifth away -- through
-    # the bridge's top, not the board. Measured per key (the 3:2 and 2:3
-    # peaks at 0.5-2.5 s, dB re the fundamental): B3-G4 ring a fifth ABOVE
-    # (-22 to -43 dB), G#4 up a fifth BELOW (-24 to -48); E4 is neither
-    # (-41 / -40) and has none. Which side each
-    # note was struck on is read from which fifth answers louder -- a note
-    # can sit on either side of a dulcimer, and this instrument's layout is
-    # not published. The partner's coupling, re the board's (the drive's and
-    # the knock's alike), is fitted.
-    bridge_partner = {59: 66, 60: 67, 61: 68, 62: 69, 63: 70, 65: 72, 66: 73, 67: 74, 69: 76,
-                      72: 79, 68: 61, 70: 63, 71: 64, 73: 66, 74: 67, 75: 68, 76: 69,
-                      77: 70, 78: 71, 79: 72, 81: 74, 82: 75, 83: 76, 84: 77, 86: 79, 88: 81,
-                      89: 82}
-    partner_coupling = 2.60
+    # the bridge's top, not the board. The pairs are the published 17/16's
+    # (Musicmakers' tuning chart: right . left, D#4.G#3 to F6.Bb5); a note on
+    # both sides is struck where the takes say (the louder fifth: C4-G4 on the
+    # left, B4-D5 on the right), so up to A4 the left, from B4 the right. The
+    # partner's coupling, re the board's, fitted (sympathy --fit --partner:
+    # ours within 0.1 dB of the takes').
+    bridge_partner = {56: 63, 57: 64, 59: 66, 61: 68, 62: 69, 63: 56, 64: 71, 66: 73, 67: 74, 68: 61, 69: 76, 71: 64, 72: 79, 73: 66, 74: 67, 76: 69, 77: 84, 78: 71, 79: 72, 81: 74, 82: 89, 83: 76, 84: 77, 86: 79, 88: 81, 89: 82}
+    partner_coupling = 14.7
 
 
 # The Clavinet D6's tone rockers. Six switches sit left of the keyboard: the

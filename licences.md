@@ -149,7 +149,7 @@ store build.
   (uploaded by a third party), Khaled Arman with the Geneva Camerata (with an
   ensemble). Ermlick's is the cleanest; its licence is the uploader's own.
 
-### L7. Seven Pianobook libraries — Pianobook's terms forbid it
+### L7. Six Pianobook libraries — Pianobook's terms forbid it
 
 - **The terms** (pianobook.co.uk/terms-conditions, section 5): the samples are
   licensed "only within your own newly-created sound recording(s)"; the
@@ -161,7 +161,6 @@ store build.
   products that are sold". A model fitted to them, sold as an instrument, is
   what this clause is written against.
 - **What derives from them:**
-  - Dulcimer (Lite Hammered Dulcimer);
   - the harpsichord's 4' (Harpsimachord);
   - the tonewheel organ's 16', 5 1/3', 1 3/5', percussion and speaker (Hammond L102);
   - Hawaiian Guitar (lap steel); 12-string Guitar (Fender 12 String);
@@ -190,7 +189,12 @@ store build.
     (Freesound pack 1365, CC0), the loop's partial chosen physically (its
     gain round the loop: bridge drive, pickup comb, damping, cabinet, the
     takes' coupling band): APPROVED ("Awesome. This is great"); the Gretsch
-    and Feedbacker credits gone. Each other voice's notes still name
+    and Feedbacker credits gone. Dulcimer rebuilt 2026-11-22: fitted to
+    iternetcone's takes (Freesound pack 19445, CC BY 4.0; C4-D5), the bass
+    bridge's stiffness and the layout from Musicmakers' published 17/16 kit
+    charts, the decay from string physics (the board's conductance by ear:
+    "Keep the long one"), the halo held past the takes: APPROVED; Kemp's
+    credit gone. Each other voice's notes still name
     the old source beside the new until Ben approves and the old fit's text
     goes.
 - **Alternatives (checked 2026-11-20; Freesound licenses each sound, so check

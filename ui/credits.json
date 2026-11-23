@@ -141,13 +141,22 @@
 },
 {
 "group": "Keyboards and bells",
-"title": "Lite Hammered Dulcimer v1.1",
-"author": "Kevin Kemp",
-"url": "https://www.pianobook.co.uk/packs/lite-hammered-dulcimer/",
-"licence": "Pianobook terms",
-"licence_url": "https://www.pianobook.co.uk/terms-conditions/",
+"title": "17/16 Hammered Dulcimer kit: string set, tuning chart, stringing instructions",
+"author": "Musicmakers (harpkit.com)",
+"url": "https://www.harpkit.com/mm5/pdf/strings/1716strg.pdf",
+"licence": "published data",
+"how": "measured",
+"voices": "Dulcimer: its courses, the treble bridge's pairs, and the bass bridge's strings (gauges, lengths)"
+},
+{
+"group": "Keyboards and bells",
+"title": "Multi-sampled Hammered Dulcimer",
+"author": "iternetcone",
+"url": "https://freesound.org/people/iternetcone/packs/19445/",
+"licence": "CC BY 4.0",
+"licence_url": "https://creativecommons.org/licenses/by/4.0/",
 "how": "fitted",
-"voices": "Dulcimer"
+"voices": "Dulcimer: its tone, stiffness, decay, body and strike, C4-D5"
 },
 {
 "group": "Keyboards and bells",

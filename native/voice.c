@@ -2177,8 +2177,24 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
         o->B = o->inharmonicity_coefficient;
         if (c->b_law == 3)              /* the steel's law (inharmonicity_coefficient_for_frequency) */
             o->B = c->law_k * pow(frequency, c->law_p);
-        else if (c->b_law == 4)         /* the dulcimer's: its bass bridge's own, the steel's law over it */
+        else if (c->b_law == 4) {       /* the dulcimer's: its bass bridge's own, the steel's law over it */
             o->B = frequency < c->bb_hz ? c->bb_B : c->law_k * pow(frequency, c->law_p);
+            if (frequency < c->bb_hz && c->n_btab) {   /* ...its bass bridge by course (bass_bridge_table) */
+                double key = 69.0 + 12.0 * log(frequency / 440.0) / log(2.0);
+                int n = c->n_btab;
+                if (key <= c->btab_key[0])
+                    o->B = c->btab_B[0];
+                else {
+                    o->B = c->btab_B[n - 1];
+                    for (int i = 0; i + 1 < n; i++)
+                        if (key <= c->btab_key[i + 1]) {
+                            o->B = c->btab_B[i] + (c->btab_B[i + 1] - c->btab_B[i]) * (key - c->btab_key[i])
+                                   / (c->btab_key[i + 1] - c->btab_key[i]);
+                            break;
+                        }
+                }
+            }
+        }
         else if (c->b_law == 5) {       /* the Clavinet's published table, linear in the key */
             double key = 69.0 + 12.0 * log(frequency / 440.0) / log(2.0);
             int n = c->n_btab;

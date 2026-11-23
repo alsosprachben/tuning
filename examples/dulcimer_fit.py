@@ -1,6 +1,8 @@
 #!/usr/bin/env python3
-"""Measure GM 15's hammered dulcimer against Kevin Kemp's (Pianobook "Lite
-Hammered Dulcimer", measured only; sources.md), and our render the same way.
+"""Measure GM 15's hammered dulcimer against iternetcone's "Multi-sampled
+Hammered Dulcimer" (Freesound pack 19445, CC BY 4.0; since 2026-11-22 --
+Kevin Kemp's Pianobook set, the first reference, is no longer read:
+licences.md L7), and our render the same way.
 
     python3 examples/dulcimer_fit.py measure [--notes=50,62,...]
     python3 examples/dulcimer_fit.py spectrum [--params=a,b] [--maxfev=N]
@@ -13,8 +15,12 @@ Hammered Dulcimer", measured only; sources.md), and our render the same way.
     python3 examples/dulcimer_fit.py halo [--rounds=N]   (writes tonelib.py)
     python3 examples/dulcimer_fit.py ab OUT.wav [--note-s=2.5]   recording, then model, key by key
 
-The recordings are one take a note, D3-F6, one condenser, each cut at 5.0 s;
-the note is read from its NAME (D3.wav, G#4.wav, Eb5.wav). Per note, with
+The recordings: eleven single strikes, C4-D5, 48 kHz stereo, each trimmed
+~40 dB down (0.9-2.9 s): the strike and its first second or two, the long
+ring cut. Their names say only a letter ("c" is C4, C#5 or C5; one "f" is
+F#4), so each take's note is the one its partials measure (TAKES). The
+neighbours ring on in several -- a dulcimer has no dampers -- the sympathy's
+evidence. Per note, with
 upright_fit's tools (a struck steel string is a struck steel string):
 
   B       inharmonicity from the partials' peaks
@@ -35,7 +41,12 @@ sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 import upright_fit as U
 
-REFS = os.path.expanduser("~/Documents/refs/dulcimer/lite/ds/Hammered Dulcimer")
+REFS = os.path.expanduser("~/Documents/refs/dulcimer_iternetcone")
+# each take's note, measured (its fundamental and its partials)
+TAKES = {60: "342912__iternetcone__c.wav", 62: "342918__iternetcone__d.wav", 64: "342917__iternetcone__e.wav",
+         65: "342916__iternetcone__f.wav", 66: "342915__iternetcone__f.wav", 67: "342920__iternetcone__g.wav",
+         69: "342914__iternetcone__a.wav", 71: "342913__iternetcone__b.wav", 72: "342919__iternetcone__high-c.wav",
+         73: "342911__iternetcone__c.wav", 74: "342921__iternetcone__high-d.wav"}
 PROGRAM = 15
 VEL = 100
 HOLD = 5.0
@@ -49,10 +60,7 @@ def key_of_name(nm):
 
 
 def recordings():
-    out = {}
-    for p in glob.glob(os.path.join(REFS, "*.wav")):
-        out[key_of_name(os.path.splitext(os.path.basename(p))[0])] = p
-    return out
+    return {k: os.path.join(REFS, f) for k, f in TAKES.items()}
 
 
 def measure(x, sr, key):
@@ -299,7 +307,10 @@ def fit_peakbody(opts):
         for c in C:
             w = np.abs(lh - np.log2(c)) <= 0.5
             if w.sum() >= 5:
-                trim[float(c)] = float(np.clip(trim.get(float(c), 0.0) - 0.5 * dv[w].mean(), -15, 15))
+                # keyed by the band's whole hertz, as the table is written: keyed
+                # by the float, a band read back from the table (321) and its
+                # centre (320.9) were two entries -- every band twice
+                trim[round(c)] = float(np.clip(trim.get(round(c), 0.0) - 0.5 * dv[w].mean(), -15, 15))
         mu = float(np.mean(list(trim.values())))
         cls.body_trim_db = tuple((round(c), round(v - mu, 1)) for c, v in sorted(trim.items()))
         trim = dict(cls.body_trim_db)
@@ -481,7 +492,7 @@ def fit_halo(opts):
     print(line)
 
 
-AB_KEYS = (50, 55, 59, 62, 67, 69, 74, 79, 84, 89)
+AB_KEYS = (60, 62, 64, 66, 67, 69, 71, 72, 74)      # the takes' (C4-D5)
 
 
 def ab(out, note_s):

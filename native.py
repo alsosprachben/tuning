@@ -2921,6 +2921,10 @@ def _class(cls):
             if _owner(cls, 'inharmonicity_coefficient_for_frequency') == 'HammeredDulcimerProperties':
                 c.b_law = 4                     # (...under the dulcimer's bass bridge, its own)
                 c.bb_hz, c.bb_B = float(cls.bass_bridge_hz), float(cls.bass_bridge_B)
+                _bt = tuple(getattr(cls, 'bass_bridge_table', ()) or ())
+                c.n_btab = len(_bt)             # (...by course, where the class has its table)
+                c.btab_key[:c.n_btab] = [float(k) for k, _ in _bt]
+                c.btab_B[:c.n_btab] = [float(b) for _, b in _bt]
         if sung_voice(cls):
             # A SUNG BODY (_VocalBody): the class's vowel, its body's draw; the
             # note's part (the file's, or the tone's own voice_part) and

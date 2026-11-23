@@ -199,25 +199,29 @@ SOURCES = [{'id': 'iowa-mis',
               'in or in relation to any competitive products that are sold or relicensed to any third parties." FAQ: '
               'forbidden "to sell or redistribute the sample libraries". Pack readme has no licence of its own.',
   'match': ['Douglas\\ Knisely']},
- {'id': 'pb-lite-hammered-dulcimer',
+ {'id': 'musicmakers-1716',
   'group': 'Keyboards and bells',
-  'title': 'Lite Hammered Dulcimer v1.1',
-  'author': 'Kevin Kemp',
-  'url': 'https://www.pianobook.co.uk/packs/lite-hammered-dulcimer/',
-  'licence': 'Pianobook terms',
-  'licence_url': 'https://www.pianobook.co.uk/terms-conditions/',
+  'title': '17/16 Hammered Dulcimer kit: string set, tuning chart, stringing instructions',
+  'author': 'Musicmakers (harpkit.com)',
+  'url': 'https://www.harpkit.com/mm5/pdf/strings/1716strg.pdf',
+  'licence': 'published data',
+  'licence_url': '',
+  'how': 'measured',
+  'voices': "Dulcimer: its courses, the treble bridge's pairs, and the bass bridge's strings (gauges, lengths)",
+  'evidence': '1716strg.pdf, 1716fin.pdf, 1716BillMaterials.pdf (fetched 2026-11-22): gauges by course, the tuning '
+              'chart, the box rails and the bridges\' placement',
+  'match': ['Musicmakers']},
+ {'id': 'fs-iternetcone-dulcimer',
+  'group': 'Keyboards and bells',
+  'title': 'Multi-sampled Hammered Dulcimer',
+  'author': 'iternetcone',
+  'url': 'https://freesound.org/people/iternetcone/packs/19445/',
+  'licence': 'CC BY 4.0',
+  'licence_url': 'https://creativecommons.org/licenses/by/4.0/',
   'how': 'fitted',
-  'voices': 'Dulcimer',
-  'issue': 'L7',
-  'evidence': 'https://www.pianobook.co.uk/terms-conditions/ (EULA, fetched 2026-11-20) s.5: licence only "to use '
-              'the download Sound File(s) only within your own newly-created sound recording(s) and/or '
-              'performances"; "expressly forbids resale or other distribution of the Products or their derivatives, '
-              'either as they exist in the library, reformatted ..., or mixed, combined, filtered, re-synthesised or '
-              'otherwise edited, for use as sounds, multi-sounds, samples, multi-samples, sound sets, programmes or '
-              'patches in a sampler, microchip, computer or any sample playback device"; "Products may not be used '
-              'in or in relation to any competitive products that are sold or relicensed to any third parties." FAQ: '
-              'forbidden "to sell or redistribute the sample libraries". Pack readme has no licence of its own.',
-  'match': ['Kevin\\ Kemp']},
+  'voices': 'Dulcimer: its tone, stiffness, decay, body and strike, C4-D5',
+  'evidence': 'each sound page 342911-342925 (fetched 2026-11-22): Attribution 4.0; the pack readme',
+  'match': ['iternetcone']},
  {'id': 'fs-celesta',
   'group': 'Keyboards and bells',
   'title': 'Celesta',
