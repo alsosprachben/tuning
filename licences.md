@@ -149,7 +149,7 @@ store build.
   (uploaded by a third party), Khaled Arman with the Geneva Camerata (with an
   ensemble). Ermlick's is the cleanest; its licence is the uploader's own.
 
-### L7. Four Pianobook libraries — Pianobook's terms forbid it
+### L7. Three Pianobook libraries — Pianobook's terms forbid it
 
 - **The terms** (pianobook.co.uk/terms-conditions, section 5): the samples are
   licensed "only within your own newly-created sound recording(s)"; the
@@ -163,7 +163,7 @@ store build.
 - **What derives from them:**
   - the harpsichord's 4' (Harpsimachord);
   - the tonewheel organ's 16', 5 1/3', 1 3/5', percussion and speaker (Hammond L102);
-  - Hawaiian Guitar (lap steel); 12-string Guitar (Fender 12 String);
+  - Hawaiian Guitar (lap steel);
   - Gopichant (The Ektara);
 - **Status:** open, and the largest issue by count. Each samplist can grant
   permission; otherwise each voice needs another source.
@@ -232,9 +232,13 @@ store build.
     (Commons, CC0/PD: all ten open strings plucked singly, and bar slides) and
     Make Noise's "Drop of Sun" pedal-steel reel (Freesound, CC0). The string,
     bar and pickup physics are a lap steel's.
-  - **12-string Guitar:** no per-note set. Kuzmanović's solo piece (Commons,
-    CC BY-SA 4.0) for the paired-course detune and pick order, on top of the
-    six-string fit.
+  - **12-string Guitar: refitted 2026-11-22** from physics and played
+    recordings, on our Iowa-fitted steel-string: the courses' detune read off
+    markiboy123's "12 String Waves" (Freesound 422047, CC0; six melody notes,
+    unison pairs 7.2 cents) and its and Kuzmanović's "Bravoure" (Commons, CC
+    BY-SA 4.0; low notes, octave strings 9.9 cents), the octave string's
+    level by physics, the pick the mandolin's (Philharmonia-fitted).
+    APPROVED by ear ("Sounds good"); the Fender 12 String credit gone.
   - **Mandolin: refitted 2026-11-22** to the Philharmonia's free samples
     (every note G3-A6). Their licence: "free to use these samples as you
     wish, including releasing them as part of a commercial work", the only

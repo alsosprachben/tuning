@@ -29890,34 +29890,40 @@ class Plectrum:
 
 class TwelveStringProperties(Plectrum, SteelGuitarProperties):
     """GS 25.8, "12-str. Gt": the steel-string with every COURSE DOUBLED, as a
-    12-string's are -- read off John Magner's Fender 12-string (Pianobook;
-    sources.md), its notes' harmonics resolved into doublets.
+    12-string's are -- since 2026-11-22 from physics and played recordings
+    (John Magner's Pianobook takes no longer read, licences.md L7):
+    markiboy123's "12 String Waves" (Freesound 422047, CC0) and Vladan
+    Kuzmanovic's "Bravoure" (Commons, CC BY-SA 4.0), each harmonic's beating
+    read where a note rings (examples/guitar12_courses.py).
 
       THE LOW FOUR COURSES (E A D G) pair each string with a thin one an
       OCTAVE up: its harmonics land on the main string's EVEN ones, so it is
-      a voice on each even harmonic (unison_voices) -- as loud as the main
-      string at its own pitch (the open low strings' 2nd harmonic ~10 dB over
-      a single string's), 8 cents off (the doublets 6-14).
+      a voice on each even harmonic (unison_voices), 9.9 cents off (the
+      takes' even harmonics beating, median over 12 low notes; 8 before). Its
+      level the main string's at its own pitch: a thinner string at about the
+      same tension carries about the same energy for the same pick.
       THE TOP TWO (B E) are UNISON pairs: a voice on every harmonic, 0.9 of
-      the main, 5.5 cents off (the doublets 1-2 Hz, 2.6-9 cents, median 5.5).
+      the main, 7.2 cents off (six melody notes' h2-h6 beating, median; 5.5
+      before -- the measure reads ours back exactly).
     A note's course by its pitch: below B3 the octave courses, B3 and up the
     unison ones (where the frets put them on the low E-A-D-G and B-E)."""
     course_split = 59
     octave_partner_gain = 1.0
-    octave_partner_cents = 8.0
+    octave_partner_cents = 9.9
     unison_partner_gain = 0.9
-    unison_partner_cents = 5.5
-    # THE PICK (examples/plectrum_fit.py): a scrape at the note's own level to
-    # 7 kHz, gone at 400 dB/s (the takes' top falls 10-20 dB by 25 ms: a first
-    # fit on 15 ms shares alone took a long quiet scrape to 10 kHz, which Ben
-    # heard as harsh), the courses crossed 28 ms apart; the partials need no
-    # boost of their own once the scrape is there
+    unison_partner_cents = 7.2
+    # THE PICK: the mandolin's (MandolinProperties, fitted to the
+    # Philharmonia's notes) -- the same flatpick on paired steel strings: a
+    # scrape at the note's level to 7 kHz rising 3 dB an octave, gone at 1100
+    # dB/s, no boost on the partials, the course's two strings 14 ms apart.
+    # (The played takes' attacks start over the last chord's ring and are
+    # soft: no target for a pick)
     pick_noise_db = 0.0
-    pick_noise_tilt_db = 0.0
+    pick_noise_tilt_db = 3.0
     pick_noise_hi_hz = 7000.0
-    pick_noise_dbs = 400.0
+    pick_noise_dbs = 1100.0
     pick_slope_db = 0.0
-    course_stagger_s = 0.028
+    course_stagger_s = 0.014
 
     def unison_voices(self, frequency, harmonic, harmonic_decay):
         from math import log2

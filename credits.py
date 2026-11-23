@@ -514,25 +514,30 @@ SOURCES = [{'id': 'iowa-mis',
   'voices': "Feedback Gt. and Gt. Feedback: the loop's band and its clean tone",
   'evidence': 'each sound page 22135-22140 (fetched 2026-11-22): Creative Commons 0; the pack readme',
   'match': ['airlynx99']},
- {'id': 'pb-fender-12-string',
+ {'id': 'fs-markiboy123-12-string',
   'group': 'Guitars and basses',
-  'title': 'Fender 12 String',
-  'author': 'John Magner',
-  'url': 'https://www.pianobook.co.uk/packs/fender-12-string/',
-  'licence': 'Pianobook terms',
-  'licence_url': 'https://www.pianobook.co.uk/terms-conditions/',
-  'how': 'fitted',
-  'voices': '12-string Guitar',
-  'issue': 'L7',
-  'evidence': 'https://www.pianobook.co.uk/terms-conditions/ (EULA, fetched 2026-11-20) s.5: licence only "to use '
-              'the download Sound File(s) only within your own newly-created sound recording(s) and/or '
-              'performances"; "expressly forbids resale or other distribution of the Products or their derivatives, '
-              'either as they exist in the library, reformatted ..., or mixed, combined, filtered, re-synthesised or '
-              'otherwise edited, for use as sounds, multi-sounds, samples, multi-samples, sound sets, programmes or '
-              'patches in a sampler, microchip, computer or any sample playback device"; "Products may not be used '
-              'in or in relation to any competitive products that are sold or relicensed to any third parties." FAQ: '
-              'forbidden "to sell or redistribute the sample libraries". Pack readme has no licence of its own.',
-  'match': ['John\\ Magner']},
+  'title': '12 String Waves',
+  'author': 'markiboy123',
+  'url': 'https://freesound.org/people/markiboy123/sounds/422047/',
+  'licence': 'CC0',
+  'licence_url': 'https://creativecommons.org/publicdomain/zero/1.0/',
+  'how': 'measured',
+  'voices': '12-string Guitar (its courses\' detune)',
+  'evidence': 'Freesound 422047 page (fetched 2026-11-22): "Creative Commons 0"',
+  'match': ['markiboy123']},
+ {'id': 'commons-kuzmanovic-12-string',
+  'group': 'Guitars and basses',
+  'title': 'Bravoure for 12 String Guitar',
+  'author': 'Vladan L. Kuzmanovi\u0107',
+  'url': 'https://commons.wikimedia.org/wiki/File:Vladan_Kuzmanovi%C4%87_-_Bravoure_For_12_String_Guitar.ogg',
+  'licence': 'CC BY-SA 4.0',
+  'licence_url': 'https://creativecommons.org/licenses/by-sa/4.0/',
+  'how': 'measured',
+  'voices': '12-string Guitar (its octave courses\' detune)',
+  'evidence': 'Commons file page (fetched 2026-11-22): "licensed under the Creative Commons Attribution-Share '
+              'Alike 4.0 International license"; own work. Two of the twelve low notes read; the detune measured '
+              'from them is a fact about the instrument, nothing of the recording ships.',
+  'match': ['Kuzmanovic']},
  {'id': 'philharmonia-mandolin',
   'group': 'Guitars and basses',
   'title': 'Sound samples: mandolin',

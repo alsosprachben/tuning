@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """The PLECTRUM (tonelib.Plectrum) fitted to picked takes: the 12-string's
-(Fender, Pianobook), the mandolin's (the Philharmonia's free samples) and the lap steel's
+(markiboy123's melody notes, Freesound CC0), the mandolin's (the Philharmonia's free samples) and the lap steel's
 fingerpicks (Lapsteel Articulations) -- sources.md.
 
     python3 examples/plectrum_fit.py measure          recorded against ours
@@ -28,12 +28,14 @@ sys.path[:0] = [HERE, os.path.join(HERE, "examples")]
 REF = os.path.expanduser("~/Documents/refs")
 # voice: (class, program, bank, [(file, MIDI)], use HF0?)
 VOICES = {
+    # markiboy123's "12 String Waves" (Freesound 422047, CC0), its six melody
+    # notes over the chords (examples/guitar12_courses.py finds them; cut to
+    # guitar12_open/cuts, 50 ms before each onset) -- since 2026-11-22, the
+    # Fender 12 String's Pianobook takes no longer read
     "12str": ("TwelveStringProperties", 25, 8,
-              [("guitar12_fender/wav/fender_12_string_E2.wav", 40),
-               ("guitar12_fender/wav/fender_12_string_E3.wav", 52),
-               ("guitar12_fender/wav/fender_12_string_A3.wav", 57),
-               ("guitar12_fender/wav/fender_12_string_E4.wav", 64),
-               ("guitar12_fender/wav/fender_12_string_A4.wav", 69)], True),
+              [("guitar12_open/cuts/markiboy_%s.wav" % n, k)
+               for n, k in (("002.12_k66", 66), ("007.07_k61", 61), ("011.13_k61", 61),
+                            ("018.07_k61", 61), ("090.31_k61", 61), ("094.16_k66", 66))], True),
     # the Philharmonia's free samples (since 2026-11-22; a clean close mic,
     # so HF0 counts): G3-A5 at piano, every fourth note
     "mandolin": ("MandolinProperties", 25, 16,

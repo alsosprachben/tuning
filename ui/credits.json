@@ -393,13 +393,23 @@
 },
 {
 "group": "Guitars and basses",
-"title": "Fender 12 String",
-"author": "John Magner",
-"url": "https://www.pianobook.co.uk/packs/fender-12-string/",
-"licence": "Pianobook terms",
-"licence_url": "https://www.pianobook.co.uk/terms-conditions/",
-"how": "fitted",
-"voices": "12-string Guitar"
+"title": "12 String Waves",
+"author": "markiboy123",
+"url": "https://freesound.org/people/markiboy123/sounds/422047/",
+"licence": "CC0",
+"licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
+"how": "measured",
+"voices": "12-string Guitar (its courses' detune)"
+},
+{
+"group": "Guitars and basses",
+"title": "Bravoure for 12 String Guitar",
+"author": "Vladan L. Kuzmanović",
+"url": "https://commons.wikimedia.org/wiki/File:Vladan_Kuzmanovi%C4%87_-_Bravoure_For_12_String_Guitar.ogg",
+"licence": "CC BY-SA 4.0",
+"licence_url": "https://creativecommons.org/licenses/by-sa/4.0/",
+"how": "measured",
+"voices": "12-string Guitar (its octave courses' detune)"
 },
 {
 "group": "Guitars and basses",
