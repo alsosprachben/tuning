@@ -4,7 +4,7 @@ single notes across its compass at three velocities, then chords -- 'old'
 rendered with the commit's tonelib.py and patch_map.py (DRUMKIT_AB_REF's, else
 HEAD's), 'new' with the tree's. (examples/drumkit_ab.py, for a drum set.)
 
-    python3 examples/refit_ab.py PROGRAM NAME [LO HI]
+    python3 examples/refit_ab.py PROGRAM[.BANK] NAME [LO HI]     (14.8: GS's variation 8)
         -> ~/Music/licence_refits/NAME_{old,new}.mp3
 """
 import os
@@ -23,6 +23,10 @@ def midi(program, lo, hi):
     import mido
     m = mido.MidiFile(type=0, ticks_per_beat=480)
     t = mido.MidiTrack(); m.tracks.append(t)
+    program, _, bank = str(program).partition(".")
+    if bank:
+        t.append(mido.Message("control_change", channel=0, control=0, value=int(bank), time=0))
+    program = int(program)
     t.append(mido.Message("program_change", channel=0, program=program, time=0))
     for v in (40, 80, 120):
         for n in range(lo, hi + 1, 5):
@@ -49,7 +53,7 @@ def render(program, name, tag, lo, hi):
 
 
 def main(argv):
-    program, name = int(argv[1]), argv[2]
+    program, name = argv[1], argv[2]
     lo, hi = (int(argv[3]), int(argv[4])) if len(argv) > 4 and argv[3] != "old" and argv[3] != "new" else (36, 96)
     if argv[-1] in ("old", "new"):
         return render(program, name, argv[-1], lo, hi)

@@ -14742,56 +14742,66 @@ class TubularBellProperties(TunedBarProperties):
 
 
 class ChurchBellProperties(TubularBellProperties):
-    """GS 14.8, "Church Bell": a CHURCH BELL, measured -- St. Kathrin's in
-    Gelting (Pianobook, Zoom H5; sources.md), one strike, its modes read
-    window by window (0.25 s) and each fitted to a line in dB: its level at
-    the strike and its decay.
+    """GS 14.8, "Church Bell": a CHURCH BELL, measured -- the lowest of the
+    four tower bells at Bethesda Church, Saratoga Springs NY, "rung once
+    softly by rope" (HMTSCCSound, Freesound 554655, CC0; since 2026-11-22,
+    St Kathrin's -- Pianobook -- no longer read: licences.md L7). One strike,
+    a 30 s ring-out, its modes read off it by examples/church_bell_fit.py:
+    each mode's band in 50 ms windows, a line in dB to 30 dB down or its
+    floor -- its level at the strike and its decay -- and its level fitted
+    through the render (1.0 dB rms; decay log-rate 0.07).
 
     The written note is the STRIKE NOTE, which a bell is heard at an octave
-    under its NOMINAL (here 649.6 Hz, E5 a little flat: the strike E4). Under
-    it the HUM, flat as a village bell's often is (0.438, not 0.5), and a mode
-    at 1.125 -- the prime/tierce region -- both ringing on for seconds (2-4
-    dB/s): the bell's tail. The nominal at 2.0 (7.6 dB/s), the superquint at
-    3.0 a DOUBLET 3 Hz apart, beating; above it the clang -- 4.2 to 13.7, as
-    loud as the nominal at the strike and gone in a second (27-57 dB/s), a
-    triplet at 7.0. Tubular bells' register law for the rest: a bigger bell,
-    lower, rings longer."""
+    under its NOMINAL (here 624.8 Hz: the strike D#4 at 312.4). Under it the
+    HUM, flat as a small bell's often is (0.558, not 0.5), and the
+    prime/tierce region at 1.162, the strongest partial: both ring on for
+    seconds (1.4, 2.2 dB/s), the bell's tail. The nominal at 2.0 and the
+    superquint at 3.03 (~9 dB/s); the clang above, 4.2 the strongest, up to
+    9.7, soft (a soft strike's). A cluster of quick modes beside the hum
+    (0.62-0.96, 25-37 dB/s) is the strike's metallic edge. Tubular bells'
+    register law for the rest: a bigger bell, lower, rings longer."""
     # (ratio to the strike note, per octave, dB at the strike, per octave, dB/s)
-    # The fast ones (> 25 dB/s) and the 1.125 4 dB over their lines' intercepts:
-    # a mode that dies within the fit's first window reads low across it (as
-    # the tubular bell's fit found), measured here against the render
+    # The decays are the take's own readings (the engine plays them 1:1); the
+    # levels fitted through the render, read the same way
     TUBE_MODES = (
-        (0.438, 0.0, -26.6, 0.0, 2.3),
-        (0.589, 0.0, -49.8, 0.0, 1.0),
-        (1.125, 0.0, -9.8, 0.0, 3.7),
-        (2.000, 0.0, -2.8, 0.0, 7.6),
-        (3.021, 0.0, -14.6, 0.0, 8.7),
-        (3.030, 0.0, -11.6, 0.0, 9.4),
-        (4.207, 0.0, 4.0, 0.0, 33.6),
-        (4.825, 0.0, -24.3, 0.0, 12.9),
-        (5.527, 0.0, -13.8, 0.0, 27.2),
-        (6.073, 0.0, -0.8, 0.0, 33.7),
-        (6.980, 0.0, -6.0, 0.0, 34.7),
-        (6.992, 0.0, -5.8, 0.0, 34.0),
-        (7.003, 0.0, -8.9, 0.0, 33.0),
-        (7.986, 0.0, -5.9, 0.0, 43.6),
-        (8.581, 0.0, 0.5, 0.0, 51.6),
-        (9.128, 0.0, -6.7, 0.0, 47.3),
-        (10.317, 0.0, -11.8, 0.0, 37.1),
-        (12.163, 0.0, -9.6, 0.0, 44.5),
-        (13.693, 0.0, -8.1, 0.0, 57.2),
+        (0.558, 0.0, 0.1, 0.0, 1.4),
+        (0.621, 0.0, -6.5, 0.0, 32.0),
+        (0.660, 0.0, -18.3, 0.0, 25.7),
+        (0.745, 0.0, -9.8, 0.0, 37.1),
+        (0.803, 0.0, -24.9, 0.0, 7.4),
+        (0.863, 0.0, -17.0, 0.0, 2.2),
+        (0.961, 0.0, -16.3, 0.0, 24.5),
+        (1.066, 0.0, -23.0, 0.0, 23.9),
+        (1.162, 0.0, 0.0, 0.0, 2.2),
+        (1.445, 0.0, -29.2, 0.0, 14.5),
+        (1.660, 0.0, -18.9, 0.0, 8.6),
+        (2.000, 0.0, -2.3, 0.0, 9.6),
+        (2.449, 0.0, -13.2, 0.0, 31.9),
+        (2.655, 0.0, -14.4, 0.0, 15.4),
+        (3.030, 0.0, -1.7, 0.0, 8.8),
+        (3.345, 0.0, -21.6, 0.0, 14.0),
+        (3.683, 0.0, -32.2, 0.0, 14.8),
+        (4.201, 0.0, -13.2, 0.0, 8.9),
+        (5.477, 0.0, -33.9, 0.0, 10.1),
+        (9.713, 0.0, -40.0, 0.0, 9.8),
     )
-    TUBE_REF_HZ = 324.8
+    TUBE_REF_HZ = 312.4
+    # THE CLAPPER LANDS IN ~4 ms (Ben: "Sounds good except for an initial
+    # click"): with no rise every mode began at full level in one phase, the
+    # first sample a step of half the peak. The take reaches 10% in 2 ms and
+    # its peak at 77 ms; with a 4 ms rise ours 1.4 ms and 85 ms, its largest
+    # first step 0.06 of the peak.
+    attack_time = 0.004
     mode_ratios = tuple(m[0] for m in TUBE_MODES)
     max_harmonic = len(TUBE_MODES)
-    # level with GM 14's tubular bell at the strike (its first 0.5 s): +6.1 dB
-    initial_gain = TubularBellProperties.initial_gain * 10.0 ** (6.1 / 20.0)
+    # level with GM 14's tubular bell at the strike (its first 0.5 s, D#4): +8.4 dB
+    initial_gain = TubularBellProperties.initial_gain * 10.0 ** (8.4 / 20.0)
 
     def harmonic_decay(self, harmonic):
         # THE TABLE IS THE RECORDING'S dB/s, at the bell's own strike note: the
-        # engine reads a decay at twice its value (measured: every mode 1.49x
-        # its table through the tubular bell's law, which is 2x at 415 Hz's
-        # register factor), and a lower bell rings longer from there
+        # engine reads a decay at twice its value (the tubular bell's law), so
+        # halved -- measured 1:1 at the strike note (church_bell_fit.py) --
+        # and a lower bell rings longer from there
         if 1 <= harmonic <= len(self.TUBE_MODES):
             f = self.frequency_x * 2.0 ** self.octave_position
             return (self.TUBE_MODES[harmonic - 1][4] / 2.0

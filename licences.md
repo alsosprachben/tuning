@@ -149,7 +149,7 @@ store build.
   (uploaded by a third party), Khaled Arman with the Geneva Camerata (with an
   ensemble). Ermlick's is the cleanest; its licence is the uploader's own.
 
-### L7. Ten Pianobook libraries — Pianobook's terms forbid it
+### L7. Nine Pianobook libraries — Pianobook's terms forbid it
 
 - **The terms** (pianobook.co.uk/terms-conditions, section 5): the samples are
   licensed "only within your own newly-created sound recording(s)"; the
@@ -164,7 +164,6 @@ store build.
   - Dulcimer (Lite Hammered Dulcimer);
   - the harpsichord's 4' (Harpsimachord);
   - the tonewheel organ's 16', 5 1/3', 1 3/5', percussion and speaker (Hammond L102);
-  - Church Bell (St Kathrin's bell);
   - Hawaiian Guitar (lap steel); 12-string Guitar (Fender 12 String);
   - Mandolin (Eclectic Mandolin); Gopichant (The Ektara);
   - Flugel Horn (Dusty Flugelhorn);
@@ -183,7 +182,11 @@ store build.
     OldBassMan's 200A (CC BY 4.0) and Sullivan's EP203W (CC BY 4.0), the
     action's knock MODELLED (no open recording of it exists), at the low of
     three levels: APPROVED 2026-11-22 ("It all sounds good"); BaltiWurli's
-    credit gone, Electric Piano 2 off this list. Each other voice's notes still name
+    credit gone, Electric Piano 2 off this list. Church Bell refitted
+    2026-11-22 to the lowest bell of Bethesda Church, Saratoga Springs
+    (HMTSCCSound, Freesound 554655, CC0; church_bell_fit.py), its click
+    fixed (a 4 ms rise): APPROVED ("Click is gone"); St Kathrin's credit
+    gone. Each other voice's notes still name
     the old source beside the new until Ben approves and the old fit's text
     goes.
 - **Alternatives (checked 2026-11-20; Freesound licenses each sound, so check

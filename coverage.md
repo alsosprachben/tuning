@@ -2416,9 +2416,9 @@ one not built plays its capital tone, as a Sound Canvas does.
 | 12.126 | SC-55 | A.GUITAR 4 | `TwelveString` | **3** | the CM-32P's A.GUITAR 4: the SC-55 map's 25.8 12-str. Gt, rated as that tone |
 | 13.8 | SC-88 | Xylophone w | `Xylophone_sc8850_13_8` | **4** | SC-8850 map: GM 13 Xylophone with key_pan_spread=0.5 |
 | 13.126 | SC-55 | E.GUITAR 1 | `FunkGuitar` | **3** | the CM-32P's E.GUITAR 1: the SC-55 map's 28.8 Funk Gt., rated as that tone |
-| 14.8 | SC-55 | Church Bell | `ChurchBell` | **4** | St. Kathrin's church bell, Gelting (Pianobook, Zoom H5): its 19 modes fitted window by window to their level at the strike and decay -- the strike note an octave under the nominal (649.6 Hz), the flat hum (0.438) and the 1.125 ringing seconds, the superquint a doublet 3 Hz apart, the clang 4.2-13.7 gone in a second; within ~6 dB of the recording, mode by mode against the nominal, to 2.5 s (its noise beyond). Ben: "Sounds amazing" |
+| 14.8 | SC-55 | Church Bell | `ChurchBell` | **4** | the lowest of Bethesda Church's four tower bells, Saratoga Springs, rung once by rope (HMTSCCSound, Freesound, CC0): its 20 modes read off the strike by examples/church_bell_fit.py -- the strike note D#4, an octave under the nominal (624.8 Hz); a flat hum (0.558) and the prime/tierce at 1.162 carrying the tail, the nominal, the superquint at 3.03, the clang to 9.7 -- levels 1.0 dB rms through the render, decays the take's (log-rate 0.07); the clapper landing in 4 ms. Ben: "Sounds good", the click gone |
 | 14.9 | SC-88 | Carillon | `ChurchBell` | **4** | SC-88 map: 14.8's voice |
-| 14.10 | SC-55 | Church Bell2 | `ChurchBell` | **3** | CHURCH BELL 2: St. Kathrin's bell (14.8, fitted) with its hum doubled an octave under at -6 dB |
+| 14.10 | SC-55 | Church Bell2 | `ChurchBell` | **3** | CHURCH BELL 2: the church bell (14.8, fitted) with its hum doubled an octave under at -6 dB |
 | 14.16 | SC-88 | Tubularbellw | `TubularBell_sc8850_14_16` | **4** | SC-8850 map: GM 14 Tubular Bells with key_pan_spread=0.5 |
 | 14.126 | SC-55 | E.GUITAR 2 | `MutedGuitar` | **4** | the CM-32P's E.GUITAR 2: the SC-55 map's 28.0 Electric Guitar (muted), rated as that tone |
 | 15.1 | SC-88 | Santur 2 | `HammeredDulcimer_sc88_15_1` | **4** | SC-88 map: GM 15 Dulcimer with detuned_pair=(-6.0, 6.0) |

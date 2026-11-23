@@ -251,25 +251,17 @@ SOURCES = [{'id': 'iowa-mis',
   'voices': 'Music Box',
   'evidence': '~/Documents/refs/freesound/musicbox_rbnuser/_readme_and_license.txt',
   'match': ['19724', 'rbnuser']},
- {'id': 'pb-st-kathrins-bell',
+ {'id': 'fs-bethesda-bell',
   'group': 'Keyboards and bells',
-  'title': "St. Kathrin's Bell",
-  'author': 'Wiesental (Lutz Froembgen)',
-  'url': 'https://www.pianobook.co.uk/packs/st-kathrins-bell/',
-  'licence': 'Pianobook terms',
-  'licence_url': 'https://www.pianobook.co.uk/terms-conditions/',
+  'title': 'bec low bell solo',
+  'author': 'HMTSCCSound',
+  'url': 'https://freesound.org/people/HMTSCCSound/sounds/554655/',
+  'licence': 'CC0',
+  'licence_url': 'https://creativecommons.org/publicdomain/zero/1.0/',
   'how': 'fitted',
-  'voices': 'Church Bell',
-  'issue': 'L7',
-  'evidence': 'https://www.pianobook.co.uk/terms-conditions/ (EULA, fetched 2026-11-20) s.5: licence only "to use '
-              'the download Sound File(s) only within your own newly-created sound recording(s) and/or '
-              'performances"; "expressly forbids resale or other distribution of the Products or their derivatives, '
-              'either as they exist in the library, reformatted ..., or mixed, combined, filtered, re-synthesised or '
-              'otherwise edited, for use as sounds, multi-sounds, samples, multi-samples, sound sets, programmes or '
-              'patches in a sampler, microchip, computer or any sample playback device"; "Products may not be used '
-              'in or in relation to any competitive products that are sold or relicensed to any third parties." FAQ: '
-              'forbidden "to sell or redistribute the sample libraries". Pack readme has no licence of its own.',
-  'match': ['Wiesental']},
+  'voices': 'Church Bell: the lowest bell of Bethesda Church, Saratoga Springs, its modes',
+  'evidence': 'https://freesound.org/people/HMTSCCSound/sounds/554655/ (fetched 2026-11-22): Creative Commons 0',
+  'match': ['HMTSCCSound']},
  {'id': 'fs-mellotron',
   'group': 'Keyboards and bells',
   'title': 'MELLOTRON VIOLIN',
