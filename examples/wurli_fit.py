@@ -1,13 +1,28 @@
 #!/usr/bin/env python3
-"""Measure GM 5's Wurlitzer against Chester Gwazda's 200A (Pianobook
-"BaltiWurli", measured only; sources.md), and our render the same way.
+"""Measure GM 5's Wurlitzer against two openly licensed 200-series sets, and
+our render the same way (since 2026-11-22; Gwazda's Pianobook BaltiWurli, the
+first reference, is no longer read: licences.md L7):
+
+  OldBassMan's "Wurlitzer 200a" (Freesound pack 5726, CC BY 4.0;
+  ~/Documents/refs/wurli_oldbassman): 13 notes D2-D6 in thirds, one dynamic
+  (taken as MF), 48 kHz/24-bit, "sampled thru a Lundal Transformer and a real
+  Tube Preamp" -- the pickup's output, full band, 5-12 s, levels as played
+  (peaks -5.6 to -7.9 dBFS). The file names sit an octave over what sounds
+  (d3 is D2) and lost their sharps (a3 is A#2).
+  Greg Sullivan's "Wurlitzer EP200" (his EP203W; CC BY 4.0, sullivang.net;
+  ~/Documents/refs/epianos_sullivan/ep200_wav, decoded from the sfz set's
+  flac): 11 keys A1-Ab6 at pp/mp/f/ff -- the only witness to how the tone
+  grows with velocity. But BAND-LIMITED (nothing above ~4-6 kHz: a 1999
+  sampler set), each take normalized to 0 dBFS, short and looped: its ladder
+  is read under SULLIVAN_HZ and at the strike only, and it says nothing of
+  levels or decay.
 
     python3 examples/wurli_fit.py measure
     python3 examples/wurli_fit.py decay [--params=a,b] [--maxfev=N]
     python3 examples/wurli_fit.py pickup [--params=a,b] [--maxfev=N]
-    python3 examples/wurli_fit.py action [--passes=N]   (writes tonelib.py)
+    python3 examples/wurli_fit.py register [--maxfev=N]
     python3 examples/wurli_fit.py ab OUT.wav [--note-s=2.5]   DI, then ours (no cabinet), note by note
-    python3 examples/wurli_fit.py abspk OUT.wav [--note-s=2.5]   the instrument as mixed, then ours
+    (the action's knock: examples/wurli_action.py, modelled)
 
 THE DI, NOT THE SPEAKER. The DI set is the pickup's own output -- the reed
 through its 1/d plate and nothing after it -- which is exactly what
@@ -42,22 +57,32 @@ sys.path.insert(0, os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 import upright_fit as U
 
-REFS = os.path.expanduser("~/Documents/refs/wurli/balti_ds/Balti Wurli  (DS)/Samples")
+OBM = os.path.expanduser("~/Documents/refs/wurli_oldbassman")
+SULLIVAN = os.path.expanduser("~/Documents/refs/epianos_sullivan/ep200_wav")
 PROGRAM = 5
-VEL = {"P": 35, "MF": 92, "F": 121}
-PC = {"C": 0, "C#": 1, "D": 2, "D#": 3, "E": 4, "F": 5, "F#": 6, "G": 7, "G#": 8, "A": 9, "A#": 10, "B": 11}
+# OldBassMan's one dynamic as MF; Sullivan's layers at the middle of his own
+# map's ranges (1-37, 38-65, 66-89, 90-127)
+VEL = {"MF": 92, "pp": 19, "mp": 52, "f": 78, "ff": 109}
+DYNS = ("pp", "mp", "MF", "f", "ff")
+SULLIVAN_HZ = 3500.0
+PC = {"c": 0, "db": 1, "d": 2, "eb": 3, "e": 4, "f": 5, "gb": 6, "g": 7, "ab": 8, "a": 9, "bb": 10, "b": 11}
 
 
-def key_of(label):
-    return (int(label[-1]) + 3) * 12 + PC[label[:-1]]
+def band(dyn):
+    """the highest frequency a take of this layer holds"""
+    return 1e9 if dyn == "MF" else SULLIVAN_HZ
 
 
 def recordings():
-    """{(dyn, key): path} for the DI set."""
+    """{(dyn, key): path}: OldBassMan's as MF, Sullivan's as pp/mp/f/ff."""
     out = {}
-    for p in glob.glob(os.path.join(REFS, "BaltiWurli_DI_*.wav")):
-        _, _, dyn, lab = os.path.basename(p)[:-4].split("_")
-        out[(dyn, key_of(lab))] = p
+    for p in glob.glob(os.path.join(OBM, "*__oldbassman__*.wav")):
+        lab = os.path.basename(p)[:-4].split("__")[2]          # 'd3' is D2, 'a3' A#2
+        out[("MF", int(lab[1]) * 12 + {"d": 2, "f": 6, "a": 10}[lab[0]])] = p
+    for p in glob.glob(os.path.join(SULLIVAN, "*.wav")):
+        b = os.path.basename(p)[:-4]
+        name = b.rstrip("pfm")
+        out[(b[len(name):], (int(name[-1]) + 1) * 12 + PC[name[:-1]])] = p
     return out
 
 
@@ -124,24 +149,28 @@ def measure_all():
         y, ysr = U.render(PROGRAM, k, VEL[dyn], 3.0)
         rows[(dyn, k)] = dict(rl=ladder(x, sr, k), ol=ladder(y, ysr, k), rd=decays(x, sr, k),
                               od=decays(y, ysr, k), rv=level(x, sr), ov=level(y, ysr))
-    print("\n  LADDER h2..h8, dB re h1 (recorded / ours)")
-    for (dyn, k), r in sorted(rows.items(), key=lambda q: (q[0][1], "PMF".index(q[0][0][0]))):
-        print("  %3d %-2s %s" % (k, dyn, " ".join("%4.0f/%-4.0f" % (a, b) for a, b in zip(r["rl"][1:8], r["ol"][1:8]))))
-    print("\n  DECAY h1..h6, dB/s (recorded / ours), MF")
+    print("\n  LADDER h2..h8, dB re h1 (recorded / ours; '--' over the take's band)")
+    for (dyn, k), r in sorted(rows.items(), key=lambda q: (q[0][1], DYNS.index(q[0][0]))):
+        print("  %3d %-2s %s" % (k, dyn, " ".join(
+            ("%4.0f/%-4.0f" % (a, b)) if (m + 2) * hz(k) < band(dyn) else "    --   "
+            for m, (a, b) in enumerate(zip(r["rl"][1:8], r["ol"][1:8])))))
+    print("\n  DECAY h1..h6, dB/s (recorded / ours), OldBassMan's (MF)")
     for (dyn, k), r in sorted(rows.items()):
         if dyn == "MF":
             print("  %3d    %s" % (k, " ".join("%5.1f/%-5.1f" % (a, b) for a, b in zip(r["rd"], r["od"]))))
-    print("\n  LEVEL re MF, dB (recorded / ours)")
-    for k in keys:
-        if ("MF", k) not in rows:
-            continue
-        s = []
-        for dyn in ("P", "F"):
-            if (dyn, k) in rows:
-                s.append("%s %+5.1f/%+5.1f" % (dyn, rows[(dyn, k)]["rv"] - rows[("MF", k)]["rv"],
-                                                rows[(dyn, k)]["ov"] - rows[("MF", k)]["ov"]))
-        print("  %3d  %s" % (k, "   ".join(s)))
+    rv, ov = register_levels(rows)
+    print("\n  REGISTER LEVEL, MF, dB re the notes' mean (recorded / ours): rms %.1f" % np.sqrt(np.mean((ov - rv) ** 2)))
+    for k, a, b in zip(sorted(k for d, k in rows if d == "MF"), rv, ov):
+        print("  %3d  %+5.1f/%+5.1f" % (k, a, b))
     return rows
+
+
+def register_levels(rows):
+    """OldBassMan's loudest 100 ms a note, and ours, each re its own mean"""
+    ks = sorted(k for d, k in rows if d == "MF")
+    rv = np.array([rows[("MF", k)]["rv"] for k in ks])
+    ov = np.array([rows[("MF", k)]["ov"] for k in ks])
+    return rv - rv.mean(), ov - ov.mean()
 
 
 # THE LOUDEST TAKES ARE CLIPPED. Every F take below C7 sits on the same
@@ -180,7 +209,7 @@ def fit_decay(opts):
     def err():
         E = []
         for (dyn, k), (rl, rd, _) in rec.items():
-            if dyn == "P":
+            if dyn != "MF":              # Sullivan's: short and looped
                 continue
             y, sr = U.render(PROGRAM, k, VEL[dyn], 3.0)
             od = decays(y, sr, k)
@@ -190,6 +219,25 @@ def fit_decay(opts):
         return float(np.sqrt(np.mean(np.square(E))))
     D.nelder(cls, names, err, {"harmonic_decay_db": 3.0, "decay_register_slope": 0.2},
              int(opts.get("--maxfev", 40)), "log-rate rms")
+
+
+# THE REGISTER'S LEVEL (`register`): octave_gain against OldBassMan's levels,
+# each note's loudest 100 ms re the notes' mean (his takes kept the levels he
+# played them at), ours at MF with the cabinet out -- the pickup's output, as
+# his chain took it.
+def fit_register(opts):
+    di_only()
+    import tonelib as T
+    import dulcimer_fit as D
+    cls = T.WurlitzerProperties
+    rs = {dk: p for dk, p in recordings().items() if dk[0] == "MF"}
+    rec = {dk: level(*U.load(p)) for dk, p in rs.items()}
+
+    def err():
+        rows = {dk: dict(rv=rec[dk], ov=level(*U.render(PROGRAM, dk[1], VEL["MF"], 0.6))) for dk in rs}
+        rv, ov = register_levels(rows)
+        return float(np.sqrt(np.mean((ov - rv) ** 2)))
+    D.nelder(cls, ["octave_gain"], err, {"octave_gain": 1.0}, int(opts.get("--maxfev", 30)), "level rms")
 
 
 # THE PICKUP (`pickup`): the gap, the swing, how close to the plate it may
@@ -219,104 +267,20 @@ def fit_pickup(opts):
         E = []
         for (dyn, k), (rl, rd, rll) in rec.items():
             y, sr = U.render(PROGRAM, k, VEL[dyn], 1.2)
-            for r_, o_ in ((rl, ladder(y, sr, k, n=PICK_N)),
-                           (rll, ladder(y, sr, k, n=PICK_N, a=LATE[0], b=LATE[1]))):
+            inband = (np.arange(2, PICK_N + 1) * hz(k)) < band(dyn)
+            pairs = [(rl, ladder(y, sr, k, n=PICK_N))]
+            if dyn == "MF":             # Sullivan's loop by then
+                pairs.append((rll, ladder(y, sr, k, n=PICK_N, a=LATE[0], b=LATE[1])))
+            for r_, o_ in pairs:
                 a, b = np.maximum(r_[1:], -70), np.maximum(o_[1:], -70)
-                ok = np.isfinite(a) & np.isfinite(b)
+                ok = np.isfinite(a) & np.isfinite(b) & inband
                 E += list((b - a)[ok])
         return float(np.sqrt(np.mean(np.square(E))))
     D.nelder(cls, names, err, {"pickup_offset": 0.2, "pickup_deflection": 0.2,
+                               "deflection_velocity_power": 0.2,
                                "pickup_deflection_max": 0.3, "deflection_register_slope": 0.15,
                                "pickup_slot_q": 0.3, "pickup_slot_p": 1.0},
              int(opts.get("--maxfev", 80)), "ladder rms")
-
-
-# THE ACTION (`action`): the hammer, the key and the damper, heard inside the
-# case (the Mech set, an XY pair in it). Its takes are mostly the reeds'
-# own acoustic sound -- 91-100% of 0.1-0.4 s at the note's partials -- and
-# what is not is a thump in the first 50 ms, 60 Hz to ~2 kHz, strongest at
-# 240-480, 25-30 dB down by 0.1 s, the same under every note. Fitted as
-# strike_noise_db (the grand's strike machinery), against the speaker as it
-# is heard: each set was recorded at its own gain, so the balance is the
-# pack's own mix (BaltiWurli.dspreset: the Mechanical group -11.6 dB, the
-# Speaker -1.4) -- the author's ear, not a measurement. Ours with the
-# cabinet in, the thump read the same way: the energy between the note's
-# partials in third octaves, 0-50 ms, re the speaker take's (ours': the
-# render's) whole 0-50 ms.
-MECH_DB, SPKR_DB = -11.580, -1.409
-
-
-def _between(x, sr, k, a=0.0, b=0.05):
-    t0 = U.onset(x, sr)
-    n = 1 << 15
-    seg = x[t0 + int(a * sr):t0 + int(b * sr)]
-    X = np.abs(np.fft.rfft(seg * np.hanning(len(seg)), n)) ** 2
-    f = np.fft.rfftfreq(n, 1.0 / sr)
-    near = np.zeros_like(f, bool)
-    f0 = hz(k)
-    for m in range(1, 80):
-        near |= np.abs(f - m * f0) < max(0.03 * m * f0, 8.0)
-    out = []
-    for lo, hi in zip(U.S3[:-1], U.S3[1:]):
-        w = (f >= lo) & (f < hi)
-        m_ = w & ~near
-        out.append(X[m_].mean() * w.sum() if m_.any() else np.nan)
-    return np.array(out), X.sum()
-
-
-def action_targets():
-    """{key: target dB a band}: the Mech take's thump, mixed under the
-    speaker take of the same (or the nearest) key at MF."""
-    spk = {}
-    for p in glob.glob(os.path.join(REFS, "BaltiWurli_Spkr_MF_*.wav")):
-        spk[key_of(os.path.basename(p)[:-4].split("_")[-1])] = p
-    out = {}
-    for p in glob.glob(os.path.join(REFS, "BaltiWurli_Mech_*.wav")):
-        k = key_of(os.path.basename(p)[:-4].split("_")[-1])
-        ks = min(spk, key=lambda q: abs(q - k))
-        mb, _ = _between(*U.load(p), k)
-        xs, sr = U.load(spk[ks])
-        _, stot = _between(xs, sr, ks)
-        out[k] = 10 * np.log10(mb + 1e-30) + MECH_DB - SPKR_DB - 10 * np.log10(stot)
-    return out
-
-
-def fit_action(opts):
-    import re
-    import tonelib as T
-    cls = T.WurlitzerProperties
-    os.environ["TUNING_CABINET"] = "1"
-    tgt = action_targets()
-    keys = sorted(tgt)
-    if not getattr(cls, "strike_noise_db", ()):
-        cls.strike_noise_db = tuple((int(round(c)), -40.0) for c in U.S3C)
-    for it in range(int(opts.get("--passes", 4)) + 1):
-        D = []
-        for k in keys:
-            y, sr = U.render(PROGRAM, k, VEL["MF"], 1.0)
-            ob, otot = _between(y, sr, k)
-            D.append(tgt[k] - (10 * np.log10(ob + 1e-30) - 10 * np.log10(otot)))
-        D = np.array(D)
-        ok = np.isfinite(D) & (np.array([tgt[k] for k in keys]) > -80)
-        e = float(np.sqrt(np.mean(D[ok] ** 2)))
-        print("  pass %d: action rec - ours, rms %.1f dB" % (it, e), flush=True)
-        if it == int(opts.get("--passes", 4)):
-            break
-        band = np.array([np.nanmean(np.where(ok[:, j], D[:, j], np.nan)) if ok[:, j].any() else 0.0
-                         for j in range(D.shape[1])])
-        band = np.nan_to_num(band)
-        old = dict(cls.strike_noise_db)
-        cls.strike_noise_db = tuple((int(round(c)), round(float(np.interp(np.log(c), np.log(list(old)),
-                                                                          list(old.values()))
-                                                               + np.clip(0.8 * b, -15, 15)), 1))
-                                    for c, b in zip(U.S3C, band))
-    src = open(os.path.join(os.path.dirname(HERE), "tonelib.py")).read()
-    a = src.index("class WurlitzerProperties(")
-    body = src[a:]
-    line = "    strike_noise_db = %s\n" % (cls.strike_noise_db,)
-    body2 = re.sub(r"^    strike_noise_db = .*\n", lambda _: line, body, count=1, flags=re.M)
-    open(os.path.join(os.path.dirname(HERE), "tonelib.py"), "w").write(src[:a] + body2)
-    print(line)
 
 
 def ab(out, note_s):
@@ -332,50 +296,11 @@ def ab(out, note_s):
     gap, rest = np.zeros(int(A.GAP_S * A.SR)), np.zeros(int(0.6 * A.SR))
     parts = []
     for k in sorted({k for _, k in rs}):
-        for dyn in ("P", "MF", "F"):
+        for dyn in DYNS:
             if (dyn, k) not in rs:
                 continue
             y, sr = U.render(PROGRAM, k, VEL[dyn], note_s + 0.5)
             parts += [A.fit_note(*U.load(rs[(dyn, k)])), gap, A.fit_note(y, sr), rest]
-    x = np.concatenate(parts)
-    write_wav(out, np.stack([x, x], 1), A.SR)
-
-
-def abspk(out, note_s):
-    """The whole instrument: each Speaker take (P, MF) with the Mech take of
-    the same or the nearest key under it at the pack's own mix (Speaker -1.4,
-    Mechanical -11.6 dB; onsets aligned), then ours with the cabinet in and
-    the action, at the layer's velocity. Each pair peak-normalised alike."""
-    import harpsi_ab as A
-    from roomtail import write_wav
-    from scipy.signal import resample_poly
-    os.environ["TUNING_CABINET"] = "1"
-    A.NOTE_S = note_s
-    spk, mech = {}, {}
-    for p in glob.glob(os.path.join(REFS, "BaltiWurli_Spkr_*.wav")):
-        _, _, dyn, lab = os.path.basename(p)[:-4].split("_")
-        if dyn in ("P", "MF"):
-            spk[(dyn, key_of(lab))] = p
-    for p in glob.glob(os.path.join(REFS, "BaltiWurli_Mech_*.wav")):
-        mech[key_of(os.path.basename(p)[:-4].split("_")[-1])] = p
-
-    def aligned(p):
-        x, sr = U.load(p)
-        if sr != A.SR:
-            x = resample_poly(x, A.SR, sr)
-        return x[max(0, U.onset(x, A.SR) - int(0.01 * A.SR)):]
-    gap, rest = np.zeros(int(A.GAP_S * A.SR)), np.zeros(int(0.6 * A.SR))
-    parts = []
-    for k in sorted({k for _, k in spk}):
-        for dyn in ("P", "MF"):
-            if (dyn, k) not in spk:
-                continue
-            s_ = aligned(spk[(dyn, k)]) * 10 ** (SPKR_DB / 20)
-            m_ = aligned(mech[min(mech, key=lambda q: abs(q - k))]) * 10 ** (MECH_DB / 20)
-            n = max(len(s_), len(m_))
-            x = np.pad(s_, (0, n - len(s_))) + np.pad(m_, (0, n - len(m_)))
-            y, sr = U.render(PROGRAM, k, VEL[dyn], note_s + 0.5)
-            parts += [A.fit_note(x, A.SR), gap, A.fit_note(y, sr), rest]
     x = np.concatenate(parts)
     write_wav(out, np.stack([x, x], 1), A.SR)
 
@@ -386,12 +311,10 @@ def main(argv):
         measure_all()
     elif argv[:1] == ["decay"]:
         fit_decay(opts)
+    elif argv[:1] == ["register"]:
+        fit_register(opts)
     elif argv[:1] == ["pickup"]:
         fit_pickup(opts)
-    elif argv[:1] == ["action"]:
-        fit_action(opts)
-    elif argv[:1] == ["abspk"]:
-        abspk(argv[1], float(opts.get("--note-s", 2.5)))
     elif argv[:1] == ["ab"]:
         ab(argv[1], float(opts.get("--note-s", 2.5)))
     else:

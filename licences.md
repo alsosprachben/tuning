@@ -149,7 +149,7 @@ store build.
   (uploaded by a third party), Khaled Arman with the Geneva Camerata (with an
   ensemble). Ermlick's is the cleanest; its licence is the uploader's own.
 
-### L7. Eleven Pianobook libraries — Pianobook's terms forbid it
+### L7. Ten Pianobook libraries — Pianobook's terms forbid it
 
 - **The terms** (pianobook.co.uk/terms-conditions, section 5): the samples are
   licensed "only within your own newly-created sound recording(s)"; the
@@ -161,7 +161,6 @@ store build.
   products that are sold". A model fitted to them, sold as an instrument, is
   what this clause is written against.
 - **What derives from them:**
-  - Electric Piano 2 (Wurlitzer 200A, BaltiWurli);
   - Dulcimer (Lite Hammered Dulcimer);
   - the harpsichord's 4' (Harpsimachord);
   - the tonewheel organ's 16', 5 1/3', 1 3/5', percussion and speaker (Hammond L102);
@@ -180,7 +179,11 @@ store build.
     Grand to Greg Sullivan's CP80 (CC BY 4.0), the wound bass's attack then
     fitted (cp80_wound_fit.py), its levels GeneralUser's (0f4a6ac): APPROVED
     2026-11-22 (Ben: "works great"); the old fit's text and credit gone, the
-    Electric Grand off this list. Each other voice's notes still name
+    Electric Grand off this list. Electric Piano 2 refitted 2026-11-22 to
+    OldBassMan's 200A (CC BY 4.0) and Sullivan's EP203W (CC BY 4.0), the
+    action's knock MODELLED (no open recording of it exists), at the low of
+    three levels: APPROVED 2026-11-22 ("It all sounds good"); BaltiWurli's
+    credit gone, Electric Piano 2 off this list. Each other voice's notes still name
     the old source beside the new until Ben approves and the old fit's text
     goes.
 - **Alternatives (checked 2026-11-20; Freesound licenses each sound, so check

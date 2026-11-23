@@ -6370,7 +6370,8 @@ class RhodesProperties(ElectricPianoProperties):
     # THE REGISTER'S LEVEL. The swing fitted for timbre is far wider in the bass, and
     # the level rode on it: C2 +14 to C7 -29 dB re C4. Learman's layers are
     # normalised, so no Rhodes level says otherwise; a voiced Rhodes is set
-    # even, as Gwazda's Wurlitzer measures, and that curve is the target:
+    # even, as a Wurlitzer measures (OldBassMan's 200A, CC BY 4.0: within ~3
+    # dB from D2 to D6), and that curve is the target:
     # rms 12.1 -> 2.1 dB (Ben: "much quieter up higher and much louder
     # down lower").
     octave_gain = 8.06
@@ -6426,8 +6427,8 @@ class WurlitzerProperties(ElectricPianoProperties):
     the capacitance is a square-edged bump about the plate's plane, symmetric
     like the Rhodes' magnet -- centred, the fundamental goes -- and the reed
     rests off the plane, pickup_offset, a voicing as the tine's is. This was
-    first read as a one-sided plate's 1/d, a pole; fitted to the DI takes the
-    slot wins on every count (the comments at pickup_offset and pickup_slot_q).
+    first read as a one-sided plate's 1/d, a pole; fitted to the pickup's own
+    output the slot wins on every count (the comments at pickup_offset and pickup_slot_q).
 
     A SQUARE EDGE BUZZES, AND THE BUZZ DECAYS BACK INTO THE TONE. A wide bass
     swing crosses the slot's edges: the fundamental is flattened and its energy
@@ -6446,10 +6447,15 @@ class WurlitzerProperties(ElectricPianoProperties):
     WHAT IS NOT MODELLED. The beating of higher partials (DAGA 2017): it would
     need the reed's own higher modes, and the same paper's camera says the
     motion is "approximately sinusoidal", so where it comes from is not settled
-    by the measurement. A fixed ring near 387 Hz (with 522, 655, 868, 924) in
-    the DI takes from E5 up, the same under every note: the reed bar, or the
-    undamped top reeds -- measured, not yet modelled. And the takes' 60 Hz
-    mains hum, which is the recording's.
+    by the measurement. Sympathetic ringing of undamped reeds through the
+    harp under the pedal (Sullivan's to-do: "the Wurlitzer does have a lot of
+    this") -- not yet modelled.
+
+    THE REFERENCES (since 2026-11-22, examples/wurli_fit.py): OldBassMan's
+    200A (Freesound pack 5726, CC BY 4.0), 13 notes D2-D6 through a
+    transformer and tube preamp -- the pickup's output, full band, as
+    played; and Greg Sullivan's EP203W (CC BY 4.0), 11 keys at pp/mp/f/ff,
+    band-limited to ~4 kHz and normalized -- its dynamics' ladders only.
 
     A NOTE ON THE SENSING CONVENTION, since it decides everything. Taken as
     charge on a fixed-voltage plate, the signal follows C and therefore 1/d, and
@@ -6462,53 +6468,42 @@ class WurlitzerProperties(ElectricPianoProperties):
     """
     # A struck reed, the same as the tine: nothing bends it.
     pitch_bendable = False
-    # THE PICKUP, FITTED to Gwazda's 200A DI (examples/wurli_fit.py pickup:
-    # every note's h2-h8 at P and MF and the two F takes the recording's
-    # clipper spared, at the strike and again at 0.6-1.0 s). The reed rests
-    # half a slot-width off the plate's plane and swings across it, wider down
-    # the keyboard. Against the one-sided 1/d curve, fitted the same way:
-    # the bass's fundamental now builds as the takes' do, peaking at ~1.07 s
-    # on C2 and G2 (the takes 1.07, 1.08; 1/d 0.1-0.3), and the middle's h5-h7
-    # come up to the takes', the odd ones the stronger (A3: -19 -26 -44
-    # against -18 -28 -27). Their plateau past h8 (-35 to -49 dB) is still
-    # under-made by a rounded slot; the square edges below (pickup_slot_p)
-    # bring it up.
-    # The swing goes as velocity itself: deflection_velocity_power fitted
-    # free with the swing came out 1.05 (11.48 -> 11.40 dB rms, nothing), so
-    # left at 1 -- where the Rhodes' tine wants 1.45.
-    pickup_offset = 0.568         # the reed's rest, off the plate's plane
-    pickup_deflection = 0.975
-    pickup_deflection_max = 2.339
-    deflection_register_slope = -0.760
+    # THE PICKUP, FITTED (examples/wurli_fit.py pickup) to every note's
+    # h2-h32 at the strike -- OldBassMan's at MF over the whole band, and
+    # again at 0.6-1.0 s; Sullivan's pp/mp/f/ff under 3.5 kHz -- the reed
+    # resting off the plate's plane and swinging across it, wider down the
+    # keyboard: 14.4 -> 11.0 dB rms. The swing's velocity law fitted with
+    # it, on Sullivan's four dynamics: 0.93, nearly velocity itself (the
+    # Rhodes' tine wants 1.45).
+    pickup_offset = 0.423         # the reed's rest, off the plate's plane
+    deflection_velocity_power = 0.934
+    pickup_deflection = 1.145
+    pickup_deflection_max = 2.544
+    deflection_register_slope = -0.769
 
     # A free reed with nothing bolted to it.
     tonebar_mode_ratios = ()
     tonebar_gains = ()
 
-    # THE REED'S DECAY, MEASURED (examples/wurli_fit.py decay, Gwazda's 200A
-    # DI, h1-h3 at MF and F): the k*D law holds -- harmonic k at k times the
-    # reed's rate -- but the rate DOUBLES AN OCTAVE, ~2 dB/s at C2 to ~44 at
-    # F#6. The bass sings far longer than the 16 dB/s here had it (14 at C2):
-    # log-rate rms 0.51 -> 0.35 refitted on the slot's layers, on the takes
-    # the recording's clipper left alone (wurli_fit.py: every F take below C7
-    # is clipped at -3 dBFS). harmonic_decay_db is the swing's own rate at the
+    # THE REED'S DECAY (examples/wurli_fit.py decay, OldBassMan's takes, 5-12
+    # s, h1-h3): the k*D law -- harmonic k at k times the reed's rate -- and
+    # the rate climbing the keyboard, ~2 dB/s at D2 to ~25 at D6. Log-rate
+    # rms 0.59 -> 0.42. harmonic_decay_db is the swing's own rate at the
     # reference: each layer A^n falls n times it.
-    harmonic_decay_db = 7.13
-    decay_register_slope = 0.91
+    harmonic_decay_db = 7.24
+    decay_register_slope = 0.721
 
-    # THE ACTION: the hammer, the key and the damper, heard inside the case --
-    # a thump in the first tens of ms, 60 Hz to ~2 kHz, strongest at 240-480
-    # Hz, the same under every note (Gwazda's Mech set; examples/wurli_fit.py
-    # action). Its level under the speaker is the pack's own mix, -11.6 dB
-    # for the mechanical group against -1.4 for the speaker: the author's
-    # ear, not a measurement. Its fall, ~25-30 dB by 0.1 s. Fitted at the
-    # output, cabinet in, 20.4 -> 9.7 dB rms over the nine Mech takes (most
-    # of it each take's own scatter), the table smoothed: the real thump is
-    # heard in the room and this one passes through the speaker, so its top
-    # bands carry the cabinet's roll-off undone.
-    strike_noise_db = ((45, -13.5), (57, -11.4), (71, -10.3), (90, -13.0), (113, -19.1), (143, -26.9), (180, -32.3), (226, -31.9), (285, -29.2), (359, -28.3), (453, -28.1), (570, -26.2), (718, -22.3), (905, -18.5), (1140, -16.2), (1437, -15.8), (1810, -17.6), (2281, -20.5), (2874, -22.2), (3620, -20.6), (4561, -15.6), (5747, -8.2), (7241, -2.3), (9123, 1.0), (11494, 3.1))
+    # THE ACTION, MODELLED (examples/wurli_action.py; Ben 2026-11-22: "model
+    # it"): the key bottoming on its felt (~3 ms contact) and the hammer's
+    # felt on the reed (~0.8 ms, 8 dB under), radiated by the thin plastic
+    # case (little under its ~120 Hz panel modes; loss factor 0.04 sets the
+    # fall). Heard in the room beside the speaker, so the table undoes the
+    # lid speakers' response. Its level re the note by Ben's ear: the low of
+    # three, -26 dB ("Go with the low action"). No openly
+    # licensed recording of the action was found to fit it to.
+    strike_noise_db = ((45, -21.9), (57, -21.0), (71, -19.8), (90, -18.1), (113, -17.3), (143, -19.9), (180, -25.1), (226, -30.5), (285, -34.1), (359, -34.9), (453, -35.3), (570, -36.4), (718, -38.6), (905, -43.3), (1140, -48.7), (1437, -54.1), (1810, -57.7), (2281, -58.5), (2874, -59.0), (3620, -59.1), (4561, -57.8), (5747, -55.2), (7241, -55.5), (9123, -59.5), (11494, -63.5))
     strike_noise_slope = 0.0
-    strike_noise_dbs = 250.0
+    strike_noise_dbs = 156.2
     strike_noise_fade_s = 0.001
 
     cabinet = "wurlitzer"
@@ -6522,11 +6517,11 @@ class WurlitzerProperties(ElectricPianoProperties):
     # Same normalisation as its sibling -- C3/C4/C5 at velocity 100, matched on
     # rms against the grand piano. It started 5.1 dB OVER one, which is the
     # small cabinet's midrange doing what a small cabinet does.
-    # THE REGISTER'S LEVEL. The swing's register slope had the DI falling ~4 dB an
-    # octave, C2 +5.6 to F#6 -18.3 re A3; Gwazda's DI at MF holds -4 to +1 from
-    # C2 to F#5 and drops ~9 at the top (wurli_fit.py). Fitted: rms 6.2 -> 2.1
-    # dB (Ben: "much quieter up higher and much louder down lower").
-    octave_gain = 3.96
+    # THE REGISTER'S LEVEL (examples/wurli_fit.py register): each note's
+    # loudest 100 ms against OldBassMan's, which kept the levels he played
+    # them at -- rms 1.9 -> 0.8 dB (Ben, of the earlier fit: "much quieter up
+    # higher and much louder down lower").
+    octave_gain = 5.37
     initial_gain = 0.27897256      # C3/C4/C5 at v100 matched on rms to the grand piano (was +3.8 dB over)
 
     # THE REED SWINGS THROUGH A SLOT. "The charged plate has cutouts at the
@@ -6539,19 +6534,15 @@ class WurlitzerProperties(ElectricPianoProperties):
     # sharpness of its edges -- not a one-sided plate's 1/d, which the DAGA
     # paper's sentence had been read as. A swing across the plane flattens
     # the fundamental and throws its energy into the harmonics, the odd ones
-    # strongest off-centre: the bark, and Gwazda's DI's odd-harmonic plateau
-    # (-35 to -49 dB from h5 at MF) that 1/d could not make; as the swing
+    # strongest off-centre: the bark, and the takes' odd-harmonic plateau
+    # that 1/d could not make; as the swing
     # decays the fundamental comes back (pickup_layers): the bass's slow,
     # lingering attack (Ben).
-    pickup_slot_q = 0.905
+    pickup_slot_q = 1.033
     # ...and how square its edges are: (1 + |u|^p)^-q, p 2 a Lorentzian. The
-    # takes' bass buzzes to h32 and past at MF (-16 to -41 dB at C2-G2,
-    # 1-2 kHz), where a rounded slot's series is spent by h16. Fitted on
-    # h2-h32 (wurli_fit.py pickup), the edges come out square-ish: 14.6 ->
-    # 11.5 dB rms (p 3.18), and 10.8 (p 2.59) refitted once the layers could
-    # follow a wide swing's attack (_pickup_layers: its powers chosen, the
-    # strike sampled densely).
-    pickup_slot_p = 2.589
+    # bass buzzes far up its series, where a rounded slot's is spent by h16;
+    # fitted with the swing (above), p comes out 1.89.
+    pickup_slot_p = 1.890
     pickup_harmonics = 48
 
     def pickup_flux(self, u):

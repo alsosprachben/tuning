@@ -91,16 +91,6 @@
 },
 {
 "group": "Keyboards and bells",
-"title": "BaltiWurli",
-"author": "Chester Gwazda",
-"url": "https://www.pianobook.co.uk/packs/baltiwurli/",
-"licence": "Pianobook terms",
-"licence_url": "https://www.pianobook.co.uk/terms-conditions/",
-"how": "fitted",
-"voices": "Electric Piano 2 (Wurlitzer 200A)"
-},
-{
-"group": "Keyboards and bells",
 "title": "Yamaha CP80 Electric Grand Piano (v1.3)",
 "author": "Greg Sullivan",
 "url": "http://www.sullivang.net/",
@@ -108,6 +98,26 @@
 "licence_url": "https://creativecommons.org/licenses/by/4.0/",
 "how": "fitted",
 "voices": "Electric Grand Piano"
+},
+{
+"group": "Keyboards and bells",
+"title": "Wurlitzer EP203W Electric Piano (v1.1)",
+"author": "Greg Sullivan",
+"url": "http://www.sullivang.net/wurlitzer-ep203w-electric-piano-for-gigasampler-gigastudio",
+"licence": "CC BY 4.0",
+"licence_url": "https://creativecommons.org/licenses/by/4.0/",
+"how": "fitted",
+"voices": "Electric Piano 2 (Wurlitzer 200A): how its tone grows with velocity"
+},
+{
+"group": "Keyboards and bells",
+"title": "Wurlitzer 200a",
+"author": "OldBassMan",
+"url": "https://freesound.org/people/OldBassMan/packs/5726/",
+"licence": "CC BY 4.0",
+"licence_url": "https://creativecommons.org/licenses/by/4.0/",
+"how": "fitted",
+"voices": "Electric Piano 2 (Wurlitzer 200A): its pickup, decay and register"
 },
 {
 "group": "Keyboards and bells",

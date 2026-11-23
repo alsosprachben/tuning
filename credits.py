@@ -127,25 +127,6 @@ SOURCES = [{'id': 'iowa-mis',
   'evidence': '~/Documents/refs/rhodes/jrhodes3d/LICENSE: "License for samples: CC BY-NC ... To use the samples in a '
               'commercial product, please contact me"',
   'match': ['jRhodes3d', 'Jeff\\ Learman']},
- {'id': 'pb-baltiwurli',
-  'group': 'Keyboards and bells',
-  'title': 'BaltiWurli',
-  'author': 'Chester Gwazda',
-  'url': 'https://www.pianobook.co.uk/packs/baltiwurli/',
-  'licence': 'Pianobook terms',
-  'licence_url': 'https://www.pianobook.co.uk/terms-conditions/',
-  'how': 'fitted',
-  'voices': 'Electric Piano 2 (Wurlitzer 200A)',
-  'issue': 'L7',
-  'evidence': 'https://www.pianobook.co.uk/terms-conditions/ (EULA, fetched 2026-11-20) s.5: licence only "to use '
-              'the download Sound File(s) only within your own newly-created sound recording(s) and/or '
-              'performances"; "expressly forbids resale or other distribution of the Products or their derivatives, '
-              'either as they exist in the library, reformatted ..., or mixed, combined, filtered, re-synthesised or '
-              'otherwise edited, for use as sounds, multi-sounds, samples, multi-samples, sound sets, programmes or '
-              'patches in a sampler, microchip, computer or any sample playback device"; "Products may not be used '
-              'in or in relation to any competitive products that are sold or relicensed to any third parties." FAQ: '
-              'forbidden "to sell or redistribute the sample libraries". Pack readme has no licence of its own.',
-  'match': ['Chester\\ Gwazda']},
  {'id': 'sullivan-cp80',
   'group': 'Keyboards and bells',
   'title': 'Yamaha CP80 Electric Grand Piano (v1.3)',
@@ -160,6 +141,32 @@ SOURCES = [{'id': 'iowa-mis',
               '4.0)". The sfz conversion (github.com/sfzinstruments/GregSullivan.E-Pianos, ~/Documents/refs/'
               'epianos_sullivan) says CC BY 3.0 "with the author permission with the request for attribution".',
   'match': ['Greg\\ Sullivan', 'sullivang']},
+ {'id': 'sullivan-ep200',
+  'group': 'Keyboards and bells',
+  'title': 'Wurlitzer EP203W Electric Piano (v1.1)',
+  'author': 'Greg Sullivan',
+  'url': 'http://www.sullivang.net/wurlitzer-ep203w-electric-piano-for-gigasampler-gigastudio',
+  'licence': 'CC BY 4.0',
+  'licence_url': 'https://creativecommons.org/licenses/by/4.0/',
+  'how': 'fitted',
+  'voices': 'Electric Piano 2 (Wurlitzer 200A): how its tone grows with velocity',
+  'evidence': 'http://www.sullivang.net/ (fetched 2026-11-22): "Licensing (updated 21-Oct-2026): All these '
+              'instruments I host here now have Creative Commons Attribution 4.0 International licensing. (CC BY '
+              '4.0)"; the instrument page: "created by sampling my own Wurlitzer EP203W (a member of the EP200 '
+              'series)". ~/Documents/refs/epianos_sullivan/ep200_wav (decoded from the sfz conversion\'s flac).',
+  'match': []},
+ {'id': 'fs-wurlitzer-oldbassman',
+  'group': 'Keyboards and bells',
+  'title': 'Wurlitzer 200a',
+  'author': 'OldBassMan',
+  'url': 'https://freesound.org/people/OldBassMan/packs/5726/',
+  'licence': 'CC BY 4.0',
+  'licence_url': 'https://creativecommons.org/licenses/by/4.0/',
+  'how': 'fitted',
+  'voices': 'Electric Piano 2 (Wurlitzer 200A): its pickup, decay and register',
+  'evidence': 'each of the 13 sound pages (87988-88000, fetched 2026-11-22): Attribution 4.0; the pack\'s '
+              '_readme_and_license.txt (~/Documents/refs/wurli_oldbassman)',
+  'match': ['OldBassMan']},
  {'id': 'aalto-clavinet',
   'group': 'Keyboards and bells',
   'title': 'Clavinet D6 sound examples (companion to Gabrielli, Valimaki & Bilbao, ICMC 2011)',
