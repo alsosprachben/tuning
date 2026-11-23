@@ -268,34 +268,25 @@ class JazzChorus212(Cabinet):
 
 
 class HammondSpinet(Cabinet):
-    """A Hammond's own speaker: the L-102 spinet's, in its console's open back
-    -- what a tonewheel plays through with no Leslie.
+    """A Hammond's own speaker: a spinet's 12" paper cone in its console's open
+    back -- what a tonewheel plays through with no Leslie.
 
-    MEASURED 300 Hz-4 kHz from Peter Corbett's L102 takes (Pianobook; each
-    upper drawbar alone through its own speaker, close-miked): each take's
-    level over our wheels' own at its frequency (examples/tonecab_fit.py),
-    1.8 dB rms over sixth octaves, the drawbars agreeing within 2-4 dB:
-
-      870 Hz        a hollow, broad and deep (-6 dB): the cone between its
-                    piston band and its breakup.
-      1.5 kHz       presence, +6: the breakup, a paper cone's.
-      4.1 kHz       a shallow notch, and a gentle fall over 2.5 kHz (1st
-                    order): no tweeter, the cone's own top.
-
-    BELOW 300 Hz, THEORY (Ben, 2026-11-19): the takes' residual climbs to +30
-    dB at 87 Hz there -- the spinet's generator and its swell's loudness
-    compensation, not the cone -- so it is carried down from the cone's
-    physics: a 12" paper cone's free-air resonance near 80 Hz and a 2nd-order
-    roll-off under it, no box peak (an open back has no box), flat between.
-
-    A spinet's speaker, not a tone cabinet's (a PR-40's two 15" and two 12"):
-    no openly licensed recording of one was found (sources.md).
+    FROM THE CONE'S PHYSICS since 2026-11-22 (the L102 takes it was measured
+    on no longer read, licences.md L7): a full-range 12" paper cone, no
+    tweeter, as Guitar12's is drawn but milder (a full-range cone, not a
+    guitar speaker) --
+      80 Hz      its free-air resonance, a 2nd-order roll-off under it, no box
+                 peak (an open back has no box) -- Ben's theory, 2026-11-19
+      1 kHz      a shallow hollow (-3 dB) between the piston band and breakup
+      1.8 kHz    the paper cone's breakup, a presence lift (+3 dB)
+      over 3 kHz the cone's own top, falling 6 dB an octave
+    Ben chose it by ear over the plain piston (flat to 3 kHz): "Breakup".
     """
-    formants = ((1548.0, 600.0, 0.383),)
-    antiformants = ((869.6, 431.9, 0.690), (4082.0, 400.0, 0.276))
-    formant_floor = 0.9365
-    bore_corner_hz = 2500.0
-    bore_order = 1.105
+    formants = ((1800.0, 900.0, 0.4),)
+    antiformants = ((1000.0, 500.0, 0.3),)
+    formant_floor = 1.0
+    bore_corner_hz = 3000.0
+    bore_order = 1.0
     bell_cutoff_hz = 80.0
     bell_order = 2.0
 

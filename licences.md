@@ -162,7 +162,12 @@ store build.
   what this clause is written against.
 - **What derives from them:**
   - the harpsichord's 4' (Harpsimachord);
-  - the tonewheel organ's 16', 5 1/3', 1 3/5', percussion and speaker (Hammond L102);
+- **Tonewheel organ: rebuilt 2026-11-22 off the L102:** the 16', 5 1/3' and
+  1 3/5' on the CC0 B3 packs' own drawbar law (-2.8 dB an octave: 1.38,
+  0.94, 0.53); the spinet speaker from a 12" paper cone's physics, Ben's
+  "Breakup" over a plain piston; the percussion's decay from the service
+  manuals' circuit (C31 0.33 uF, R57/R58), its levels by Ben's ear. The
+  Hammond L102 credit gone; L9 closed with it.
 - **Status:** open, and the largest issue by count. Each samplist can grant
   permission; otherwise each voice needs another source.
   - **Refitted 2026-11-20** (A/Bs in ~/Music/licence_refits): Taisho Koto
@@ -295,7 +300,12 @@ store build.
 - **The terms:** "You may not use the samples in this library to create and
   distribute any other sample pack or product."
 - **What derives from it:** the B3 percussion tap's 2nd and 3rd harmonic decay.
-- **Status:** open.
+- **Status:** CLOSED 2026-11-22. The tap's decay from Hammond's service
+  manuals (HSM495: C31 0.33 uF through R58 4.7 M, R57 1.5 M across it for
+  fast; the spinet manuals' "less than 1/2 second" to cut-off): ~110 dB/s;
+  its level by Ben's ear ("B3 as the default, level is good"). The
+  Indiginus credit gone.
+- **Was:** open.
 - **Alternatives (checked 2026-11-20):** no open isolated-percussion or
   single-drawbar takes exist (the free HamOrg library has them under a
   restrictive licence). Fallback: the Hammond service manual (HSM495) gives

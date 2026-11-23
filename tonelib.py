@@ -6836,27 +6836,21 @@ class TonewheelProperties(SynthProperties):
     # The drawbars. Ratios are TEMPERED, not integer -- see above. Amplitudes
     # are the drawbar at 8, the stop mask choosing which are pulled.
     #
-    # THE THREE NO B3 TAKE PULLED -- 16', 5 1/3', 1 3/5' -- FROM THE L102
-    # (Pianobook; a 1960s spinet sampled dry, every drawbar ALONE:
-    # examples/l102_fit.py), each against a drawbar the B3 packs did fit, on
-    # the SAME WHEEL (the 16' at key K with the 8' at K-12 ...: one frequency,
-    # so the speaker and the mic divide out): the 16' +2.2 dB over the 8'
-    # (1.00 -> 1.30), the 5 1/3' -1.1 under it (0.85 -> 0.87, as it was), the
-    # 1 3/5' level with the 2' and 1.3 dB over the 1 1/3' (0.52 -> 0.59, the
-    # mean of the two it gives). The L102 holds EVERY drawbar within +-2.3 dB
-    # of the 8' on its wheel, where ours falls with footage (1' -6.5); the B3
-    # packs cannot tell the two apart -- their settings, solved in 3 dB steps,
-    # absorb it (drawbar_fit: rok 5.70 dB against 6.07 with the L102's gains,
-    # tonewheel 3.80 against 3.76) -- so the fitted drawbars keep theirs, and
-    # only the three asserted ones take the spinet's word (Ben: "(b)").
+    # THE THREE NO B3 TAKE PULLED -- 16', 5 1/3', 1 3/5' -- ON THE B3'S OWN
+    # LAW (since 2026-11-22: the L102's takes no longer read, licences.md L7):
+    # the six drawbars the CC0 packs fitted fall 2.8 dB an octave of footage
+    # (0.8 dB rms about a line in dB against octaves over the 8'), the wheels'
+    # output and the drawbar wiring together. The 5 1/3' and 1 3/5' between
+    # their neighbours on it (0.94, 0.53), the 16' an octave under the 8' at
+    # its slope (+2.8 dB: 1.38) -- the L102 had read 0.87, 0.59 and 1.30.
     stop_ranks = [
-        ("16",    0.5,    1.30),     # sub-fundamental (the L102, below)
-        ("5-1/3", 1.4983, 0.87),     # sub-third: tempered fifth, not 1.5 (the L102)
+        ("16",    0.5,    1.38),     # sub-fundamental (the B3 law, above)
+        ("5-1/3", 1.4983, 0.94),     # sub-third: tempered fifth, not 1.5 (the B3 law)
         ("8",     1.0,    1.00),     # fundamental
         ("4",     2.0,    0.90),
         ("2-2/3", 2.9966, 0.72),     # tempered twelfth, not 3.0
         ("2",     4.0,    0.66),
-        ("1-3/5", 5.0397, 0.59),     # tempered seventeenth: 13.7 cents sharp (the L102)
+        ("1-3/5", 5.0397, 0.53),     # tempered seventeenth: 13.7 cents sharp (the B3 law)
         ("1-1/3", 5.9932, 0.45),
         ("1",     8.0,    0.40),
     ]
@@ -6920,50 +6914,44 @@ class DrawbarOrganProperties(TonewheelProperties):
 class TonewheelPercussionProperties(TonewheelProperties):
     """The percussion tap: a wheel keyed through a decaying gate, its own rank
     (rank_is_pipe: its attack and decay its own, the drawbars' sustain not)."""
-    # FITTED to the L102 (Pianobook; examples/l102_fit.py), its percussion
-    # recorded alone on the fast decay, both harmonics: 2.00 and 3.00 x the 8'
-    # (the drawbars' own wheels), falling ~90 dB/s through the compass (T60
-    # 0.65 s; the takes are cut at 0.17-0.25 s, so +-20%). decay_db 45 renders
-    # 89-91. Its peak against the 8' ON THE SAME WHEEL (speaker and mic
-    # divided out): the third -11 dB at F2's tap to -2 two octaves up, its
-    # mean held here (stop_ranks 0.60, the residual -3.8 .. +3.7 dB). The rise
-    # is the spinet's percussion circuit against its drawbar path -- a B3's is
-    # another -- and register_tilt_db does not reach a rank: left flat.
+    # THE DECAY FROM THE CIRCUIT (since 2026-11-22; the L102's and Indiginus'
+    # takes no longer read, licences.md L7, L9): Hammond's service manuals --
+    # the control tube's grid falls from ~+25 V to its ~+15 V cut-off as C31
+    # (0.33 uF) discharges through R58 (4.7 M) or, on fast, R57 (1.5 M) across
+    # it: tau 0.375 s, cut-off at ~0.55 s toward a ~12 V wiper (the spinet
+    # manuals: "cutoff ... in less than 1/2 second" fast, "about 2-1/2
+    # seconds" slow). ~110 dB/s to inaudible: decay_db 55 (45 rendered 89-91
+    # dB/s). The fast decay, as both consoles' percussion here plays.
+    # ITS LEVEL BY BEN'S EAR (no manual gives one): the spinet's 3rd 0.60 and
+    # 2nd 0.28 (stop_ranks below), the B3's as it was ("level is good")
     rank_is_pipe = True
     rank_only_when_drawn = True       # a channel that never draws it renders as if it were not there
     attack_time = 0.0015
-    decay_db = 45.0
+    decay_db = 55.0
     harmonic_decay_db = 0.0
     harmonic_decay_dampening = 0.0
     sustain_level = 0.0
 
 
 class TonewheelPercussionB3Properties(TonewheelPercussionProperties):
-    """The B3's tap: Indiginus's Real Rotor Organ (a 1957 B3 through a Leslie on
-    chorale, ~/Documents/refs/b3_real_rotor_organ), its 2nd and 3rd recorded
-    alone, 61 keys. Through the rotor every reading swings: the decay's
-    median ~100 dB/s over 20-250 ms, both harmonics (iq 50-95) -- decay_db 50.
-    ITS LEVEL IS ITS SAMPLER'S, NOT ITS FILES': the files stand +9 dB over the
-    drawbar on the same wheel (the 3rd against the 5 1/3', the 2nd against the
-    8', both drawn at 8 in its 688 600 000), but a tap alone normalised as a
-    four-drawbar chord is comes out hot by just that much -- and its maker turned
-    them down in his own preset (3rd 0.3, 2nd 0.5 against the drawbars' 0.7). By
-    his mix, an owner's ear on his own organ: the 3rd +1.4 dB over its drawbar,
-    the 2nd +6.3 -- bolder than the spinet's -6.6 and -14.4, as a B3's is."""
-    decay_db = 50.0
+    """The B3's tap: the same circuit's decay (TonewheelPercussionProperties),
+    its level bolder than the spinet's -- by Ben's ear ("B3 as the default,
+    level is good"): 1.32 for the 3rd, 2.76 for the 2nd (stop_ranks below).
+    Since 2026-11-22 Indiginus' Real Rotor Organ takes are no longer read
+    (licences.md L9)."""
 
 
 # THE PERCUSSION as ranks of their own, each a stop, as a console selects its
 # percussion with tabs: the third harmonic's wheel (the tempered twelfth the
-# 2 2/3' drawbar plays) or the second's (the 4''s), the L102's (bits 9, 10;
-# its second -14.4 dB against the 8' on its wheel, mean of six keys, the third
-# -6.6) or the B3's (bits 11, 12). GM 17 draws the B3's third (Ben: "B3 as
-# the default, level is good").
+# 2 2/3' drawbar plays) or the second's (the 4''s), a spinet's (bits 9, 10;
+# named for the L102 they were first set on) or the B3's (bits 11, 12), the
+# levels by Ben's ear. GM 17 draws the B3's third (Ben: "B3 as the default,
+# level is good").
 TonewheelProperties.stop_ranks = TonewheelProperties.stop_ranks + [
     ("perc 3rd L102", 2.9966, 0.60, TonewheelPercussionProperties),
     ("perc 2nd L102", 2.0, 0.28, TonewheelPercussionProperties),
-    # the B3's, rendered and read as the recordings were: 1.32 puts the 3rd
-    # +1.4 dB over its 5 1/3', 2.76 the 2nd +6.3 over its 8' 
+    # the B3's, bolder (1.32 puts the 3rd ~+1.4 dB over its 5 1/3', 2.76 the
+    # 2nd ~+6.3 over its 8')
     ("perc 3rd B3", 2.9966, 1.32, TonewheelPercussionB3Properties),
     ("perc 2nd B3", 2.0, 2.76, TonewheelPercussionB3Properties)]
 

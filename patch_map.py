@@ -3015,7 +3015,7 @@ CAB_ABOUT = {
     None: "the voice's own",
     "direct": "no speaker: the amplifier's output straight to the desk",
     "leslie": "After the Leslie 122: horn and drum rotors, the cabinet's response measured (hammondman's takes)",
-    "hammond": "After a Hammond spinet's speaker (the L-102's): measured 300 Hz-4 kHz, a 12\" cone's physics under",
+    "hammond": "After a Hammond spinet's speaker: a 12\" paper cone's physics, its breakup's presence, open-backed",
     "guitar12": "open-backed 1x12 guitar combo: voiced from the speaker's design",
     "guitar412": "closed-back 4x12, Vintage 30s: fitted to measured impulse responses",
     "jc120": "After the Roland JC-120's 2x12, closed back: voiced from its design, no recording",

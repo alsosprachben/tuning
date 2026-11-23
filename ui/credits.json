@@ -228,25 +228,6 @@
 },
 {
 "group": "Organs, harmoniums and accordions",
-"title": "Real Rotor Organ (Decent Sampler)",
-"author": "Indiginus (A. Tracy Collins)",
-"url": "https://www.indiginus.com/real-rotor-organ",
-"licence": "Indiginus licence",
-"how": "fitted",
-"voices": "Percussive Organ B3 percussion tap: 2nd/3rd harmonic decay and level"
-},
-{
-"group": "Organs, harmoniums and accordions",
-"title": "Hammond L102",
-"author": "Peter Corbett",
-"url": "https://www.pianobook.co.uk/packs/hammond-l102/",
-"licence": "Pianobook terms",
-"licence_url": "https://www.pianobook.co.uk/terms-conditions/",
-"how": "fitted",
-"voices": "Tonewheel organ 16', 5-1/3', 1-3/5' drawbars, L102 percussion, organ speaker cabinet"
-},
-{
-"group": "Organs, harmoniums and accordions",
 "title": "tonewheel organ sound samples",
 "author": "hammondman",
 "url": "https://freesound.org/people/hammondman/packs/18844/",

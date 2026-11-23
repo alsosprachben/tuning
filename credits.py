@@ -303,40 +303,6 @@ SOURCES = [{'id': 'iowa-mis',
               'HarmoniumDebainOriginal.pdf: no licence or terms; https://jepisi.re/harmoniums/debain-reunion '
               '(fetched 2026-11-20): no licence, terms or usage statement',
   'match': ['Jean\\-Pierre\\ Silvestre']},
- {'id': 'real-rotor-organ',
-  'group': 'Organs, harmoniums and accordions',
-  'title': 'Real Rotor Organ (Decent Sampler)',
-  'author': 'Indiginus (A. Tracy Collins)',
-  'url': 'https://www.indiginus.com/real-rotor-organ',
-  'licence': 'Indiginus licence',
-  'licence_url': '',
-  'how': 'fitted',
-  'voices': 'Percussive Organ B3 percussion tap: 2nd/3rd harmonic decay and level',
-  'issue': 'L9',
-  'evidence': '~/Documents/refs/b3_real_rotor_organ/x/Real Rotor Organ DS/Real Rotor Organ DS User Guide.pdf, EULA: '
-              '"You may not use the samples in this library to create and distribute any other sample pack or '
-              'product, or use it in the training of an AI product." "All samples and other materials (c)2024 A. '
-              'Tracy Collins. All rights reserved."',
-  'match': ['Indiginus']},
- {'id': 'pb-hammond-l102',
-  'group': 'Organs, harmoniums and accordions',
-  'title': 'Hammond L102',
-  'author': 'Peter Corbett',
-  'url': 'https://www.pianobook.co.uk/packs/hammond-l102/',
-  'licence': 'Pianobook terms',
-  'licence_url': 'https://www.pianobook.co.uk/terms-conditions/',
-  'how': 'fitted',
-  'voices': "Tonewheel organ 16', 5-1/3', 1-3/5' drawbars, L102 percussion, organ speaker cabinet",
-  'issue': 'L7',
-  'evidence': 'https://www.pianobook.co.uk/terms-conditions/ (EULA, fetched 2026-11-20) s.5: licence only "to use '
-              'the download Sound File(s) only within your own newly-created sound recording(s) and/or '
-              'performances"; "expressly forbids resale or other distribution of the Products or their derivatives, '
-              'either as they exist in the library, reformatted ..., or mixed, combined, filtered, re-synthesised or '
-              'otherwise edited, for use as sounds, multi-sounds, samples, multi-samples, sound sets, programmes or '
-              'patches in a sampler, microchip, computer or any sample playback device"; "Products may not be used '
-              'in or in relation to any competitive products that are sold or relicensed to any third parties." FAQ: '
-              'forbidden "to sell or redistribute the sample libraries". Pack readme has no licence of its own.',
-  'match': ['Peter\\ Corbett']},
  {'id': 'fs-tonewheel-hammondman',
   'group': 'Organs, harmoniums and accordions',
   'title': 'tonewheel organ sound samples',
