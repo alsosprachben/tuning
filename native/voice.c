@@ -2025,7 +2025,7 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
             /* ClavinetProperties.__init__: the coil on the note's speaking
                length, and the key-up's modes */
             double f0 = frequency;
-            double length = s->cl_ref_m * pow(s->cl_ref_hz / f0, s->cl_pow);
+            double length = s->cl_ref_m * pow(s->cl_ref_hz / f0, f0 >= s->cl_ref_hz ? s->cl_pow : s->cl_pow_lo);
             double key = 69.0 + 12.0 * log(f0 / 440.0) / log(2.0);
             double dc = s->cl_c0 + (s->cl_c1 - s->cl_c0) * pymin(1.0, pymax(0.0, (key - 29.0) / 59.0));
             double qb = pymin(s->cl_bridge / pymax(length, 1e-6), s->cl_qmax);
@@ -2179,6 +2179,21 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
             o->B = c->law_k * pow(frequency, c->law_p);
         else if (c->b_law == 4)         /* the dulcimer's: its bass bridge's own, the steel's law over it */
             o->B = frequency < c->bb_hz ? c->bb_B : c->law_k * pow(frequency, c->law_p);
+        else if (c->b_law == 5) {       /* the Clavinet's published table, linear in the key */
+            double key = 69.0 + 12.0 * log(frequency / 440.0) / log(2.0);
+            int n = c->n_btab;
+            if (key <= c->btab_key[0])
+                o->B = c->btab_B[0];
+            else {
+                o->B = c->btab_B[n - 1];
+                for (int i = 0; i + 1 < n; i++)
+                    if (key <= c->btab_key[i + 1]) {
+                        o->B = c->btab_B[i] + (c->btab_B[i + 1] - c->btab_B[i]) * (key - c->btab_key[i])
+                               / (c->btab_key[i + 1] - c->btab_key[i]);
+                        break;
+                    }
+            }
+        }
         if (c->rnd) {                   /* ...and RandomStrike's: its pitch and lateness */
             o->pitch_jitter = (1.0 + o->pitch_jitter) * pow(2.0, c->rnd_draws[2] / 1200.0) - 1.0;
             o->attack_jitter = o->attack_jitter + c->rnd_draws[3];

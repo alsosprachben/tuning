@@ -4402,20 +4402,24 @@ class ClavinetProperties(InharmonicStringProperties):
     striking portion of the tone nearly entirely." So the click is carried as
     broadband noise that grows with force, not as a string transient.
 
-    MEASURED, THINLY. The CC0 material is loops, riffs and synth imitations;
-    the one isolated recording is Aalto's companion page to Gabrielli,
-    Valimaki & Bilbao (ICMC 2011): a D6's Bb2, E4 and F#5, each twice, on the
-    centre pickup (measured only; sources.md). The geometry -- string scale,
-    both pickups' distances, the switches -- is the DAFx-12 pickup paper's
-    (Remaggi, Gabrielli et al.); the ladder, the decay and the stiffness are
-    fitted to the takes (examples/clav_fit.py).
+    FROM ITS PUBLISHED MEASUREMENTS (since 2026-11-22; examples/
+    clav_published.py). No openly licensed isolated recording of a D6
+    exists (Aalto's companion-page takes, the first reference, carry no
+    licence and are no longer read: licences.md L10). One D6, measured by
+    Gabrielli, Valimaki, Bilbao et al.: the stiffness table and the ring's
+    loop filter (EURASIP 2013, CC BY; ICMC 2011), the scale and both
+    pickups (DAFx-12), the release's three-semitone drop and the knock's
+    band. What they leave open is Ben's ear's: the tilt (between two of
+    three), the key-up's level; the register voiced even. Markus Ruffing's
+    D6 (Wikimedia Commons, free use) was the listening reference -- played
+    through a wah, so a reference for feel, not for tone.
     """
     # ITS PICKUP SWITCH, the part's to set (the AMP card): the D6's: its two rocker switches (clav_pickup)
     pickup_family = 'clav'
 
-    # Struck at the very end of what sounds: 0.042 of the speaking length,
-    # FITTED (clav_fit.py; the estimate was 0.035), the comb's first null
-    # near the 24th partial, so everything audible is on its rising edge.
+    # Struck at the very end of what sounds: 0.035 of the speaking length (an
+    # estimate: the tangent's tip size is not published), the comb's first
+    # null near the 29th partial, so everything audible is on its rising edge.
     # The four TONE rockers are on the wheel: see CLAV_TONE above and
     # blockrender's clavinet pass. The other two, AB/CD, select which of the two
     # pickups is heard, and they are NOT here -- a pickup selection changes the
@@ -4424,16 +4428,29 @@ class ClavinetProperties(InharmonicStringProperties):
     # already sounding. That is a second pass, and it wants a bank axis.
     clav_panel = True
 
-    strike_point = 0.0417
+    strike_point = 0.035
     strike_depth = 0.90
     strike_fills_with_force = False     # rubber on an anvil, not felt
 
-    # MEASURED on the Aalto D6 takes (clav_fit.py measure): B 3.4-3.6e-5 at
-    # E4, 3.6-5.4e-5 at F#5 (Bb2's two takes scatter, 2.7e-5 and 9.6e-5).
-    # The estimate here had been 1.1e-4, three times too stiff: the string
-    # is long (67.8 cm at 161 Hz, DAFx-12), not short.
-    inharmonicity_coefficient = 3.5e-05
-    inharmonicity_dynamic = False
+    # THE STIFFNESS, PUBLISHED (Gabrielli, Valimaki et al., EURASIP JASP
+    # 2013:103, Table 1; examples/clav_published.py): B at six keys of one
+    # D6, "linearly interpolated" between them by key -- 5e-4 at F1, the
+    # wound bass falling to 1e-4 by D#3, the plain strings ~9e-5 to E6.
+    inharmonicity_coefficient = 9e-05
+    inharmonicity_dynamic = True
+    inharmonicity_table = ((29, 5e-4), (34, 2e-4), (50, 9e-5), (51, 1e-4), (78, 9e-5), (88, 8e-5))
+
+    def inharmonicity_coefficient_for_frequency(self, frequency):
+        """the table at the note's key, linear between its points, held past
+        its ends (native/voice.c b_law 5: the same arithmetic)"""
+        key = 69.0 + 12.0 * _log(float(frequency) / 440.0) / _log(2.0)
+        t = self.inharmonicity_table
+        if key <= t[0][0]:
+            return t[0][1]
+        for (k0, b0), (k1, b1) in zip(t[:-1], t[1:]):
+            if key <= k1:
+                return b0 + (b1 - b0) * (key - k0) / (k1 - k0)
+        return t[-1][1]
 
     # The magnet. pickup_points is filled in per note by __init__ below.
     pickup_width = 0.012
@@ -4441,14 +4458,17 @@ class ClavinetProperties(InharmonicStringProperties):
 
     # WHERE THE STRING ENDS, as a function of the note, anchored on the one
     # string the DAFx-12 pickup paper measured (Remaggi, Gabrielli et al.):
-    # 67.8 cm for 161 Hz -- the estimate this replaces had 0.26 m there. How
-    # the length scales up and down the compass is fitted (clav_fit.py), on
-    # three notes, Bb2-F#5: as f^-0.49. Past them it is extrapolated -- F1
-    # comes out ~1.3 m, longer than a D6's case allows, so the bass's combs
-    # are the law's guess; inside, the pickup fractions are the takes'.
+    # 67.8 cm for 161 Hz. Over it, the PLAIN strings: B = pi^2 E d^2 /
+    # (64 rho L^4 f^2), so the published B at F#5 and E6 with Hohner's .008"
+    # steel puts them at 0.240 and 0.185 m -- a law f^-0.631 through the
+    # three. Under it, the WOUND strings barely lengthen: the EURASIP paper's
+    # A#2 pickup take notches at ~544 Hz, the centre pickup at 1/4.67 of the
+    # string -- 0.70 m -- f^-0.108 (examples/clav_published.py length). One
+    # law through all had F1 at 1.55 m, longer than the case.
     speaking_length_ref_m = 0.678
     speaking_length_ref_hz = 161.0
-    speaking_length_power = 0.492
+    speaking_length_power = 0.631
+    speaking_length_power_bass = 0.108
     # THE TWO PICKUPS, where the paper measured them, from the string's
     # termination at the bridge: the BRIDGE pickup below the strings at a
     # constant 4 cm (tilted 30 degrees), the CENTRE pickup above them at 18.5
@@ -4460,41 +4480,44 @@ class ClavinetProperties(InharmonicStringProperties):
     # THE SWITCHES (the paper's Table 1): A/B and C/D select centre only
     # ("centre"), bridge only ("bridge"), both in phase ("both") or both in
     # ANTI-phase ("anti", the fundamental damped -- the thin funk sound).
-    # The Aalto takes were played on the CENTRE pickup: fitted with every
-    # take free to choose, B-flat2 to F#5 came out 6.7 dB rms; held to centre
-    # 6.7, to bridge 7.6 (clav_fit.py fit --setting). So centre by default.
+    # Centre by default: the warm one, and the EURASIP paper's A#2 take's
+    # comb is the centre pickup's.
     clav_pickup = "centre"
 
-    # THE LADDER AND THE RING, FITTED to the Aalto takes (clav_fit.py fit
-    # --setting=centre): ladders h2-h24 and h1-h6's decay, 16.6 -> 6.7 dB rms
-    # (ladder 7.4, decay 2.1). Against the magnet's rising n the tilt is
-    # steeper the higher the note -- F#5's h2 is 24-29 dB under h1 where Bb2's
-    # holds level to h8 -- which the estimate had flat (h2 level with h1 at
-    # F#5). And it does NOT die fast: Bb2's h1 falls 2-3 dB/s, E4's 7, F#5's
-    # 18-19 -- the rate rising about an octave's doubling -- where the
-    # estimate ("the anvil is lossy") had 17 everywhere.
-    tonal_dampening = 2.530
-    octave_dampening = 0.514
-    decay_db = 0.422
-    harmonic_decay_db = 2.909
-    decay_register_slope = 0.890
+    # THE TILT, BY EAR (Ben, 2026-11-22: "between middle and bright" of three
+    # falling tilts; clav_tilt_*.mp3). The paper's "the second partial always
+    # ... more than 3 dB higher than the first" holds in the bass and middle;
+    # the top octave's h2 dips under its pickup's notch (q ~0.36 of a short
+    # string). Fitted to that statement alone the tilt went below zero --
+    # every harmonic to the 128th growing -- and the output saturated.
+    # THE RING, FITTED to the ICMC paper's loop filter (gain 0.996, its pole
+    # -0.8 to -0.1 over the keyboard) with the EURASIP paper's ripple filter
+    # averaged, which lengthens the lowest partials: h1-h4 at 11 keys, h1
+    # weighted three times (Ben: "the sustain might need to be a bit more"),
+    # log-rate rms 0.93 -> 0.16; h1 within ~5% of it F1 to D6.
+    tonal_dampening = 2.0
+    octave_dampening = 0.45
+    decay_db = -3.748
+    harmonic_decay_db = 8.391
+    decay_register_slope = 1.344
+    harmonic_decay_dampening = 0.236
     release_valve_time = 0.035          # woven yarn, and it means it
 
-    # THE KEY LETTING GO, MEASURED (clav_fit.py; the Aalto take's four
-    # key-ups): 32-39 dB under the strike's first 50 ms, gone in 20-40 ms,
-    # and NOT the same under every note -- a thump at 100-450 Hz under Bb2,
-    # 180 Hz and 0.7-1.8 kHz under E4, 0.45-1.8 kHz under F#5. So two parts:
-    # the mechanism's thump at fixed Hz, fading up the keyboard (~0.5 dB a
-    # semitone over Bb2), and the string let go -- a burst at its own 2nd to
-    # 4th harmonics as the tangent leaves it, before the yarn has it. Set per
-    # note in __init__; the level calibrated through the renderer
-    # (clav_fit.py keyup) to the takes' -35 dB.
-    release_click_db = -48.9
+    # THE KEY LETTING GO (examples/clav_published.py keyup): the tangent
+    # leaves and the whole string -- "the pitch decrease after release is
+    # three semitones for the whole keyboard" (ICMC 2011, EURASIP 2013) --
+    # sounds at its 2nd-4th harmonics three semitones down until the yarn has
+    # it; and the mechanism's thump, "most of its energy concentrated below
+    # 1,200 Hz" (EURASIP), at three modes spread through that band, alike
+    # under every note (an assumption). Its level is not published: -50, the
+    # quietest the renderer keeps (a mode under 3e-3 of the note's gain is
+    # dropped) -- the key-up 26 dB under the strike's first 50 ms.
+    release_click_db = -50.0
     release_click_decay_db = 500.0      # amplitude -30 dB in ~30 ms
     release_click_s = 0.06
-    keyup_thump_hz = (110.0, 180.0, 290.0)
-    keyup_thump_db_per_semitone = 0.5
-    keyup_string_harmonics = ((2, 1.0), (3, 0.7), (4, 0.4))
+    keyup_thump_hz = (150.0, 380.0, 950.0)
+    keyup_thump_db_per_semitone = 0.0
+    keyup_string_harmonics = ((2 * 2 ** (-3 / 12.0), 1.0), (3 * 2 ** (-3 / 12.0), 1.0), (4 * 2 ** (-3 / 12.0), 1.0))
     attack_time = 0.0015
 
     # The key, its rebound and the tangent on the anvil. Loud enough to mask the
@@ -4509,17 +4532,19 @@ class ClavinetProperties(InharmonicStringProperties):
     # 100, same room and master, matched on rms against the grand piano. It
     # started 18.7 dB UNDER one, because almost all of this voice's energy sits
     # in partials the comb had been pushing around rather than in a fundamental.
-    # THE REGISTER'S LEVEL. Against the Aalto takes' three notes (a player's own force
-    # on each, so a rough guide): F#5 had come out 8 dB quiet. A line through
-    # them, rms 3.1 -> 2.6 dB.
-    octave_gain = 1.64
+    # THE REGISTER'S LEVEL (examples/clav_published.py register): nothing
+    # published, so voiced even, as the other electric pianos -- each key's
+    # loudest 100 ms at v100, F1 to E6, rms 8.7 -> 3.0 dB (the old line
+    # through three notes had left F1 ~19 dB over C4).
+    octave_gain = 6.94
     initial_gain = 0.57125374      # C3/C4/C5 at v100 matched on rms to the grand piano (was +3.8 dB over)
 
     def __init__(self, frequency=256.0, *args, **kwargs):
         super().__init__(frequency, *args, **kwargs)
         f0 = float(frequency)
         length = self.speaking_length_ref_m * (
-            (self.speaking_length_ref_hz / f0) ** self.speaking_length_power)
+            (self.speaking_length_ref_hz / f0) ** (self.speaking_length_power if f0 >= self.speaking_length_ref_hz
+                                                   else self.speaking_length_power_bass))
         self.speaking_length_m = length
         key = 69.0 + 12.0 * _log(f0 / 440.0) / _log(2.0)
         c0, c1 = self.pickup_centre_m

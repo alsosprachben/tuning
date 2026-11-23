@@ -21832,16 +21832,17 @@ def _selftest(only=""):
           and cv.strike_fills_with_force is False,
           "  (first null at partial %.0f; a piano notches at %.0f)"
           % (1.0 / cv.strike_point, 1.0 / _T.GrandPianoProperties.strike_point))
-    # Measured (clav_fit.py, the Aalto D6): its bass holds h2-h8 at or over
-    # the fundamental -- Bb2 about +4 dB on average -- where a plucked
-    # harpsichord's fall away; up the keyboard the D6 darkens fast.
+    # Published (Gabrielli et al., EURASIP 2013: "The second partial always
+    # has a magnitude more than 3 dB higher than the first"): its bass holds
+    # h2-h8 at or over the fundamental, where a plucked harpsichord's fall
+    # away; up the keyboard the D6 darkens fast.
     up = lambda q: 10 * _math.log10(sum((q.harmonic_volume(h) / q.harmonic_volume(1)) ** 2
                                         for h in range(2, 9)) / 7.0)
     cvb = _T.ClavinetProperties(116.5, 0.0, (100 / 127.0) ** 2, 1.0)
     hcb = _T.HarpsichordProperties(116.5, 0.0, (100 / 127.0) ** 2, 1.0)
     check("...which makes its bass buzz where a harpsichord's rings",
           up(cvb) > 0.0 and up(cvb) > up(hcb) + 3.0,
-          "  (Bb2, h2-h8 %+.1f dB re h1 on average against %+.1f; the take's ~+4)"
+          "  (Bb2, h2-h8 %+.1f dB re h1 on average against %+.1f)"
           % (up(cvb), up(hcb)))
     # THE MAGNET, which the harpsichord voice it borrowed did not have at all.
     check("...and it has pickups, which the harpsichord has none of",

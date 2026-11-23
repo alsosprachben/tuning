@@ -285,16 +285,20 @@ store build.
 
 - **Debain harmonium** (Jean-Pierre Silvestre's Hauptwerk set): the reed
   organ's registers (GS 20). His address is in the set's PDF; ask him.
-- **Aalto clavinet** recordings: the Clavinet (GM 7). Ask the authors.
+- **Aalto clavinet** recordings: CLOSED 2026-11-22. The Clavinet (GM 7)
+  rebuilt from the papers' published measurements of one D6 (EURASIP 2013,
+  CC BY; ICMC 2011; DAFx-12: examples/clav_published.py) -- stiffness table,
+  loop and ripple filters, scale, pickups, the release's drop -- with the
+  tilt and the key-up by Ben's ear ("as close as we can get with the
+  material we have"). clav_fit.py and the Aalto credit removed.
 - **Drum machines (TR-808, TR-606, TR-707): CLOSED 2026-11-22.** All four
   machine kits refitted to MckAudio's TR-8 recordings (CC0); the 808's metal
   oscillators set from the service notes. Fischer's, Vargo's, bdu's and
   hyperreal's sets are no longer read, and their credits are gone.
-- **Alternatives for the clavinet (checked 2026-11-20):** only Markus
-  Ruffing's "Hohner Clavinet D6.ogg" (Commons; "allows anyone to use it for
-  any purpose"): 101 s of playing across the pickup settings, lossy. A check
-  on pickup combinations, not a fit. Keep the published DAFx/ICMC geometry,
-  ask Aalto to release their examples under CC BY, or record a D6.
+- **The clavinet's listening reference:** Markus Ruffing's "Hohner Clavinet
+  D6.ogg" (Commons, free use; ~/Documents/refs/clavinet_ruffing): dense
+  riffs across the pickup settings, through a WAH (Ben heard it; a 9 dB swell
+  darkening at 21.8-22.1 s), lossy -- feel and register, not tone.
 - **Alternatives for the harmonium (checked 2026-11-20):** no openly licensed
   French harmonium with separate registers exists (Grabowski's free Emil
   Müller set records the stops separately but is "All Rights Reserved").

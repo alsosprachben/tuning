@@ -283,13 +283,14 @@ typedef struct {
        dB per octave of mode ratio per dB of stroke, about mst_ref */
     double mst, mst_ref;
     /* A CLAVINET (ClavinetProperties.__init__, on the electric path): its
-       coil a fraction of the note's speaking length (ref_m (ref_hz/f0)^pow),
+       coil a fraction of the note's speaking length (ref_m (ref_hz/f0)^pow,
+       ^pow_lo under ref_hz: the wound bass's),
        at bridge_m or between c0 and c1 by key, capped at qmax; sel 0
        centre, 1 bridge, 2 both, 3 both in anti-phase. Its key-up's modes
        (release_click_modes): the thumps, falling tdb a semitone over key
        46, then the string's harmonics kh at ka -- the note's in vk_* */
     int clav, cl_sel, cl_nt, cl_nk;
-    double cl_ref_m, cl_ref_hz, cl_pow, cl_bridge, cl_c0, cl_c1, cl_qmax, cl_tdb;
+    double cl_ref_m, cl_ref_hz, cl_pow, cl_pow_lo, cl_bridge, cl_c0, cl_c1, cl_qmax, cl_tdb;
     double cl_thump[8], cl_kh[8], cl_ka[8];
     int vk_n;
     double vk_hz[16], vk_amp[16];
@@ -503,6 +504,10 @@ typedef struct {
     /* b_law 4 (HammeredDulcimerProperties'): bb_B under the bass bridge's
        bb_hz, law_k f^law_p over it */
     double bb_hz, bb_B;
+    /* b_law 5 (ClavinetProperties.inharmonicity_table): B linear in the key
+       between n_btab points (btab_key, btab_B), held past its ends */
+    int n_btab;
+    double btab_key[8], btab_B[8];
     /* A BANK OF COURSES (course_keys: the dulcimer's): the register's
        strings only at the keys with course[key] set, has_course; else all */
     int has_course;

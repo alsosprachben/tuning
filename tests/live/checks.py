@@ -70,7 +70,7 @@ CHECKS = [
     ("moog_cmx", "nvrender_check.py", ["@moog_cmx.mid"], {}),
     # a part's speaker and pickup (CC83, CC85: after the program change that
     # puts them back), a channel's Messenger mode (CC86), presets' setup measures
-    ("choices_files", "nvrender_check.py", ["@pk_reset.mid", "@pk_strat_bridge.mid", "@pk_clav_anti.mid",
+    ("choices_files", "nvrender_check.py", ["@pk_reset.mid", "@pk_strat_bridge.mid", "@pk_clav_anti.mid", "@clav_compass.mid",
                                             "@pk_ibanez_inside.mid", "@cab_gt412.mid", "@cab_org16les.mid",
                                             "@msgr_mode.mid", "@setup_guitar_rig.mid", "@setup_organ_full.mid",
                                             "@setup_moog.mid", "4"], {}),

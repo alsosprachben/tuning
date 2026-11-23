@@ -118,7 +118,7 @@ class VoiceSnap(ctypes.Structure):
                 ('dul_n', I), ('dhz_set', I), ('dul_beat', C * 2), ('dhz_db', C), ('dhz_pow', C), ('pps', C),
                 ('ushare', I), ('mst', C), ('mst_ref', C),
                 ('clav', I), ('cl_sel', I), ('cl_nt', I), ('cl_nk', I),
-                ('cl_ref_m', C), ('cl_ref_hz', C), ('cl_pow', C), ('cl_bridge', C), ('cl_c0', C), ('cl_c1', C),
+                ('cl_ref_m', C), ('cl_ref_hz', C), ('cl_pow', C), ('cl_pow_lo', C), ('cl_bridge', C), ('cl_c0', C), ('cl_c1', C),
                 ('cl_qmax', C), ('cl_tdb', C), ('cl_thump', C * 8), ('cl_kh', C * 8), ('cl_ka', C * 8),
                 ('vk_n', I), ('vk_hz', C * 16), ('vk_amp', C * 16),
                 ('hit_n', I), ('hit_cents', C * 8), ('hit_gain', C),
@@ -188,6 +188,7 @@ class VoiceInit(ctypes.Structure):
                 + [('strike_wobble_hz', C), ('strike_wobble_gain', C), ('strike_wobble_slope', C)]
                 + [('rnd', I)] + [(f, C) for f in ('rnd_level_db', 'rnd_effort_db', 'rnd_cents', 'rnd_timing_s')]
                 + [('rnd_draws', C * 4), ('law_k', C), ('law_p', C), ('bb_hz', C), ('bb_B', C),
+                   ('n_btab', I), ('btab_key', C * 8), ('btab_B', C * 8),
                    ('has_course', I), ('course', ctypes.c_ubyte * 128),
                    ('n_open', I), ('open_st', C * 8), ('pluck_open', C),
                    ('vbody', I), ('n_vb', I), ('vb_fm', (C * 3) * 16)]
@@ -1431,7 +1432,8 @@ def clav_voice(cls):
     if not issubclass(cls, T.ClavinetProperties) or issubclass(cls, T.FormantBody):
         return False
     own = dict(_HARMONIC_OWN, bore_gain='SynthProperties', _body_trim=None, pickup_gain='SynthProperties',
-               inharmonicity_coefficient_for_frequency='InharmonicStringProperties')
+               inharmonicity_coefficient_for_frequency='ClavinetProperties' if getattr(
+                   cls, 'inharmonicity_table', None) else 'InharmonicStringProperties')
     if any(_owner(cls, n) != o for n, o in own.items()):
         return False
     if any(k.__name__ not in ('SynthProperties', 'ClavinetProperties', 'object') for k in cls.__mro__
@@ -1439,7 +1441,8 @@ def clav_voice(cls):
         return False
     return (cls.clav_pickup in _CLAV_SEL and cls.mode_gains is None and cls.mode_ratios is None
             and bool(cls.strike_point) and not cls.strike_fills_with_force and not cls.harmonic_touch
-            and not cls.inharmonicity_dynamic and not (cls.unison_detune or ()) and not cls.blare_db_per_khz
+            and (not cls.inharmonicity_dynamic or 1 <= len(getattr(cls, 'inharmonicity_table', ()) or ()) <= 8)
+            and not (cls.unison_detune or ()) and not cls.blare_db_per_khz
             and not cls.bore_corner_hz and 1 <= (cls.max_harmonic or 0) <= 128 and not cls.max_partial_hz
             and not cls.pickup_resonance_hz and not cls.lowpass_hz and cls.pickup_turns == 1.0
             and len(cls.keyup_thump_hz) <= 8 and len(cls.keyup_string_harmonics) <= 8
@@ -2468,6 +2471,7 @@ def snapshot(props):
                 s.clav, s.cl_sel = 1, _CLAV_SEL[c.clav_pickup]
                 s.cl_ref_m, s.cl_ref_hz = float(c.speaking_length_ref_m), float(c.speaking_length_ref_hz)
                 s.cl_pow, s.cl_bridge = float(c.speaking_length_power), float(c.pickup_bridge_m)
+                s.cl_pow_lo = float(getattr(c, 'speaking_length_power_bass', c.speaking_length_power))
                 s.cl_c0, s.cl_c1 = (float(x) for x in c.pickup_centre_m)
                 s.cl_qmax, s.cl_tdb = float(c.pickup_fraction_max), float(c.keyup_thump_db_per_semitone)
                 s.cl_nt, s.cl_nk = len(c.keyup_thump_hz), len(c.keyup_string_harmonics)
@@ -2903,7 +2907,12 @@ def _class(cls):
             c.rnd_cents, c.rnd_timing_s = cls.rnd_cents, cls.rnd_timing_s
         c.key_jitter = int(c.kind == 0)
         c.b_law = _b_law(cls) if c.kind == 0 else 0
-        if c.kind == 4 and cls.inharmonicity_dynamic:
+        if c.kind == 4 and cls.inharmonicity_dynamic and getattr(cls, 'inharmonicity_table', None):
+            c.b_law = 5                         # (the Clavinet's published table)
+            c.n_btab = len(cls.inharmonicity_table)
+            c.btab_key[:c.n_btab] = [float(k) for k, _ in cls.inharmonicity_table]
+            c.btab_B[:c.n_btab] = [float(b) for _, b in cls.inharmonicity_table]
+        elif c.kind == 4 and cls.inharmonicity_dynamic:
             c.b_law = 3                         # (the steel's law)
             c.law_k, c.law_p = cls.inharmonicity_law
             if _owner(cls, 'inharmonicity_coefficient_for_frequency') == 'HammeredDulcimerProperties':

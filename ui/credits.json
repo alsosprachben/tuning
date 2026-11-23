@@ -121,12 +121,13 @@
 },
 {
 "group": "Keyboards and bells",
-"title": "Clavinet D6 sound examples (companion to Gabrielli, Valimaki & Bilbao, ICMC 2011)",
-"author": "Aalto University Acoustics Lab (L. Gabrielli, V. Valimaki, S. Bilbao)",
-"url": "http://research.spa.aalto.fi/publications/papers/icmc11-clavinet/",
-"licence": "no licence stated",
-"how": "fitted",
-"voices": "Clavinet"
+"title": "A digital waveguide-based approach for Clavinet modeling and synthesis (EURASIP JASP 2013:103); Real-time emulation of the Clavinet (ICMC 2011); A pickup model for the Clavinet (DAFx-12)",
+"author": "L. Gabrielli, V. Valimaki, H. Penttinen, S. Squartini, S. Bilbao; L. Remaggi et al.",
+"url": "https://asp-eurasipjournals.springeropen.com/articles/10.1186/1687-6180-2013-103",
+"licence": "CC BY 4.0 (the EURASIP article); published measurements",
+"licence_url": "https://creativecommons.org/licenses/by/4.0/",
+"how": "measured",
+"voices": "Clavinet: its string stiffness, ring, scale, pickups and key-up, from their published measurements"
 },
 {
 "group": "Keyboards and bells",
