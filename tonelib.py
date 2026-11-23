@@ -3941,32 +3941,15 @@ class HarpsiFourProperties(HarpsiBase):
     """The 4' choir: its own row of strings an octave up, half as long, on its
     own bridge -- its pluck, its ladder and its decay its own."""
     rank_is_pipe = True               # its decay is its own (see HarpsiUpperProperties)
-    # FITTED to Knisely's Harpsimachord (Pianobook: a Brown copy of a 1750
-    # Kirckman), its Lower 8' takes against its Lower 8' + 4' -- one
-    # instrument, one room, one EQ chain, so the take over the take is free of
-    # all three. The 4' lands only on the 8''s even harmonics; the odd ones
-    # either side are the same string plucked twice and take out the take's
-    # own difference (examples/harpsi_4ft.py):
-    #
-    #     even over odd, dB    n=1    2   3-4  5-8 | late - early (0.8-1.6 s)
-    #     bass, recorded       3.6  4.5  8.4  4.9 | -2.3 -4.3 -3.0 -1.4
-    #     tenor                5.1  9.3  5.3  5.2 | -0.7 -6.5 -1.9 -5.4
-    #     treble               0.3  1.1  2.1  1.4 |  3.8 -3.8  1.8 -1.4
-    #
-    # PLUCKED AT TWICE THE 8''s FRACTION -- 0.21 against 0.115: the jacks
-    # stand in one row across strings half as long. Darker per harmonic than
-    # the 8' (tonal_dampening 0.52), and dying faster: decay_db 12.4 at its
-    # own pitch. The 8''s values gave 2.89 dB rms; these, 1.62.
-    #
-    # ITS LEVEL IS THE TOTAL'S, NOT THE LADDER'S. Even over odd, the fit puts
-    # the 4' as loud as the 8' (1.05) -- against THIS instrument's 8' evens,
-    # which are weaker against its fundamental than ours (VCSL's English). The
-    # recording's 8'+4' is 0.9 dB over its 8' (61 keys, unnormalised takes);
-    # 0.57 matches that, 1.05 was 2.5 dB over. Ben, A/B on BWV 847: "Levelled
-    # sounds more natural." (stop_ranks 0.57; it stood at an asserted 0.58.)
-    strike_point = 0.2099
-    tonal_dampening = 0.5213
-    decay_db = 12.43
+    # FROM PHYSICS since 2026-11-22 (Knisely's Harpsimachord takes, which it
+    # was fitted on, no longer read, licences.md L7): THE PLUCK at twice the
+    # 8''s fraction -- the jacks stand in one row across strings half as long
+    # (2 x 0.115; the old fit read 0.21); THE ROLL-OFF AND DECAY the 8''s own
+    # laws (VCSL, CC0) at its pitch: the same quill on the same wire.
+    # ITS LEVEL IS THE TOTAL'S, by Ben's ear (A/B on BWV 847: "Levelled
+    # sounds more natural"; stop_ranks 0.57), the physics A/B the same
+    # (harpsi4_{old,physics}.mp3: "Sounds good").
+    strike_point = 0.23
     max_partial_hz = 16000.0
     partial_phase_spread = 1.0
 

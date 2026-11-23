@@ -149,7 +149,7 @@ store build.
   (uploaded by a third party), Khaled Arman with the Geneva Camerata (with an
   ensemble). Ermlick's is the cleanest; its licence is the uploader's own.
 
-### L7. One Pianobook library — Pianobook's terms forbid it
+### L7. Pianobook libraries — Pianobook's terms forbid it: CLOSED 2026-11-22
 
 - **The terms** (pianobook.co.uk/terms-conditions, section 5): the samples are
   licensed "only within your own newly-created sound recording(s)"; the
@@ -161,7 +161,10 @@ store build.
   products that are sold". A model fitted to them, sold as an instrument, is
   what this clause is written against.
 - **What derives from them:**
-  - the harpsichord's 4' (Harpsimachord);
+- **Harpsichord 4': rebuilt 2026-11-22 from physics** -- plucked at twice
+  the 8''s fraction (0.23), the 8''s VCSL laws at its pitch, its level by
+  Ben's ear: APPROVED ("Sounds good"); the Harpsimachord credit gone. With
+  it every voice is off Pianobook's libraries.
 - **Tonewheel organ: rebuilt 2026-11-22 off the L102:** the 16', 5 1/3' and
   1 3/5' on the CC0 B3 packs' own drawbar law (-2.8 dB an octave: 1.38,
   0.94, 0.53); the spinet speaker from a 12" paper cone's physics, Ben's

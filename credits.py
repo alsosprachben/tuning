@@ -180,25 +180,6 @@ SOURCES = [{'id': 'iowa-mis',
   'evidence': 'examples/clav_published.py: Table 1 (B), the loop and ripple filters, the 67.8 cm / 161 Hz string, '
               'Fig. 3\'s A#2 comb, the release\'s three-semitone drop',
   'match': ['Gabrielli']},
- {'id': 'pb-harpsimachord',
-  'group': 'Keyboards and bells',
-  'title': 'Harpsimachord',
-  'author': 'Douglas Knisely',
-  'url': 'https://www.pianobook.co.uk/packs/harpsimachord/',
-  'licence': 'Pianobook terms',
-  'licence_url': 'https://www.pianobook.co.uk/terms-conditions/',
-  'how': 'fitted',
-  'voices': "Harpsichord stops: the 4'",
-  'issue': 'L7',
-  'evidence': 'https://www.pianobook.co.uk/terms-conditions/ (EULA, fetched 2026-11-20) s.5: licence only "to use '
-              'the download Sound File(s) only within your own newly-created sound recording(s) and/or '
-              'performances"; "expressly forbids resale or other distribution of the Products or their derivatives, '
-              'either as they exist in the library, reformatted ..., or mixed, combined, filtered, re-synthesised or '
-              'otherwise edited, for use as sounds, multi-sounds, samples, multi-samples, sound sets, programmes or '
-              'patches in a sampler, microchip, computer or any sample playback device"; "Products may not be used '
-              'in or in relation to any competitive products that are sold or relicensed to any third parties." FAQ: '
-              'forbidden "to sell or redistribute the sample libraries". Pack readme has no licence of its own.',
-  'match': ['Douglas\\ Knisely']},
  {'id': 'musicmakers-1716',
   'group': 'Keyboards and bells',
   'title': '17/16 Hammered Dulcimer kit: string set, tuning chart, stringing instructions',

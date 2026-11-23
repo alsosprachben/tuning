@@ -70,7 +70,7 @@ CHECKS = [
     ("moog_cmx", "nvrender_check.py", ["@moog_cmx.mid"], {}),
     # a part's speaker and pickup (CC83, CC85: after the program change that
     # puts them back), a channel's Messenger mode (CC86), presets' setup measures
-    ("choices_files", "nvrender_check.py", ["@pk_reset.mid", "@pk_strat_bridge.mid", "@pk_clav_anti.mid", "@clav_compass.mid", "@feedback_held.mid", "@dulcimer_compass.mid", "@flugel_phrase.mid", "@mandolin_compass.mid", "@guitar12_compass.mid", "@hawaiian_compass.mid", "@gopichant_compass.mid", "@tonewheel_spinet.mid",
+    ("choices_files", "nvrender_check.py", ["@pk_reset.mid", "@pk_strat_bridge.mid", "@pk_clav_anti.mid", "@clav_compass.mid", "@feedback_held.mid", "@dulcimer_compass.mid", "@flugel_phrase.mid", "@mandolin_compass.mid", "@guitar12_compass.mid", "@hawaiian_compass.mid", "@gopichant_compass.mid", "@tonewheel_spinet.mid", "@harpsi_four.mid",
                                             "@pk_ibanez_inside.mid", "@cab_gt412.mid", "@cab_org16les.mid",
                                             "@msgr_mode.mid", "@setup_guitar_rig.mid", "@setup_organ_full.mid",
                                             "@setup_moog.mid", "4"], {}),
@@ -104,6 +104,8 @@ CHECKS = [
     ("gopichant_live", "nvlive_check.py", ["@gopichant_compass.mid", "12", "--programs"], {}),
     # the tonewheel: the spinet speaker (breakup), the drawbars, the percussion's circuit decay
     ("tonewheel_spinet_live", "nvlive_check.py", ["@tonewheel_spinet.mid", "8", "--programs"], {}),
+    # (the harpsichord's 4': files only, choices_files -- live draws a
+    # registerable voice's stops from the panel, its CC11 the expression)
     ("eastern", "nvlive_check.py", ["@eastern.mid", "6", "--program=104",
                                     "--eastern-at=3.2:raga:bel_todi/todi@c#"], {}),
     ("rolls", "nvlive_check.py", ["@rolls.mid", "14", "--drums", "--program=0", "--programs"], {}),
