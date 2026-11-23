@@ -2404,6 +2404,16 @@
 },
 {
 "group": "Tunings",
+"title": "Indian Art Music Raga Recognition Dataset (features)",
+"author": "Sankalp Gulati, Joan Serrà, Kaustuv Kanti Ganguli, Sertan Şentürk and Xavier Serra (ISMIR 2016, ICASSP 2016)",
+"url": "https://zenodo.org/records/7278506",
+"licence": "CC BY 4.0",
+"licence_url": "https://creativecommons.org/licenses/by/4.0/",
+"how": "measured",
+"voices": "the 29 measured raga tunings (sung_*): each swara from its raga's ten Hindustani recordings"
+},
+{
+"group": "Tunings",
 "title": "Sankey Bach keyboard MIDI corpus",
 "author": "John Sankey",
 "url": "http://www.jsbach.net/midi/sankey/",

@@ -234,15 +234,15 @@ TUNERS = {
 }
 
 # THE EASTERN TUNINGS' systems (the Tuning card's buttons): a name each; the
-# measured ragas ("saraga_yaman_kalyan") by their raga's name
+# measured ragas ("sung_yaman_kalyan") by their raga's name
 EASTERN = {"bel_todi": "Todi", "et": "Equal", "just5": "Just", "pythagorean": "Pythagorean"}
 
 
 def eastern_name(key):
     if key in EASTERN:
         return EASTERN[key]
-    if key.startswith("saraga_"):
-        return key[len("saraga_"):].replace("_", " ").title()
+    if key.startswith("sung_"):
+        return key[len("sung_"):].replace("_", " ").title()
     return key.replace("_", " ")
 
 

@@ -1500,17 +1500,17 @@ function drawEast() {
   const esig = eastSpec(p) + '|' + !!TN.measured;
   if (esig === TN.esig) return;
   TN.esig = esig;
-  const measured = p.system.startsWith('saraga_') || TN.measured;
+  const measured = p.system.startsWith('sung_') || TN.measured;
   $('tnSys').innerHTML = `<button class="tns${!p.system && !TN.measured ? ' on' : ''}" data-kit="1" data-sys="">Off</button>` +
-    L.systems.filter(x => !x.startsWith('saraga_')).map(x => `<button class="tns${x === p.system ? ' on' : ''}" data-kit="1" data-sys="${esc(x)}">${esc(x)}</button>`).join('') +
-    (L.systems.some(x => x.startsWith('saraga_'))       // (none ship now: licences.md L5)
+    L.systems.filter(x => !x.startsWith('sung_')).map(x => `<button class="tns${x === p.system ? ' on' : ''}" data-kit="1" data-sys="${esc(x)}">${esc(x)}</button>`).join('') +
+    (L.systems.some(x => x.startsWith('sung_'))       // (measured: examples/rrd_swaras.py)
       ? `<button class="tns${measured ? ' on' : ''}" data-kit="1" data-measured="1">measured ragas…</button>` : '');
   $('tnRagas').innerHTML = measured
-    ? L.systems.filter(x => x.startsWith('saraga_')).map(x => `<button class="tns${x === p.system ? ' on' : ''}" data-kit="1" data-sys="${esc(x)}">${esc(x.slice(7).replace(/_/g, ' '))}</button>`).join('')
+    ? L.systems.filter(x => x.startsWith('sung_')).map(x => `<button class="tns${x === p.system ? ' on' : ''}" data-kit="1" data-sys="${esc(x)}">${esc(x.slice(5).replace(/_/g, ' '))}</button>`).join('')
     : p.system ? `<button class="tns${!p.raga ? ' on' : ''}" data-kit="1" data-raga="">No raga</button>` +
       L.ragas.map(x => `<button class="tns${x === p.raga ? ' on' : ''}" data-kit="1" data-raga="${esc(x)}">${esc(x)}</button>`).join('') : '';
   $('tnSa').innerHTML = p.system ? '<b>Sa</b>' + SA_KEYS.map(k => `<button class="tns${k === p.sa ? ' on' : ''}" data-kit="1" data-sa="${k}">${k.toUpperCase()}</button>`).join('') : '';
-  $('tnEast').textContent = p.system ? `The Indian instruments' parts play ${p.system.startsWith('saraga_') ? 'raga ' + p.system.slice(7).replace(/_/g, ' ') + ' as measured (Saraga)' : p.system}${p.raga ? ', raga ' + p.raga : ''}, Sa on ${p.sa.toUpperCase()} (unless the tuner above is itself Indian).`
+  $('tnEast').textContent = p.system ? `The Indian instruments' parts play ${p.system.startsWith('sung_') ? 'raga ' + p.system.slice(5).replace(/_/g, ' ') + ' as measured' : p.system}${p.raga ? ', raga ' + p.raga : ''}, Sa on ${p.sa.toUpperCase()} (unless the tuner above is itself Indian).`
     : 'Off: the Indian instruments play the tuner above.';
   const on = $('tnRagas').querySelector('.on'); if (on) on.scrollIntoView({ block: 'nearest' });
 }
@@ -1519,7 +1519,7 @@ Kit.press($('tnList').parentNode.querySelector('.tn-east'), async b => {
   if (b.dataset.measured) { TN.measured = true; TN.esig = ''; drawEast(); return; }
   if (b.dataset.sys !== undefined) {
     p.system = b.dataset.sys; TN.measured = false;
-    if (!p.system || p.system.startsWith('saraga_')) p.raga = '';
+    if (!p.system || p.system.startsWith('sung_')) p.raga = '';
   }
   if (b.dataset.raga !== undefined) p.raga = b.dataset.raga;
   if (b.dataset.sa !== undefined) p.sa = b.dataset.sa;

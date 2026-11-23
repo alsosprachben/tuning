@@ -1319,7 +1319,7 @@ class TUI:
         part given a raga in its temperament column keeps that one."""
         import ragas
         cur = getattr(self.live, "eastern", None)
-        systems = sorted(ragas.SYSTEMS, key=lambda k: (k.startswith("saraga_"), k))
+        systems = sorted(ragas.SYSTEMS, key=lambda k: (k.startswith("sung_"), k))
         items = ["off -- every part on its own tuner"] + [
             "%-26s %s" % (k, (ragas.SYSTEMS[k]["kind"] + ": " + ragas.SYSTEMS[k]["source"])[:60])
             for k in systems]
@@ -1337,7 +1337,7 @@ class TUI:
             return
         system = systems[pick - 1]
         own = system in ragas.RAGAS
-        rg = [None] + sorted(r for r in ragas.RAGAS if not r.startswith("saraga_"))
+        rg = [None] + sorted(r for r in ragas.RAGAS if not r.startswith("sung_"))
         ritems = [("(its own swaras)" if own else "(all twelve swaras)")] + [
             "%-10s %s" % (r, " ".join(ragas.SWARAS[i] for i in ragas.RAGAS[r])) for r in rg[1:]]
         rp = self.menu(scr, "Eastern tuning: raga (the meend's detents)", ritems,

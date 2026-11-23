@@ -116,10 +116,14 @@ store build.
 - **What derives from it:** the `saraga_*` tunings in `ragas.py`, shown on the
   Tuning card under their raga names. These are tables taken straight from the
   data, the most direct derivation of any issue here.
-- **Status:** CLOSED BY DROPPING (Ben, 2026-11-22): the `saraga_*` tunings and
-  Saraga's credit are gone; Bel's Todi, just, Pythagorean and equal remain.
-  `examples/saraga_swaras.py --write` restores them for local study only. To
-  return later: measure them again from an open source below.
+- **Status:** CLOSED BY DROPPING (Ben, 2026-11-22), and since 2026-11-23
+  MEASURED AGAIN FROM AN OPEN SOURCE: 29 ragas (`sung_*` in `ragas.py`,
+  `examples/rrd_swaras.py`) from the Raga Recognition Dataset's Hindustani
+  pitch tracks (Zenodo 7278506, CC BY 4.0; read in place by
+  `examples/rrd_stage.py`), by Serra 2011's rule as before. Unlike Saraga's,
+  its recordings do not say which have a harmonium, so none are left out.
+  Marva (4 swaras clear) is not written. `examples/saraga_swaras.py` stays,
+  for local study only (its data since deleted).
 - **Alternatives (checked 2026-11-20):**
   1. The Indian Art Music Raga Recognition Dataset's features (Zenodo
      7278506, CC BY 4.0): pitch contours, tonic and nyas segments for 300

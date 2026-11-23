@@ -744,7 +744,7 @@ J tuning_of(nv_host *h, bool lists)
         for (int i = 0; const char *p = nv_raga_system_name(i); i++)
             sy.a.push_back(sess::str(p));
         for (int i = 0; const char *p = nv_raga_name(i, nullptr, nullptr); i++)
-            if (strncmp(p, "saraga_", 7) != 0)
+            if (strncmp(p, "sung_", 5) != 0)
                 rg.a.push_back(sess::str(p));
         o.o["systems"] = sy;
         o.o["ragas"] = rg;

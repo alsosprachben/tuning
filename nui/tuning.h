@@ -37,7 +37,7 @@ inline std::string eastern_name(const std::string &k)
     static const std::map<std::string, std::string> M = {{"bel_todi", "Todi"}, {"et", "Equal"}, {"just5", "Just"}, {"pythagorean", "Pythagorean"}};
     if (auto it = M.find(k); it != M.end())
         return it->second;
-    std::string s = k.rfind("saraga_", 0) == 0 ? k.substr(7) : k;
+    std::string s = k.rfind("sung_", 0) == 0 ? k.substr(5) : k;
     bool up = true;
     for (char &c : s) {
         if (c == '_')
@@ -350,7 +350,7 @@ inline void draw_tuning(App &a)
     if (!T.east_mine.empty() && ImGui::GetTime() > T.east_until)
         T.east_mine.clear();
     East p = east_parts(T.east_mine.empty() ? str(&T.t, "eastern") : T.east_mine);
-    const bool measured = p.system.rfind("saraga_", 0) == 0 || T.measured;
+    const bool measured = p.system.rfind("sung_", 0) == 0 || T.measured;
     bool changed = false;
     float ey = EY + 36;
     {
@@ -358,14 +358,14 @@ inline void draw_tuning(App &a)
         std::vector<bool> lit = {p.system.empty() && !T.measured};
         std::vector<std::string> sys;
         for (const auto &s : T.systems)
-            if (s.rfind("saraga_", 0) != 0) {
+            if (s.rfind("sung_", 0) != 0) {
                 sys.push_back(s);
                 w.push_back(eastern_name(s));
                 lit.push_back(s == p.system);
             }
         bool any_meas = false;          // (none ship now: licences.md L5 -- the button only when there are some)
         for (const auto &s : T.systems)
-            any_meas = any_meas || s.rfind("saraga_", 0) == 0;
+            any_meas = any_meas || s.rfind("sung_", 0) == 0;
         if (any_meas) {
             w.push_back("measured ragas\xe2\x80\xa6");
             lit.push_back(measured);
@@ -388,7 +388,7 @@ inline void draw_tuning(App &a)
         std::vector<std::string> w, sys;
         std::vector<bool> lit;
         for (const auto &s : T.systems)
-            if (s.rfind("saraga_", 0) == 0) {
+            if (s.rfind("sung_", 0) == 0) {
                 w.push_back(eastern_name(s));
                 sys.push_back(s);
                 lit.push_back(s == p.system);
@@ -437,10 +437,10 @@ inline void draw_tuning(App &a)
         say = "Off: the Indian instruments play the tuner above.";
     else {
         std::string sys = p.system;
-        if (sys.rfind("saraga_", 0) == 0) {
-            sys = sys.substr(7);
+        if (sys.rfind("sung_", 0) == 0) {
+            sys = sys.substr(5);
             std::replace(sys.begin(), sys.end(), '_', ' ');
-            sys = "raga " + sys + " as measured (Saraga)";
+            sys = "raga " + sys + " as measured";
         }
         say = "The Indian instruments' parts play " + sys + (p.raga.empty() ? "" : ", raga " + p.raga) + ", Sa on " + sa_up +
               " (unless the tuner above is itself Indian).";

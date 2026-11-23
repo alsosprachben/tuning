@@ -2528,11 +2528,11 @@ struct Panel {
         for (int i = 0; nv_raga_system_name(i); i++)
             systems.push_back(nv_raga_system_name(i));
         std::stable_sort(systems.begin(), systems.end(), [](const std::string &a, const std::string &b) {
-            bool sa = !a.compare(0, 7, "saraga_"), sb = !b.compare(0, 7, "saraga_");
+            bool sa = !a.compare(0, 5, "sung_"), sb = !b.compare(0, 5, "sung_");
             return sa != sb ? sb : a < b;
         });
         for (int i = 0; nv_raga_name(i, nullptr, nullptr); i++)
-            if (strncmp(nv_raga_name(i, nullptr, nullptr), "saraga_", 7))
+            if (strncmp(nv_raga_name(i, nullptr, nullptr), "sung_", 5))
                 ragas.push_back(nv_raga_name(i, nullptr, nullptr));
         std::sort(ragas.begin(), ragas.end());
         // ...where it stands now ("raga:<system>[/<raga>]@<key>")
