@@ -156,6 +156,9 @@ CHECKS = [
     ("assign_live", "nvlive_check.py", ["@assign_mode.mid", "16", "--beside", "--programs"], {}),
     ("ump_inputs", "../tests/live/ump_check.py", [], {}),
     ("input_watch", "../tests/live/input_watch_check.py", [], {}),
+    # THE GUARD: every tone and drum set a class the native engine plays
+    # (examples/native_coverage.py --check: a voice falling back to Python fails)
+    ("native_coverage", "native_coverage.py", ["--check", "/dev/null"], {}),
     ("cmx_panel", "../tests/live/cmx_panel_check.py", [], {}),
     ("udrum_panel", "../tests/live/udrum_panel_check.py", [], {}),
     ("pull", "../tests/live/pull_check.py", [], {}),

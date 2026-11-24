@@ -534,7 +534,7 @@ static double harmonic_volume(const VoiceSnap *v, int harmonic);
 
 /* the voice's harmonic_volume -- a throat's tilted and its vowel moved --
    and SampledBreak's: nothing at or above its Nyquist */
-double nv_harmonic_volume(const VoiceSnap *v, int harmonic)
+double nv_harmonic_volume_base(const VoiceSnap *v, int harmonic)
 {
     double s = harmonic_volume(v, harmonic);
     if (v->pick_set) {                          /* Plectrum: the pick's boost over pick_hz */
@@ -554,6 +554,16 @@ double nv_harmonic_volume(const VoiceSnap *v, int harmonic)
     }
     if (v->nyquist != 0.0 && !(v->frequency_x * pow(2.0, v->octave_position) * nv_mode_ratio(v, harmonic) < v->nyquist))
         return 0.0;
+    return s;
+}
+
+/* ...THE TAISHOGOTO'S LOW STRING DARKER (TaishoKotoProperties.harmonic_volume:
+   its harmonics falling crs_ltilt dB an octave more than the trio's) */
+double nv_harmonic_volume(const VoiceSnap *v, int harmonic)
+{
+    double s = nv_harmonic_volume_base(v, harmonic);
+    if (v->crs_ltilt != 0.0 && harmonic > 1)
+        s = s * pow(10.0, -v->crs_ltilt * log2((double)harmonic) / 20.0);
     return s;
 }
 
@@ -1060,8 +1070,8 @@ int nv_unison_voices(const VoiceSnap *v, double frequency, int harmonic, double 
                trio's k-th harmonics on the string's 2k-th, each a third of
                the sum's power */
             double hm = nv_harmonic_volume(v, harmonic);
-            if (hm > 0.0) {
-                double g = v->crs_oct_gain * nv_harmonic_volume(v, harmonic / 2) / hm;
+            if (hm > 0.0) {             /* (at the string's own spectrum: without the low string's tilt) */
+                double g = v->crs_oct_gain * nv_harmonic_volume_base(v, harmonic / 2) / hm;
                 g = (g < 30.0 ? g : 30.0) / pow((double)v->crs_ntrio, 0.5);
                 for (int q = 0; q < v->crs_ntrio; q++) {
                     out[5 * n + 0] = g; out[5 * n + 1] = 0.0;

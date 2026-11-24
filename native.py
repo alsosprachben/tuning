@@ -139,7 +139,7 @@ class VoiceSnap(ctypes.Structure):
                 ('fb_set', I), ('fb_fixed', I), ('n_fbs', I), ('fb_band_hz', C), ('fb_delay', C), ('fb_swell', C),
                 ('fb_gain', C), ('fb_dbs', C), ('fbs', (C * 2) * 8), ('fb_table', I), ('fb_k', ctypes.c_ubyte * 128), ('sw_set', I), ('sw_cents', C),
                 ('sw_hz', C * 2), ('mm_pts', I), ('mr_law', I), ('mr_a', C * 2), ('mr_b', C * 2), ('mr_lo', C * 2),
-                ('mr_ref', C), ('mr_body', C * 3), ('crs_ntrio', I), ('crs_trio', C * 4),
+                ('mr_ref', C), ('mr_body', C * 3), ('crs_ntrio', I), ('crs_trio', C * 4), ('crs_ltilt', C),
                 ('swp_set', I), ('swp_share', C), ('swp_tog', C * 2), ('swp_swept', C * 2), ('swp_step', C),
                 ('hm_vp_n', I), ('hm_vp_hz', C * 32), ('hm_vp_p', C * 32),
                 ('lid_db', C), ('lid_hz', C), ('lid_order', C), ('decay_board_top_hz', C),
@@ -1313,11 +1313,11 @@ def plectrum_voice(cls):
 
 def taisho_voice(cls):
     """The taishogoto (tonelib.TaishoKotoProperties): its octave trio, its
-    sweep, an untilted low string (its harmonic_volume then Plectrum's)."""
+    sweep, its low string's tilt (VoiceSnap.crs_ltilt over Plectrum's volume)."""
     import tonelib as T
     K = getattr(T, 'TaishoKotoProperties', None)
     return (K is not None and issubclass(cls, K) and _owner(cls, 'unison_voices') == 'TaishoKotoProperties'
-            and not getattr(cls, 'low_string_tilt_db', 0.0) and 1 <= len(cls.octave_trio_cents) <= 4)
+            and 1 <= len(cls.octave_trio_cents) <= 4)
 
 
 def class_value(cls, name, default=None):
@@ -2459,6 +2459,7 @@ def snapshot(props):
                 s.crs_kind, s.crs_oct_gain = 5, p.octave_partner_gain
                 s.crs_ntrio = len(p.octave_trio_cents)
                 s.crs_trio[:s.crs_ntrio] = [float(c) for c in p.octave_trio_cents]
+                s.crs_ltilt = float(getattr(p, 'low_string_tilt_db', 0.0) or 0.0)
             if _owner(type(p), 'section_onsets_at') == 'TaishoKotoProperties':
                 s.swp_set, s.swp_share, s.swp_step = 1, p.sweep_share, p.sweep_step_s
                 s.swp_tog[:] = [float(x) for x in p.sweep_together_s]

@@ -399,7 +399,7 @@ typedef struct {
        TaishoKotoProperties.unison_voices): on each even harmonic crs_ntrio
        voices crs_trio cents off, the trio's sum crs_oct_gain re the string */
     int crs_ntrio;
-    double crs_trio[4];
+    double crs_trio[4], crs_ltilt;      /* (crs_ltilt: its low string's tilt, dB an octave: low_string_tilt_db) */
     /* THE PICK SWEEPING THE COURSE (TaishoKotoProperties.section_onsets_at):
        each key's draw -- swept (swp_swept s) with swp_share's chance, else
        together (swp_tog) -- the trio's strings swp_step s apart; 0 none */
@@ -2045,6 +2045,7 @@ int nv_song_pedal_values(void *s, long long ch, double *t, int *v, int cap);
 double nv_damper_contact(int p, int key, int top);
 double nv_stage_angle(double p);
 double nv_harmonic_volume(const VoiceSnap *v, int harmonic);
+double nv_harmonic_volume_base(const VoiceSnap *v, int harmonic);
 void nv_partial_decay(const VoiceSnap *v, double f0, int m, double *out);
 int nv_lreg_pluck(void *h, long long sid, int key, double at, int R, const double *cols, const long *slot,
                   const int *free_keys, int nfree, const int *plucked, int nplucked, const long *rchoir);

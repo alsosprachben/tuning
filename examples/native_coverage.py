@@ -2,6 +2,9 @@
 """The native port's task list: what of each standard the C engine plays.
 
     python3 examples/native_coverage.py [OUT.md]      (default: native.md)
+    python3 examples/native_coverage.py --check OUT.md   ...and fail (exit 1) if any
+                                                         tone or drum set is not whole
+                                                         (tests/live/checks.py's guard)
 
 Written from the engine itself (native.note_class over patch_map's and
 percussion_map's classes), so it cannot drift: a tone is NATIVE when every
@@ -490,6 +493,12 @@ STAGES = (("GM1", None), ("GM2", 'gm2'), ("MT-32", 'mt32'), ("CM-64", 'cm64'), (
 
 
 def main(argv):
+    # --check: fail where a tone or a drum set is not whole -- a refit that
+    # makes a voice fall back to Python (the Taisho Koto's low string's tilt,
+    # 2026-11-20 -> 24) is a failure, not a quiet slower render
+    check = "--check" in argv
+    argv = [a for a in argv if a != "--check"]
+    failures = []
     # --json DIR: the coverage page's data besides (stages, tones, kits, tasks .json)
     jdir = None
     if "--json" in argv:
@@ -619,6 +628,8 @@ def main(argv):
         ks = [(k[0], k[1]) + tuple(map(len, kit_keys(k[0], k[2]))) if isinstance(k, tuple) else
               (k, PM.drum_set_name(k if k < 128 else k % 128)) + tuple(map(len, kit_keys(k))) for k in kits]
         kfull = sum(1 for k in ks if k[2] == k[3])
+        failures += ["%s tone %s" % (stage, t[2] if len(t) > 2 else t) for t in rest]
+        failures += ["%s drum set %s (%d of %d keys)" % (stage, k[1], k[3], k[2]) for k in ks if k[2] != k[3]]
         summary.append("| %s | %d of %d | %d of %d |" % (stage, len(nat), len(new), kfull, len(ks)))
         js['stages'].append(dict(stage=stage, order=len(js['stages']), tones_native=len(nat), tones_total=len(new),
                                  kits_whole=kfull, kits_total=len(ks)))
@@ -693,6 +704,11 @@ def main(argv):
     print("\n".join(summary))
     if lsum:
         print("live:\n" + "\n".join(lsum))
+    if check:
+        if failures:            # (checks.py reads the last line: "N failed")
+            print("NOT NATIVE:\n  %s\nnative coverage: %d failed" % ("\n  ".join(failures), len(failures)))
+            return 1
+        print("native coverage: every tone and drum set native, 0 failed")
     return 0
 
 
