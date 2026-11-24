@@ -752,12 +752,14 @@ static std::string synth_fmt(const std::string &kind, double v, const double *pn
     return b;
 }
 
+// a harmonium's knee levers' range (tonelib.HARMONIUM_PRESSURE_MIN, _MAX), for their readout
+static const double KNEE_PA_MIN = 80.0, KNEE_PA_MAX = 1600.0;
 // live.CONTROLS: the destinations, in the panel's order, (key, label)
 static const std::pair<int, const char *> CONTROLS[] = {
     {64, "sustain"}, {66, "sostenuto"}, {67, "soft"}, {65, "portamento"}, {-3, "mono"}, {1, "mod wheel"},
     {11, "expression"}, {7, "volume"}, {10, "pan"}, {5, "portamento time"}, {93, "chorus"},
     {81, "scanner (V/C)"}, {4, "crescendo"}, {12, "drive"}, {13, "detune"}, {18, "drones"}, {19, "mouth"},
-    {20, "crank"}, {70, "tone (rockers)"}, {80, "rotor speed"}, {92, "tremolo depth"}, {74, "brightness"}, {71, "resonance"}, {73, "attack"}, {75, "decay"},
+    {20, "crank"}, {21, "knee, bass"}, {22, "knee, treble"}, {70, "tone (rockers)"}, {80, "rotor speed"}, {92, "tremolo depth"}, {74, "brightness"}, {71, "resonance"}, {73, "attack"}, {75, "decay"},
     {72, "release"}, {76, "vibrato rate"}, {77, "vibrato depth"}, {78, "vibrato delay"}, {-1, "pitch wheel"},
     {-2, "aftertouch"}};
 static const int NCONTROLS = sizeof(CONTROLS) / sizeof(CONTROLS[0]);
@@ -767,7 +769,7 @@ static const int NCONTROLS = sizeof(CONTROLS) / sizeof(CONTROLS[0]);
 static int control_default(int key)
 {
     switch (key) {
-    case 11: case 18: return 127;
+    case 11: case 18: case 21: case 22: return 127;
     case 7: return 100;
     case 12: return 32;
     case 13: return 64;
@@ -2774,6 +2776,15 @@ struct Panel {
         c.value = kind == "bend" ? std::max(-8192, std::min(8191, v)) : std::max(0, std::min(127, v));
         if (H.control_send)
             H.control_send(c.key, c.value, c.channel);
+        if (c.key == 21 || c.key == 22) {   // (a harmonium's knee lever: where it caps its half's wind)
+            char b[64];
+            if (c.value >= 127)
+                snprintf(b, sizeof b, "no limit");
+            else    // (tonelib.harmonium_knee: harmonium_pressure(v / 127))
+                snprintf(b, sizeof b, "the wind capped at %ld Pa",
+                         lround(KNEE_PA_MIN + (KNEE_PA_MAX - KNEE_PA_MIN) * (c.value / 127.0)));
+            say(std::string(control_label(c.key)) + ": " + b);
+        }
     }
     // livetui.fire (a hotkey): a switch toggles; a continuous control jumps
     // between its default and full travel
@@ -2787,8 +2798,9 @@ struct Panel {
             say(std::string(lab ? lab : "?") + (on ? " down" : " up"));
         } else {
             const int d = control_default(c.key), top = kind == "bend" ? 8191 : 127;
-            ctl_send(c, c.value != d ? d : top);
-            say(std::string(lab ? lab : "?") + " " + std::to_string(c.value));
+            ctl_send(c, c.value != d ? d : (d != top ? top : 0));     // (one resting at full travel: to nothing)
+            if (c.key != 21 && c.key != 22)                          // (a knee says where it caps the wind: ctl_send)
+                say(std::string(lab ? lab : "?") + " " + std::to_string(c.value));
         }
     }
     // a, b, space, enter, d (livetui's controls keys)

@@ -2172,11 +2172,16 @@ class TUI:
         chans = range(16) if c.get("channel") is None else (c["channel"],)
         for ch in chans:
             self.live.inject(LV.control_message(key, c["value"], ch))
+        if key in T.HARMONIUM_KNEE_CC:
+            # (a harmonium's knee lever: where it caps its half's wind)
+            self.say("%s: %s" % (LV.CONTROL_BY_KEY[key][1], "no limit" if c["value"] >= 127 else
+                                 "the wind capped at %d Pa" % round(T.harmonium_knee(c["value"]))))
 
     def fire(self, c):
         """What a control's hotkey does: a switch toggles; a continuous control
         jumps between its default and full travel -- the mod wheel's vibrato on
-        and off, say."""
+        and off, say -- or, one that rests at full travel (expression, a
+        harmonium's knee levers), between that and nothing."""
         key = c["key"]
         _, label, kind, default = LV.CONTROL_BY_KEY[key]
         if kind == "switch":
@@ -2185,8 +2190,10 @@ class TUI:
             self.say("%s %s" % (label, "down" if on else "up"))
         else:
             top = 8191 if kind == "bend" else 127
-            self.send_control(c, default if c.get("value", default) != default else top)
-            self.say("%s %d" % (label, c["value"]))
+            other = top if default != top else 0
+            self.send_control(c, default if c.get("value", default) != default else other)
+            if key not in T.HARMONIUM_KNEE_CC:     # (a knee says where it caps the wind: send_control)
+                self.say("%s %d" % (label, c["value"]))
 
     def learn_key(self, scr):
         """Wait for the next key pressed on the keyboard: (channel, note), or

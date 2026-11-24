@@ -523,6 +523,11 @@ CONTROLS = (
     (18, "drones", "continuous", 127),
     (19, "mouth", "continuous", 0),
     (20, "crank", "continuous", 0),
+    # THE HARMONIUM'S KNEE LEVERS (Double-Expression: tonelib.HARMONIUM_KNEE_CC):
+    # each half's wind capped at its set-point -- at rest the pianissimo, fully
+    # in (127, where they start: the boards hooked shut) no limit
+    (21, "knee, bass", "continuous", 127),
+    (22, "knee, treble", "continuous", 127),
     (70, "tone (rockers)", "continuous", 0),
     (80, "rotor speed", "continuous", 0),
     (92, "tremolo depth", "continuous", 0),
