@@ -58,12 +58,21 @@ LEN_LOW_M, F_LOW = 0.135, 32.70
 LEN_HIGH_M, F_HIGH = 0.0085, 4186.0
 WIDTH_RATIO = 0.16           # width / length ("in proportion"; the accordion reed of Millot's Table 2 is 0.16)
 WIDTH_MIN_M = 0.0021
+# ITS THICKNESS IN PROPORTION TOO: each stop "une serie complete d'anches de
+# forme semblable, de memes proportions" (Mustel p. 129), wide and thick "a
+# proportion" (p. 139) -- its PITCH then set by the profile, scraped at the
+# root, thinned at the tip (p. 143), not by a uniform beam's thickness. The
+# proportion is the measured harmonium reed's (Puranik & Scavone: 0.4 mm on
+# 16 mm). None: the uniform beam's thickness for its length and pitch
+THICK_RATIO = 0.015          # (calibrated: the foundation's median rise 160 ms at 700 Pa, the real harmonium's
+                             # 140; at 0.025, the Indian reed's, the middle reeds took 0.3-0.5 s and the top was mute)
 # THE FRAME AND THE VOICING (Millot's Table 2, a harmonica reed, scaled by
 # the tongue's length where a length is meant)
 PLATE_M = 0.0009             # the frame's thickness (es)
 CLEARANCE_M = 50e-6          # the gap all round the tongue in the slot (hmin)
 REST_RATIO = 0.019           # the tip's rest GAP, its downstream face above the slot, / length (0.3 mm at Puranik & Scavone's 16 mm)
-CURL_M = 0.0                 # the tip's extra upward bend at rest (the curved reed), m at the tip
+CURL_M = 0.0                 # the curved reed's bend, m at the tip: voiced to the same tip gap, its root half
+                             # set lower, nearer the slot -- the gradual cut-off (Mustel p. 139-140)
 EDGE_ROUND_M = 0.0           # the slot's edge radius (the euphonic reed), m
 # THE TONGUE'S DAMPING: Puranik & Scavone's measured B5 reed, its beam damping
 # R = 0.065 (ρA y_tt + R y_t): a decay of R/2ρA = 4.8 /s, Q = ω0/(R/ρA) = ~650
@@ -110,7 +119,11 @@ PASSAGE_AREA_RATIO = 2.0     # its area / the slot's (L x W)
 # a chest held at a fixed pressure -- an infinite volume -- leaves it stable).
 # Fed from the regulated pressure through its inlet. Puranik & Scavone's
 # chamber: 1.3 litres
-CHEST_M3 = 5e-6              # the reed's WELL behind it, fed through its hole from the chest
+CHEST_M3 = 5e-6              # the reed's WELL behind it, fed through its hole from the chest...
+# ...SIZED BY ITS REED: the slot's area times Mustel's laye depth (3-4 cm, p.
+# 97) -- one 5 cm3 well for every reed left the 16' Bourdon's big reed
+# breathing against it, a gurgle (Ben). None: CHEST_M3 for all
+WELL_DEPTH_M = 0.035
 CHEST_INLET_M2 = 1.0e-4
 FEED_FLOW_M3S = None         # (a check: the chest fed by a constant flow instead, Millot's minimal configuration)
 REST_SIDE = 1                # +1 the tongue rests upstream of the plate, pushed into it (blown-closed);
@@ -158,6 +171,8 @@ def tongue(f0):
     k = np.log(LEN_HIGH_M / LEN_LOW_M) / np.log(F_HIGH / F_LOW)
     L = LEN_LOW_M * (f0 / F_LOW) ** k
     W = max(WIDTH_MIN_M, WIDTH_RATIO * L)
+    if THICK_RATIO:
+        return L, W, THICK_RATIO * L
     t = f0 * 2.0 * np.pi * L * L / (1.875 ** 2 * np.sqrt(BRASS_E / (12.0 * BRASS_RHO)))
     return L, W, t
 
@@ -238,6 +253,7 @@ def simulate(f0, p0, secs=1.0, cell=True, attack_s=0.02, out_sr=48000, vel=None)
     Sr_k = W * L * _I1K[:K]                # each mode's pumped-flow and pressure-force area
     Sr = Sr_k[0]
     PS = _PSIK[:K]
+    well = WELL_DEPTH_M * W * L if WELL_DEPTH_M else CHEST_M3
     m_tot = BRASS_RHO * W * t * L
     rest_gap = REST_RATIO * L
     open_s = PALLET_OPEN_S if vel is None else \
@@ -288,7 +304,7 @@ def simulate(f0, p0, secs=1.0, cell=True, attack_s=0.02, out_sr=48000, vel=None)
         # 117(4) 2005: what drives a blown-closed reed with no acoustic coupling),
         # behind the passage's inertance (p_up = p1 - Mp du/dt) and into the
         # cell (p_dn = pc_in + Zc u)
-        prof = rest * _PSI + q @ PS
+        prof = (rest - CURL_M) * _PSI + q @ PS
         Su = useful_section(prof, L, W, t, CURL_M)
         A = -float(Sr_k @ qv)                         # (x + = upstream; moving downstream pumps air through)
         aS = VENA * Su
@@ -310,7 +326,7 @@ def simulate(f0, p0, secs=1.0, cell=True, attack_s=0.02, out_sr=48000, vel=None)
         inlet = CHEST_INLET_M2 if FEED_HOLE_RATIO is None else FEED_HOLE_RATIO * slot
         u_in = (FEED_FLOW_M3S * ramp if FEED_FLOW_M3S is not None else
                 inlet * VENA * np.sign(dpi) * np.sqrt(2.0 * abs(dpi) / RHO_AIR))
-        p1 += RHO_AIR * C_AIR * C_AIR / CHEST_M3 * (u_in - u) * dt
+        p1 += RHO_AIR * C_AIR * C_AIR / well * (u_in - u) * dt
         # the tongue: m x'' + (m w0/Q) x' + k x = -Sr dp  (dp pushes it downstream: x -)
         p_ex = ST_HILAIRE * RHO_AIR * abs(vj) * float(qv.sum())     # (+ along the tip's motion)
         if ST_HILAIRE_SIDED:
