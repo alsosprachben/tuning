@@ -405,7 +405,7 @@ static const char *TUNERS[][2] = {
     {"hybridharm", "pure 2:1 octaves -- right for mode-locked pipes"},
     {"hybridharm440", "pure 2:1 octaves at concert pitch"},
     {"hybridmean", "the hybrid's chains bridged by a mean third: no wolf, pure octaves"},
-    {"hybridmeanpiano", "hybridmean on a Steinway's stretched octaves, A=440"},
+    {"hybridmeanpiano", "hybridmean after a Steinway's stretched octaves, A=440"},
     {"stretchedhelmholtz", "two pure-fifth chains joined by inharmonic octaves, A=440"},
     {"gm2", "the default: a GM 2 device, equal A=440, and the FILE owns the tuning (MTS)"},
     {"even", "equal temperament, A=440"},
@@ -2969,7 +2969,7 @@ struct Panel {
         const bool layered = snl > 1;
         snprintf(b, sizeof b, "part %d, %s%s", prow + 1, r->name.c_str(), layered ? "  (layered -- B: the other)" : "");
         const bool reads = H.messenger_reads && H.messenger_reads();
-        line("  " + C("accent2") + "\x1b[1m" + (layered ? std::string("MOOG MESSENGER ") + (slayer ? "B" : "A") : "MOOG MESSENGER")
+        line("  " + C("accent2") + "\x1b[1m" + (layered ? std::string("SYNTH ") + (slayer ? "B" : "A") : "SYNTH")
              + "\x1b[0m  " + C("dim") + b + "   " + (reads ? C("ok") + "reads a Messenger on every part  (M: stop)"
                                                         : C("dim") + "M: read a Messenger's knobs"));
         const int half = (NSYNTH + 1) / 2, xw = std::max(40, T.w / 2);

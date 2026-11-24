@@ -2289,7 +2289,11 @@ def about_json(path):
     walk(doc)
     bad = sorted({w for w in words if UW.has_provenance(w)})
     blank = [k for k, v in list(efx.items()) + list(effects.items()) if not v]
-    if missing or bad or blank:
+    # (a maker's name as a plain noun in the pickers' words: licences.md L13)
+    marked = [(k, v, bare_marks(v)) for k, v in list(desc.items()) + list(kit_desc.items()) if bare_marks(v)]
+    if missing or bad or blank or marked:
+        for k, v, ms in marked:
+            print("a mark as a plain noun (%s) in %s: %s" % (", ".join(ms), k, v))
         for p, v in missing:
             print("no words for patch %d.%d" % (p, v))
         for w in bad:
@@ -2341,7 +2345,7 @@ def _voice_notes():
 # a "Moog"; a sound that follows an instrument leads with "after the ...".
 # (The tables keep their shorthand; GS's own drum and patch names, which say
 # which slot a file asks for, are not touched.)
-MARK_LEADS = ("Fender Jazz Bass", "Fender Rhodes", "Ibanez RG2820", "Wurlitzer console", "Yamaha CP-80",
+MARK_LEADS = ("Fender Jazz Bass", "Fender Rhodes", "Ibanez RG2820", "Wurlitzer console", "Yamaha CP-80", "CP-80",
               "Yamaha CS", "Yamaha", "Jupiter-8", "Juno-6", "Minimoog", "Oberheim", "Steinway", "Stratocaster",
               "Strat", "Ibanez", "Hammond", "Rhodes", "Wurlitzer", "Clavinet", "Hohner", "Mellotron", "Simmons",
               "TB-303", "SH-101", "SH-5", "D-50")
@@ -2355,6 +2359,25 @@ def referential(text):
         if text.startswith(m) and (len(text) == len(m) or not text[len(m)].isalnum()):
             return "after the " + text
     return text
+
+
+# MARKS NEVER A PLAIN NOUN in the pickers' words (licences.md L13): each must
+# follow "after" (or lead, which referential() makes "after the ..."). The
+# GS drum names ("909 Snare 1", "TR-909 Claps") are Roland's own names for the
+# slots a file calls for -- identification -- and not listed here.
+NOUN_MARKS = ("Leslie", "Hammond", "Rhodes", "Wurlitzer", "Clavinet", "Stratocaster", "Strat", "Telecaster",
+              "Fender", "Gibson", "Les Paul", "Steinway", "Moog", "Minimoog", "Simmons", "Mellotron", "Fairlight",
+              "Hohner", "Yamaha", "Ibanez", "Oberheim", "CP-80", "CP-70", "Spectra-Tone", "JC-120")
+
+
+def bare_marks(text):
+    """the marks a picker's words use as plain nouns (none after "after")"""
+    out = []
+    for m in NOUN_MARKS:
+        for x in re.finditer(r"(?<![A-Za-z0-9])" + re.escape(m) + r"(?![a-z0-9])", text):
+            if not re.search(r"after (the |a |an )?[\w' .-]*$", text[:x.start()]):
+                out.append(m)
+    return out
 
 
 def credits_json(path):

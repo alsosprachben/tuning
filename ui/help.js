@@ -24,11 +24,11 @@ const HELP = {
       'The card keys',
       ['PARTS', 'Every part: its key range, level, pan, transpose, channel, mute and solo; layer, split and remove parts.'],
       ['LIBRARY', 'Every patch, by family or by search: tap one to play it on the selected part.'],
-      ['SYNTH', 'The selected part\'s synth knobs, laid out as the Moog Messenger\'s panel. Only for the synth programs.'],
+      ['SYNTH', 'The selected part\'s synth knobs, laid out after the Moog Messenger\'s panel. Only for the synth programs.'],
       ['STOPS', 'The selected part\'s organ: its stops or drawbars, and a tonewheel organ\'s drive.'],
       ['PIANO', 'The pedals, the dampers on the strings, and a key used as the sustain pedal.'],
       ['DRUMS', 'The drum kits and their sounds as pads to play; the user sets.'],
-      ['AMP', 'The selected part\'s speaker, its pickups, its valve\'s drive, and a Leslie\'s rotors.'],
+      ['AMP', 'The selected part\'s speaker, its pickups, its valve\'s drive, and a rotary speaker\'s rotors.'],
       ['EFFECTS', 'The insertion effect, and the reverb, chorus, delay and EQ every part shares.'],
       ['MATRIX', 'What the wheels, aftertouch and two controllers move on the selected part.'],
       ['TUNING', 'The tuning every part plays in, and the Indian voices\' raga tuning.'],
@@ -109,7 +109,7 @@ const HELP = {
   },
   synth: {
     title: 'Synth',
-    intro: 'The selected part\'s synth, laid out as the Moog Messenger\'s front panel, then the delay. Each section has its own ?. Long-press a knob for its exact value and the Messenger\'s name for it.',
+    intro: 'The selected part\'s synth, laid out after the Moog Messenger\'s front panel, then the delay. Each section has its own ?. Long-press a knob for its exact value and the Messenger\'s name for it.',
     terms: [
       ['LAYER A / LAYER B', 'A patch made of two synths: which one the knobs show.'],
       ['N CHANGED · BACK TO THE PATCH', 'How many controls you have changed; tap to put them all back. AS THE PATCH when none are.'],
@@ -172,7 +172,7 @@ const HELP = {
       ['EG amount', 'How far the filter envelope opens the filter on each note.'],
       ['Resonance', 'A peak at the cutoff; turned high, it rings and whistles.'],
       ['KB tracking', 'off: the cutoff is the same on every key. 1:1: it rises with the key, so high notes stay as bright as low ones.'],
-      ['Mode', '4P LP: a steep low-pass (the classic Moog). 2P LP: a gentler low-pass. BP: band-pass, only the middle. HP: high-pass, only the top.'],
+      ['Mode', '4P LP: a steep low-pass (after the classic Moog ladder). 2P LP: a gentler low-pass. BP: band-pass, only the middle. HP: high-pass, only the top.'],
       ['Res bass', 'Puts back the bass that resonance takes away.'],
     ],
   },
@@ -215,7 +215,7 @@ const HELP = {
   },
   drive: {
     title: 'Valve (drive)',
-    intro: 'The valve amplifier\'s drive, in front of the speaker (or an organ\'s Leslie): a guitar\'s, a bass\'s, an organ\'s. On the AMP card for every amplified voice; an organ\'s on its Stops card too, where the mod wheel is the swell pedal.',
+    intro: 'The valve amplifier\'s drive, in front of the speaker (or an organ\'s rotary speaker): a guitar\'s, a bass\'s, an organ\'s. On the AMP card for every amplified voice; an organ\'s on its Stops card too, where the mod wheel is the swell pedal.',
     terms: [
       ['Drive', '0 is clean; 1 the edge of breakup; turned past it, it growls and clips. Its distortion is mostly the notes mixing, so a chord thickens where one note barely would. Two knobs: DRIVE, the drive set (the patch\'s own, or turned), and WITH THE WHEEL, what plays: the mod wheel scales the drive, up to four times the patch\'s own. Both reach that far (at least 3).'],
       ['AS THE PATCH (n)', 'The knob is at the patch\'s own drive, n.'],
@@ -254,13 +254,13 @@ const HELP = {
   },
   amp: {
     title: 'Amp',
-    intro: 'What the selected part\'s voice plays through, as it is modelled: a guitar\'s, a bass\'s or a Clavinet\'s pickups, its valve amplifier, the speaker it drives, and an organ\'s Leslie. An acoustic voice has none of these: it is heard as it is.',
+    intro: 'What the selected part\'s voice plays through, as it is modelled: a guitar\'s, a bass\'s or a clav\'s pickups, its valve amplifier, the speaker it drives, and an organ\'s rotary speaker. An acoustic voice has none of these: it is heard as it is.',
     terms: [
-      ['PICKUP', 'Which of the instrument\'s pickups it plays on, on a switch drawn as the instrument\'s own: a 5-way blade (the Stratocaster\'s, the Ibanez\'s), a Jazz Bass\'s two volume knobs, a Clavinet\'s two rockers. Under it, the string with its coils where they sit, the ones heard lit.'],
+      ['PICKUP', 'Which of the instrument\'s pickups it plays on, on a switch drawn after the instrument\'s own: a 5-way blade (after the Fender Stratocaster\'s and the Ibanez\'s), two volume knobs (after the Fender Jazz Bass\'s), two rockers (after the Hohner Clavinet\'s). Under it, the string with its coils where they sit, the ones heard lit.'],
       ['VALVE', 'The amplifier\'s triode stage and its drive: clean at 0, the edge of breakup at 1, a clip past it. DRIVE is the drive set; WITH THE WHEEL beside it is what plays, the mod wheel scaling it (up to four times the patch\'s own). AS THE PATCH puts the patch\'s back.'],
       ['SPEAKER', 'The cabinet: the voice\'s own, or another it can play through. The line under the buttons says what that speaker is.'],
       ['ROTARY', 'An organ\'s rotating speaker, after the Leslie 122: its speed (STOP, SLOW, FAST -- the half-moon, CC80) and how it is heard (IN THE ROOM, or TWO MICS round it). Shown when the organ plays through one.'],
-      ['Kept', 'The part keeps its valve, speaker and how its Leslie is heard through program changes, and in the session.'],
+      ['Kept', 'The part keeps its valve, speaker and how its rotary speaker is heard through program changes, and in the session.'],
     ],
   },
   pickup: {
@@ -272,19 +272,19 @@ const HELP = {
       ['Two-coil bass', 'After the Fender Jazz Bass. No switch: its two volume knobs, neck and bridge. Tap one to turn it fully up or off (one always stays up). Both up is the full sound; the bridge alone the growl, the neck alone the thump.'],
       ['Keyboard, two pickups', 'After the Hohner Clavinet D6: its two rocker switches, A/B and C/D. A C the centre pickup alone (warm), B C the bridge pickup (thin), B D both in phase (full), A D both against each other (hollow: the fundamental cancelled -- the funk sound).'],
       ['Level', 'A bridge pickup is wound hotter, as a real one is, to make up for the string moving less there; parallel coils load each other, which lifts their resonance. The levels follow from that, as on the instrument.'],
-      ['CC85', 'A file or a keyboard chooses it too, on the part\'s channel, at once (the next notes). A program change puts it back to the voice\'s own, so a file sends it after the program change, as it would a volume: bank select, program change, then CC83 and CC85. 0 the voice\'s own, 1 neck, 2 the second position (a Strat\'s neck and middle, the Ibanez\'s neck humbucker in parallel), 3 middle, 4 the fourth (a Strat\'s middle and bridge, the Ibanez\'s inside coils), 5 bridge, 6 neck and bridge (both), 7 the Clavinet\'s both in anti-phase. One the instrument does not have leaves it its own.'],
+      ['CC85', 'A file or a keyboard chooses it too, on the part\'s channel, at once (the next notes). A program change puts it back to the voice\'s own, so a file sends it after the program change, as it would a volume: bank select, program change, then CC83 and CC85. 0 the voice\'s own, 1 neck, 2 the second position (three single coils: neck and middle; two humbuckers: the neck one in parallel), 3 middle, 4 the fourth (three single coils: middle and bridge; two humbuckers: the inside coils), 5 bridge, 6 neck and bridge (both), 7 the clav\'s both in anti-phase. One the instrument does not have leaves it its own.'],
     ],
   },
   cabinet: {
     title: 'Speaker (cabinet)',
-    intro: 'The speaker the part\'s voice plays through, on the AMP card. Every amplified voice has one of its own: the guitars and basses their amps\' cabinets, the Rhodes its suitcase, the Wurlitzer the speakers in its lid, the organs a Leslie or the Hammond\'s own speaker. Choose another, part by part; the session keeps it, and a program change puts the part back on its new voice\'s own.',
+    intro: 'The speaker the part\'s voice plays through, on the AMP card. Every amplified voice has one of its own: the guitars and basses their amps\' cabinets, the tine electric piano its suitcase, the reed electric piano the speakers in its lid, the organs a rotary speaker or their console\'s own speaker. Choose another, part by part; the session keeps it, and a program change puts the part back on its new voice\'s own.',
     terms: [
       ['PATCH\'S OWN \u00b7 name', 'The patch\'s own speaker, named. Tap another to play through it; the line under the buttons says what that speaker is.'],
       ['DIRECT', 'No speaker: the amplifier\'s output straight to the desk, as a direct box takes it. Brighter and harder, with nothing rounding the top.'],
       ['ROTARY', 'A tonewheel organ\'s rotating speaker, after the Leslie 122: its horn and drum turning. Only an organ offers it. Its speed and how it is heard are on the AMP card\'s ROTARY.'],
       ['SPINET', 'A tonewheel organ\'s own speaker, after a Hammond spinet\'s: no rotors, a single 12-inch cone.'],
-      ['Level', 'A Leslie coming or going keeps the organ\'s level: the rotors\' path is quieter than a fixed speaker\'s, and that is put back.'],
-      ['CC83', 'A file or a keyboard chooses it too, on the part\'s channel, at once (the next notes). A program change puts it back to the voice\'s own, so a file sends it after the program change, as it would a volume: bank select, program change, then CC83 and CC85. 0 the voice\'s own, 1 direct, 2 a Leslie, 3 the Hammond\'s speaker, 4 a 1x12 guitar combo, 5 a closed 4x12, 6 a JC-120, 7 a bass 4x10, 8 the Rhodes suitcase, 9 the Wurlitzer\'s lid, 10 a Spectra-Tone, 11 its Chorus (a 60\'s organ\'s manuals). One the voice does not offer leaves it its own.'],
+      ['Level', 'A rotary speaker coming or going keeps the organ\'s level: the rotors\' path is quieter than a fixed speaker\'s, and that is put back.'],
+      ['CC83', 'A file or a keyboard chooses it too, on the part\'s channel, at once (the next notes). A program change puts it back to the voice\'s own, so a file sends it after the program change, as it would a volume: bank select, program change, then CC83 and CC85. 0 the voice\'s own (OWN), 1 DIRECT, 2 ROTARY (after the Leslie 122), 3 SPINET (after a Hammond spinet\'s speaker), 4 1x12 (a guitar combo), 5 4x12 (closed), 6 2x12 CLEAN (after the Roland JC-120), 7 BASS 4x10, 8 SUITCASE (a tine piano\'s), 9 LID PAIR (a reed piano\'s lid speakers), 10 CONE ROTOR (after the Wurlitzer Spectra-Tone), 11 ROTOR CHORUS (its chorus, a 60\'s organ\'s manuals). One the voice does not offer leaves it its own.'],
     ],
   },
   piano: {

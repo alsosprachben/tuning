@@ -711,7 +711,7 @@ function drawAmp() {
     if ((!kind && !hasPk) || !p || p.drums) {
       el.className = 'amp no-les';
       el.innerHTML = `<p class="amp-empty">${p && p.drums ? 'A drum set has no amplifier: its drums are heard as they are.'
-        : 'This voice plays through no amplifier or speaker of its own: an acoustic instrument is heard as it is. The Rhodes and Wurlitzer, the organs, the electric guitars and basses have one.'}</p>`;
+        : 'This voice plays through no amplifier or speaker of its own: an acoustic instrument is heard as it is. The electric pianos, the organs, the electric guitars and basses have one.'}</p>`;
       return;
     }
     const pkSec = hasPk ? `<section><h3 data-help="pickup">Pickup</h3><p class="amp-pkname"></p><div class="amp-pksw"></div>` +
@@ -843,7 +843,7 @@ function drawAmp() {
   if (lb.dataset.mode !== 'les') {
     lb.dataset.mode = 'les';
     lb.innerHTML = '<h4>SPEED</h4><div class="amp-row">' + ['STOP', 'SLOW', 'FAST'].map((n, s) => `<button class="hb amp-sp" data-kit="1" data-s="${s}">${n}</button>`).join('') +
-      '</div><p class="pn-note">The rotors spin up and down between speeds as a real Leslie\'s do; a flick of the pitch wheel steps them too.</p>' +
+      '</div><p class="pn-note">The rotors spin up and down between speeds as a real rotary speaker\'s do; a flick of the pitch wheel steps them too.</p>' +
       '<h4>HEARD</h4><div class="amp-row two"><button class="hb amp-rot" data-kit="1" data-m="0">IN THE ROOM</button><button class="hb amp-rot" data-kit="1" data-m="1">TWO MICS</button></div>' +
       '<div class="amp-spread"></div><p class="pn-note amp-rnote">The cabinet heard where it stands: its horn and drum turning toward you and away.</p>';
     lb.querySelectorAll('.amp-sp').forEach(b => Kit.press(b, () => {

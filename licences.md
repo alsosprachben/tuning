@@ -450,9 +450,61 @@ legal advice: a lawyer reads this before sale.
     "after the ..." (183). The tables keep their shorthand; GS's own names
     are untouched (identification).
   - The disclaimer, in the Credits topic (both UIs).
-- **Still open:** the owners to confirm, the store listing's and manual's
-  copy of the disclaimer, and the Messenger card (laid out after the
-  Messenger's controls: a lawyer's look at the layout, no artwork copied).
+- **DONE 2026-11-23 (Ben: "L13 next"):**
+  - A maker's name is never a plain noun in our words. Help: "an organ's
+    rotary speaker" (not "Leslie"), "the tine / reed electric piano", "a
+    clav"; the speaker choices listed by their labels with each one's
+    "after" (ROTARY after the Leslie 122, 2x12 CLEAN after the Roland
+    JC-120, CONE ROTOR after the Wurlitzer Spectra-Tone, ...); the pickup
+    switches "drawn after" the Stratocaster's, Jazz Bass's and Clavinet's.
+    Pickers: "rotary slow/fast", "orchestra hit + drawbar organ", "after the
+    TR-808: its mid tom", the terminal picker's "(after the Rhodes)"; GM
+    program 7 is GM 1's own name, "Clavi".
+  - THE CHECK: `examples/gm_coverage.py --about` fails on a mark used as a
+    plain noun in the pickers' words (NOUN_MARKS, bare_marks); GS's drum
+    names ("909 Snare 1") are identification and pass.
+  - The synth panel's heading in both terminal UIs: "SYNTH" (was "MOOG
+    MESSENGER"); the touch card was already SYNTH. "The Messenger" stays
+    where it names the connected hardware (Setup, its CC mode): identifying
+    a device.
+  - THE MESSENGER CARD, the facts for a lawyer: the sections and their
+    controls' places follow the Messenger's panel (LFO 1 with the left
+    hand, oscillators, mixer, filter, envelopes; nui/synth.h, ui/app.js);
+    everything drawn is ours -- our knobs with scopes, segmented switches,
+    our theme, colours and fonts; no logo, artwork, lettering or wood; the
+    controls carry generic function names. Whether the arrangement alone is
+    trade dress is the lawyer's call.
+  - THE OWNERS (web research 2026-11-23, mostly through USPTO mirrors --
+    each to be checked in TSDR before sale):
+    - Roland Corporation: Roland and its model names (GS, Sound Canvas,
+      SC-55/88/8850, MT-32, CM-64/32L, TR-808 (US Reg. 6082363), 909, 707,
+      606, TR-8, CR-78, Jupiter, Juno, JC-120, TB-303, SH-101, D-50).
+    - Suzuki Musical Instrument Mfg. (Hammond Suzuki): Hammond, Leslie.
+    - Wurlitzer: the family's brand company won the music and electronics
+      categories back in 2021 (from Gibson/Baldwin); the current US
+      registration for pianos and organs is unconfirmed. Spectra-Tone: its
+      US registration expired 1984 (no owner).
+    - Rhodes: Rhodes Music Group Ltd runs the brand (relaunch 2021); the US
+      registration still lists the Joseph Brandstetter Trust. "Fender
+      Rhodes" expired.
+    - Fender Musical Instruments Corp.: Fender, Stratocaster, Telecaster,
+      Jazz Bass, Precision Bass. Gibson Brands: Gibson, Les Paul.
+    - Hohner: Hohner; Clavinet's US registration was cancelled in 2020.
+    - Yamaha Corporation: Yamaha, CP-80, CS. Hoshino Gakki: Ibanez.
+    - Moog Music Inc. (inMusic since June 2023): Moog, Minimoog, Messenger.
+    - Simmons: Guitar Center (GTRC Services) since 2005-07.
+    - Steinway Musical Instruments (Paulson & Co. since 2013).
+    - Mellotron: Markus Resch on the US register (one museum page says
+      otherwise: confirm). Oberheim: Tom Oberheim (returned 2019/2021).
+    - Vox: Korg (Vox Amplification Ltd, since 1992). Fairlight: Blackmagic
+      Design most likely (bought 2016; confirm in TSDR).
+    - General MIDI: the MIDI Association and AMEI's specification; only its
+      logos are claimed (we show none) -- say "the General MIDI
+      specification", not a trademark.
+- **Still open:** the store listing's and manual's copy of the disclaimer
+  (neither is written yet: paste the paragraph above), the owners' TSDR
+  check, and the lawyer's look at the whole (this section, the Messenger
+  card's layout).
 
 ## Recording our own
 

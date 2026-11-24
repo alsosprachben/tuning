@@ -57,7 +57,7 @@ VARIATION_DESC = {
     (112, 11): "a gamelan in stereo: metallophones and gongs",
     (112, 16): "ceng-ceng: Balinese clashing cymbals",
     (113, 8): "atarigane: the Japanese festival hand gong",
-    (118, 13): "the 606's tom, through a valve, on every key",
+    (118, 13): "after the TR-606: its tom, through a valve, on every key",
     (120, 12): "satsuma biwa: the Japanese lute, struck",
     (120, 13): "satsuma biwa, tremolo-picked",
     (122, 16): "pink noise: equal power in every octave",
@@ -70,13 +70,13 @@ VARIATION_DESC = {
     (0, 8): "wide: keys spread in stereo",
     (0, 16): "dark: worn hammers, soft attack",
     (1, 8): "wide: keys spread in stereo",
-    (2, 1): "CP-80 + Rhodes underneath",
-    (2, 2): "Rhodes + CP-80 underneath",
+    (2, 1): "CP-80, a tine piano underneath",
+    (2, 2): "tine piano, an electric grand underneath",
     (2, 8): "wide: keys spread in stereo",
     (3, 8): "the bright upright (= 001)",
     (4, 8): "Rhodes as a detuned pair, ±4 c",
-    (4, 16): "Rhodes + Wurlitzer layered",
-    (4, 24): "the Wurlitzer (= 005)",
+    (4, 16): "tine piano and reed piano layered",
+    (4, 24): "the reed electric piano (= 005)",
     (5, 8): "Wurlitzer as a detuned pair, ±4 c",
     (5, 16): "wide: keys spread in stereo",
     (6, 8): "8' and 4' coupled",
@@ -102,9 +102,9 @@ VARIATION_DESC = {
     (17, 1): "16 5-1/3 8, perc 2nd",
     (17, 8): "scanner chorus C3",
     (17, 32): "16 5-1/3 8 1, perc 3rd",
-    (18, 8): "all drawbars, Leslie slow, wheel to fast",
-    (18, 16): "Leslie slow",
-    (18, 24): "all drawbars, Leslie fast",
+    (18, 8): "all drawbars, rotary slow, wheel to fast",
+    (18, 16): "rotary slow",
+    (18, 24): "all drawbars, rotary fast",
     (19, 8): "principal chorus to 15th",
     (19, 16): "principals 16 8 4, mixture",
     (19, 24): "flutes 8 4",
@@ -158,7 +158,7 @@ VARIATION_DESC = {
     (98, 19): "kalimba + crystal",
     (99, 2): "nylon guitar + harp",
     (99, 3): "harp + synth voice",
-    (99, 5): "nylon guitar + Rhodes",
+    (99, 5): "nylon guitar + tine piano",
     (102, 3): "wide: keys spread in stereo",
     (102, 4): "keys spread wider",
     (102, 5): "spread wider, resonant",
@@ -169,9 +169,9 @@ VARIATION_DESC = {
     (115, 8): "castanets, by pitch",
     (116, 8): "the orchestra set's drum, by pitch",
     (117, 1): "Standard set's tom, by pitch",
-    (117, 8): "electronic tom (Simmons)",
+    (117, 8): "electronic tom, after the Simmons",
     (117, 9): "Room set's tom, by pitch",
-    (118, 8): "the 808's mid tom",
+    (118, 8): "after the TR-808: its mid tom",
     (118, 9): "Simmons tom (Electronic set)",
     (119, 1): "Standard's crash 2, backwards",
     (119, 8): "Standard's snare, backwards",
@@ -356,8 +356,8 @@ CAPITAL_DESC.update({
     14: "brass tubes, struck",
     15: "hammered dulcimer",
     16: "Hammond: 16 5-1/3 8, its own speaker",
-    17: "Hammond: 888 8, perc 3rd, Leslie slow",
-    18: "Hammond: 16 5-1/3 8 1, Leslie fast",
+    17: "Hammond: 888 8, perc 3rd, rotary slow",
+    18: "Hammond: 16 5-1/3 8 1, rotary fast",
     19: "Grönlund organ: principal 8'",
     20: "harmonium: an 8' and a sharp 4'",
     21: "Hohner on musette: wet reeds",
@@ -389,7 +389,7 @@ CAPITAL_DESC.update({
     49: "the section swelling in, slow bow",
     52: "a choir singing \"ah\"",
     53: "voices singing \"oo\"",
-    55: "the Fairlight-era stab",
+    55: "the early-80s sampler's orchestral stab",
     56: "Bb trumpet",
     57: "tenor and bass trombones",
     58: "tuba",
@@ -445,7 +445,7 @@ VARIATION_DESC.update({
     (5, 128 + 16): "bell an octave up on hard hits",
     (62, 128 + 16): "Moog: slow filter swell, wide",
     (63, 128 + 16): "Moog: slower, darker, vibrato",
-    (4, 256 + 8): "wide and softer Rhodes",
+    (4, 256 + 8): "wide and softer tine piano",
     (39, 256 + 8): "Moog: FM triangles + sub",
 })
 
@@ -473,7 +473,7 @@ KIT_DESC = {
     0: "acoustic kit: maple drums, brass cymbals", 1: "acoustic kit, a second set of drums",
     2: "acoustic kit, a third set of drums", 8: "acoustic kit in a live room", 9: "hip-hop kit: sampled breaks",
     10: "jungle kit: fast breakbeat drums", 11: "techno kit: machine drums", 12: "the room kit, panned wide",
-    13: "house kit: 909-style drums", 16: "rock kit, gated and big", 24: "Simmons electronic drums",
+    13: "house kit: 909-style drums", 16: "rock kit, gated and big", 24: "electronic drums, after the Simmons",
     25: "the TR-808 drum machine", 26: "dance kit: machine and sampled drums", 27: "the CR-78 rhythm box",
     28: "the TR-606 drum machine", 29: "the TR-707 drum machine", 30: "the TR-909 drum machine",
     32: "jazz kit: small drums, ride cymbals", 33: "the jazz kit, panned wide", 40: "jazz kit with brushes",
@@ -694,7 +694,7 @@ def _setting_words(src, attrs, nm=""):
         elif a in ("blare_db_per_khz", "bore_corner_hz", "lowpass_hz", "bell_cutoff_hz"):
             out.append("brighter" if more else "darker")
         elif a == "leslie_fast":
-            out.append("Leslie fast" if v else "Leslie slow")
+            out.append("rotary fast" if v else "rotary slow")       # (a maker's name never a plain noun: licences.md L13)
         elif a == "leslie":
             out.append("tremolo")
         elif a in ("one_shot", "gate_time", "speech_cycles", "release_valve_time"):
@@ -703,7 +703,7 @@ def _setting_words(src, attrs, nm=""):
             out.append("slow attack" if more else "quick attack")
         elif a == "cabinet":
             if v:
-                out.append({"guitar412": "4x12 cabinet", "guitar12": "1x12 cabinet", "jc120": "JC-120 amp",
+                out.append({"guitar412": "4x12 cabinet", "guitar12": "1x12 cabinet", "jc120": "2x12 clean amp",
                             "bass410": "4x10 bass cabinet", "leslie": "Leslie", "hammond": "Hammond speaker",
                             "direct": "direct", "rhodes": "suitcase speaker"}.get(v, str(v)))
         elif a == "voice_part":
@@ -802,10 +802,9 @@ def _fit_words(ws, cap=CAP):
 
 
 def _short_base(p):
-    """a voice named shortly: what it is modelled on, else its GM name"""
-    m = MODELLED.get(p)
-    if m and m != "Moog":
-        return {"Gr\u00f6nlund": "Gr\u00f6nlund organ"}.get(m, m)
+    """a voice named shortly, in plain words (its GM name's) -- never a
+    maker's name as a noun (licences.md L13: "after the ..." is for the
+    pickers' own line, MODELLED)"""
     n = _gm_name(p)
     return _SHORT.get(n, n)
 
@@ -870,7 +869,7 @@ _SHORT = {"Brass Section": "brass", "String Ensemble 1": "strings", "String Ense
           "French Horn": "horn", "Orchestra Hit": "orchestra hit", "Tremolo Strings": "tremolo strings",
           "Pizzicato Strings": "pizzicato strings", "Synth Strings 1": "synth strings",
           "Synth Strings 2": "synth strings 2", "Acoustic Grand Piano": "piano", "Bright Acoustic Piano": "upright",
-          "Electric Piano 1": "Rhodes", "Electric Piano 2": "Wurlitzer", "Drawbar Organ": "drawbar organ",
+          "Electric Piano 1": "tine piano", "Electric Piano 2": "reed piano", "Drawbar Organ": "drawbar organ",
           "Percussive Organ": "percussive organ", "Choir Aahs": "choir", "Voice Oohs": "voices",
           "Alto Sax": "alto", "Tenor Sax": "tenor", "Baritone Sax": "baritone", "Trombone": "trombone",
           "Trumpet": "trumpet", "Tuba": "tuba", "Flute": "flute", "Oboe": "oboe", "Clarinet": "clarinet",

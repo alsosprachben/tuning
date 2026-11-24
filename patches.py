@@ -6,7 +6,7 @@ patches = {
 4: "Electric Piano 1",
 5: "Electric Piano 2",
 6: "Harpsichord",
-7: "Clavinet",
+7: "Clavi",                 # (GM 1's own name; Clavinet is Hohner's mark, licences.md L13)
 8: "Celesta",
 9: "Glockenspiel",
 10: "Music Box",

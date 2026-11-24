@@ -261,7 +261,7 @@ inline void draw_amp(App &a)
         const std::string why = p && flag(p, "drums")
                                     ? "A drum set has no amplifier: its drums are heard as they are."
                                     : "This voice plays through no amplifier or speaker of its own -- an acoustic "
-                                      "instrument is heard as it is. The Rhodes and Wurlitzer, the organs, the "
+                                      "instrument is heard as it is. The electric pianos, the organs, the "
                                       "electric guitars and basses have one.";
         const auto ls = wrap(a, a.font, 21, why, X1 - X0);
         for (size_t i = 0; i < ls.size(); i++)
@@ -584,7 +584,7 @@ inline void draw_amp(App &a)
                 call(a, "{\"call\":\"part_cc\",\"row\":" + std::to_string(a.row) + ",\"cc\":80,\"v\":" + std::to_string(SV[s]) + "}");
             }
         }
-        const auto sn = wrap(a, a.font, 14, "The rotors spin up and down between speeds as a real Leslie's do; "
+        const auto sn = wrap(a, a.font, 14, "The rotors spin up and down between speeds as a real rotary speaker's do; "
                                             "a flick of the pitch wheel steps them too.", LW - 28);
         for (size_t i = 0; i < sn.size(); i++)
             text(a, a.font, 14, x + 14, sy + bh + 8 + i * LH, SILK_DIM, sn[i]);

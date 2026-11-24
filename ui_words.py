@@ -17,7 +17,7 @@ EFX_ABOUT = {
     "Distortion": "overdrive with more gain: hard clipping",
     "Phaser": "a sweeping notch, the classic swirl",
     "Auto Wah": "a resonant filter swept by an LFO and by playing",
-    "Rotary": "a Leslie speaker: horn and drum spinning",
+    "Rotary": "a rotary speaker: horn and drum spinning",
     "Stereo Flanger": "a short swept delay with feedback: a jet sweep",
     "Step Flanger": "a flanger that moves in steps",
     "Tremolo": "the level pulsing",

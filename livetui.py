@@ -80,7 +80,7 @@ def gm_label(p, v=0):
         # GS's own name for the variation -- and a map's own tone says whose
         nm = PMAP.VARIATION_NAMES[(p, v)]
         return nm + (" (%s)" % PMAP.MAP_LABELS[v >> 7] if v >> 7 in PMAP.MAP_LABELS else "")
-    return GM[p] + (" (%s)" % MODELLED[p] if p in MODELLED else "")
+    return GM[p] + (" (after the %s)" % MODELLED[p] if p in MODELLED else "")
 
 
 def built_variations(p):
@@ -304,13 +304,13 @@ def drum_key_name(note, program):
 
 def gm_label_short(p, width, v=0):
     """gm_label within a column: past it, the GM name's own qualifier goes
-    and Electric/Acoustic shorten -- "E. Guitar (Stratocaster)" -- so the
+    and Electric/Acoustic shorten -- "E. Guitar (after the Stratocaster)" -- so the
     model still shows; the picker has the whole name."""
     s = gm_label(p, v)
     if len(s) <= width or v or p not in MODELLED:
         return s
     base = GM[p].split(" (")[0].replace("Electric ", "E. ").replace("Acoustic ", "A. ")
-    return "%s (%s)" % (base, MODELLED[p])
+    return "%s (after the %s)" % (base, MODELLED[p])
 
 # Every tuner in midilib.tuner_registry. This list was hand-kept and had drifted
 # four entries short of the registry -- hybrid440 (the files' default) among
@@ -332,7 +332,7 @@ TUNER_NOTE = {
     "hybridharm": "pure 2:1 octaves -- right for mode-locked pipes",
     "hybridharm440": "pure 2:1 octaves at concert pitch",
     "hybridmean": "the hybrid's chains bridged by a mean third: no wolf, pure octaves",
-    "hybridmeanpiano": "hybridmean on a Steinway's stretched octaves, A=440",
+    "hybridmeanpiano": "hybridmean after a Steinway's stretched octaves, A=440",
     "stretchedhelmholtz": "two pure-fifth chains joined by inharmonic octaves, A=440",
     "gm2":        "the default: a GM 2 device, equal A=440, and the FILE owns the tuning (MTS)",
     "werckmeister": "Werckmeister III, from Sankey's published cents, A=415",
@@ -2828,8 +2828,10 @@ class TUI:
         if p is None:
             return self.draw_sound_controls(scr, y, w, h)
         _layered = len(MG.layers_of(p.moog())) > 1
-        self.addstr(scr, y, 2, ("MOOG MESSENGER %s" % self.synth_layer(p).upper()) if _layered
-                    else "MOOG MESSENGER", curses.A_BOLD | C("cyan"))
+        # (the synth, named as what it is -- the touch UI's SYNTH card; its
+        # panel is laid out after the Moog Messenger's, licences.md L13)
+        self.addstr(scr, y, 2, ("SYNTH %s" % self.synth_layer(p).upper()) if _layered
+                    else "SYNTH", curses.A_BOLD | C("cyan"))
         self.addstr(scr, y, 20, ("part %d, %s  (layered -- B: the other)" if _layered else "part %d, %s")
                     % (self.row + 1, p.label()), C("dim"))
         hw = (("reads a Messenger on %s  (M: stop)"
