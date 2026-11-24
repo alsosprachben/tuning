@@ -264,6 +264,13 @@ typedef struct {
        own rate, the contact's fast fall (the class's dB) */
     int fc_tab, n_fc;
     double fc_amp[64], fc_share[64], fc_fast[64];
+    /* A SILK STRING ON ITS SAWARI (tonelib.SawariContact: the biwa): on
+       (sw_on), each partial falls at the free silk's rate, 10 (sw_sigma0 +
+       sw_sigma2 f^2) / ln 10 at f = m sw_f0 (the note's frequency), and the
+       note's modes from the baked table (nv_sawari_set) -- n_sw of them,
+       each the share the strip feeds and its slow fall (the class's dB) */
+    int sw_on, n_sw;
+    double sw_f0, sw_sigma0, sw_sigma2, sw_share[96], sw_slow[96];
     /* A PIPE'S MODE LOCK (mode_lock_*: a played pipe's, a reed's, a brass
        instrument's): each harmonic above the first starting sharp by
        ml_spread x/(1+x), x = (m/ml_knee)^2, pulled into lock over ml_time
@@ -1643,6 +1650,7 @@ int nv_voice_bodies_set(int n, const char *names, const double *ratio, const dou
    each (amp, share, fast) -- native.py and the export hand them over. 0 on
    a table too large */
 int nv_fret_contact_set(int nt, int nk, int nv, int nm, double key0, const double *vels, const double *data);
+int nv_sawari_set(int nk, int nm, double key0, const double *data);
 int nv_voice_body(const char *name);
 int nv_voice_part(int part, double *ratio, double *cluster);
 void nv_song_note(void *s, long long ch, int note, double on, double off, int vel, double v7, double v11,

@@ -29,6 +29,9 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "examples"))
 NAMES = "C C# D D# E F F# G G# A A# B".split()
+# NOT READ (since 2026-11-23, licences.md L12): TimGM6mb's hit -- a GPL-2 set;
+# the fit stands on FluidR3's pair (MuseScore's is the same) and GeneralUser's two
+EXCLUDE = ("TimGM6mb",)
 
 
 def envelope(x, sr):
@@ -327,6 +330,8 @@ def main(argv):
     for name, path in SETS:
         if not path or not os.path.exists(path):
             continue
+        if name in EXCLUDE:
+            continue
         for sname, root, sr, x in C.gm_samples(path, 55):
             if sname.endswith("(R)") or sname.endswith("xt"):
                 continue                    # the stereo pair's other side; GU's low-rate copy
@@ -354,6 +359,16 @@ def main(argv):
         x0 = np.r_[np.log([r[2] for r in H.stop_ranks]), np.log(H.decay_db), H.harmonic_decay_db,
                    26.9, np.log(H.strike_noise_dbs), 20.0, np.log(0.05), 20.0, np.log(40.0)]
         only = None
+        if "--refit-all" in argv:
+            # (since 2026-11-23, TimGM6mb's hit no longer read: every number at
+            # once, from the class as it stands -- its timpani and cymbal, the
+            # noise as an offset from the hits' new median colour)
+            x0 = np.r_[np.log([r[2] for r in H.stop_ranks]), np.log(H.decay_db), H.harmonic_decay_db,
+                       float(np.mean([v - min(NOISE, key=lambda q: abs(np.log(q[0] / f)))[1]
+                                      for f, v in H.strike_noise_db])),
+                       np.log(H.strike_noise_dbs), 0.0, 0.0,
+                       H.strike_noise_layers[0][0][0][1], np.log(H.strike_noise_layers[0][2]), 0.0,
+                       H.struck_layer[1], np.log(H.struck_layer[2]), np.log(H.struck_layer[3])]
         if "--drum" in argv:
             # the third run's best, and the DRUM alone free: its level, rise and
             # fall (the third run held the fall at 40 dB/s, so a bloom at 50 ms

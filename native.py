@@ -116,7 +116,8 @@ class VoiceSnap(ctypes.Structure):
                 ('sp_decay', I), ('sp_B', I), ('sp_scale', C), ('sp_gauge', C * 8), ('sp_core', C * 8), ('sp_mass', C),
                 ('sp_wind', C), ('sp_qte', C), ('sp_g', C), ('sp_fall', C), ('sp_fexp', C), ('sp_joint', C), ('sp_body', C),
                 ('sp_mount', C), ('fc_tab', I), ('n_fc', I), ('fc_amp', C * 64), ('fc_share', C * 64),
-                ('fc_fast', C * 64), ('ml_spread', C), ('ml_knee', C), ('ml_time', C),
+                ('fc_fast', C * 64), ('sw_on', I), ('n_sw', I), ('sw_f0', C), ('sw_sigma0', C), ('sw_sigma2', C),
+                ('sw_share', C * 96), ('sw_slow', C * 96), ('ml_spread', C), ('ml_knee', C), ('ml_time', C),
                 ('n_mute', I), ('mute', (C * 2) * 24), ('n_tube', I), ('tube_ref_hz', C), ('tube', (C * 4) * 32),
                 ('or_set', I), ('or_share', C), ('or_db', C * 2), ('or_lowest_hz', C), ('or_g', C),
                 ('dul_n', I), ('dhz_set', I), ('dul_beat', C * 2), ('dhz_db', C), ('dhz_pow', C), ('pps', C),
@@ -566,6 +567,7 @@ def _load():
                                      P, ctypes.POINTER(VoiceNote)]),
             ('nv_voice_bodies_set', I, [I, ctypes.c_char_p, ctypes.c_void_p, ctypes.c_void_p, I]),
             ('nv_fret_contact_set', I, [I, I, I, I, C, ctypes.c_void_p, ctypes.c_void_p]),
+            ('nv_sawari_set', I, [I, I, C, ctypes.c_void_p]),
             ('nv_voice_body', I, [ctypes.c_char_p]),
             ('nv_voice_part', I, [I, ctypes.POINTER(C), ctypes.POINTER(C)]),
             ('nv_note', I, [ctypes.POINTER(NoteClass), ctypes.POINTER(NoteIn), ctypes.POINTER(PyRandomState), I,
@@ -1353,6 +1355,12 @@ def harmonic_voice(cls):
     if dul:
         # (a dulcimer's courses and its decay by each mode's frequency)
         own = dict(own, unison_voices='HammeredDulcimerProperties', harmonic_decay='HammeredDulcimerProperties')
+    elif _owner(cls, 'harmonic_decay') == 'SawariContact':
+        # (a silk string on its sawari: the free silk's fall and the baked
+        # share it feeds -- VoiceSnap.sw_*, sawari_data's table in the engine)
+        if not cls.sawari or not sawaris(lib()):
+            return False
+        own = dict(own, harmonic_decay='SawariContact', aftersound_partial='SawariContact')
     elif _owner(cls, 'harmonic_decay') == 'PromptDecay':
         # (a two-stage decay, PromptDecay's, over the law it falls to)
         _mro = cls.__mro__[cls.__mro__.index(T.PromptDecay) + 1:]
@@ -1371,7 +1379,7 @@ def harmonic_voice(cls):
                    harmonic_decay='Plectrum')
         if _owner(cls, 'unison_voices') in ('TwelveStringProperties', 'MandolinProperties', 'TaishoKotoProperties'):
             own['unison_voices'] = _owner(cls, 'unison_voices')
-    elif _owner(cls, 'aftersound_partial') not in (None, 'PromptDecay'):
+    elif _owner(cls, 'aftersound_partial') not in (None, 'PromptDecay', 'SawariContact'):
         return False
     if _owner(cls, 'unison_voices') in ('KanunProperties', 'OudProperties'):
         own = dict(own, unison_voices=_owner(cls, 'unison_voices'))     # (its courses: VoiceSnap.crs_*)
@@ -2407,6 +2415,9 @@ def snapshot(props):
             s.hit_cents[:s.hit_n] = [float(x) for x in p.section_cents]
         if _owner(type(p), 'harmonic_decay') == 'HammeredDulcimerProperties':
             s.dhz_set, s.dhz_db, s.dhz_pow = 1, float(p.decay_hz_db), float(p.decay_hz_power)
+        if _owner(type(p), 'harmonic_decay') == 'SawariContact' and p.sawari:
+            import sawari_data as _SWD
+            s.sw_on, s.sw_sigma0, s.sw_sigma2 = 1, float(_SWD.SAWARI['sigma0']), float(_SWD.SAWARI['sigma2'])
         if _owner(type(p), 'harmonic_decay') == 'PromptDecay' and p.prompt_max_hz:
             s.pd_max_hz, s.pd_dbs, s.pd_share = (float(p.prompt_max_hz), float(p.prompt_dbs),
                                                  float(p.aftersound_share))
@@ -2841,6 +2852,31 @@ def sung_voice(cls):
 
 _VB_SET = [False]
 _FC_SET = [False]
+_SW_SET = [False]
+
+
+def sawari_blob():
+    """(nk, nm, key0, data): sawari_data's table flat, [key][mode][share,
+    fast, slow], as nv_sawari_set takes it."""
+    import sawari_data as W
+    nm = len(W.TABLE[0])
+    data = [float(x) for row in W.TABLE for mode in row for x in mode]
+    return len(W.KEYS), nm, float(W.KEYS[0]), data
+
+
+def sawaris(d):
+    """SawariContact's table into the engine (nv_sawari_set) -- once."""
+    if _SW_SET[0]:
+        return 1
+    if d is None:
+        return 0
+    try:
+        nk, nm, k0, data = sawari_blob()
+    except ImportError:
+        return 0
+    ok = d.nv_sawari_set(nk, nm, k0, (C * len(data))(*data))
+    _SW_SET[0] = bool(ok)
+    return ok
 
 
 def fret_contact_names():
@@ -2908,7 +2944,8 @@ def init_supported(cls):
                         and electric_voice(cls))
                and not (k.__name__ == 'ClavinetProperties' and clav_voice(cls))
                and not (k.__name__ in _STOPPED_INITS and stopped_voice(cls) and harmonic_voice(cls))
-               and not (k.__name__ == '_VocalBody' and sung_voice(cls))):
+               and not (k.__name__ == '_VocalBody' and sung_voice(cls))
+               and not (k.__name__ == 'SawariContact' and harmonic_voice(cls))):
             return False
         if any(_owner(cls, n) != o for n, o in _BASE_OWN.items() if n != 'inharmonicity_coefficient_func'):
             return False

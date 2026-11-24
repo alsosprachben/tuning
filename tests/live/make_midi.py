@@ -886,7 +886,26 @@ def rhodes_compass():
     return mid
 
 
-MAKERS = {"rhodes_compass": rhodes_compass, "basses_all": basses_all, "eguitars_six": eguitars_six, "stab_chords": stab_chords, "harpsi_four": harpsi_four, "tonewheel_spinet": tonewheel_spinet, "gopichant_compass": gopichant_compass, "hawaiian_compass": hawaiian_compass, "guitar12_compass": guitar12_compass, "flugel_phrase": flugel_phrase, "mandolin_compass": mandolin_compass, "dulcimer_compass": dulcimer_compass, "feedback_held": feedback_held, "clav_compass": clav_compass,
+def biwa_compass():
+    """GS 120.12, the biwa on its sawari (licences.md L4: SawariContact, its
+    baked table): A2-A5 at two velocities, each left to ring (the fed share's
+    slow fall), then a low note held."""
+    mid = mido.MidiFile(type=0, ticks_per_beat=480)
+    tr = mido.MidiTrack(); mid.tracks.append(tr)
+    tr.append(mido.Message("control_change", channel=0, control=0, value=12, time=0))
+    tr.append(mido.Message("control_change", channel=0, control=32, value=0, time=0))
+    tr.append(mido.Message("program_change", channel=0, program=120, time=0))
+    for v in (60, 120):
+        for n in (45, 52, 57, 64, 69, 76, 81):
+            tr.append(mido.Message("note_on", channel=0, note=n, velocity=v, time=20))
+            tr.append(mido.Message("note_off", channel=0, note=n, velocity=0, time=480))
+    tr.append(mido.Message("note_on", channel=0, note=45, velocity=110, time=10))
+    tr.append(mido.Message("note_off", channel=0, note=45, velocity=0, time=1920))
+    tr.append(mido.Message("note_off", channel=0, note=0, velocity=0, time=960))
+    return mid
+
+
+MAKERS = {"biwa_compass": biwa_compass, "rhodes_compass": rhodes_compass, "basses_all": basses_all, "eguitars_six": eguitars_six, "stab_chords": stab_chords, "harpsi_four": harpsi_four, "tonewheel_spinet": tonewheel_spinet, "gopichant_compass": gopichant_compass, "hawaiian_compass": hawaiian_compass, "guitar12_compass": guitar12_compass, "flugel_phrase": flugel_phrase, "mandolin_compass": mandolin_compass, "dulcimer_compass": dulcimer_compass, "feedback_held": feedback_held, "clav_compass": clav_compass,
           "couplers_upper": lambda: couplers(16, ((1.5, 0), (2.5, 1 | 4), (3.5, 2), (4.5, 2 | 4 | 8), (6.0, 1 | 2 | 8))),
           "couplers_lower": lambda: couplers(41, ((1.5, 4), (3.0, 1 | 4), (4.5, 0), (6.0, 4))), "spectra_rotor": lambda: spectra(10), "spectra_chorus": lambda: spectra(11),
           "spectra_sustain": lambda: spectra_sustain(10), "spectra_sustain_chorus": lambda: spectra_sustain(11), "dense_pedal": dense_pedal, "assign_mode": assign_mode, "mpe_organ": lambda: mpe_zone(19), "cmx_live": cmx_live, "userdrums": userdrums, "drumdelay": drumdelay, "moog_cmx": moog_cmx, "two_organs": two_organs, "rhythmpart": rhythmpart, "gsrx_2port": gsrx_2port, "drumnrpn": drumnrpn, "drumnrpn2": drumnrpn2, "gsvsense": gsvsense,

@@ -77,7 +77,7 @@
 "licence": "GPL 2",
 "licence_url": "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html",
 "how": "levels and references",
-"voices": "the Orchestra Hit, release times, levels"
+"voices": "release times, levels (the Orchestra Hit no longer: since 2026-11-23 fitted without it)"
 },
 {
 "group": "Keyboards and bells",
@@ -920,13 +920,23 @@
 },
 {
 "group": "Strings from around the world",
-"title": "Biwa performances and lessons 1984-2000, item SB33",
-"author": "Hugh de Ferranti (depositor); PARADISEC",
-"url": "https://catalog.paradisec.org.au/collections/HDF1/items/SB33",
-"licence": "CC BY-NC-SA 4.0 and PARADISEC conditions",
-"licence_url": "https://www.paradisec.org.au/deposit/access-conditions/",
+"title": "Five satsuma biwa videos (YouTube 4GEqbkQpPi8, mluhc8o21oQ, myYZddh4PBA, dZ4BBHF9ttI, aLaQzWTb6rw)",
+"author": "Takahisa Suda (his own channel, TakahisaSuda&YokoKamiyabu)",
+"url": "https://www.youtube.com/watch?v=4GEqbkQpPi8",
+"licence": "CC BY",
+"licence_url": "https://creativecommons.org/licenses/by/3.0/",
 "how": "fitted",
-"voices": "Biwa"
+"voices": "Biwa: the bachi on the belly, the stroke checked"
+},
+{
+"group": "Strings from around the world",
+"title": "\"Noche de Museos de JUNIO Biwa\": Yuuka Yamana, satsuma biwa (YouTube 4UYOOzfrfKI)",
+"author": "Museo Nacional de las Culturas del Mundo, INAH",
+"url": "https://www.youtube.com/watch?v=4UYOOzfrfKI",
+"licence": "CC BY",
+"licence_url": "https://creativecommons.org/licenses/by/3.0/",
+"how": "fitted",
+"voices": "Biwa: the bachi on the belly, the stroke checked"
 },
 {
 "group": "Strings from around the world",

@@ -747,6 +747,22 @@ static bool read_export(const char *path, Export &E)
                 fseek(f, vp, SEEK_SET);
             }
         }
+        // SAWR: tonelib.SawariContact's baked table (voice.c's: nv_sawari_set)
+        {
+            long vp = ftell(f);
+            char vt[4];
+            int vh[2];
+            double k0;
+            if (ok && fread(vt, 1, 4, f) == 4 && !memcmp(vt, "SAWR", 4) && fread(vh, 4, 2, f) == 2
+                && fread(&k0, 8, 1, f) == 1) {
+                std::vector<double> sd((size_t)vh[0] * vh[1] * 3);
+                ok = fread(sd.data(), 8, sd.size(), f) == sd.size();
+                if (ok)
+                    nv_sawari_set(vh[0], vh[1], k0, sd.data());
+            } else {
+                fseek(f, vp, SEEK_SET);
+            }
+        }
         }
         // VARS: bank select (native.variation_tables) -- the slots and their
         // classes at each key, the entries a program change selects, GS's and GM 2's tables

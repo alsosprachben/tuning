@@ -292,7 +292,8 @@ def stage_ukulele():
     print("  %d notes staged (of %d played): %s" % (len(got), len(UKE_NOTES), have))
 
 
-def stage_live(label="ueno", pat="shamisen/195521__*.wav", min_next=0.3, lo=100, hi=1500, fall_db=None, clear=True):
+def stage_live(label="ueno", pat="shamisen/195521__*.wav", min_next=0.3, lo=100, hi=1500, fall_db=None, clear=True,
+               periodic=0.6, steady_cents=30.0):
     """THE SHAMISEN'S PLUCKS, out of RTB45's live festival take (freesound
     195521, CC BY 4.0; sources.md "Ethnic programs"): every onset (a 12 dB
     rise in 10 ms, over -40 dB) that rings MIN_NEXT s or more before the next,
@@ -317,7 +318,10 @@ def stage_live(label="ueno", pat="shamisen/195521__*.wav", min_next=0.3, lo=100,
             continue
         t = T[3:30]
         f = float(np.median(t[:, 0]))
-        if (t[:, 1] < 0.2).mean() <= 0.6 or np.std(1200 * np.log2(t[:, 0] / f)) >= 30:
+        # (PERIODIC: the share of its first frames that are pitched; STEADY_CENTS
+        # its pitch's sd -- a satsuma biwa's strokes glide, its tall frets
+        # pressed to bend the note, and fail the shamisen's 30 cents)
+        if (t[:, 1] < 0.2).mean() <= periodic or np.std(1200 * np.log2(t[:, 0] / f)) >= steady_cents:
             continue
         # FALL_DB: a pluck falls -- this many dB from 50 to 300 ms -- where a
         # sung or spoken note held over it does not (a lesson tape's voice)
@@ -955,6 +959,25 @@ def main(argv):
                 # (the Pianobook ektara takes are no longer read, licences.md L7:
                 # the voice is from open recordings, examples/ektara_open.py)
                 raise SystemExit("gopichant: retired 2026-11-22, see examples/ektara_open.py")
+            elif voice == "biwa" and os.environ.get("BIWA_REF") == "open":
+                # (since 2026-11-23, licences.md L4: PARADISEC's NC tape no
+                # longer read) satsuma biwa on YouTube under CC BY: Takahisa
+                # Suda's own channel (five videos, ~/Documents/refs/biwa_suda)
+                # and Yuuka Yamana (Tsuruta school) in concert at Mexico's Museo
+                # Nacional de las Culturas del Mundo (INAH, 4UYOOzfrfKI;
+                # ~/Documents/refs/biwa_inah): the strokes between the singing
+                # (the guard against a sung note held over a stroke, fall_db, is
+                # off for the three with no singing: Suda's #instrumental and his
+                # two shrine offerings)
+                SUNG_NOT = ("4GEqbkQpPi8", "mluhc8o21oQ", "myYZddh4PBA")
+                first = True
+                for w in sorted(glob.glob(os.path.expanduser("~/Documents/refs/biwa_suda/suda_*_44k.wav"))) + [
+                        os.path.expanduser("~/Documents/refs/biwa_inah/inah_biwa_44k.wav")]:
+                    tag = "suda" if "suda" in w else "inah"          # (plucks() reads [a-z]+ labels)
+                    sung = not any(k in w for k in SUNG_NOT)
+                    stage_live(tag, w, lo=80, hi=1500, fall_db=6.0 if sung else None, clear=first,
+                               periodic=0.6 if sung else 0.4, steady_cents=30.0 if sung else 80.0)
+                    first = False
             elif voice == "biwa":
                 # side A's first 8:50 (the rest is blank tape); its lowest
                 # string is A2, 110 Hz

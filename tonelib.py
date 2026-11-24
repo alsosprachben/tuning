@@ -13648,7 +13648,9 @@ class OrchestraHitProperties(PercussionProperties):
     # FITTED (examples/orchhit_fit.py) TO WHAT GM PLAYS. The patch is the
     # Fairlight-era SAMPLE -- one recorded orchestral stab -- so the GM sets'
     # own hits are the instrument (FluidR3/MuseScore's G#6 and G#7, GeneralUser
-    # GS's two, TimGM6mb's): a ROOT AND ITS FIFTH (the fifth 4-7 dB under, no
+    # GS's two; TimGM6mb's, a GPL set, no longer read since 2026-11-23 --
+    # licences.md L12 -- every number refitted without it, the timpani and the
+    # cymbal with them: score 1344 -> 1157): a ROOT AND ITS FIFTH (the fifth 4-7 dB under, no
     # third), the octaves -2..+3 within 0-6 dB of each other, 7-12 dB of it
     # NOISE, and gone fast (-20 dB at 0.24-0.47 s). Ours was the root alone,
     # falling 15-32 dB into the top octave, clean (noise -35 dB), with a 1.1-
@@ -13656,13 +13658,13 @@ class OrchestraHitProperties(PercussionProperties):
     # more (CC11's stop word has seven bits): the horns on the fifth, the winds
     # on the twelfth, as an orchestra voices a power chord.
     stop_ranks = [
-        ("bass",    0.25, 1.179, ConicalBrassProperties),   # basses, tuba: 2 octaves down
-        ("tenor",   0.5,  1.365, TromboneProperties),       # trombones, cellos
-        ("horn",    1.5,  0.387, HornProperties),           # horns on the FIFTH
-        ("string",  1.0,  1.872, BowedStringProperties),    # the strings, marcato
-        ("tpt",     2.0,  0.993, TrumpetProperties),        # trumpets an octave up
-        ("wind",    3.0,  1.052, StoppedPipeProperties),    # flutes and oboes on the twelfth
-        ("picc",    4.0,  0.214, StoppedPipeProperties),    # piccolo on the top octave
+        ("bass",   0.25, 1.542, ConicalBrassProperties),   # basses, tuba: 2 octaves down,
+        ("tenor",  0.5,  1.799, TromboneProperties),   # trombones, cellos,
+        ("horn",   1.5,  0.340, HornProperties),   # horns on the FIFTH,
+        ("string", 1.0,  1.021, BowedStringProperties),   # the strings, marcato,
+        ("tpt",    2.0,  1.089, TrumpetProperties),   # trumpets an octave up,
+        ("wind",   3.0,  1.141, StoppedPipeProperties),   # flutes and oboes on the twelfth,
+        ("picc",   4.0,  0.223, StoppedPipeProperties),   # piccolo on the top octave,
     ]
     crescendo_order = ["string", "bass", "tenor", "horn", "tpt", "wind", "picc"]
 
@@ -13685,15 +13687,15 @@ class OrchestraHitProperties(PercussionProperties):
     release_floor_db = -40.0
 
     max_harmonic = 32           # per rank, and there are seven of them
-    decay_db = 29.37            # fitted to the GM hits (was 12, to our own orchestra)
-    harmonic_decay_db = -0.236
+    decay_db = 29.96            # fitted to the GM hits (was 12, to our own orchestra)
+    harmonic_decay_db = -0.946
     # THE NOISE IN IT, the GM hits' own colour (their spectrum's floor per third
     # octave, 0-60 ms from the peak, median of the hits): broad, falling from
     # ~-17 dB at 100-300 Hz to -28 at 2-6 kHz -- the cymbal, the bass drum, the
     # brass's rasp and the sampler's grit. Its level and fall fitted with the
     # rest (+30.6 dB, 49 dB/s): noise -5..-6 dB of the hit against their -7..-12.
-    strike_noise_db = ((45, 7.6), (56, 11.6), (71, 9.6), (90, 14.6), (113, 12.6), (142, 13.6), (180, 14.6), (226, 10.6), (285, 9.6), (360, 11.6), (453, 9.6), (571, 6.6), (720, 5.6), (907, 4.6), (1142, 6.6), (1440, 2.6), (1814, 2.6), (2285, 4.6), (2880, 4.6), (3628, 2.6), (4571, 4.6), (5760, 4.6), (7257, 0.6), (9143, 2.6), (11520, -5.4), (14514, -3.4))
-    strike_noise_dbs = 49.4
+    strike_noise_db = ((45, 8.1), (57, 11.7), (71, 8.1), (90, 15.0), (113, 12.0), (143, 12.2), (180, 14.7), (227, 10.7), (286, 8.4), (360, 11.0), (454, 7.7), (571, 6.5), (720, 4.3), (907, 4.0), (1143, 6.5), (1440, 2.1), (1814, 2.2), (2286, 4.2), (2880, 4.8), (3629, 3.0), (4572, 4.9), (5760, 4.7), (7257, 2.3), (9143, 2.8), (11520, -5.2), (14514, -3.7))
+    strike_noise_dbs = 47.0
     strike_noise_len_s = 1.0
     strike_noise_fade_s = 0.001
     strike_noise_slope = 0.0
@@ -13708,7 +13710,7 @@ class OrchestraHitProperties(PercussionProperties):
     # would not keep at any level (it bought the 50 ms bloom with the tail).
     # struck_layer is set below TimpaniProperties, which this file defines later
     strike_noise_layers = (
-        (((5760, 17.4), (7257, 17.4), (9143, 17.4), (11520, 17.4), (14514, 17.4)), 0.001, 60.3, 0.8),
+        (((5760, 15.5), (7257, 15.5), (9143, 15.5), (11520, 15.5), (14514, 15.5)), 0.001, 61.6, 0.8),
     )
     # ONE decay law cannot hold both ends of this envelope, because the thing
     # being matched is a SUM: the strings and brass stop when the players stop,
@@ -15118,7 +15120,7 @@ class TimpaniProperties(MembraneDrumProperties):
 
 
 # GM 55's timpani (see OrchestraHitProperties): defined here, after the kettle.
-OrchestraHitProperties.struck_layer = (TimpaniProperties, -9.1, 0.029, 19.7)
+OrchestraHitProperties.struck_layer = (TimpaniProperties, -6.9, 0.033, 26.0)
 
 class NoisyPercussionMixin:
     """A radiation roll-off for the percussion voices that carry a noise wash.
@@ -24378,48 +24380,130 @@ class ShamisenProperties(PromptDecay, MembraneBodyProperties):
     initial_gain = 0.032913 * 10 ** (6.989 / 20.0)
 
 
-class BiwaProperties(PromptDecay, FormantBody, PluckedStringProperties):
+class SawariContact:
+    """A SILK STRING BUZZING ON ITS SAWARI (Ben, 2026-11-23: "Contact model.
+    Go with the physics."): the biwa's nearly flat strip on its nut and every
+    fret, which the string at rest lies on and slaps each cycle -- simulated
+    (examples/sawari_contact.py: Taguti's model, Acoust. Sci. & Tech. 29(3)
+    2008, the silk's measured stiffness; its losses fitted to Taguti &
+    Tohnai 2001's unshaved nut) and baked per key into sawari_data.py. The
+    contact leaves each mode's start alone and FEEDS it: every partial falls
+    at the free silk's own rate (lossy -- over ~1.2 kHz gone in a fraction
+    of a second), while a share of it, fed by the modes under it, rings on
+    slowly -- the kernel's two stages. The buzz is the upper partials kept
+    alive. The silk's free fall replaces the class's decay law outright.
+    """
+    sawari = False                  # True: sawari_data's table (the strip, the silk, the tuning there)
+
+    def __init__(self, frequency=256.0, *args, **kwargs):
+        super().__init__(frequency, *args, **kwargs)
+        self._sw = sawari_modes(float(frequency)) if self.sawari else None
+        self._sw_f0 = float(frequency)
+
+    def harmonic_decay(self, harmonic):
+        if self._sw is None:
+            return super().harmonic_decay(harmonic)
+        D = _SW_DATA.SAWARI
+        f = harmonic * self._sw_f0
+        return 10.0 * (D["sigma0"] + D["sigma2"] * f * f) / _log(10.0)
+
+    def aftersound_partial(self, f0, m, decay_rate):
+        sw = self._sw
+        if sw is None or m > len(sw) or sw[m - 1][0] <= 0.0:
+            return (0.0, decay_rate)
+        return (sw[m - 1][0], sw[m - 1][1])
+
+
+_SW_DATA = None
+
+
+def sawari_modes(frequency):
+    """[(share, slow dB/s)] for each mode of a note, from the baked table:
+    linear in the key between its rows (a mode one row lacks -- past the
+    simulation's 16 kHz -- taken from the other), held at the table's ends."""
+    global _SW_DATA
+    if _SW_DATA is None:
+        import sawari_data as _SW_DATA_
+        _SW_DATA = _SW_DATA_
+    keys, grid = _SW_DATA.KEYS, _SW_DATA.TABLE
+    key = 69.0 + 12.0 * _log(frequency / 440.0) / _log(2.0)
+    kf = min(max(key - keys[0], 0.0), float(len(keys) - 1))
+    i = int(kf)
+    i1 = min(i + 1, len(keys) - 1)
+    wk = kf - i
+    out = []
+    for m in range(len(grid[i])):
+        a, b = grid[i][m], grid[i1][m]
+        if a[1] <= 0.0 or b[1] <= 0.0:
+            c = a if a[1] > 0.0 else b
+            out.append((c[0], c[2]))
+        else:
+            out.append((a[0] + (b[0] - a[0]) * wk, a[2] + (b[2] - a[2]) * wk))
+    return out
+
+
+class BiwaProperties(SawariContact, FormantBody, PluckedStringProperties):
     """GS 120.12 "Biwa Stroke": the satsuma biwa -- silk strings over a
     WOODEN pear-shaped body (a koto's kind, not the shamisen's skin), struck
     with a huge bachi that hits the soundboard with the strings, and frets
     tall enough that a string grazes them: a sawari of its own.
 
-    FITTED to Hugh de Ferranti's satsuma biwa (PARADISEC HDF1-SB33, side A,
-    1984-2000; examples/pluck_fit.py --voice=biwa). THAT DATA IS CC BY-NC-SA
-    4.0 under PARADISEC's access conditions: the numbers fitted here derive
-    from it, the recording itself stays on Ben's machine (sources.md). Starts
-    from the shamisen's struck-silk numbers, which the fit then moves."""
-    release_valve_time = 0.554
+    SINCE 2026-11-23 FROM OPEN RECORDINGS AND ITS NEAREST KIN (licences.md
+    L4: Hugh de Ferranti's PARADISEC tape, CC BY-NC-SA, no longer read).
+    Satsuma biwa under CC BY is scarce: Takahisa Suda's own channel and Yuuka
+    Yamana's concert at Mexico's INAH museum give 14 clean strokes
+    (examples/pluck_fit.py --voice=biwa, BIWA_REF=open) -- enough for the
+    stroke's prompt fall and its brightness, not its decay or its body (short
+    strokes, bent on the tall frets, two instruments in two rooms). So the
+    RING is the shamisen's (silk, bachi-struck; fitted to a CC BY 4.0 take)
+    and the BODY the oud's (the measured pear-shaped wooden lute, CC BY-SA
+    and CC0 notes) -- chosen by Ben, 2026-11-23, to voice by ear against
+    Suda's playing. ...THEN THE PHYSICS (Ben: "Contact model. Go with the
+    physics"): the ring and the buzz from the sawari's simulation
+    (SawariContact), the body Taguti's, the pluck's spectrum the bachi's
+    triangle; the open strokes keep the bachi's knock on the belly."""
+    release_valve_time = 0.554    # the shamisen's (four GM sets' releases' median; no recording)
     release_fraction_max = None
     strike_point = 0.18
     strike_depth = 0.0
     inharmonicity_coefficient = 1.0e-05
     strike_fills_with_force = False
-    prompt_dbs = 113.1
-    aftersound_share = 0.1882
-    prompt_max_hz = 6239.0
-    tonal_dampening = 0.45
-    # THE BODY IS ITS FITTED TRIM ALONE (body_trim_db, --fit=body): a flat
-    # floor, no formants, a corner far over the band it is fitted on -- set,
-    # because without a corner harmonic_volume skips the body entirely
+    # THE PLUCK'S SPECTRUM: a triangle released at strike_point, read as the
+    # force on the bridge -- 1/n under its comb, no register tilt (as the
+    # simulation Ben heard, examples/sawari_contact.py --phrase)
+    tonal_dampening = 1.0
+    octave_dampening = 0.0
+    # THE BODY: Taguti's (2008, sec. 5) -- two mass-dashpot-spring elements at
+    # 850 and 1,900 Hz -- their Q (4) and a radiation rising 6 dB an octave
+    # under them fitted with the silk's losses to Taguti & Tohnai's unshaved
+    # nut (examples/sawari_contact.py); the bridge force's way to the air.
+    # The fundamental barely radiates: their h1 and h2 last 0.2 s, h6 leads
     formant_floor = 1.0
     bore_corner_hz = 12000.0
-    # fitted 500 Hz-5 kHz only (pluck_fit LOW_HZ/TOP_HZ): under it the take's
-    # 1980s cassette and microphone, 25-32 dB thin, over it the tape's top
-    # gone -- neither the instrument's. Mid-forward, 17-24 dB over 500 Hz from
-    # 640 Hz to 4 kHz: the satsuma's bright, nasal stroke (miss 14.1 -> 12.6
-    # dB with the unfitted ends; +10-20 -> +5-8 dB inside the band)
-    body_trim_db = ((508, 1.8), (640, 17.5), (806, 2.1), (1016, 21.5), (1280, 23.1), (1613, 17.4),
-                    (2032, 10.9), (2560, 15.3), (3225, 24.0), (4064, 22.8))
-    # THE DECAY (--fit=decay, 44 strokes): fast and nearly flat across the
-    # harmonics -- the sawari keeps the top up as long as the fundamental.
-    # The strokes of a lesson are often damped by the next, so the miss
-    # stays wide (27 dB/s)
-    decay_db = 15.54
-    harmonic_decay_db = 0.0233
-    decay_register_slope = 0.6748
+    body_trim_db = ((160, -44.8), (202, -40.6), (254, -36.4), (320, -32.0), (403, -27.4), (508, -22.2),
+                    (640, -15.9), (806, -7.7), (1016, -12.4), (1280, -19.1), (1613, -7.6), (2032, 0.0),
+                    (2560, -4.2), (3225, -6.4), (4064, -7.5), (5120, -8.1), (6451, -8.5), (8127, -8.7),
+                    (10240, -8.8))
+    # THE RING AND THE BUZZ: the sawari, simulated and baked (SawariContact,
+    # sawari_data.py) -- the free silk's fall per partial, and the share the
+    # strip feeds that rings on
+    sawari = True
+    # THE BACHI ON THE BELLY: a satsuma biwa's huge plectrum strikes the
+    # wooden soundboard with the string -- the strokes carry energy BETWEEN
+    # their partials only ~11 dB under the partials' (ours, without it, 36).
+    # Fitted band by band as the koto's tsume (examples/biwa_open.py
+    # --fit=strike, from the koto's table: 2.6 dB rms; floored at -60, where
+    # the partials fill the band and the fit pushes it to nothing)
+    strike_noise_db = ((157, -12.4), (198, -27.7), (249, -13.0), (314, -12.0), (396, -49.8), (499, -13.9), (629, -46.9), (792, -15.5), (998, -41.2), (1257, -20.8), (1584, -60.0), (1996, -29.2), (2514, -43.0), (3168, -36.3), (3991, -20.8), (5029, -59.0), (6336, -26.3), (7982, -20.7), (10057, -28.4), (12671, -60.0))
+    # its belly rings: the noise falls 40 dB/s, not the koto tsume's click
+    # (fitted with the ring and the share: fall 1.2 dB, between/on -10.3 dB
+    # against the strokes' -11)
+    strike_noise_dbs = 150.0     # Ben: "the chiff of the hit is too long" at 40
+    strike_noise_fade_s = 0.002
     max_harmonic = 96
-    initial_gain = 0.032913 * 10 ** (6.989 / 20.0)
+    # (its loudness held at the voice it replaced -- the bank's balance, the
+    # biwa_compass test file's integrated level, -38.4 LUFS: +5.6 dB)
+    initial_gain = 0.032913 * 10 ** (12.589 / 20.0)
 
 
 class KanunProperties(FormantBody, PluckedStringProperties):
@@ -24570,6 +24654,8 @@ class OudProperties(FormantBody, PluckedStringProperties):
         lo, hi = self.course_cents
         c = rng.uniform(lo, hi) * (1.0 if rng.random() < 0.5 else -1.0)
         return [(self.course_partner_gain, 0.0, 2.0 ** (c / 1200.0) - 1.0, harmonic_decay, 0.0)]
+
+
 
 
 class KotoProperties(FormantBody, PluckedStringProperties):

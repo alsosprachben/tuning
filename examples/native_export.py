@@ -448,6 +448,11 @@ def main(argv):
         nt, nk, nv, nm, k0, vels, data = N.fret_contact_blob()
         f.write(b"FCON" + struct.pack("<iiii", nt, nk, nv, nm) + struct.pack("<d", k0)
                 + struct.pack("<%dd" % nv, *vels) + struct.pack("<%dd" % len(data), *data))
+        # SAWR: tonelib.SawariContact's baked table (native.sawari_blob:
+        # nv_sawari_set's) -- a silk string on its sawari
+        snk, snm, sk0, sdata = N.sawari_blob()
+        f.write(b"SAWR" + struct.pack("<ii", snk, snm) + struct.pack("<d", sk0)
+                + struct.pack("<%dd" % len(sdata), *sdata))
         # VARS: bank select -- the slots (program, variation, layer), their
         # classes at each key, the entries (a slot, or a layered set: each
         # layer's slot, semitones and velocities), GS's and GM 2's tables;

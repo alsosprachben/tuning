@@ -92,9 +92,20 @@ store build.
 - **Source:** Hugh de Ferranti's satsuma biwa recordings at PARADISEC. The
   access conditions say commercial enterprises may not include the data in
   models, beyond the NC licence.
-- **What derives from it:** `tonelib.BiwaProperties` (`examples/pluck_fit.py
+- **What derived from it:** `tonelib.BiwaProperties` (`examples/pluck_fit.py
   --voice=biwa`). The audio stays local and is never sent anywhere.
-- **Status:** open.
+- **Status:** CLOSED 2026-11-23 (Ben: "Approved"). The tape is no longer read;
+  every number it gave is replaced. The open strokes (Takahisa Suda's own CC BY
+  videos, INAH's CC BY concert; `examples/biwa_open.py`) were too few and too
+  roomy to fit the ring, so the instrument is physics (Ben: "Contact model. Go
+  with the physics"): the sawari simulated (`examples/sawari_contact.py`,
+  Taguti's model, Acoust. Sci. & Tech. 29(3) 2008, with the silk's measured
+  stiffness) and baked per key (`sawari_data.py`, `tonelib.SawariContact`, in
+  every engine: the SAWR export section); the silk's losses and Taguti's
+  two-resonance body fitted to Taguti & Tohnai's anechoic unshaved nut (Acoust.
+  Sci. & Tech. 22(3) 2001), the strong sawari then predicted. The bachi's knock
+  on the belly is fitted to the open strokes (credited). The release is the
+  shamisen's; the level is held at the old voice's (bank balance).
 - **Alternatives (checked 2026-11-20):** nothing open fits a model. The only
   open biwa audio is 23 s of compressed video ("Biwa intro - 2022 8 31",
   Wikimedia Commons, CC BY 3.0), enough to check the sawari buzz, not to fit
@@ -351,6 +362,11 @@ store build.
   D1-G#5, overhead mics, maker unstated).
 - **TimGM6mb** (GPL-2): one of the references in the Orchestra Hit fit. Fitted
   numbers are unlikely to be a derivative work; easy to drop from the fit.
+  DROPPED FROM THE FIT 2026-11-23 (Ben: "OK, drop it"): `examples/orchhit_fit.py`
+  no longer reads its hit (EXCLUDE), and every number of the voice, its timpani
+  and cymbal with them, was refitted on FluidR3's and GeneralUser's four
+  (score 1344 -> 1157; Ben: "Orchestra Hit is good"). It is still one of the
+  release consensus's four sets and a level reference.
   An open replacement: the US Marine Band's "Infernal Dance" from the
   Firebird (Commons, public domain as a US government recording), the passage
   the original Fairlight stab came from, though a wind-band arrangement; or a

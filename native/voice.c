@@ -707,6 +707,10 @@ static double harmonic_decay_(const VoiceSnap *v, int harmonic)
             return d + (v->wound_decay_by_force ? v->wound_decay_db * v->attack_volume : v->wound_decay_db) * w;
         return d;
     }
+    if (v->sw_on) {                             /* SawariContact: the free silk's fall */
+        double f = (double)harmonic * v->sw_f0;
+        return 10.0 * (v->sw_sigma0 + v->sw_sigma2 * f * f) / log(10.0);
+    }
     if (v->kind == 4 && v->elec && v->sp_decay) {    /* ElectricBassProperties: the string's physics */
         double slow = sp_decay(v, harmonic);
         if (v->fc_tab && harmonic <= v->n_fc && v->fc_share[harmonic - 1] < 1.0)
@@ -1297,7 +1301,14 @@ void nv_partial_decay(const VoiceSnap *v, double f0, int m, double *out)
     double dbps = nv_harmonic_decay(v, m);
     double logr = dbps > 0 ? log(db_ratio(dbps)) : 0.0;
     double a[2];
-    if (v->fc_tab) {                            /* FretContact.aftersound_partial: the string's own ring */
+    if (v->sw_on) {                             /* SawariContact.aftersound_partial: the share the strip feeds */
+        a[0] = 0.0;
+        a[1] = dbps;
+        if (m <= v->n_sw && v->sw_share[m - 1] > 0.0) {
+            a[0] = v->sw_share[m - 1];
+            a[1] = v->sw_slow[m - 1];
+        }
+    } else if (v->fc_tab) {                     /* FretContact.aftersound_partial: the string's own ring */
         a[0] = 0.0;
         a[1] = dbps;
         if (m <= v->n_fc && v->fc_share[m - 1] < 1.0) {
@@ -1472,6 +1483,55 @@ static void fc_modes(VoiceSnap *s, double frequency, double attack_volume)
     }
 #undef FCV
     s->n_fc = fc_nm;
+}
+
+/* tonelib.SawariContact's table (nv_sawari_set): [key][mode][share, fast, slow] */
+static double *SW_DATA, SW_KEY0;
+static int sw_nk, sw_nm;
+
+int nv_sawari_set(int nk, int nm, double key0, const double *data)
+{
+    if (nk < 1 || nm < 1 || nm > 96)
+        return 0;
+    size_t n = (size_t)nk * nm * 3;
+    double *d = (double *)malloc(n * sizeof(double));
+    if (!d)
+        return 0;
+    memcpy(d, data, n * sizeof(double));
+    free(SW_DATA);
+    SW_DATA = d;
+    SW_KEY0 = key0;
+    sw_nk = nk; sw_nm = nm;
+    return 1;
+}
+
+/* tonelib.sawari_modes: the note's (share, slow), linear in the key between
+   rows (a mode one row lacks taken from the other), held at the ends */
+static void sw_modes(VoiceSnap *s, double frequency)
+{
+    s->sw_f0 = frequency;
+    if (!SW_DATA) {                             /* (no table: the free silk alone) */
+        s->n_sw = 0;
+        return;
+    }
+    double key = 69.0 + 12.0 * log(frequency / 440.0) / log(2.0);
+    double kf = pymin(pymax(key - SW_KEY0, 0.0), (double)(sw_nk - 1));
+    int i = (int)kf;
+    int i1 = i + 1 < sw_nk - 1 ? i + 1 : sw_nk - 1;
+    double wk = kf - i;
+#define SWV(ii, mm, qq) SW_DATA[(((size_t)(ii)) * sw_nm + (mm)) * 3 + (qq)]
+    for (int m = 0; m < sw_nm; m++) {
+        if (SWV(i, m, 1) <= 0.0 || SWV(i1, m, 1) <= 0.0) {
+            int c = SWV(i, m, 1) > 0.0 ? i : i1;
+            s->sw_share[m] = SWV(c, m, 0);
+            s->sw_slow[m] = SWV(c, m, 2);
+        } else {
+            s->sw_share[m] = SWV(i, m, 0) + (SWV(i1, m, 0) - SWV(i, m, 0)) * wk;
+            s->sw_slow[m] = SWV(i, m, 2) + (SWV(i1, m, 2) - SWV(i, m, 2)) * wk;
+        }
+    }
+#undef SWV
+    s->n_sw = sw_nm;
 }
 
 /* ElectricBassProperties.inharmonicity_coefficient_for_frequency: from its core */
@@ -2110,6 +2170,8 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
         for (int q = s->n_reed; q < 1025; q++)
             s->reed_s[q] = 0.0;                 /* (none past this key's) */
     }
+    if (s->sw_on)                               /* SawariContact.__init__: the note's modes from its table */
+        sw_modes(s, frequency);
     if (s->kind == 4 && s->elec) {              /* an electric guitar: its fret (ElectricGuitarProperties.__init__) */
         if (s->fc_tab)                          /* FretContact.__init__: the note's modes from its table */
             fc_modes(s, frequency, s->attack_volume);
