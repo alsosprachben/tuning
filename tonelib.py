@@ -18708,27 +18708,28 @@ class MoogSynthBrass4(MoogSynthBrass2):
 
 class MoogTelephone2(SawtoothSynthProperties):
     """GS 124.1 "Telephone 2": the ELECTRONIC TONE RINGER that replaced the
-    gongs (examples/telephone2_fit.py, fitted to GeneralUser GS's own tone).
-    A ringer chip is a small synth -- an oscillator, a square LFO switching
-    its pitch up a fifth fourteen times a second, a piezo disc whose
-    resonance favours the lower tone -- so the Moog plays it: OSC 1 at the
-    key, LFO 1 a square on its pitch, the ladder a band pass for the disc.
-    C4 rings at GU's own pitch (1824 Hz), so it sounds 2.8 octaves over where
-    it is written, as the helicopter sounds under. It rings while held and
-    stops when let go, as GU's does: the cadence is the score's (GM 124)."""
+    gongs. A ringer chip is a small synth, so the Moog plays it. SINCE
+    2026-11-24 FROM THE CHIP'S DATASHEET (Motorola MC34017; GeneralUser's tone,
+    the old fit, no longer read: its origin unknown, licences.md L12): its
+    output alternates between fo/5 and fo/4 -- two tones a major third (5:4)
+    apart -- switched at fo/320, a push-pull square into a piezo disc. Of the
+    three variants Ben chose the -1 ("A"): 808 and 1010 Hz switching 12.5 times
+    a second. OSC 2 a square at the key, LFO 1 a square up the third, the
+    ladder a fixed band pass at 3 kHz for the disc (a typical small ringer's
+    resonance: not on the datasheet); C4 rings at the low tone, 1.63 octaves
+    over where it is written. It rings while held and stops when let go: the
+    cadence is the score's (GM 124)."""
     moog = True
-    sounding_octaves = 2.8013
-    # OSC 2, as LFO 1's pitch destination is on the Messenger: a saw through a
-    # band pass a fifth of an octave under the lower tone (examples/
-    # telephone2_fit.py: each tone's harmonics and their balance, 8.6 dB rms
-    # over GU's -- the upper 6.4 dB under the lower, GU's 9.8; GU's lower
-    # tone keeps more of its 2nd than one band pass can), LFO 1 a square up
-    # a fifth at 14.6 Hz, reset at each key, gone 50 ms after the key
-    messenger = dict(osc2_wave=0.5, osc1_level=0.0, osc2_level=1.0, osc2_freq=0.5, sub_level=0.0,
-                     noise_level=0.0, mode=2, kb_track=1.0, resonance=0.42, eg_amount=0.5,
-                     cutoff=0.42177, f_attack=0.0, f_decay=0.4, f_sustain=1.0, f_release=0.05,
-                     a_attack=0.0, a_decay=0.4, a_sustain=1.0, a_release=0.08,
-                     lfo1_shape=3, lfo1_dest=1, lfo1_rate=0.838703, lfo1_depth=0.750229,
+    sounding_octaves = 1.62685157788249       # (log2(808 / C4))
+    # OSC 2 a square (moog.SQUARE); LFO 1 square on its pitch, up 5:4
+    # (moog.lfo_pitch_knob, the square's full swing up) at 12.5 Hz (lfo_rate_
+    # knob), reset at each key; the ladder band pass at 3 kHz (cutoff_knob),
+    # not following the key; envelopes flat, gone 20 ms after the key
+    messenger = dict(osc2_wave=0.68, osc1_level=0.0, osc2_level=1.0, osc2_freq=0.5, sub_level=0.0,
+                     noise_level=0.0, mode=2, kb_track=0.0, resonance=0.5, eg_amount=0.5,
+                     cutoff=0.7529783947358086, f_attack=0.0, f_decay=0.4, f_sustain=1.0, f_release=0.02,
+                     a_attack=0.0, a_decay=0.4, a_sustain=1.0, a_release=0.02,
+                     lfo1_shape=3, lfo1_dest=1, lfo1_rate=0.8157592458480668, lfo1_depth=0.7050601440207506,
                      lfo1_reset=True, mod_amount=0.5)
 
 
@@ -21613,8 +21614,9 @@ class SimmonsSnareProperties(SimmonsProperties):
     filter left out of the bend's reach (VSDSX: the snare's noise VCF is not
     on the envelope). FITTED to a real Simmons snare (examples/elkit_fit.py
     --fit=ssnare: hit 36 of tarane468's Freesound pack, chosen as the one
-    GeneralUser's Elec SD is closest to). The kit's snare; the two-tone
-    ElectronicSnareProperties, fitted to GeneralUser itself, stays for an A/B."""
+    GeneralUser's Elec SD is closest to). The kit's snare. (The two-tone
+    snare fitted to GeneralUser's sample itself, kept for an A/B, was removed
+    2026-11-24 with the rest of what was fitted to its samples: licences.md L12.)"""
     # Score 42 -> 7.6, the closest fit in the kit: -10/-20/-40 dB at
     # 41/134/305 ms against the hit's 41/122/303. The fit gave its noise filter
     # half an octave of bend, which the circuit is said not to have.
@@ -21623,86 +21625,29 @@ class SimmonsSnareProperties(SimmonsProperties):
                "noise_db": -18.9, "click_db": -17.0, "click_dbs": 164.0}
 
 
-class ElectronicSnareProperties(ModeDecays, ElectricSnareProperties):
-    """Note 38 of the Electronic set ("Elec SD"). The Simmons snare, which is
-    the drum machine's snare with its body let loose: where note 40 of the
-    Standard kit is an 808 -- a crack, a body that barely drops -- a Simmons
-    pad pitch-sweeps its snare as it does its toms, and that "pew" under the
-    noise is the sound of the whole decade.
-    """
-    tension_bend_max = 0.50
-    tension_bend_slope = 0.0
-    tension_settle_cutoff = 0.4
-    # FITTED (examples/elkit_fit.py --fit=snare --target=GeneralUser) to
-    # GeneralUser GS, tuned to its 168 Hz (percussion_map), where 220 had left
-    # the body an octave up (-37 dB in the 125 Hz octave; GeneralUser -5). All
-    # but no sweep, and the wires' noise from the strike, -28.9 dB at 1 kHz
-    # RISING 4.5 an octave -- GeneralUser's snare is brightest at 4-8 kHz --
-    # falling with the drum (below: -25 dB, 105 dB/s, set by its track); and its GATE
-    # (percussion_map.KIT_GATE): GeneralUser's
-    # stops dead at 0.31 s, -32 dB, where ours rang on. Score 25 -> 17.
-    # TWO TONES, NOT A HEAD (Ben: "need more drum sound"): GeneralUser's
-    # Electronic snare is a two-oscillator voice -- 167 Hz and 234 Hz, 1.40 --
-    # the low one gone in ~100 ms (~190 dB/s), the upper one starting 15 dB
-    # under it and decaying half as fast (~100), so after 100 ms it carries
-    # the drum to the gate. Ours had the acoustic head's modes (1.59, 2.14 ...)
-    # all falling together. mode_decays are tonelib D (the amplitude falls
-    # twice that in dB/s).
-    mode_ratios = (1.0, 1.40)
-    mode_gains = (1.0, 0.126)
-    max_harmonic = 2
-    mode_decays = (110.0, 50.0)
-    tension_bend = 0.052
-    tension_settle_time = 0.058
-    decay_db = 46.82
-    strike_noise_db = tuple((round(400.0 * 2 ** (k / 3.0)),
-                             round(-25.0 + 4.5 * _log(400.0 * 2 ** (k / 3.0) / 1000.0) / _log(2.0), 1))
-                            for k in range(15))
-    strike_noise_dbs = 105.0
-    # ONE NOISE, WITH THE DRUM (Ben: "The noise stays weirdly constant over
-    # the snare's drum. They don't go together."): the acoustic snare's wire
-    # chiff, inherited, was a second noise -- a burst, then the strike's
-    # 45 dB/s left hanging under tones falling 100-190. A drum machine's noise
-    # goes through the tones' amplifier: GeneralUser's holds ~60 ms and falls
-    # ~70-80 dB/s with them.
-    chiff_volume = 0.0
-    release_valve_time = 0.020      # its gate's close (percussion_map.KIT_GATE)
-    strike_noise_len_s = 1.0
-    strike_noise_fade_s = 0.001
+class GatedSnareProperties(AcousticSnareProperties):
+    """"Gated SD" (the Electronic set's 40, the Power set's 38): the 1980s
+    GATED REVERB SNARE -- a snare in a live room, the room mics crushed by a
+    compressor so the room HOLDS instead of decaying, then a noise gate
+    slamming it shut (Townhouse Studios 1979-80, Peter Gabriel's "Intruder";
+    then the digital units' "nonlinear" programmes). The stop is the sound.
 
-
-class GatedSnareProperties(SnareDrumProperties):
-    """Note 40 of the Electronic set ("Gated SD"). An acoustic snare in a big
-    room with a noise gate on the reverb: the tail HOLDS, then stops dead.
-
-    THE STOP IS THE SOUND, and nothing here decays into it. So this is the
-    snare's own modes with the decay slowed to let the room carry, and a GATE:
-    `gate_time` is the one-shot's length instead of the eight seconds every
-    other struck voice is allowed to ring, and release_valve_time is the
-    gate's own close -- fast, but not a step, because a step is a click.
-    """
-    harmonic_decay_db = 10.0
-    release_valve_time = 0.015
-    # FITTED to GeneralUser GS (examples/elkit_fit.py --fit=gated --target=
-    # GeneralUser, then scans): THE ROOM IS THE NOISE, loud -- -12 dB at 1 kHz,
-    # flat, falling 60 dB/s into the gate -- so the top is up (ours had been
-    # -20 dB from 1 to 4 kHz) and the level falls as GeneralUser's does to the
-    # gate, within 3.8 dB rms every 50 ms (0 -7 -11 -15 -17 -20 -24 -26 dB
-    # against 0 -3 -7 -8 -14 -17 -24 -30). The search's three decay points
-    # preferred a 5 dB/s room that held flat at -10 dB to the gate. Tuned to
-    # 290 Hz (percussion_map), which keeps its body in the 250 Hz octave as
-    # GeneralUser's has: its tracker's 390 Hz is an overtone. The gate at
-    # 0.40 s, where GeneralUser's falls 35 dB.
-    decay_db = 23.33
+    SINCE 2026-11-24 FROM OUR OWN PROGRAMS (GeneralUser GS's sample, the old
+    fit, no longer read: its origin unknown, licences.md L12): OUR acoustic
+    snare (GM 38, DRSKit's, at its own 195 Hz) and the room as its strike
+    noise -- flat from 250 Hz to 11 kHz, 12 dB re the note, falling only 15
+    dB/s (the compressor), cut at gate_time over release_valve_time (fast,
+    not a step: a step clicks). Ben's of three ("A", the classic: a big flat
+    room gated at 0.40 s, against a tight 0.25 s and a huge 0.55 s)."""
+    strike_noise_db = tuple((round(250.0 * 2 ** (k / 2.0)), -12.0) for k in range(12))
+    strike_noise_dbs = 15.0
+    strike_noise_len_s = 0.45
+    strike_noise_fade_s = 0.005
     gate_time = 0.40
-    tension_bend = 0.028
-    tension_settle_time = 0.1543
-    strike_noise_db = tuple((round(400.0 * 2 ** (k / 3.0)),
-                             round(-12.0 + 0.3 * _log(400.0 * 2 ** (k / 3.0) / 1000.0) / _log(2.0), 1))
-                            for k in range(15))
-    strike_noise_dbs = 320.0
-    strike_noise_len_s = 1.0
-    strike_noise_fade_s = 0.001
+    release_valve_time = 0.015
+    # the old voice's level, the room included (its rms over the four test
+    # hits 4.75 dB over the GeneralUser-fitted one's at the acoustic's gain)
+    initial_gain = AcousticSnareProperties.initial_gain * 10.0 ** (-4.75 / 20.0)
 
 
 # ---- the Brush set (SC-55 p.70, program 40): three notes, all on the snare ---
@@ -30518,22 +30463,22 @@ class SfxRainProperties(SfxWeatherProperties):
 
 
 class SfxBurstNoiseProperties(SfxWeatherProperties):
-    """GS 125.9 "Burst Noise", fitted to GeneralUser GS's own tone (no
-    recording of the SC-55's; examples/weather_fit.py burst): a steady hiss,
-    flat from 1.6 to 6.4 kHz, and low bursts in it -- 100-400 Hz, ~1.6 a
-    second at C4 -- the weather's machinery (a noise table and grains).
-    Played from the keyboard as GS plays it, transposed whole by the key (as
-    the melodic SFX are, patch_map.melodic_sfx); held while the key is."""
+    """GS 125.9 "Burst Noise". FROM ITS NAME (2026-11-24; GeneralUser's tone,
+    the old fit, no longer read: its origin unknown, licences.md L12), Ben's
+    of three readings ("B, radio static"): a bright hiss, flat from 300 Hz to
+    8 kHz (6 dB an octave under, 12 over), and its crackle -- tiny clicks,
+    clusters of six sines across 1-8 kHz, ~25 a second, each gone in a few
+    ms -- the weather's machinery (a noise table and grains). Played from the
+    keyboard as GS plays it, transposed whole by the key (as the melodic SFX
+    are, patch_map.melodic_sfx); held while the key is."""
     one_shot = False
     transposed_from_hz = 261.6256
     breath_noise_fade_s = 0.01
-    breath_noise_db = ((51, 20.0), (101, 35.0), (202, 45.0), (404, 50.0), (808, 50.0), (1616, 48.0),
-                       (3233, 48.0), (6465, 48.0), (12931, 40.0))
-    # FITTED (examples/weather_fit.py burst): the colour within ~1 dB of GU's
-    # from 320 Hz to 8 kHz, the bursts 12 dB under where the fit's kurtosis
-    # step took them (the 127 Hz band their check: -23.6 dB against GU's -24.5)
-    breath_noise_db = ((51, 25.0), (64, 23.1), (80, 26.2), (101, 5.7), (127, -35.9), (160, 2.0), (202, 9.2), (255, 28.1), (321, 49.8), (404, 52.5), (509, 52.4), (641, 54.1), (808, 51.3), (1018, 39.4), (1283, 40.5), (1616, 40.9), (2036, 50.5), (2566, 40.7), (3233, 45.3), (4073, 46.4), (5132, 47.9), (6465, 49.2), (8146, 48.4), (10263, 41.9), (12931, -9.0))
-    grains = ((100.0, 400.0, 1.6, 46.4, 6.0, 60.0),)
+    breath_noise_db = ((51, 34.7), (64, 36.6), (80, 38.6), (101, 40.6), (127, 42.6), (160, 44.6), (202, 46.6),
+                       (255, 48.6), (321, 50.0), (404, 50.0), (509, 50.0), (641, 50.0), (808, 50.0), (1018, 50.0),
+                       (1283, 50.0), (1616, 50.0), (2036, 50.0), (2566, 50.0), (3233, 50.0), (4073, 50.0),
+                       (5132, 50.0), (6465, 50.0), (8146, 49.7), (10263, 45.7), (12931, 41.7))
+    grains = ((1000.0, 8000.0, 25.0, 58.0, 10.0, 3000.0, 1.0, 0.001, 6),)
 
 
 class SfxThunderProperties(SfxWeatherProperties):
@@ -31424,31 +31369,34 @@ class SfxSkidProperties(SfxWeatherProperties):
 
 
 class SfxStarshipProperties(SfxWeatherProperties):
-    """SFX 71, "Starship": no recording of one exists, so GeneralUser GS's
-    patch as it means it (examples/starship_ref.py: timidity plays it wrong)
-    -- a hiss through a resonant low-pass (3.8 kHz, 12.8 dB), swelling in
-    over 0.21 s, and a buzz near 2.3 kHz warbling 581 cents at 10.9 Hz, 24 dB
-    under it, fading in over 0.84 s: the sci-fi warble."""
+    """SFX 71, "Starship". No starship exists to record, and GeneralUser GS's
+    patch (the old reference, examples/starship_ref.py) is of unknown origin
+    (licences.md L12), so SINCE 2026-11-24 it is OURS: the noise table and a
+    warbling two-harmonic buzz, Ben's of three readings ("C", an engine
+    shimmer) -- a 600 Hz tone, its octave 14 dB under, warbling 80 cents at
+    5 Hz, under a bright hiss (12 dB an octave up to 2 kHz, flat to 8 kHz),
+    the hiss in over 0.15 s and the tone over 0.3 s."""
     held_texture = True               # sustains while held, its GS length the least (blockrender, live)
-    mode_ratios = (1.0, 2.0)
-    # at the noise table's scale: the buzz 23.7 dB under the hiss, as the
-    # reference has it
-    mode_gains = (51.3, 5.13)
+    # the buzz at 600 Hz, where the kit plays key 71 at 2315 (percussion_map)
+    mode_ratios = (600.0 / 2315.0, 1200.0 / 2315.0)
+    mode_gains = (51.3, 51.3 * 10 ** (-14.0 / 20.0))
     max_harmonic = 2
     decay_db = 0.0
     harmonic_decay_db = 0.0
-    attack_time = 0.84
-    breath_noise_fade_s = 0.21
+    attack_time = 0.3
+    breath_noise_fade_s = 0.15
     release_valve_time = 0.3
     release_fraction_max = None
-    starship_vibrato_cents = 581.0 / 1.4142     # the LFO's peak, as an rms
-    starship_vibrato_hz = 10.9
+    starship_vibrato_cents = 80.0 / 1.4142      # the LFO's peak, as an rms
+    starship_vibrato_hz = 5.0
 
     def voice_vibrato(self, frequency, index):
         d = 2.0 ** (self.starship_vibrato_cents * 1.4142 / 1200.0) - 1.0
         return (d, self.starship_vibrato_hz, 0.0)
-    # FITTED (examples/weather_fit.py): colour rms 4.1 dB to the recording
-    breath_noise_db = ((51, -29.9), (64, -40.7), (80, -28.2), (101, -28.4), (127, 2.3), (160, -42.1), (202, 1.0), (255, 4.7), (321, -23.8), (404, 29.3), (509, -33.7), (641, 2.4), (808, 14.5), (1018, 4.9), (1283, -128.5), (1616, 36.5), (2036, 30.2), (2566, 49.4), (3233, 54.5), (4073, 57.4), (5132, 43.9), (6465, 35.9), (8146, 16.7), (10263, 21.2), (12931, -9.7))
+    breath_noise_db = ((51, -15.5), (64, -11.6), (80, -7.7), (101, -3.7), (127, 0.3), (160, 4.3), (202, 8.3),
+                       (255, 12.3), (321, 16.3), (404, 20.3), (509, 24.3), (641, 28.3), (808, 32.3), (1018, 36.3),
+                       (1283, 40.3), (1616, 44.3), (2036, 48.0), (2566, 48.0), (3233, 48.0), (4073, 48.0),
+                       (5132, 48.0), (6465, 48.0), (8146, 47.7), (10263, 43.7), (12931, 39.7))
     grains = ()
 
 
@@ -32584,33 +32532,25 @@ class Sfx2SealProperties(SfxThroatProperties):
 
 
 class SfxHighQProperties(TR808Properties):
-    """SFX 39, "High Q": a resonant filter snapped shut -- a sine swept
-    down from ~3.2 kHz toward ~100 Hz in a few tens of ms, exponentially in
-    pitch (the 808's bend)."""
-    # set from GeneralUser's track (examples/sfx808_fit.py's fitter tracks
-    # pitch in 20 ms windows, which a 4.5-octave fall in 45 ms outruns): ln(f /
-    # 100 Hz) falls 0.85x every 4 ms from 3.24 kHz -- 5 octaves, 24.6 ms --
-    # the level 6 dB down over its 56 ms, where the sample ends (the gate)
-    tr808 = {"tune_hz": 100.0, "decay_s": 0.57, "bend_oct": 5.3342, "bend_ms": 31.6061,
-             "h2_db": -29.1, "h3_db": -34.0}
-    slow_share = 0.0992258
-    slow_dbs = 45.0704
-    click_cal_db = 0.663206
-    click_dbs = 660.335
-    click_stroke_slope = 0.186949
-    chiff_volume = 1.38128
-    chiff_width = 0.0619027
-    chiff_bandwidth = 0.0754977
-    sustain_jitter = 0.0571051
-    band_trim_db = ((177, -5.3), (354, 1.1), (707, -2.5), (1414, 0.8), (2828, 0.5), (5657, 1.0), (11314, 4.5))
-
+    """SFX 39, "High Q": a resonant filter snapped shut -- a high-Q filter
+    struck, its cutoff falling: a sine swept down exponentially in pitch (the
+    808's resonator and bend). FROM ITS NAME (2026-11-24; GeneralUser's sample
+    of it no longer read -- its origin unknown, licences.md L12), by Ben's ear
+    of three ("A"): 2.5 kHz down 4 octaves in 40 ms, ringing 0.3 s, a trace of
+    harmonics; its level the old one's (the loudest 150 ms)."""
+    tr808 = {"tune_hz": 2500.0 / 16, "tone_db": 1.32, "decay_s": 0.30, "bend_oct": 4.0, "bend_ms": 40.0,
+             "h2_db": -40.0, "h3_db": -46.0}
 
 class SfxSquareClickProperties(TR808Properties):
-    """SFX 44, "Square Click": one square pulse, 2.7 ms -- a click and no
-    tone (the 808's click, alone)."""
-    tr808 = {"tune_hz": 1000.0, "tone_db": -100.0, "decay_s": 0.01, "click_db": 1.7549,
-             "click_dbs": 4198.5793, "click_tilt": -3.9428, "click_hp_hz": 464.517,
-             "click_lp_hz": 8132.4373}
+    """SFX 44, "Square Click": a click and no tone (the 808's click, alone).
+    FROM ITS NAME (2026-11-24; GeneralUser's sample of it no longer read, its
+    origin unknown, licences.md L12): the engine's click at the shortest it
+    renders faithfully (~10 ms: shorter, its band-limited noise loses the low
+    bands' energy -- 3 dB a halving to 10 ms, then -30 dB by 1 ms), flat
+    between its coupling's 150 Hz and 12 kHz (Ben: the shortest noise click);
+    its level the old one's (the loudest 150 ms)."""
+    tr808 = {"tune_hz": 1000.0, "tone_db": -100.0, "decay_s": 0.01, "click_db": 2.46, "click_dbs": 6000.0,
+             "click_tilt": 0.0, "click_hp_hz": 150.0, "click_lp_hz": 12000.0}
 
 
 

@@ -71,8 +71,9 @@ SOURCES = [{'id': 'iowa-mis',
   'licence': 'GeneralUser GS licence',
   'licence_url': 'https://github.com/mrbumpy409/GeneralUser-GS/blob/main/documentation/LICENSE.txt',
   'how': 'levels and references',
-  'voices': 'the bank balance and release times; hits picked for the Electronic, Orchestra and Room sets; the '
-            'Orchestra Hit',
+  'voices': 'the bank balance, release times and the SFX set\'s held lengths; the Orchestra Hit (one of two '
+            'reference sets); the Brush Swirl\'s envelope; LiveRoom; the Electronic toms\' pitches and gates; the '
+            'Simmons hits picked as closest to its',
   'issue': 'L12',
   'evidence': 'documentation/LICENSE.txt (fetched 2026-11-20): "You may use GeneralUser GS without restriction for '
               'your own music creation, private or commercial ... feel free to use it in your software projects"; '

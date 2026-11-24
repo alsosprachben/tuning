@@ -385,9 +385,26 @@ store build.
   the original Fairlight stab came from, though a wind-band arrangement; or a
   tutti chord chopped from the Marine Chamber Orchestra's Beethoven 1 (public
   domain, strings included).
-- **GeneralUser GS**: its licence says some samples' origins are unknown. It
-  sets levels (fine); where a voice was fitted to one of its samples (the
-  Orchestra Hit, the Simmons hit picks) check that sample.
+- **GeneralUser GS**: its licence says some samples' origins are unknown
+  (Collins reprograms presets to match Roland's; no per-sample sources). Our
+  rule (Ben, 2026-11-24): recordings others made of an instrument are fine,
+  raw samples lifted from a unit are not -- and GeneralUser's cannot be told
+  apart. AUDITED 2026-11-24.
+  REFITTED, nothing of GeneralUser's left (2026-11-24, each by Ben's ear):
+  High Q and Square Click (from their names, on the TR-808 engine), Telephone
+  2 (the MC34017 ringer chip's datasheet: 808/1010 Hz, 12.5 Hz), Burst Noise
+  (radio static), the Starship (our noise and buzz) and the Gated SD (our
+  acoustic snare and a gated room); the two-tone Electronic snare fitted to
+  its sample, unused, removed. Their fit scripts retired (sfx808_fit.py,
+  telephone2_fit.py, starship_ref.py; weather_fit.py's burst and starship,
+  elkit_fit.py's gated and snare).
+  STILL READ, for the lawyer -- measurements of its samples, no audio:
+  levels (patch_map's trims, the kits' per-key gains, release times); the
+  Orchestra Hit (one of the fit's two reference sets); the Brush Swirl's
+  envelope; LiveRoom (two numbers); the Electronic toms' pitches and gates;
+  the SFX set's gesture timings and held lengths (percussion_map.KIT_GATE);
+  the Simmons hits chosen as closest to its (the voices fitted to the real
+  Simmons takes).
 - **VSCO 2 CE's upright piano** (Ivy Audio): CC0 through Versilian's grant
   (the repo's LICENSE is CC0; Info.txt: "Bearer is granted right to
   redistribute this sample set by Versilian Studios LLC"; Readme: "permitted

@@ -149,8 +149,8 @@ def show(label, m):
 GROUPS = {
     "toms":  ("ElectronicTomProperties", (41, 45, 50)),
     "kick":  ("ElectronicKickProperties", (36,)),
-    "snare": ("ElectronicSnareProperties", (38,)),
-    "gated": ("GatedSnareProperties", (40,)),
+    # (snare: the two-tone snare fitted to GeneralUser, removed 2026-11-24, licences.md L12)
+    # (gated: retired 2026-11-24 -- our acoustic snare and a gated room now, licences.md L12)
 }
 # the kit's tuning of these notes, x: the sets' median pitch over ours. The
 # kick ends at 94, 51 and 47 Hz (ours 55); the snare starts at 133, 168 and

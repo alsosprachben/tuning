@@ -21,6 +21,10 @@ them by their generators:
 The mod envelope's slow terms (an octave up and +697 cents of cutoff over 16
 s) move it under 80 cents in the 1.5 s played, and are left out.
 """
+
+# RETIRED 2026-11-24 (licences.md L12): the Starship is our own (tonelib).
+raise SystemExit("starship_ref: retired 2026-11-24 -- the Starship no longer reads GeneralUser's patch")
+
 import os
 import struct
 import sys

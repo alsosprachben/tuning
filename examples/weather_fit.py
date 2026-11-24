@@ -48,7 +48,8 @@ VOICES = {
     # A MELODIC VARIATION (its key a (program, bank, note)), against
     # GeneralUser GS's own tone on it held HOLD seconds (gu_take): no
     # recording of the SC-55's exists
-    "burst":   ("SfxBurstNoiseProperties", (125, 9, 60), "GU:125:9:60", (100, 400)),
+    # (burst: retired 2026-11-24 -- GeneralUser's tone, of unknown origin, no
+    # longer read; the voice is from its name, licences.md L12)
     # THE VEHICLES (63-69): read from a stretch of the recording (SEGMENT), the
     # crash whole (SHORT); the train's FLAC decoded by sox into SCRATCH
     "engine":  ("SfxEngineProperties", 63, "engine/433584__jackthemurray__car-starting-and-accelerating.wav", None),
@@ -64,7 +65,8 @@ VOICES = {
                 None),
     # no recording: GeneralUser's patch as it means it, built by
     # examples/starship_ref.py into a scratch WAV (load, below)
-    "starship": ("SfxStarshipProperties", 71, "STARSHIP", None),
+    # (starship: retired 2026-11-24 -- GeneralUser's patch no longer read; the
+    # voice is our own, licences.md L12)
     # THE REST (39-75): a blast, a turntable, a hinge, a rifle
     "explosion": ("SfxExplosionProperties", 75, "explosion/251401__felixblume__dynamite-explosion-in-the-mountain.wav",
                   None),

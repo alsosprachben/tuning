@@ -14,6 +14,11 @@ disc whose resonance favours the lower tone -- a small synth, so the Moog
 plays it: OSC 2, LFO 1 square on the pitch, the ladder as BAND PASS standing
 in for the disc.
 """
+
+# RETIRED 2026-11-24 (licences.md L12): GeneralUser GS's tone is of unknown
+# origin; Telephone 2 is the MC34017 datasheet's ringer (tonelib.MoogTelephone2).
+raise SystemExit("telephone2_fit: retired 2026-11-24 -- the voice is the MC34017's (licences.md L12)")
+
 import json
 import os
 import subprocess

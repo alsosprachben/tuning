@@ -18,6 +18,12 @@ set and at GU's samples: the High Q as timidity plays it on its key (it
 plays this one right), the Square Click read from the SF2 (130 samples, no
 key tracking).
 """
+
+# RETIRED 2026-11-24 (licences.md L12): GeneralUser GS's samples of these
+# sounds are of unknown origin; High Q and Square Click are built from their
+# names, by Ben's ear (tonelib.SfxHighQProperties, SfxSquareClickProperties).
+raise SystemExit("sfx808_fit: retired 2026-11-24 -- the voices are from their names (licences.md L12)")
+
 import os
 import sys
 import tempfile
