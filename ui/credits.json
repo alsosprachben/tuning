@@ -481,16 +481,6 @@
 },
 {
 "group": "Winds",
-"title": "Short flugelhorn excerpt.ogg; Trumpet playing short excerpt for comparison with flugelhorn.ogg",
-"author": "Ovinus Real",
-"url": "https://commons.wikimedia.org/wiki/File:Short_flugelhorn_excerpt.ogg",
-"licence": "CC BY-SA 4.0",
-"licence_url": "https://creativecommons.org/licenses/by-sa/4.0/",
-"how": "measured",
-"voices": "Flugel Horn (a check)"
-},
-{
-"group": "Winds",
 "title": "Bach - Partita For Solo Flute - Traverso - 3. Sarabande.ogg",
 "author": "Alex Murray (traverso)",
 "url": "https://commons.wikimedia.org/wiki/File:Bach_-_Partita_For_Solo_Flute_-_Traverso_-_3._Sarabande.ogg",
@@ -1046,16 +1036,6 @@
 "url": "https://freesound.org/people/msx2plus/sounds/678381/",
 "licence": "CC0",
 "licence_url": "https://creativecommons.org/publicdomain/zero/1.0/",
-"how": "fitted",
-"voices": "Taisho Koto"
-},
-{
-"group": "Strings from around the world",
-"title": "Taishogoto",
-"author": "Arthur Chanson",
-"url": "https://www.pianobook.co.uk/packs/taishogoto/",
-"licence": "Pianobook terms",
-"licence_url": "https://www.pianobook.co.uk/terms-conditions/",
 "how": "fitted",
 "voices": "Taisho Koto"
 },

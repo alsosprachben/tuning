@@ -180,8 +180,12 @@ store build.
   "Breakup" over a plain piston; the percussion's decay from the service
   manuals' circuit (C31 0.33 uF, R57/R58), its levels by Ben's ear. The
   Hammond L102 credit gone; L9 closed with it.
-- **Status:** open, and the largest issue by count. Each samplist can grant
-  permission; otherwise each voice needs another source.
+- **Status:** CLOSED 2026-11-22, and the last remnant 2026-11-24: the Taisho
+  Koto's top, trio detune and pick sweep had stayed on Chanson's pack after its
+  2026-11-20 refit, and its drone stop on the pack's drone takes -- now the top
+  and detune on msx2plus's CC0 take, the sweep by Ben's ear, the drone from the
+  voice's own laws (A/B approved: "Sounds good"); the Pianobook credit gone. No
+  voice reads a Pianobook library. The record of each refit:
   - **Refitted 2026-11-20** (A/Bs in ~/Music/licence_refits): Taisho Koto
     to msx2plus's taishogoto (CC0) and the harpsichord's lute stop back to
     VCSL's English Lute row (CC0) -- both APPROVED by Ben's ear. The

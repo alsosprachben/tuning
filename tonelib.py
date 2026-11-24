@@ -30957,18 +30957,20 @@ class GuitarFeedbackProperties(Feedback, ElectricGuitarProperties):
 class TaishoKotoProperties(TwelveStringProperties):
     """GS 107.8 "Taisho Koto": the taishogoto, the keyed zither of 1912 -- a
     typewriter's row of keys stopping its strings on frets, the right hand
-    picking -- fitted to Arthur Chanson's soprano (Pianobook, Taishogoto;
-    sources.md; examples/pluck_fit.py --voice=taisho --pianobook). REFITTED,
-    2026-11-20, to msx2plus's "multisampled taishogoto" (Freesound 678381,
-    CC0; every note D3-D#5, each left 5-7 s), the Pianobook set's terms
-    forbidding a model sold as an instrument (licences.md L7): the low
-    string's tilt 15.83 -> 12.16 dB on the 0.15 s ladder, the top as it
-    stood; the decay on h1-h6 12.81 -> 11.35 dB/s.
+    picking -- fitted to msx2plus's "multisampled taishogoto" (Freesound
+    678381, CC0; every note D3-D#5, each left 5-7 s; examples/pluck_fit.py
+    --voice=taisho). Nothing of the Pianobook set it first stood on (Arthur
+    Chanson's soprano, whose terms forbid a model sold as an instrument:
+    licences.md L7) is read: refitted on msx2plus's takes 2026-11-20 (the
+    decay, the low string's tilt, the trio's level, the box's corner) and
+    2026-11-24 (the top, the trio's detune; the drone from the voice's own
+    laws, TaishoDroneProperties).
 
     EVERY KEY STOPS A COURSE: one string at the note and THREE an octave over
     it, as the 12-string's low courses pair a string with its octave (E5 in
     the pack sounds 330 and 661 Hz at one level; its upper lines a few cents
-    apart). Written at the low string, as the 12-string is. Picked: its
+    apart: their beating on msx2plus's takes, octave_trio_cents). Written at
+    the low string, as the 12-string is. Picked: its
     plectrum (tonelib.Plectrum) the 12-string's until fitted."""
     course_split = 200                  # every note an octave course
     octave_partner_gain = 1.0           # the trio's sum re the low string
@@ -30977,17 +30979,23 @@ class TaishoKotoProperties(TwelveStringProperties):
     decay_db = 5.105
     harmonic_decay_db = 1.485
     decay_register_slope = 0.546
-    # ITS TOP (pluck_fit --fit=bright --top): 13.2 dB rms over the 0.15 s
-    # ladders, the rest each single pluck's own point (one take a note)
-    tonal_dampening = 0.85
-    bore_corner_hz = 2500.0
-    bore_order = 2.5
+    # ITS TOP (pluck_fit --fit=bright --top on msx2plus's takes, 2026-11-24;
+    # the order by grid with it): 11.7 dB rms over the 0.15 s ladders, the
+    # rest each single pluck's own point (one take a note) -- the order nearly
+    # free (1.4-4.0 within 0.3 dB)
+    tonal_dampening = 0.97
+    bore_corner_hz = 5000.0
+    bore_order = 1.4
     # A SMALL BOX: the low string's fundamental radiated weakly (pluck_fit
-    # --fit=bright: E5's 3rd 11 dB over its 1st, the trio 14)
+    # --fit=bright --course on msx2plus's takes, 12.3 dB rms: the corner, the
+    # trio's level and the low string's tilt below)
     bell_cutoff_hz = 600.0
     bell_order = 2.5
-    # the trio's three strings, cents off the octave (lines -3, 0, +2.5)
-    octave_trio_cents = (-3.0, 0.0, 2.5)
+    # the trio's three strings, cents off the octave: their octave partial's
+    # beating on msx2plus's takes (pluck_fit's staged plucks; the clear ones,
+    # depth >= 0.8: a median 2.55 cents, 0.7-7) -- neighbours ~2.55 cents
+    # apart, unevenly, so the beats do not lock
+    octave_trio_cents = (-2.7, 0.0, 2.4)
 
     # THE DRONE, A STOP ON THE WHEEL (Ben: "like we do for bagpipe. As a stop,
     # that can be selected by moving up modulation"): the open G2 string the
@@ -31017,14 +31025,14 @@ class TaishoKotoProperties(TwelveStringProperties):
     sympathetic_gain = 0.7
 
     # THE PICK SWEEPS THE COURSE (Ben: "some of the plucks are sweeps of
-    # octaves"): timed on all 81 takes, the trio starts with the low string in
-    # about half (0-7 ms) and 15-60 ms after it in the rest -- the octave heard
-    # arriving -- the high notes most often. Each key its own draw from that
-    # (fixed by the pitch, as the telephone's strokes are), the three upper
-    # strings crossed sweep_step_s apart. (A few takes go the other way, the
-    # trio ~10 ms first; not modelled.)
+    # octaves"), a playing gesture set BY EAR (2026-11-24, of three: "Go with
+    # C"): half the plucks swept, the trio 15-50 ms after the low string -- the
+    # octave heard arriving -- the rest together, 0-8 ms, as every pluck of
+    # msx2plus's CC0 takes lands (median 2.7 ms). Each key its own draw (fixed
+    # by the pitch, as the telephone's strokes are), the three upper strings
+    # crossed sweep_step_s apart.
     course_stagger_s = 0.0
-    sweep_together_s = (0.0, 0.007)
+    sweep_together_s = (0.0, 0.008)
     sweep_swept_s = (0.015, 0.05)
     sweep_share = 0.5
     sweep_step_s = 0.002
@@ -31065,30 +31073,27 @@ class TaishoKotoProperties(TwelveStringProperties):
 
 class TaishoDroneProperties(Plectrum, SteelGuitarProperties):
     """The taishogoto's DRONE: an open G2 string (98 Hz) the keys never stop,
-    on the same small box -- its takes (Drone_Mic_*, 24 strokes, ringing 7-12
-    s) all G2's harmonics, its own fundamental all but silent, the 4th the
-    strongest. Struck with the melody or ringing in sympathy with it as the
-    wheel selects (TaishoKotoProperties.drone_stops). Fitted by
-    examples/pluck_fit.py --voice=taishodrone."""
-    # ITS DECAY (--fit=decay --nh=8): 3.4 dB/s rms over the 24 strokes
-    decay_db = 3.929
-    harmonic_decay_db = 1.001
-    decay_register_slope = 0.9166
-    # THE MIC HEARS LITTLE UNDER 400 Hz of it (its 2nd, 196 Hz, near silent
-    # there, the strongest on the pickup): the box's corner higher for this
-    # string, the steel guitar's trim cleared -- the colour within ~10 dB of
-    # the takes' from 300 Hz to 10 kHz (806 and 2031 Hz the outliers)
-    bell_cutoff_hz = 900.0
-    bell_order = 4.0
+    on the same small box. Struck with the melody or ringing in sympathy with
+    it as the wheel selects (TaishoKotoProperties.drone_stops). SINCE
+    2026-11-24 FROM THE VOICE'S OWN LAWS (no recording of it is open: the
+    Pianobook drone takes it was fitted to are no longer read, licences.md
+    L7): the same string's decay law at its pitch, the same box -- whose
+    corner leaves its own fundamental all but silent (~39 dB under at 98 Hz),
+    its 2nd and up carrying it -- and the same top, all fitted on msx2plus's
+    CC0 takes (TaishoKotoProperties)."""
+    decay_db = TaishoKotoProperties.decay_db
+    harmonic_decay_db = TaishoKotoProperties.harmonic_decay_db
+    decay_register_slope = TaishoKotoProperties.decay_register_slope
+    bell_cutoff_hz = TaishoKotoProperties.bell_cutoff_hz
+    bell_order = TaishoKotoProperties.bell_order
     body_trim_db = ()
-    tonal_dampening = 0.97
-    bore_corner_hz = 9000.0
-    bore_order = 2.5
+    tonal_dampening = TaishoKotoProperties.tonal_dampening
+    bore_corner_hz = TaishoKotoProperties.bore_corner_hz
+    bore_order = TaishoKotoProperties.bore_order
     pick_noise_db = 0.0
     pick_noise_hi_hz = 7000.0
     pick_noise_dbs = 400.0
     pick_slope_db = 0.0
-
 
 class UkuleleProperties(Plectrum, NylonGuitarProperties):
     """GS 24.8 "Ukulele": Ben's own, a professional Luna (concert size, he

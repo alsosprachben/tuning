@@ -585,18 +585,6 @@ SOURCES = [{'id': 'iowa-mis',
   'evidence': 'Zenodo API record 1286570 (v3, 2018-06-10): cc-by-4.0, md5 f7b33b763187be309631a65d09402c99; '
               'snapshot ~/Documents/refs/csd_v3/record_1286570.json (v5 is NC, not used)',
   'match': ['Choral\\ Singing\\ Dataset']},
- {'id': 'commons-flugelhorn-pair',
-  'group': 'Winds',
-  'title': 'Short flugelhorn excerpt.ogg; Trumpet playing short excerpt for comparison with flugelhorn.ogg',
-  'author': 'Ovinus Real',
-  'url': 'https://commons.wikimedia.org/wiki/File:Short_flugelhorn_excerpt.ogg',
-  'licence': 'CC BY-SA 4.0',
-  'licence_url': 'https://creativecommons.org/licenses/by-sa/4.0/',
-  'how': 'measured',
-  'voices': 'Flugel Horn (a check)',
-  'evidence': 'Commons API (fetched 2026-11-20): CC BY-SA 4.0; tonelib.FlugelhornProperties: read as a check, Ben '
-              'chose the Pianobook fit',
-  'match': ['Ovinus\\ Real']},
  {'id': 'commons-traverso',
   'group': 'Winds',
   'title': 'Bach - Partita For Solo Flute - Traverso - 3. Sarabande.ogg',
@@ -1234,25 +1222,6 @@ SOURCES = [{'id': 'iowa-mis',
               'Commons 0; "recordings of every note on a taishogoto". Downloaded 2026-11-20 to '
               '~/Documents/refs/freesound/taishogoto_msx2plus/.',
   'match': ['msx2plus']},
- {'id': 'pb-taishogoto',
-  'group': 'Strings from around the world',
-  'title': 'Taishogoto',
-  'author': 'Arthur Chanson',
-  'url': 'https://www.pianobook.co.uk/packs/taishogoto/',
-  'licence': 'Pianobook terms',
-  'licence_url': 'https://www.pianobook.co.uk/terms-conditions/',
-  'how': 'fitted',
-  'voices': 'Taisho Koto',
-  'issue': 'L7',
-  'evidence': 'https://www.pianobook.co.uk/terms-conditions/ (EULA, fetched 2026-11-20) s.5: licence only "to use '
-              'the download Sound File(s) only within your own newly-created sound recording(s) and/or '
-              'performances"; "expressly forbids resale or other distribution of the Products or their derivatives, '
-              'either as they exist in the library, reformatted ..., or mixed, combined, filtered, re-synthesised or '
-              'otherwise edited, for use as sounds, multi-sounds, samples, multi-samples, sound sets, programmes or '
-              'patches in a sampler, microchip, computer or any sample playback device"; "Products may not be used '
-              'in or in relation to any competitive products that are sold or relicensed to any third parties." FAQ: '
-              'forbidden "to sell or redistribute the sample libraries". Pack readme has no licence of its own.',
-  'match': ['Arthur\\ Chanson']},
  {'id': 'yt-dchucksster-iktara',
   'group': 'Strings from around the world',
   'title': 'Iktara',
