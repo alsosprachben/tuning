@@ -321,7 +321,16 @@ store build.
 ### L10. No licence stated (all rights reserved by default)
 
 - **Debain harmonium** (Jean-Pierre Silvestre's Hauptwerk set): the reed
-  organ's registers (GS 20). His address is in the set's PDF; ask him.
+  organ's registers (GS 20). CLOSED 2026-11-23 (Ben: "Sounds great"): every
+  number it gave is replaced from physics. The reed is simulated
+  (`examples/freereed_sim.py`: Millot & Baumann's free reed, St Hilaire's
+  drive, checked against Puranik & Scavone's measured harmonium reed and
+  Cottingham's reed-organ measurements); the stops are built as Mustel's
+  *L'Orgue-Expressif ou Harmonium* (1903, public domain) describes them
+  (`examples/harmonium_stops.py`) and baked (`examples/harmonium_bake.py`:
+  series, speech, level); the celeste is Mustel's own +/- beats; the tremolo
+  is a bellows, its rate Ben's by ear. The foundation stays donyaquick's (CC0).
+  `examples/debain_registers.py` is retired and its credit removed.
 - **Aalto clavinet** recordings: CLOSED 2026-11-22. The Clavinet (GM 7)
   rebuilt from the papers' published measurements of one D6 (EURASIP 2013,
   CC BY; ICMC 2011; DAFx-12: examples/clav_published.py) -- stiffness table,
@@ -343,8 +352,8 @@ store build.
   used for GM 20), elankford's Yamaha pump organ (CC BY 3.0, black keys).
   Best: ask Silvestre (or Grabowski) for a written grant for fitted numbers;
   else fit the registers from their documented layouts with the CC0 reeds.
-- **Status:** open. Low risk for measured numbers, but a written yes is
-  cheap to ask for.
+- **Status:** CLOSED 2026-11-23: every item above is closed (the clavinet
+  and the drum machines 2026-11-22, the harmonium 2026-11-23).
 
 ### L11. TR-909 (Rob Roy / Jason Baker set) — CLOSED 2026-11-22
 

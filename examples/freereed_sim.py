@@ -157,6 +157,17 @@ PALLET_OPEN_SHARP_S = 0.004
 # fluctuations on the tongue, a share of the pressure drop across it (rms;
 # low-passed at 10 kHz), seeding the growth the way a smooth simulation can't
 TURB_REL = 0.03              # (no measured level found: 3% gives Cottingham & Wolff's few irregular first cycles)
+# THE TREMOLO (EB1911, "Harmonium": "small bellows" that work the wind near
+# the reeds, "which increase the velocity of the pulsation according to
+# pressure"): a spring-loaded bellows fluttering the reeds' wind, its rate
+# rising with the pressure (the wind's stiffness added to its spring's:
+# rate = TREMOLO_HZ sqrt((1 + p/TREMOLO_P_K) / (1 + TREMOLO_REF_PA/TREMOLO_P_K))),
+# swinging TREMOLO_DEPTH of it. No rate is published, and no open recording
+# has it drawn: TREMOLO_HZ is Ben's, by ear. 0 = the stop off
+TREMOLO_HZ = 0.0
+TREMOLO_REF_PA = 700.0
+TREMOLO_P_K = 700.0
+TREMOLO_DEPTH = 0.10
 OPEN_END_LOSS = 0.98         # the outlet's reflection magnitude (radiation takes the rest)
 SR = 48000 * 8
 LAST_P1 = 0.0
@@ -256,6 +267,7 @@ def simulate(f0, p0, secs=1.0, cell=True, attack_s=0.02, out_sr=48000, vel=None)
     well = WELL_DEPTH_M * W * L if WELL_DEPTH_M else CHEST_M3
     m_tot = BRASS_RHO * W * t * L
     rest_gap = REST_RATIO * L
+    trem_hz = TREMOLO_HZ * np.sqrt((1.0 + p0 / TREMOLO_P_K) / (1.0 + TREMOLO_REF_PA / TREMOLO_P_K))
     open_s = PALLET_OPEN_S if vel is None else \
         PALLET_OPEN_GENTLE_S * (PALLET_OPEN_SHARP_S / PALLET_OPEN_GENTLE_S) ** min(max(vel, 0.0), 1.0)
     rest = (REST_RATIO * L + 0.5 * t) if REST_SIDE > 0 else -(REST_RATIO * L + 0.5 * t + PLATE_M)
@@ -292,6 +304,8 @@ def simulate(f0, p0, secs=1.0, cell=True, attack_s=0.02, out_sr=48000, vel=None)
     for i in range(n):
         ramp = 1.0 if PALLET_STEP else (min(1.0, i * dt / attack_s) if attack_s > 0 else 1.0)
         P = p0 * ramp
+        if TREMOLO_HZ > 0.0:
+            P *= 1.0 + TREMOLO_DEPTH * np.sin(2.0 * np.pi * trem_hz * i * dt)
         # pressure in the cell at the reed: what comes back plus what the flow makes
         if cell:
             back = bwd[wi]

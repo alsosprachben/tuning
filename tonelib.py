@@ -8996,6 +8996,11 @@ class ReedOrganFreeProperties(FreeReedProperties):
     stop_word_ccs = (43, 44, 45)
     # Registers 1 in both halves: the plain 8-foot, what GM 20 has always been.
     default_stops = (1 << 0) | (1 << 4)
+    # ITS SPEECH, simulated (examples/harmonium_bake.py): the tongue's rise
+    # 10-90 % in cycles of the note, h4's lag -- the real harmonium's speech
+    # (donyaquick's, median 140 ms), not the 3 cycles it inherited
+    speech_cycles = 57.9
+    speech_harmonic_exp = 0.00
     # THE 4-FOOT IS TUNED REED BY REED, NOT TO THE OCTAVE: donyaquick's
     # harmonium (sources.md "Organs and free reeds") plays an 8' and a 4'
     # together -- its even harmonics swing 5-13 dB where its odd ones hold to
@@ -9027,10 +9032,14 @@ class ReedOrganFreeProperties(FreeReedProperties):
 class HarmoniumBourdonProperties(ReedOrganFreeProperties):
     """2 Bourdon, 16-foot: dark and weighty, the double diapason under the
     foundation."""
+    # FROM ITS CONSTRUCTION (examples/harmonium_bake.py, 2026-11-23: Mustel's
+    # stops simulated, harmonium_stops.STOPS['Bourdon']; the Debain's no longer
+    # read, licences.md L10): its difference from the simulated foundation on
+    # ours
     mode_gains_points = (
-        (41.2, (0.79087, 0.78627, 1.00000, 0.70042, 0.90987, 0.18211, 0.62993, 0.30076, 0.60859, 0.14455, 0.50256, 0.73787, 0.17727, 0.15111, 0.04326, 0.06509, 0.02700, 0.08807, 0.01769, 0.18450, 0.23182, 0.31678, 0.11026, 0.10729, 0.09048, 0.09183, 0.08908, 0.09111, 0.08042, 0.07478, 0.07110, 0.06660)),
-        (73.4, (0.29507, 0.37948, 0.45948, 0.18972, 0.29933, 0.20004, 0.49534, 0.35187, 1.00000, 0.24254, 0.26426, 0.58623, 0.14519, 0.22876, 0.30671, 0.17663, 0.12502, 0.14289, 0.17634, 0.10010, 0.09128, 0.08945, 0.12355, 0.12040, 0.11704, 0.11349, 0.10472, 0.09450, 0.09139, 0.08562, 0.07798, 0.07238)),
-        (130.8, (0.23038, 0.48421, 0.36515, 0.08104, 0.20091, 0.06326, 0.22368, 0.23329, 0.16764, 0.05971, 0.17588, 1.00000, 0.03183, 0.03039, 0.09221, 0.02044, 0.01805, 0.01636, 0.01524, 0.01429, 0.01395, 0.01366, 0.01307, 0.01241, 0.01169, 0.01110, 0.01035, 0.00961, 0.00871, 0.00801, 0.00743, 0.00687)),
+        (41.2, (1.00000, 0.89727, 0.69656, 0.67782, 0.38629, 0.45945, 0.48200, 0.24047, 0.21508, 0.17970, 0.16979, 0.18512, 0.14726, 0.13834, 0.15665, 0.15265, 0.10285, 0.12276, 0.11690, 0.12668, 0.12706, 0.07745, 0.07417, 0.07366, 0.05603, 0.05941, 0.06844, 0.05569, 0.06071, 0.05872, 0.05491, 0.05009)),
+        (73.4, (1.00000, 0.93409, 0.75224, 0.71945, 0.53383, 0.40273, 0.22292, 0.25213, 0.19497, 0.22742, 0.19598, 0.17960, 0.18958, 0.15396, 0.11393, 0.13281, 0.09317, 0.10353, 0.08628, 0.07868, 0.12198, 0.08392, 0.06913, 0.09617, 0.07601, 0.06200, 0.09708, 0.08451, 0.05657, 0.06151, 0.05290, 0.04811)),
+        (130.8, (1.00000, 0.94789, 0.77355, 0.63089, 0.58542, 0.39500, 0.24302, 0.26333, 0.19335, 0.14798, 0.20052, 0.15200, 0.20209, 0.12951, 0.04350, 0.07781, 0.07203, 0.06335, 0.14362, 0.09137, 0.05558, 0.13257, 0.08022, 0.03748, 0.13050, 0.08047, 0.05927, 0.32492, 0.11485, 0.11543, 0.04007, 0.02968)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the top's)
     mode_gains_low = None
@@ -9038,22 +9047,25 @@ class HarmoniumBourdonProperties(ReedOrganFreeProperties):
     bore_corner_hz = 0.0
     # its own speech and decay, not the host's (blockrender's rank_is_pipe)
     rank_is_pipe = True
-    # LEVEL: the Debain's own balance -- +0.9 dB re its Cor anglais on the same
-    # keys (debain_registers.py) -- held against ours
-    initial_gain = 0.0623007
-    # ITS SPEECH, fitted on the Debain's attack (debain_registers.py)
-    speech_cycles = 36.0
-    speech_harmonic_exp = -0.3
+    # LEVEL: its simulated level re the foundation, held on our renders
+    initial_gain = 0.0482365
+    # ITS SPEECH, simulated: the tongue's rise 10-90 %% in cycles of the note
+    speech_cycles = 42.9
+    speech_harmonic_exp = 0.00
     attack_time = 0.012
 
 
 class HarmoniumClarinetteProperties(ReedOrganFreeProperties):
     """2 Clarinette, treble 16-foot: dark and covered. Not hollow -- see above:
     that is the cavity this model lacks."""
+    # FROM ITS CONSTRUCTION (examples/harmonium_bake.py, 2026-11-23: Mustel's
+    # stops simulated, harmonium_stops.STOPS['Clarinette']; the Debain's no longer
+    # read, licences.md L10): its difference from the simulated foundation on
+    # ours
     mode_gains_points = (
-        (233.1, (0.33545, 0.83995, 1.00000, 0.69789, 0.56003, 0.72236, 0.56261, 0.24435, 0.29147, 0.18326, 0.21565, 0.18495, 0.15403, 0.13013, 0.10654, 0.08842, 0.07526, 0.06489, 0.05787, 0.05285, 0.04910, 0.04582, 0.04303, 0.03989, 0.03635, 0.03358, 0.02967, 0.02647, 0.02386, 0.02106, 0.01901, 0.01749)),
-        (440.0, (1.00000, 0.40501, 0.62785, 0.35200, 0.26451, 0.26892, 0.23524, 0.20288, 0.16464, 0.13688, 0.11131, 0.09077, 0.07258, 0.05662, 0.04491, 0.03672, 0.03023, 0.02566, 0.02262, 0.02006, 0.01834, 0.01691, 0.01566, 0.01408, 0.01259, 0.01142, 0.01405, 0.01263, 0.01111, 0.01036, 0.00921, 0.00820)),
-        (784.0, (1.00000, 0.02831, 0.44500, 0.23683, 0.16151, 0.13379, 0.10438, 0.08423, 0.06480, 0.05138, 0.03954, 0.03119, 0.02397, 0.01789, 0.01287, 0.01009, 0.00753, 0.00615, 0.00484, 0.00422, 0.00533, 0.00533, 0.00533, 0.00533, 0.00533, 0.00533, 0.00533, 0.00533, 0.00533, 0.00533, 0.00533, 0.00533)),
+        (233.1, (1.00000, 0.93796, 0.77054, 0.59014, 0.54836, 0.40052, 0.28495, 0.20322, 0.19223, 0.12828, 0.16979, 0.21618, 0.11342, 0.13883, 0.10297, 0.08226, 0.15247, 0.10281, 0.07309, 0.14892, 0.11501, 0.08122, 0.09378, 0.07666, 0.04293, 0.25879, 0.05748, 0.03896, 0.13563, 0.05856, 0.03460, 0.10729)),
+        (440.0, (1.00000, 0.90613, 0.75788, 0.57722, 0.47564, 0.35765, 0.29599, 0.17959, 0.19042, 0.17303, 0.15383, 0.13156, 0.18507, 0.14525, 0.11083, 0.12542, 0.11743, 0.09087, 0.07631, 0.11889, 0.09603, 0.06268, 0.09011, 0.10819, 0.05095, 0.05669, 0.09618, 0.06120, 0.03760, 0.06787, 0.07290, 0.03147)),
+        (784.0, (1.00000, 0.83197, 0.71274, 0.56712, 0.47713, 0.40237, 0.29869, 0.21113, 0.19131, 0.17140, 0.17905, 0.17334, 0.15095, 0.14426, 0.12672, 0.11590, 0.10893, 0.10723, 0.10722, 0.10506, 0.09671, 0.09024, 0.08289, 0.07643, 0.07108, 0.07289, 0.06911, 0.06767, 0.06227, 0.05642, 0.05212, 0.05088)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the top's)
     mode_gains_low = None
@@ -9061,27 +9073,26 @@ class HarmoniumClarinetteProperties(ReedOrganFreeProperties):
     bore_corner_hz = 0.0
     # its own speech and decay, not the host's (blockrender's rank_is_pipe)
     rank_is_pipe = True
-    # LEVEL: the Debain's own balance -- +0.0 dB re its Flute on the same
-    # keys (debain_registers.py) -- held against ours
-    initial_gain = 0.0558778
-    # ITS SPEECH, fitted on the Debain's attack (debain_registers.py)
-    speech_cycles = 36.0
-    speech_harmonic_exp = -0.6
+    # LEVEL: its simulated level re the foundation, held on our renders
+    initial_gain = 0.0537667
+    # ITS SPEECH, simulated: the tongue's rise 10-90 %% in cycles of the note
+    speech_cycles = 78.9
+    speech_harmonic_exp = 0.00
     attack_time = 0.012
 
 
 class HarmoniumClaironProperties(ReedOrganFreeProperties):
-    """3 Clairon / Fifre, 4-foot: the octave above -- MEASURED, the one
-    register the harmonium take plays besides the foundation. Voiced as the
-    foundation is (its own darker voicing, gate 0.65, left the take's h6-h12
-    5-10 dB short), and LOUDER than assumed: stop_ranks' 1.2, not 0.6 -- the
-    take's 4' fundamental (its h2) stands 3 dB over the 8''s. With both, the
-    series to h12 within 2.7 dB rms. Sharp of the octave key by key
-    (rank_detune)."""
+    """3 Clairon / Fifre, 4-foot: the octave above -- a back stop, flat-tongued,
+    in the box (Mustel p. 109): its series, speech and level from its
+    construction simulated (examples/harmonium_bake.py)."""
+    # FROM ITS CONSTRUCTION (examples/harmonium_bake.py, 2026-11-23: Mustel's
+    # stops simulated, harmonium_stops.STOPS['Clairon']; the Debain's no longer
+    # read, licences.md L10): its difference from the simulated foundation on
+    # ours
     mode_gains_points = (
-        (164.8, (1.00000, 0.43185, 0.09205, 0.01560, 0.04418, 0.06480, 0.10990, 0.03304, 0.01831, 0.10867, 0.04915, 0.02438, 0.01227, 0.03911, 0.01615, 0.01419, 0.01409, 0.01434, 0.01432, 0.01414, 0.01455, 0.01445, 0.01464, 0.01450, 0.01459, 0.01449, 0.01470, 0.01479, 0.01474, 0.01489, 0.01479, 0.01506)),
-        (293.7, (0.44848, 0.46155, 1.00000, 0.22319, 0.37524, 0.02025, 0.29218, 0.03563, 0.04332, 0.03169, 0.02518, 0.02054, 0.01932, 0.01509, 0.01196, 0.01074, 0.01073, 0.01044, 0.01060, 0.00952, 0.00953, 0.00971, 0.01029, 0.01038, 0.00946, 0.00940, 0.00950, 0.00932, 0.00935, 0.00938, 0.00935, 0.01259)),
-        (523.3, (0.19400, 0.03367, 1.00000, 0.15682, 0.15469, 0.02679, 0.04752, 0.03306, 0.03536, 0.02289, 0.01762, 0.01291, 0.01071, 0.00897, 0.00667, 0.00549, 0.00558, 0.00560, 0.00563, 0.00691, 0.00693, 0.00693, 0.00647, 0.00654, 0.00859, 0.00870, 0.00872, 0.03295, 0.03338, 0.03386, 0.03467, 0.00489)),
+        (164.8, (0.33203, 0.36548, 0.39081, 0.24642, 0.49484, 0.20497, 0.16240, 0.10623, 0.08695, 0.07271, 0.10781, 0.11206, 0.18317, 1.00000, 0.08392, 0.52684, 0.06747, 0.06369, 0.60071, 0.07152, 0.02346, 0.55759, 0.05748, 0.06269, 0.34080, 0.16607, 0.75037, 0.16732, 0.05603, 0.04523, 0.08465, 0.02231)),
+        (293.7, (0.79547, 0.90118, 1.00000, 0.79239, 0.87374, 0.39302, 0.26524, 0.13114, 0.24153, 0.68017, 0.48360, 0.64766, 0.19176, 0.58495, 0.16574, 0.15183, 0.67797, 0.20786, 0.16301, 0.75809, 0.27278, 0.21258, 0.28554, 0.14494, 0.10354, 0.08268, 0.21969, 0.05745, 0.33590, 0.30762, 0.20819, 0.31328)),
+        (523.3, (0.50971, 0.58692, 0.70055, 0.31554, 0.23262, 0.18751, 0.26327, 0.99371, 0.17914, 0.34794, 0.13817, 0.15259, 0.31739, 0.23903, 0.24720, 0.16620, 0.17134, 0.15567, 0.10197, 0.30495, 0.15357, 1.00000, 0.15671, 0.06838, 0.20971, 0.09355, 0.29111, 0.08522, 0.16201, 0.14844, 0.01779, 0.20304)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the top's)
     mode_gains_low = None
@@ -9089,20 +9100,23 @@ class HarmoniumClaironProperties(ReedOrganFreeProperties):
     bore_corner_hz = 0.0
     # its own speech and decay, not the host's (blockrender's rank_is_pipe)
     rank_is_pipe = True
-    # LEVEL: HELD where donyaquick's 8'+4' take set it (debain_registers.py
-    # --hold-level): the Debain fitted its series and speech only
-    initial_gain = 0.0704306
-    # ITS SPEECH, fitted on the Debain's attack (debain_registers.py)
-    speech_cycles = 24.0
-    speech_harmonic_exp = 0.0
+    # LEVEL: its simulated level re the foundation, held on our renders
+    initial_gain = 0.0374878
+    # ITS SPEECH, simulated: the tongue's rise 10-90 %% in cycles of the note
+    speech_cycles = 52.9
+    speech_harmonic_exp = 0.00
     attack_time = 0.012
 
 
 class HarmoniumFifreProperties(HarmoniumClaironProperties):
     """3 Fifre, treble 4-foot: the clairon's treble half."""
+    # FROM ITS CONSTRUCTION (examples/harmonium_bake.py, 2026-11-23: Mustel's
+    # stops simulated, harmonium_stops.STOPS['Fifre']; the Debain's no longer
+    # read, licences.md L10): its difference from the simulated foundation on
+    # ours
     mode_gains_points = (
-        (932.3, (1.00000, 0.17168, 0.22348, 0.08204, 0.07793, 0.03866, 0.03437, 0.01771, 0.01706, 0.01397, 0.01092, 0.00958, 0.00784, 0.00770, 0.00642, 0.00527, 0.00607, 0.00611, 0.00459, 0.00459, 0.00459, 0.00459, 0.00459, 0.00459, 0.00459, 0.00459, 0.00459, 0.00459, 0.00459, 0.00459, 0.00459, 0.00459)),
-        (1661.2, (1.00000, 0.01343, 0.07121, 0.01205, 0.00498, 0.00419, 0.00338, 0.00047, 0.00144, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071, 0.00071)),
+        (932.3, (0.55919, 0.69210, 0.56413, 0.80413, 0.48385, 1.00000, 0.31150, 0.29463, 0.22295, 0.22386, 0.48097, 0.24907, 0.26154, 0.25649, 0.15385, 0.35054, 0.16673, 0.27931, 0.23812, 0.09295, 0.42609, 0.12386, 0.19002, 0.05162, 0.04917, 0.04797, 0.04664, 0.04424, 0.04071, 0.03688, 0.03407, 0.03326)),
+        (1661.2, (0.78760, 1.00000, 0.79783, 0.92143, 0.69958, 0.63559, 0.58450, 0.41676, 0.30626, 0.47038, 0.31876, 0.39701, 0.45086, 0.12910, 0.11444, 0.10269, 0.09628, 0.09423, 0.09332, 0.09072, 0.08540, 0.07813, 0.07073, 0.06512, 0.06203, 0.06050, 0.05883, 0.05580, 0.05135, 0.04652, 0.04298, 0.04195)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the top's)
     mode_gains_low = None
@@ -9110,22 +9124,25 @@ class HarmoniumFifreProperties(HarmoniumClaironProperties):
     bore_corner_hz = 0.0
     # its own speech and decay, not the host's (blockrender's rank_is_pipe)
     rank_is_pipe = True
-    # LEVEL: HELD where donyaquick's 8'+4' take set it (debain_registers.py
-    # --hold-level): the Debain fitted its series and speech only
-    initial_gain = 0.0634428
-    # ITS SPEECH, fitted on the Debain's attack (debain_registers.py)
-    speech_cycles = 36.0
-    speech_harmonic_exp = 0.0
+    # LEVEL: its simulated level re the foundation, held on our renders
+    initial_gain = 0.0479613
+    # ITS SPEECH, simulated: the tongue's rise 10-90 %% in cycles of the note
+    speech_cycles = 124.7
+    speech_harmonic_exp = 0.00
     attack_time = 0.012
 
 
 class HarmoniumHautboisProperties(ReedOrganFreeProperties):
     """4 Hautbois, treble 8-foot: reedy and nasal, the treble's solo stop --
     the shortest pulse and the most open case."""
+    # FROM ITS CONSTRUCTION (examples/harmonium_bake.py, 2026-11-23: Mustel's
+    # stops simulated, harmonium_stops.STOPS['Hautbois']; the Debain's no longer
+    # read, licences.md L10): its difference from the simulated foundation on
+    # ours
     mode_gains_points = (
-        (466.2, (0.42095, 0.64169, 1.00000, 0.40274, 0.63228, 0.07692, 0.20464, 0.13918, 0.10264, 0.08353, 0.07258, 0.06303, 0.05297, 0.04206, 0.03356, 0.02756, 0.02334, 0.02057, 0.01843, 0.01643, 0.01668, 0.01388, 0.01188, 0.00704, 0.00629, 0.00578, 0.00374, 0.00328, 0.00288, 0.00388, 0.00339, 0.00317)),
-        (880.0, (0.70710, 0.33959, 1.00000, 0.14803, 0.10502, 0.07503, 0.04778, 0.03109, 0.02235, 0.01765, 0.01487, 0.01257, 0.01012, 0.00854, 0.00608, 0.00483, 0.00414, 0.00368, 0.00363, 0.00363, 0.00363, 0.00363, 0.00363, 0.00363, 0.00363, 0.00363, 0.00363, 0.00363, 0.00363, 0.00363, 0.00363, 0.00363)),
-        (1568.0, (0.98450, 1.00000, 0.38052, 0.07844, 0.18459, 0.08369, 0.04850, 0.02919, 0.01917, 0.01081, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296, 0.01296)),
+        (466.2, (0.61542, 0.94751, 0.91479, 0.31998, 0.35966, 0.39929, 0.20985, 0.45799, 0.34954, 0.35421, 0.21438, 0.13426, 0.54420, 0.04806, 0.35943, 0.24819, 0.80162, 0.12266, 0.19697, 0.28286, 0.18179, 1.00000, 0.12752, 0.68897, 0.04826, 0.11365, 0.13457, 0.13991, 0.08631, 0.16964, 0.13484, 0.12245)),
+        (880.0, (0.11416, 0.15058, 0.10245, 0.05495, 0.12220, 1.00000, 0.07160, 0.03736, 0.06955, 0.00603, 0.12786, 0.01622, 0.10958, 0.02158, 0.06661, 0.05137, 0.03024, 0.12724, 0.01760, 0.05729, 0.02041, 0.03748, 0.00878, 0.03219, 0.01251, 0.01220, 0.01187, 0.01125, 0.01036, 0.00938, 0.00867, 0.00846)),
+        (1568.0, (0.54091, 0.64728, 0.54296, 0.41726, 0.46755, 0.16764, 0.59163, 0.08234, 0.75499, 0.18689, 0.22809, 1.00000, 0.11901, 0.09927, 0.08800, 0.07896, 0.07403, 0.07246, 0.07176, 0.06976, 0.06567, 0.06008, 0.05439, 0.05007, 0.04770, 0.04652, 0.04524, 0.04291, 0.03948, 0.03577, 0.03305, 0.03226)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the top's)
     mode_gains_low = None
@@ -9133,21 +9150,24 @@ class HarmoniumHautboisProperties(ReedOrganFreeProperties):
     bore_corner_hz = 0.0
     # its own speech and decay, not the host's (blockrender's rank_is_pipe)
     rank_is_pipe = True
-    # LEVEL: the Debain's own balance -- +0.9 dB re its Flute on the same
-    # keys (debain_registers.py) -- held against ours
-    initial_gain = 0.0738428
-    # ITS SPEECH, fitted on the Debain's attack (debain_registers.py)
-    speech_cycles = 24.0
-    speech_harmonic_exp = -0.6
-    attack_time = 0.035
+    # LEVEL: its simulated level re the foundation, held on our renders
+    initial_gain = 0.0758417
+    # ITS SPEECH, simulated: the tongue's rise 10-90 %% in cycles of the note
+    speech_cycles = 99.0
+    speech_harmonic_exp = 0.00
+    attack_time = 0.012
 
 
 class HarmoniumBassonProperties(ReedOrganFreeProperties):
     """4 Basson, bass 8-foot: the hautbois's bass half, the bassoon."""
+    # FROM ITS CONSTRUCTION (examples/harmonium_bake.py, 2026-11-23: Mustel's
+    # stops simulated, harmonium_stops.STOPS['Basson']; the Debain's no longer
+    # read, licences.md L10): its difference from the simulated foundation on
+    # ours
     mode_gains_points = (
-        (82.4, (0.34711, 1.00000, 0.36131, 0.10559, 0.09914, 0.04717, 0.04179, 0.03494, 0.02159, 0.09672, 0.13572, 0.03450, 0.02596, 0.01973, 0.00951, 0.00984, 0.01374, 0.01311, 0.00886, 0.00784, 0.00810, 0.00718, 0.00632, 0.00564, 0.00534, 0.00515, 0.00493, 0.00478, 0.00426, 0.00378, 0.00339, 0.00332)),
-        (146.8, (1.00000, 0.41154, 0.13705, 0.19878, 0.06320, 0.29919, 0.21270, 0.12406, 0.08331, 0.02073, 0.01870, 0.00883, 0.03518, 0.07242, 0.02099, 0.01586, 0.02101, 0.02239, 0.02309, 0.02134, 0.02068, 0.01845, 0.01625, 0.01399, 0.01264, 0.01216, 0.01150, 0.01041, 0.00885, 0.00781, 0.00739, 0.00690)),
-        (261.6, (1.00000, 0.96339, 0.78457, 0.33180, 0.68111, 0.78898, 0.27080, 0.46194, 0.36172, 0.48768, 0.19658, 0.17862, 0.11294, 0.13152, 0.10766, 0.09149, 0.07843, 0.07249, 0.06720, 0.06052, 0.05405, 0.04552, 0.03907, 0.03407, 0.03005, 0.02805, 0.02538, 0.02286, 0.01991, 0.01686, 0.01493, 0.01388)),
+        (82.4, (0.51805, 0.72695, 0.62116, 1.00000, 0.82513, 0.35856, 0.55665, 0.23925, 0.06784, 0.54092, 0.13143, 0.10374, 0.78839, 0.06621, 0.31822, 0.23365, 0.18764, 0.41113, 0.13734, 0.07347, 0.83359, 0.01262, 0.11377, 0.19288, 0.10798, 0.09617, 0.31906, 0.19085, 0.05497, 0.37007, 0.11930, 0.10978)),
+        (146.8, (0.55240, 0.74348, 0.64712, 0.40881, 1.00000, 0.33079, 0.25202, 0.25526, 0.11259, 0.17687, 0.28511, 0.04364, 0.46969, 0.11487, 0.27291, 0.95112, 0.14919, 0.07606, 0.71627, 0.02830, 0.19067, 0.20024, 0.10310, 0.19766, 0.11277, 0.18524, 0.17985, 0.36384, 0.10675, 0.13491, 0.02468, 0.05880)),
+        (261.6, (0.34508, 0.47662, 0.43745, 0.18519, 0.63256, 0.19143, 0.09890, 0.14005, 0.10662, 0.08398, 0.20909, 0.17613, 0.18237, 0.22115, 0.11071, 0.04224, 1.00000, 0.04006, 0.12527, 0.29646, 0.06052, 0.35218, 0.09739, 0.11991, 0.03839, 0.18623, 0.03564, 0.06411, 0.07676, 0.09317, 0.05660, 0.18256)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the top's)
     mode_gains_low = None
@@ -9155,22 +9175,25 @@ class HarmoniumBassonProperties(ReedOrganFreeProperties):
     bore_corner_hz = 0.0
     # its own speech and decay, not the host's (blockrender's rank_is_pipe)
     rank_is_pipe = True
-    # LEVEL: the Debain's own balance -- +0.2 dB re its Cor anglais on the same
-    # keys (debain_registers.py) -- held against ours
-    initial_gain = 0.0618676
-    # ITS SPEECH, fitted on the Debain's attack (debain_registers.py)
-    speech_cycles = 24.0
-    speech_harmonic_exp = -0.3
+    # LEVEL: its simulated level re the foundation, held on our renders
+    initial_gain = 0.0496467
+    # ITS SPEECH, simulated: the tongue's rise 10-90 %% in cycles of the note
+    speech_cycles = 39.9
+    speech_harmonic_exp = 0.00
     attack_time = 0.012
 
 
 class HarmoniumCelesteProperties(ReedOrganFreeProperties):
     """C Voix celeste, treble 16-foot: TWO ROWS of reeds, one tuned a little
     off the other, so the stop beats on its own (stop_ranks' two ratios)."""
+    # FROM ITS CONSTRUCTION (examples/harmonium_bake.py, 2026-11-23: Mustel's
+    # stops simulated, harmonium_stops.STOPS['Celeste']; the Debain's no longer
+    # read, licences.md L10): its difference from the simulated foundation on
+    # ours
     mode_gains_points = (
-        (233.1, (0.43025, 0.38095, 1.00000, 0.31804, 0.70123, 0.22395, 0.20407, 0.12901, 0.18087, 0.10358, 0.10811, 0.07348, 0.08911, 0.06303, 0.05238, 0.04435, 0.03778, 0.03232, 0.02960, 0.02686, 0.02500, 0.02364, 0.02209, 0.02070, 0.01900, 0.01754, 0.01555, 0.01411, 0.01270, 0.01119, 0.01012, 0.00918)),
-        (440.0, (0.40974, 0.19143, 1.00000, 0.33983, 0.33405, 0.31657, 0.26598, 0.22415, 0.18297, 0.15983, 0.12594, 0.10601, 0.07939, 0.06328, 0.05022, 0.04059, 0.03382, 0.02873, 0.02532, 0.02250, 0.02055, 0.01893, 0.01755, 0.01564, 0.01414, 0.01290, 0.01386, 0.01238, 0.01078, 0.00945, 0.00839, 0.00752)),
-        (784.0, (1.00000, 0.07129, 0.51868, 0.53533, 0.23448, 0.30263, 0.23909, 0.19277, 0.14758, 0.11665, 0.08977, 0.07080, 0.05440, 0.04186, 0.03127, 0.02455, 0.01918, 0.01577, 0.01088, 0.00947, 0.01062, 0.01062, 0.01062, 0.01062, 0.01062, 0.01062, 0.01062, 0.01062, 0.01062, 0.01062, 0.01062, 0.01062)),
+        (233.1, (1.00000, 0.94318, 0.85438, 0.74191, 0.61646, 0.49046, 0.37749, 0.29140, 0.24183, 0.22453, 0.22165, 0.21722, 0.20487, 0.18564, 0.16456, 0.14766, 0.13844, 0.13550, 0.13419, 0.13044, 0.12281, 0.11234, 0.10170, 0.09363, 0.08919, 0.08700, 0.08459, 0.08024, 0.07383, 0.06689, 0.06180, 0.06033)),
+        (440.0, (1.00000, 0.94318, 0.85438, 0.74191, 0.61646, 0.49046, 0.37749, 0.29140, 0.24183, 0.22453, 0.22165, 0.21722, 0.20487, 0.18564, 0.16456, 0.14766, 0.13844, 0.13550, 0.13419, 0.13044, 0.12281, 0.11234, 0.10170, 0.09363, 0.08919, 0.08700, 0.08459, 0.08024, 0.07383, 0.06689, 0.06180, 0.06033)),
+        (784.0, (1.00000, 0.94318, 0.85438, 0.74191, 0.61646, 0.49046, 0.37749, 0.29140, 0.24183, 0.22453, 0.22165, 0.21722, 0.20487, 0.18564, 0.16456, 0.14766, 0.13844, 0.13550, 0.13419, 0.13044, 0.12281, 0.11234, 0.10170, 0.09363, 0.08919, 0.08700, 0.08459, 0.08024, 0.07383, 0.06689, 0.06180, 0.06033)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the top's)
     mode_gains_low = None
@@ -9178,25 +9201,28 @@ class HarmoniumCelesteProperties(ReedOrganFreeProperties):
     bore_corner_hz = 0.0
     # its own speech and decay, not the host's (blockrender's rank_is_pipe)
     rank_is_pipe = True
-    # LEVEL: the Debain's own balance -- -1.0 dB re its Flute on the same
-    # keys (debain_registers.py) -- held against ours
-    initial_gain = 0.0487447
-    # ITS SPEECH, fitted on the Debain's attack (debain_registers.py)
-    speech_cycles = 36.0
-    speech_harmonic_exp = -0.6
-    attack_time = 0.035
+    # LEVEL: its simulated level re the foundation, held on our renders
+    initial_gain = 0.0352766
+    # ITS SPEECH, simulated: the tongue's rise 10-90 %% in cycles of the note
+    speech_cycles = 75.9
+    speech_harmonic_exp = 0.00
+    attack_time = 0.012
 
 
-# ---- the Debain's registers this voice did not have ---------------------------
-# Jean-Pierre Silvestre's Debain (sources.md "Organs and free reeds") has three
-# more reed stops than the eight registers and celeste above: each recorded
-# key by key, so each added as the organ's recorded ranks were.
+# ---- three more stops --------------------------------------------------------
+# The Violoncelle, Sourdine and Musette, which French harmoniums carried
+# beyond the eight registers and the celeste (a Debain's among them); built
+# as the others are, from their construction (examples/harmonium_stops.py).
 class HarmoniumVioloncelleProperties(ReedOrganFreeProperties):
     """V Violoncelle, bass 8-foot: the bass's string-toned solo."""
+    # FROM ITS CONSTRUCTION (examples/harmonium_bake.py, 2026-11-23: Mustel's
+    # stops simulated, harmonium_stops.STOPS['Violoncelle']; the Debain's no longer
+    # read, licences.md L10): its difference from the simulated foundation on
+    # ours
     mode_gains_points = (
-        (82.4, (0.38720, 1.00000, 0.32942, 0.13913, 0.17825, 0.09780, 0.06577, 0.04662, 0.03132, 0.07453, 0.17051, 0.06183, 0.03007, 0.05447, 0.01889, 0.02413, 0.01668, 0.02133, 0.00772, 0.02026, 0.01471, 0.01708, 0.01488, 0.01369, 0.01280, 0.01251, 0.01185, 0.01130, 0.01027, 0.00913, 0.00818, 0.00805)),
-        (146.8, (1.00000, 0.29024, 0.30195, 0.26679, 0.11271, 0.48671, 0.28394, 0.05941, 0.03314, 0.02807, 0.06683, 0.00674, 0.06649, 0.03403, 0.04452, 0.02868, 0.03297, 0.02880, 0.03077, 0.02573, 0.02418, 0.02147, 0.01893, 0.01682, 0.01565, 0.01446, 0.01438, 0.01209, 0.01096, 0.00951, 0.00828, 0.00787)),
-        (261.6, (1.00000, 0.64579, 0.46173, 0.29589, 0.34601, 0.18364, 0.18031, 0.10394, 0.23781, 0.19044, 0.23244, 0.16010, 0.14095, 0.11840, 0.09760, 0.08285, 0.07114, 0.06593, 0.06027, 0.05522, 0.04856, 0.04173, 0.03505, 0.03056, 0.02703, 0.02522, 0.02279, 0.02046, 0.01786, 0.01524, 0.01338, 0.01239)),
+        (82.4, (0.50465, 0.48660, 0.68271, 0.47440, 1.00000, 0.42795, 0.95464, 0.13939, 0.17678, 0.20737, 0.12303, 0.17960, 0.22252, 0.18352, 0.24479, 0.22223, 0.29909, 0.50105, 0.12569, 0.11520, 0.70430, 0.05394, 0.10618, 0.12103, 0.11898, 0.08755, 0.44131, 0.23458, 0.07823, 0.53677, 0.23781, 0.14229)),
+        (146.8, (0.27855, 0.25556, 0.36604, 0.40025, 0.50233, 0.19866, 0.22895, 0.07078, 0.06926, 0.13619, 0.02869, 0.11988, 0.09178, 0.24912, 0.06696, 1.00000, 0.09573, 0.07751, 0.39805, 0.04775, 0.10822, 0.09890, 0.07347, 0.10901, 0.10112, 0.13720, 0.16676, 0.27600, 0.19709, 0.10247, 0.08672, 0.02384)),
+        (261.6, (0.25848, 0.23320, 0.35948, 0.40852, 0.37527, 0.15399, 0.11098, 0.17567, 0.04334, 0.20522, 0.04647, 0.60549, 0.11656, 0.38348, 0.11998, 0.07495, 1.00000, 0.04651, 0.13398, 0.29182, 0.12093, 0.25080, 0.15326, 0.18980, 0.03206, 0.33586, 0.05989, 0.07631, 0.44335, 0.06136, 0.14468, 0.14045)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the top's)
     mode_gains_low = None
@@ -9204,22 +9230,25 @@ class HarmoniumVioloncelleProperties(ReedOrganFreeProperties):
     bore_corner_hz = 0.0
     # its own speech and decay, not the host's (blockrender's rank_is_pipe)
     rank_is_pipe = True
-    # LEVEL: the Debain's own balance -- +0.3 dB re its Cor anglais on the same
-    # keys (debain_registers.py) -- held against ours
-    initial_gain = 0.0720741
-    # ITS SPEECH, fitted on the Debain's attack (debain_registers.py)
-    speech_cycles = 24.0
-    speech_harmonic_exp = 0.0
-    attack_time = 0.02
+    # LEVEL: its simulated level re the foundation, held on our renders
+    initial_gain = 0.0662032
+    # ITS SPEECH, simulated: the tongue's rise 10-90 %% in cycles of the note
+    speech_cycles = 39.9
+    speech_harmonic_exp = 0.00
+    attack_time = 0.012
 
 
 class HarmoniumSourdineProperties(ReedOrganFreeProperties):
     """S Sourdine, bass 8-foot: the muted bass, an accompaniment under a treble
     solo."""
+    # FROM ITS CONSTRUCTION (examples/harmonium_bake.py, 2026-11-23: Mustel's
+    # stops simulated, harmonium_stops.STOPS['Sourdine']; the Debain's no longer
+    # read, licences.md L10): its difference from the simulated foundation on
+    # ours
     mode_gains_points = (
-        (82.4, (1.00000, 0.95847, 0.83620, 0.75158, 0.62677, 0.45090, 0.33627, 0.26384, 0.22702, 0.21110, 0.90004, 0.19836, 0.17919, 0.19081, 0.15268, 0.13890, 0.32157, 0.16727, 0.12914, 0.11604, 0.02880, 0.09640, 0.05905, 0.11468, 0.07425, 0.07141, 0.06735, 0.06247, 0.05599, 0.05030, 0.04630, 0.04501)),
-        (146.8, (0.83888, 0.97845, 0.80991, 0.66172, 0.52541, 0.38363, 1.00000, 0.25286, 0.23727, 0.16353, 0.18588, 0.04353, 0.24772, 0.26475, 0.14293, 0.11802, 0.11309, 0.10742, 0.10302, 0.09678, 0.11158, 0.07780, 0.06816, 0.06050, 0.05575, 0.05248, 0.04927, 0.04544, 0.03993, 0.03519, 0.03162, 0.03016)),
-        (261.6, (0.92096, 1.00000, 0.92418, 0.91649, 0.86857, 0.84153, 0.74955, 0.85987, 0.65514, 0.57142, 0.46161, 0.12634, 0.15894, 0.13648, 0.11365, 0.09739, 0.08591, 0.08046, 0.07513, 0.06773, 0.06095, 0.05222, 0.04500, 0.03969, 0.03554, 0.03331, 0.03039, 0.02733, 0.02411, 0.02067, 0.01838, 0.01743)),
+        (82.4, (0.87660, 0.31950, 0.29335, 0.71024, 0.54563, 0.17635, 1.00000, 0.07645, 0.03914, 0.21326, 0.05122, 0.04247, 0.06304, 0.01208, 0.02968, 0.02462, 0.02283, 0.05774, 0.01496, 0.01511, 0.06707, 0.01004, 0.00963, 0.04769, 0.01302, 0.01091, 0.05391, 0.01789, 0.01343, 0.04337, 0.02162, 0.03328)),
+        (146.8, (1.00000, 0.37461, 0.36773, 0.64785, 0.82946, 0.15867, 0.55811, 0.21552, 0.07838, 0.10422, 0.02455, 0.04108, 0.04996, 0.10071, 0.12379, 0.35320, 0.05257, 0.03463, 0.09932, 0.02385, 0.02246, 0.07307, 0.01625, 0.03358, 0.08719, 0.04257, 0.01667, 0.04411, 0.02381, 0.03985, 0.02006, 0.01195)),
+        (261.6, (0.85159, 0.27783, 0.37918, 0.33778, 1.00000, 0.23661, 0.14434, 0.28081, 0.05499, 0.08743, 0.05579, 0.25292, 0.07383, 0.10810, 0.05248, 0.01891, 0.24740, 0.02305, 0.02741, 0.07626, 0.02873, 0.07846, 0.04566, 0.02505, 0.01792, 0.04450, 0.01399, 0.01358, 0.04601, 0.01559, 0.01569, 0.04043)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the top's)
     mode_gains_low = None
@@ -9227,21 +9256,24 @@ class HarmoniumSourdineProperties(ReedOrganFreeProperties):
     bore_corner_hz = 0.0
     # its own speech and decay, not the host's (blockrender's rank_is_pipe)
     rank_is_pipe = True
-    # LEVEL: the Debain's own balance -- -10.3 dB re its Cor anglais on the same
-    # keys (debain_registers.py) -- held against ours
-    initial_gain = 0.0117977
-    # ITS SPEECH, fitted on the Debain's attack (debain_registers.py)
-    speech_cycles = 36.0
-    speech_harmonic_exp = 0.0
-    attack_time = 0.02
+    # LEVEL: its simulated level re the foundation, held on our renders
+    initial_gain = 0.0230359
+    # ITS SPEECH, simulated: the tongue's rise 10-90 %% in cycles of the note
+    speech_cycles = 75.8
+    speech_harmonic_exp = 0.00
+    attack_time = 0.012
 
 
 class HarmoniumMusetteProperties(ReedOrganFreeProperties):
     """M Musette, treble 16-foot: the treble's soft reed."""
+    # FROM ITS CONSTRUCTION (examples/harmonium_bake.py, 2026-11-23: Mustel's
+    # stops simulated, harmonium_stops.STOPS['Musette']; the Debain's no longer
+    # read, licences.md L10): its difference from the simulated foundation on
+    # ours
     mode_gains_points = (
-        (233.1, (1.00000, 0.84514, 0.93519, 0.31287, 0.33747, 0.04565, 0.27376, 0.18386, 0.37905, 0.42870, 0.49397, 0.17417, 0.30886, 0.20213, 0.16460, 0.13705, 0.11699, 0.10089, 0.09110, 0.08458, 0.07941, 0.07546, 0.07064, 0.06617, 0.06127, 0.05680, 0.05124, 0.04650, 0.04210, 0.03768, 0.03368, 0.03075)),
-        (440.0, (0.28863, 0.05505, 0.61235, 0.81667, 1.00000, 0.55361, 0.52120, 0.49960, 0.32227, 0.26773, 0.21423, 0.17501, 0.13921, 0.11004, 0.08666, 0.06957, 0.05800, 0.04924, 0.04335, 0.03840, 0.03497, 0.03213, 0.02966, 0.02262, 0.02042, 0.01859, 0.01533, 0.01362, 0.01184, 0.00993, 0.00886, 0.00790)),
-        (784.0, (0.57770, 0.10636, 1.00000, 0.02902, 0.02904, 0.11490, 0.02243, 0.01817, 0.01388, 0.01107, 0.00850, 0.00675, 0.00518, 0.00334, 0.00202, 0.00160, 0.00099, 0.00081, 0.00134, 0.00117, 0.00148, 0.00148, 0.00148, 0.00148, 0.00148, 0.00148, 0.00148, 0.00148, 0.00148, 0.00148, 0.00148, 0.00148)),
+        (233.1, (0.31479, 0.38703, 0.40686, 0.24542, 0.47949, 0.19097, 0.10201, 0.16096, 0.14149, 0.02827, 0.17581, 0.12351, 0.18812, 0.23525, 0.10173, 0.06484, 0.23776, 0.06388, 0.08277, 0.16646, 0.08609, 0.17004, 0.02519, 0.58682, 0.04511, 1.00000, 0.03520, 0.04637, 0.17561, 0.02546, 0.08290, 0.05417)),
+        (440.0, (0.62355, 0.82652, 0.87859, 0.47836, 0.32016, 0.33833, 0.42706, 0.19930, 0.40459, 0.32751, 0.24292, 0.16729, 0.38293, 0.12088, 0.91820, 0.31611, 0.05251, 0.24726, 0.09287, 0.26381, 0.04219, 1.00000, 0.10974, 0.51808, 0.19139, 0.14760, 0.37785, 0.03329, 0.27793, 0.04252, 0.29447, 0.07599)),
+        (784.0, (0.64548, 0.81246, 0.66096, 0.51365, 0.66847, 0.98955, 0.40896, 0.08598, 0.33662, 0.12707, 0.47704, 0.21240, 0.89976, 0.21322, 0.21263, 0.30918, 0.03098, 1.00000, 0.05009, 0.43705, 0.19767, 0.22326, 0.49072, 0.08121, 0.64382, 0.01399, 0.21896, 0.06897, 0.06347, 0.05750, 0.05313, 0.05185)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the top's)
     mode_gains_low = None
@@ -9249,25 +9281,20 @@ class HarmoniumMusetteProperties(ReedOrganFreeProperties):
     bore_corner_hz = 0.0
     # its own speech and decay, not the host's (blockrender's rank_is_pipe)
     rank_is_pipe = True
-    # LEVEL: the Debain's own balance -- -0.6 dB re its Flute on the same
-    # keys (debain_registers.py) -- held against ours
-    initial_gain = 0.053788
-    # ITS SPEECH, fitted on the Debain's attack (debain_registers.py)
-    speech_cycles = 36.0
-    speech_harmonic_exp = -0.3
-    attack_time = 0.035
+    # LEVEL: its simulated level re the foundation, held on our renders
+    initial_gain = 0.0488702
+    # ITS SPEECH, simulated: the tongue's rise 10-90 %% in cycles of the note
+    speech_cycles = 63.9
+    speech_harmonic_exp = 0.00
+    attack_time = 0.012
 
 
-# THE VOIX CELESTE'S DETUNE, in cents. EB1911 says only "not quite in unison";
-# +12 was asserted. MEASURED (debain_registers.py --celeste): the Debain's
-# celeste drawn alone beats -- every harmonic's level swings at m times one
-# rate, h1-h6 agreeing to 0.01 Hz -- so the stop is TWO ROWS, the second this
-# far above the first: 10.5-18.6 cents key by key, median 15.4, about a line
-# from 16.3 at A4 falling 1.3 an octave (2.1 cents rms about it). A tuner's
-# pairs, not a law: three neighbours share one 1.87 Hz beat, as beats counted
-# would set them. Each key its own (HARMONIUM_CELESTE_BY_KEY); this the
-# nominal, for the stop's ratio.
-HARMONIUM_CELESTE_CENTS = 15.4
+# THE VOIX CELESTE'S DETUNE, in cents: MUSTEL'S OWN METHOD (L'Orgue-Expressif
+# p. 145; since 2026-11-23, the Debain's measured rows no longer read,
+# licences.md L10): two ranks, one tuned above and one below the true pitch,
+# 6 beats a second at 440 Hz, slower in the bass, faster in the treble
+# (beats ~ f^0.5, examples/harmonium_bake.py). The nominal spread:
+HARMONIUM_CELESTE_CENTS = 23.9
 
 # The split: EB1911 puts it "in the middle of the keyboard scale", each half
 # about two octaves and a half of a five-octave compass (C2 to C7 here). That
@@ -9277,13 +9304,17 @@ HARMONIUM_SPLIT = 65
 _BASS = (0, HARMONIUM_SPLIT - 1)
 _TREBLE = (HARMONIUM_SPLIT, 127)
 
-# THE VOIX CELESTE'S TWO ROWS, key by key (debain_registers.py --celeste)
-# (keys 83, 85, 89, 92, 93, 94, 95, 96: no steady rate read -- the line's)
+# THE VOIX CELESTE'S TWO ROWS, key by key: (above, below) in cents re the
+# key's 16-foot (examples/harmonium_bake.py, Mustel's rule)
 HARMONIUM_CELESTE_BY_KEY = {
-    65: 17.8,    66: 17.4,    67: 16.4,    68: 15.5,    69: 13.1,    70: 14.6,    71: 15.7,    72: 14.7,
-    73: 13.0,    74: 17.4,    75: 18.5,    76: 18.6,    77: 15.2,    78: 14.4,    79: 12.5,    80: 17.6,
-    81: 17.4,    82: 17.5,    83: 14.7,    84: 16.4,    85: 14.5,    86: 14.9,    87: 13.0,    88: 10.5,
-    89: 14.0,    90: 15.4,    91: 11.3,    92: 13.7,    93: 13.6,    94: 13.5,    95: 13.4,    96: 13.3,
+    65: (+18.64, -18.84),  66: (+18.11, -18.30),  67: (+17.60, -17.78),  68: (+17.10, -17.27),
+    69: (+16.61, -16.77),  70: (+16.14, -16.29),  71: (+15.69, -15.83),  72: (+15.24, -15.38),
+    73: (+14.81, -14.94),  74: (+14.39, -14.51),  75: (+13.98, -14.09),  76: (+13.58, -13.69),
+    77: (+13.20, -13.30),  78: (+12.82, -12.92),  79: (+12.46, -12.55),  80: (+12.11, -12.19),
+    81: (+11.76, -11.84),  82: (+11.43, -11.51),  83: (+11.11, -11.18),  84: (+10.79, -10.86),
+    85: (+10.48, -10.55),  86: (+10.19, -10.25),  87: (+9.90, -9.95),  88: (+9.62, -9.67),
+    89: (+9.34, -9.39),  90: (+9.08, -9.13),  91: (+8.82, -8.87),  92: (+8.57, -8.61),
+    93: (+8.33, -8.37),  94: (+8.09, -8.13),  95: (+7.86, -7.90),  96: (+7.64, -7.67),
 }
 
 # (name, footage ratio, gain, voice, dyn, pipe, key range). A ratio of None is
@@ -9297,7 +9328,8 @@ ReedOrganFreeProperties.stop_ranks = [
     ("clarinette 2",  0.5, 0.80, HarmoniumClarinetteProperties, False, None, _TREBLE),
     ("fifre 3",       2.0, 1.20, HarmoniumFifreProperties, False, None, _TREBLE),
     ("hautbois 4",    1.0, 0.85, HarmoniumHautboisProperties, False, None, _TREBLE),
-    ("celeste",       (0.5, 0.5 * 2.0 ** (HARMONIUM_CELESTE_CENTS / 1200.0)), 0.70,
+    ("celeste",       (0.5 * 2.0 ** (-HARMONIUM_CELESTE_CENTS / 2400.0),
+                       0.5 * 2.0 ** (HARMONIUM_CELESTE_CENTS / 2400.0)), 0.70,
                       HarmoniumCelesteProperties, False, None, _TREBLE),
     ("expression",    None, 0.0),
     ("percussion",    None, 0.0),
@@ -9312,8 +9344,8 @@ ReedOrganFreeProperties.stop_ranks = [
 # second its own measured cents above (mixture_ratios reads a composition by
 # the key's pitch, so each key its pair)
 ReedOrganFreeProperties.mixture_compositions = {"celeste": [
-    (440.0 * 2.0 ** ((_k - 69.5) / 12.0), (0.5, 0.5 * 2.0 ** (_c / 1200.0)))
-    for _k, _c in sorted(HARMONIUM_CELESTE_BY_KEY.items())]}
+    (440.0 * 2.0 ** ((_k - 69.5) / 12.0), (0.5 * 2.0 ** (_b / 1200.0), 0.5 * 2.0 ** (_a / 1200.0)))
+    for _k, (_a, _b) in sorted(HARMONIUM_CELESTE_BY_KEY.items())]}
 # The panel's key rows: the reeds on the digits, the three stops that are not
 # reeds on shift+digit, the Debain's other three on Alt+digit.
 ReedOrganFreeProperties.stop_rows = [
@@ -9401,15 +9433,17 @@ ReedOrganFreeProperties.percussion_attack_s = 0.003
 # tremolo_hz/tremolo_depth, which would hand the harmonium's CC1 a tremolo
 # knob. EB1911 says the flutter quickens with the pressure; this one runs at a
 # fixed rate, and has no pitch wobble.
-# ...MEASURED (debain_registers.py --tremolo): the Debain's Tremolo is its
-# Musette row with the flutter on (its ladder within 3.8 dB of the Musette's),
-# recorded key by key -- every harmonic's level swinging together (h1-h4 one
-# rate: a level, not a pitch) at 9.52 Hz, the median of 9.3-10.9 (quicker up
-# the treble), depth 0.25; ours on the Musette reads the same at the depth
-# below. The Debain's flutters its one row; this one, every reed drawn. (5.5
-# Hz, 0.22 were asserted)
-ReedOrganFreeProperties.stop_tremolo_hz = 9.52
-ReedOrganFreeProperties.stop_tremolo_depth = 0.2530
+# ...SINCE 2026-11-23 FROM ITS PHYSICS (licences.md L10: the Debain's measured
+# 9.52 Hz no longer read): a spring-loaded bellows fluttering the reeds' wind
+# (examples/freereed_sim.py TREMOLO_*). No rate is published and no open
+# recording has one drawn, so the rate is Ben's, by ear: "the slower side.
+# Leave room for speed on higher and louder" -- 5 Hz at 700 Pa, quickening with
+# the pressure (rate ~ sqrt(1 + p/700): ~4.3 Hz soft, ~6.2 Hz full) and the
+# treble half's own smaller bellows 1.15x (harmonium_stops: those two arrive
+# with the pressure, step 4). Its 10% swing of the wind swings the reeds'
+# level +/-6% (the simulation, middle C and C5): the depth, peak to peak
+ReedOrganFreeProperties.stop_tremolo_hz = 5.0
+ReedOrganFreeProperties.stop_tremolo_depth = 0.125
 
 
 class AccordionProperties(FormantBody, FreeReedProperties):

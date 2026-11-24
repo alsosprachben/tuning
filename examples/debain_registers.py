@@ -740,4 +740,7 @@ def main(argv):
 
 
 if __name__ == "__main__":
+    # (retired 2026-11-23, licences.md L10: the stops are from their
+    # construction now, examples/harmonium_bake.py; the Debain is not read)
+    raise SystemExit("debain_registers: retired 2026-11-23, see examples/harmonium_bake.py")
     sys.exit(main(sys.argv))

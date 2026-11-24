@@ -40,6 +40,11 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path[:0] = [HERE, os.path.join(HERE, "examples")]
 import freereed_sim as F  # noqa: E402
 
+# THE TREMOLO'S RATE (Ben, by ear: "the slower side; leave room for speed on
+# higher and louder"): 5 Hz at 700 Pa (freereed_sim.TREMOLO_*), the treble
+# half's own smaller bellows this much quicker
+TREMOLO_HZ = 5.0
+TREMOLO_TREBLE_RATIO = 1.15
 PRESSURE_PA = 700.0           # a moderate playing pressure (Puranik & Scavone measured 200-1000 Pa)
 CELESTE_BEATS = 6.0           # beats a second between its two ranks, at CELESTE_REF_HZ
 CELESTE_REF_HZ = 440.0
@@ -240,7 +245,36 @@ def old_new(outp, secs=1.4):
     wavfile.write(outp, 48000, (y / np.abs(y).max() * 0.8 * 32767).astype(np.int16))
 
 
+def tremolo_listen(outp, rates=(5.0, 6.5, 8.0)):
+    """The tremolo at each rate (middle C, G4, through the case), then the
+    middle rate soft and loud: the bellows quickening with the wind."""
+    from scipy.io import wavfile
+    parts = []
+
+    def clip(f0, p_scale=1.0):
+        y = sound(dict(FOUNDATION, pressure=p_scale), f0, secs=2.2, with_case=True)
+        env = np.ones_like(y)
+        env[:144] = np.linspace(0, 1, 144)
+        env[-2400:] = np.linspace(1, 0, 2400)
+        return [y / (np.sqrt(np.mean(y[len(y) // 2:] ** 2)) + 1e-12) * 0.1 * env, np.zeros(9600)]
+    for r in rates:
+        F.TREMOLO_HZ = r
+        for f0 in (261.63, 392.0):
+            parts += clip(f0)
+        parts.append(np.zeros(19200))
+        print("  %.1f Hz" % r, flush=True)
+    F.TREMOLO_HZ = rates[len(rates) // 2]
+    for ps in (0.45, 2.0):
+        parts += clip(261.63, ps)
+    print("  %.1f Hz at 315 and 1400 Pa" % F.TREMOLO_HZ, flush=True)
+    F.TREMOLO_HZ = 0.0
+    y = np.concatenate(parts)
+    wavfile.write(outp, 48000, (y / np.abs(y).max() * 0.8 * 32767).astype(np.int16))
+
+
 if __name__ == "__main__":
+    if "--tremolo" in sys.argv:
+        tremolo_listen(sys.argv[sys.argv.index("--tremolo") + 1])
     if "--oldnew" in sys.argv:
         old_new(sys.argv[sys.argv.index("--oldnew") + 1])
     if "--survey" in sys.argv:

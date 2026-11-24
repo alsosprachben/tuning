@@ -604,6 +604,35 @@ def spectra_sustain(choice):
     return mid
 
 
+def harmonium_stops():
+    """GM 20, the harmonium's stops baked from their construction (licences.md
+    L10): three registrations on its stop word (CC43 bits 0-6, CC44 7-13, CC45
+    14+; stop_ranks' order), each a bass and a treble pair -- the default (Cor
+    anglais + Flute); Bourdon, Clairon, Basson, Hautbois, Celeste; Clarinette,
+    Fifre, Violoncelle, Sourdine, Musette with the tremolo."""
+    mid, tr = one_track()
+    ev = [(0.0, mido.Message('program_change', channel=0, program=20))]
+    regs = ((None, None, None), (2 | 4 | 8, 1 | 2, 0), (32 | 64, 16 | 32 | 64, 1))
+    t = 0.2
+    for cc43, cc44, cc45 in regs:
+        if cc43 is not None:
+            ev += [(t, mido.Message('control_change', channel=0, control=43, value=cc43)),
+                   (t, mido.Message('control_change', channel=0, control=44, value=cc44)),
+                   (t, mido.Message('control_change', channel=0, control=45, value=cc45))]
+        for k in (48, 55, 72, 79):
+            ev += [(t + 0.05, mido.Message('note_on', channel=0, note=k, velocity=100)),
+                   (t + 1.6, mido.Message('note_off', channel=0, note=k, velocity=0))]
+        t += 2.2
+    ev.append((t + 0.5, mido.Message('control_change', channel=0, control=7, value=100)))
+    now = 0
+    for at, msg in sorted(ev, key=lambda e: e[0]):
+        tk = int(round(at * 960))
+        msg.time = tk - now
+        now = tk
+        tr.append(msg)
+    return mid
+
+
 def couplers(variation, steps):
     """A 60's organ manual (bank 16, program 16: 16 the upper's 60's Organ 1, 41
     the lower) holding a chord from 0.3 s while its COUPLER SWITCHES change
@@ -905,7 +934,7 @@ def biwa_compass():
     return mid
 
 
-MAKERS = {"biwa_compass": biwa_compass, "rhodes_compass": rhodes_compass, "basses_all": basses_all, "eguitars_six": eguitars_six, "stab_chords": stab_chords, "harpsi_four": harpsi_four, "tonewheel_spinet": tonewheel_spinet, "gopichant_compass": gopichant_compass, "hawaiian_compass": hawaiian_compass, "guitar12_compass": guitar12_compass, "flugel_phrase": flugel_phrase, "mandolin_compass": mandolin_compass, "dulcimer_compass": dulcimer_compass, "feedback_held": feedback_held, "clav_compass": clav_compass,
+MAKERS = {"harmonium_stops": harmonium_stops, "biwa_compass": biwa_compass, "rhodes_compass": rhodes_compass, "basses_all": basses_all, "eguitars_six": eguitars_six, "stab_chords": stab_chords, "harpsi_four": harpsi_four, "tonewheel_spinet": tonewheel_spinet, "gopichant_compass": gopichant_compass, "hawaiian_compass": hawaiian_compass, "guitar12_compass": guitar12_compass, "flugel_phrase": flugel_phrase, "mandolin_compass": mandolin_compass, "dulcimer_compass": dulcimer_compass, "feedback_held": feedback_held, "clav_compass": clav_compass,
           "couplers_upper": lambda: couplers(16, ((1.5, 0), (2.5, 1 | 4), (3.5, 2), (4.5, 2 | 4 | 8), (6.0, 1 | 2 | 8))),
           "couplers_lower": lambda: couplers(41, ((1.5, 4), (3.0, 1 | 4), (4.5, 0), (6.0, 4))), "spectra_rotor": lambda: spectra(10), "spectra_chorus": lambda: spectra(11),
           "spectra_sustain": lambda: spectra_sustain(10), "spectra_sustain_chorus": lambda: spectra_sustain(11), "dense_pedal": dense_pedal, "assign_mode": assign_mode, "mpe_organ": lambda: mpe_zone(19), "cmx_live": cmx_live, "userdrums": userdrums, "drumdelay": drumdelay, "moog_cmx": moog_cmx, "two_organs": two_organs, "rhythmpart": rhythmpart, "gsrx_2port": gsrx_2port, "drumnrpn": drumnrpn, "drumnrpn2": drumnrpn2, "gsvsense": gsvsense,
