@@ -796,6 +796,41 @@ def harmonium_onset():
     return mid
 
 
+def harmonium_grandjeu():
+    """GM 20's Grand-Jeu (CC46 bit 1: tonelib.grand_jeu_on): a chord on the
+    default registration; the Grand-Jeu drawn (every full stop, both halves,
+    and the Forte-Expressifs) on the reservoir; then under the Expression, the
+    feet swelling a held chord (the lids open past 800 Pa); the Grand-Jeu
+    pushed in under a held chord (back to the knobs' own registration)."""
+    mid, tr = one_track()
+    ev = [(0.0, mido.Message('program_change', channel=0, program=20))]
+    cc = lambda t, c, v: ev.append((t, mido.Message('control_change', channel=0, control=c, value=v)))
+
+    def chord(t0, t1, keys=(48, 55, 64, 72, 76), vel=100):
+        for k in keys:
+            ev.append((t0, mido.Message('note_on', channel=0, note=k, velocity=vel)))
+            ev.append((t1, mido.Message('note_off', channel=0, note=k, velocity=0)))
+    chord(0.2, 2.2)
+    cc(2.6, 46, 2)
+    chord(2.8, 4.8)
+    cc(5.2, 44, 4)
+    cc(5.2, 11, 30)
+    chord(5.4, 10.0)
+    for i in range(21):
+        cc(5.8 + 0.1 * i, 11, int(round(30 + 97 * i / 20)))
+    cc(8.5, 46, 0)
+    cc(8.5, 44, 0)
+    chord(10.4, 12.4)
+    ev.append((13.0, mido.Message('control_change', channel=0, control=7, value=100)))
+    now = 0
+    for at, msg in sorted(ev, key=lambda e: e[0]):
+        tk = int(round(at * 960))
+        msg.time = tk - now
+        now = tk
+        tr.append(msg)
+    return mid
+
+
 def couplers(variation, steps):
     """A 60's organ manual (bank 16, program 16: 16 the upper's 60's Organ 1, 41
     the lower) holding a chord from 0.3 s while its COUPLER SWITCHES change
@@ -1097,7 +1132,7 @@ def biwa_compass():
     return mid
 
 
-MAKERS = {"harmonium_onset": harmonium_onset, "harmonium_prolong": harmonium_prolong, "harmonium_boxes": harmonium_boxes, "harmonium_wind": harmonium_wind, "harmonium_stops": harmonium_stops, "biwa_compass": biwa_compass, "rhodes_compass": rhodes_compass, "basses_all": basses_all, "eguitars_six": eguitars_six, "stab_chords": stab_chords, "harpsi_four": harpsi_four, "tonewheel_spinet": tonewheel_spinet, "gopichant_compass": gopichant_compass, "hawaiian_compass": hawaiian_compass, "guitar12_compass": guitar12_compass, "flugel_phrase": flugel_phrase, "mandolin_compass": mandolin_compass, "dulcimer_compass": dulcimer_compass, "feedback_held": feedback_held, "clav_compass": clav_compass,
+MAKERS = {"harmonium_grandjeu": harmonium_grandjeu, "harmonium_onset": harmonium_onset, "harmonium_prolong": harmonium_prolong, "harmonium_boxes": harmonium_boxes, "harmonium_wind": harmonium_wind, "harmonium_stops": harmonium_stops, "biwa_compass": biwa_compass, "rhodes_compass": rhodes_compass, "basses_all": basses_all, "eguitars_six": eguitars_six, "stab_chords": stab_chords, "harpsi_four": harpsi_four, "tonewheel_spinet": tonewheel_spinet, "gopichant_compass": gopichant_compass, "hawaiian_compass": hawaiian_compass, "guitar12_compass": guitar12_compass, "flugel_phrase": flugel_phrase, "mandolin_compass": mandolin_compass, "dulcimer_compass": dulcimer_compass, "feedback_held": feedback_held, "clav_compass": clav_compass,
           "couplers_upper": lambda: couplers(16, ((1.5, 0), (2.5, 1 | 4), (3.5, 2), (4.5, 2 | 4 | 8), (6.0, 1 | 2 | 8))),
           "couplers_lower": lambda: couplers(41, ((1.5, 4), (3.0, 1 | 4), (4.5, 0), (6.0, 4))), "spectra_rotor": lambda: spectra(10), "spectra_chorus": lambda: spectra(11),
           "spectra_sustain": lambda: spectra_sustain(10), "spectra_sustain_chorus": lambda: spectra_sustain(11), "dense_pedal": dense_pedal, "assign_mode": assign_mode, "mpe_organ": lambda: mpe_zone(19), "cmx_live": cmx_live, "userdrums": userdrums, "drumdelay": drumdelay, "moog_cmx": moog_cmx, "two_organs": two_organs, "rhythmpart": rhythmpart, "gsrx_2port": gsrx_2port, "drumnrpn": drumnrpn, "drumnrpn2": drumnrpn2, "gsvsense": gsvsense,

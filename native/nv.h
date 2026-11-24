@@ -694,6 +694,10 @@ typedef struct OrganSpec {
     /* ...and its onset's axes (HARMONIUM_ONSET_TOUCH, _PRESSURES, HAMMER_TOUCH,
        SMOOTHSTEP_10) */
     double on_touch[3], on_p[3], ham_touch[3], ss10;
+    /* ...and its GRAND-JEU (tonelib.grand_jeu_on): its stop (-1 none), the
+       ranks it brings on (a bit a rank) */
+    int gj_rank;
+    long long gj_mask;
 } OrganSpec;
 
 /* tonelib.harmonium_pressure / _pressure_gain / _tremolo_hz, operation for operation */

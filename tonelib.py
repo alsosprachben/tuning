@@ -8177,6 +8177,21 @@ DividerPedalProperties.coupler_switches = ()
 DividerPedalProperties.default_couplers = 0
 
 
+# THE GRAND-JEU (Mustel, glossary p. 151): one knob (or a heel or knee lever)
+# bringing on the four full stops, all eight halves -- Cor anglais / Flute 8,
+# Bourdon / Clarinette 16, Clairon / Fifre 4, Basson / Hautbois 8 -- and, on
+# Mustel's own instruments, the Forte-Expressifs. It opens their pallets by
+# its own linkage: their knobs do not move, and pushing it in returns each to
+# its own.
+def grand_jeu_on(cls, on):
+    """The ranks that SOUND from those drawn (on), the Grand-Jeu's among them
+    where it is drawn (cls.grand_jeu): every engine's, beside coupled_on."""
+    gj = getattr(cls, 'grand_jeu', None)
+    if not gj or 'grand jeu' not in on:
+        return set(on)
+    return set(on) | set(gj)
+
+
 def coupled_on(cls, on, couplers):
     """The ranks that SOUND (a set of names) from those whose stop-word bit is
     drawn (on), the manual's coupler switches at `couplers` (COUPLER_CC's
@@ -9651,6 +9666,9 @@ ReedOrganFreeProperties.stop_ranks = [
     # lowest octave's keys latched (HARMONIUM_PROLONG_KEYS, blockrender's
     # _prep_prolongement)
     ("prolongement",  None, 0.0),
+    # bit 22, THE GRAND-JEU (glossary p. 151; on CC46): every full stop at once
+    # (grand_jeu_on)
+    ("grand jeu",     None, 0.0),
 ]
 # THE CELESTE'S TWO ROWS AT EACH KEY: the first at the key's 16-foot, the
 # second its own measured cents above (mixture_ratios reads a composition by
@@ -9663,7 +9681,7 @@ ReedOrganFreeProperties.mixture_compositions = {"celeste": [
 ReedOrganFreeProperties.stop_rows = [
     ["cor anglais 1", "bourdon 2", "clairon 3", "basson 4", "|",
      "flute 1", "clarinette 2", "fifre 3", "hautbois 4", "celeste"],
-    ["expression", "percussion", "tremolo", "prolongement"],
+    ["expression", "percussion", "tremolo", "prolongement", "grand jeu"],
     ["violoncelle", "sourdine", "|", "musette"],
     ["forte fixe B", "forte expr B", "metaphone B", "|", "forte fixe T", "forte expr T", "metaphone T"],
 ]
@@ -9997,6 +10015,8 @@ def harmonium_onset_delay(cls, f, vel, p, speech_s):
 # (percussion_rise_points: its rise against the unstruck reed's at each key,
 # per touch HARMONIUM_HAMMER_TOUCH, simulated: freereed_sim.hammer_impulse).
 ReedOrganFreeProperties.percussion_ranks = ("cor anglais 1", "flute 1")
+ReedOrganFreeProperties.grand_jeu = ("cor anglais 1", "bourdon 2", "clairon 3", "basson 4", "flute 1",
+                                     "clarinette 2", "fifre 3", "hautbois 4", "forte expr B", "forte expr T")
 HARMONIUM_HAMMER_TOUCH = (0.2, 0.6, 1.0)
 
 

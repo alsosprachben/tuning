@@ -2232,6 +2232,7 @@ def registration_blocks(ch, prop, ccs, nblk, amp=None, recalls=()):
         on = {r[0] for i, r in enumerate(ranks) if (mask >> i) & 1 or r[0] in drawn}
         if cgate:
             on = T.coupled_on(prop, {k for k in on if k not in prop.coupler_copies}, cpl[0])
+        on = T.grand_jeu_on(prop, on)       # (a harmonium's Grand-Jeu: its full stops sound)
         for i, r in enumerate(ranks):
             k = r[0]; rank_ev[k].append((t, (T.level_gain(prop, k, on) if lvl else 1.0) if k in on else 0.0))
         swell_ev.append((t, vol))

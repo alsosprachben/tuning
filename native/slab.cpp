@@ -7239,8 +7239,9 @@ struct Part {
         double p = og->hwind ? hwind_now(patches[cur], half) : og->pres_ref;
         // ...ITS HALF'S BOX (harmonium_box_tone): each slot by its own frequency
         if (og->hwind) {
-            int fx = og->fixe_rank[half] >= 0 && dr[og->fixe_rank[half]];
-            int fe = og->fexpr_rank[half] >= 0 && dr[og->fexpr_rank[half]];
+            const std::vector<char> snd = coupled(og, dr, patches[cur].cpl);   // (what sounds: the Grand-Jeu's too)
+            int fx = og->fixe_rank[half] >= 0 && snd[og->fixe_rank[half]];
+            int fe = og->fexpr_rank[half] >= 0 && snd[og->fexpr_rank[half]];
             int meta = og->meta_rank[half] >= 0 && dr[og->meta_rank[half]];
             double o = nv_hbox_open(og, p, fx, fe);
             if (o != 0.0 || meta) {
@@ -8685,6 +8686,14 @@ struct Part {
     // coupled tab not under its manual's 8' Off; any other organ its drawn
     static std::vector<char> coupled(const OrganSpec *og, const std::vector<char> &dr, int cpl)
     {
+        if (og && og->gj_rank >= 0) {           // (a harmonium's Grand-Jeu, tonelib.grand_jeu_on)
+            std::vector<char> out(dr);
+            if (og->gj_rank < (int)dr.size() && dr[og->gj_rank])
+                for (int ri = 0; ri < (int)out.size() && ri < og->n_rank; ri++)
+                    if ((og->gj_mask >> ri) & 1)
+                        out[ri] = 1;
+            return out;
+        }
         if (!og || !og->has_cpl)
             return dr;
         const int n = (int)dr.size();
@@ -9068,8 +9077,9 @@ struct Part {
             BRt[row] = (float)(sum / 8.0);
             BCt[row] = st.acc[row];
             if (q->box_back) {              // (a back stop's box: its half's lids at the block's two edges)
-                int fx = og->fixe_rank[h] >= 0 && p.drawn[og->fixe_rank[h]];
-                int fe = og->fexpr_rank[h] >= 0 && p.drawn[og->fexpr_rank[h]];
+                const std::vector<char> snd = coupled(og, p.drawn, p.cpl);   // (what sounds: the Grand-Jeu's too)
+                int fx = og->fixe_rank[h] >= 0 && snd[og->fixe_rank[h]];
+                int fe = og->fexpr_rank[h] >= 0 && snd[og->fexpr_rank[h]];
                 BLt[2 * row] = (float)(nv_hlevel_gain(q, e0[h]) * nv_hbox_level(og, nv_hbox_open(og, e0[h], fx, fe)));
                 BLt[2 * row + 1] = (float)(nv_hlevel_gain(q, out[h])
                                            * nv_hbox_level(og, nv_hbox_open(og, out[h], fx, fe)));

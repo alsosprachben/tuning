@@ -3232,7 +3232,7 @@ class OrganSpec(ctypes.Structure):
                 + [(f, C) for f in ('box_s', 'box_alpha', 'box_alpha_hz', 'box_gap', 'box_lid', 'fexpr_pa',
                                     'fexpr_span', 'meta_hz')]
                 + [('prolong_rank', I), ('prolong_lo', I), ('prolong_hi', I), ('on_touch', C * 3), ('on_p', C * 3),
-                   ('ham_touch', C * 3), ('ss10', C)])
+                   ('ham_touch', C * 3), ('ss10', C), ('gj_rank', I), ('gj_mask', ctypes.c_longlong)])
 
 
 _ORGAN = {}
@@ -3565,6 +3565,11 @@ def organ(cls):
     o.prolong_lo, o.prolong_hi = T.HARMONIUM_PROLONG_KEYS
     o.on_touch[:], o.on_p[:] = list(T.HARMONIUM_ONSET_TOUCH), list(T.HARMONIUM_ONSET_PRESSURES)
     o.ham_touch[:], o.ss10 = list(T.HARMONIUM_HAMMER_TOUCH), T.SMOOTHSTEP_10
+    # (its Grand-Jeu: tonelib.grand_jeu_on)
+    _names = [r[0] for r in ranks]
+    o.gj_rank = _names.index('grand jeu') if 'grand jeu' in _names and getattr(cls, 'grand_jeu', None) else -1
+    o.gj_mask = sum(1 << _names.index(k) for k in (getattr(cls, 'grand_jeu', None) or ()) if k in _names) \
+        if o.gj_rank >= 0 else 0
     if getattr(cls, 'harmonium_wind', False):
         # THE HARMONIUM'S CHEST (wind.HarmoniumWind), its ranks by half and stop
         import wind as WND

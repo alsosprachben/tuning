@@ -517,6 +517,11 @@ struct Song {
                         drawn = true;
                 base[ri] = ((mask >> ri) & 1) || drawn;
             }
+            // (a harmonium's GRAND-JEU, tonelib.grand_jeu_on: its full stops sound)
+            if (spec->gj_rank >= 0 && base[spec->gj_rank])
+                for (int ri = 0; ri < nr; ri++)
+                    if ((spec->gj_mask >> ri) & 1)
+                        base[ri] = true;
             // (THE COUPLER SWITCHES, tonelib.coupled_on: a copy sounds with its tab
             //  and its switch, a coupled tab not under its manual's 8' Off)
             for (int ri = 0; ri < nr; ri++) {

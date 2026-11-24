@@ -12262,6 +12262,8 @@ class Live:
         switches (tonelib.coupled_on: a copy its tab and its switch, a coupled
         tab not under 8' Off) -- the drawn set itself on any other voice."""
         d = part.drawn if drawn is None else drawn
+        if not part.drums and getattr(part.patch._voice_class(60), "grand_jeu", None):
+            return T.grand_jeu_on(part.patch._voice_class(60), d)      # (a harmonium's Grand-Jeu)
         if part.drums or not getattr(part.patch, "coupler_switches", ()):
             return d
         return T.coupled_on(part.patch._voice_class(60),
@@ -12853,7 +12855,8 @@ class Live:
     def _hbox_stops(self, part, half):
         """A harmonium part's half's Fortes drawn: (Fixe, Expressif)."""
         sd = "BT"[half]
-        return "forte fixe " + sd in part.drawn, "forte expr " + sd in part.drawn
+        snd = self._coupled_ranks(part)     # (what sounds: the Grand-Jeu brings the Forte-Expressifs)
+        return "forte fixe " + sd in snd, "forte expr " + sd in snd
 
     def _hwind_now(self, part, half):
         """A harmonium part's half's wind (Pa) for a note struck now: its
