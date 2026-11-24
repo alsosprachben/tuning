@@ -9005,6 +9005,22 @@ class ReedOrganFreeProperties(FreeReedProperties):
     # (m3/s at f, f, the exponent across the keyboard) -- simulated
     pressure_level_db = ((60, -52.83), (80, -35.32), (100, -21.50), (120, -14.91), (150, -11.59), (200, -8.73), (250, -6.81), (300, -5.18), (400, -2.24), (500, -1.12), (700, 0.00), (1000, 1.45), (1300, 2.68), (1600, 3.66))
     pressure_draw = (5.6449e-04, 261.63, -1.374)
+    # ITS ONSET (examples/harmonium_bake.py --onset: tonelib.harmonium_onset):
+    # its reed's wait to 10 % of its swing, s, at its keys -- a row per touch
+    # (gentle, middle, sharp), a column per wind (300, 700, 1500 Pa) -- simulated
+    onset_points = (
+        (130.81, ((0.4346, 0.1754, 0.0610), (0.2669, 0.1067, 0.0229), (0.2059, 0.0686, 0.0000))),
+        (261.63, ((0.4079, 0.2059, 0.1220), (0.4194, 0.1639, 0.0724), (0.2288, 0.0991, 0.0381))),
+        (523.25, ((0.3811, 0.1839, 0.1081), (0.3356, 0.1630, 0.0929), (0.3014, 0.1441, 0.0758))),
+    )
+    # ITS HAMMER (the Percussion: tonelib.harmonium_percussion_rise): the struck
+    # reed's rise against the unstruck one's, a column per touch (0.2, 0.6, 1.0) -- simulated
+    percussion_rise_points = (
+        (130.81, (1.0000, 1.0000, 0.9348)),
+        (261.63, (1.0172, 0.8793, 0.7069)),
+        (523.25, (0.9277, 0.7711, 0.5542)),
+        (1046.50, (1.3879, 1.1983, 1.0431)),
+    )
 
     registerable = True
     # ...AND STILL PLAYED, not only set up: its onset and release (CC73/72)
@@ -9085,6 +9101,14 @@ class HarmoniumBourdonProperties(ReedOrganFreeProperties):
     # (m3/s at f, f, the exponent across the keyboard) -- simulated
     pressure_level_db = ((60, -31.68), (80, -22.74), (100, -17.40), (120, -14.14), (150, -11.18), (200, -8.07), (250, -5.69), (300, -4.36), (400, -2.68), (500, -1.53), (700, 0.00), (1000, 1.51), (1300, 2.41), (1600, 2.79))
     pressure_draw = (3.0764e-03, 73.40, -1.030)
+    # ITS ONSET (examples/harmonium_bake.py --onset: tonelib.harmonium_onset):
+    # its reed's wait to 10 % of its swing, s, at its keys -- a row per touch
+    # (gentle, middle, sharp), a column per wind (300, 700, 1500 Pa) -- simulated
+    onset_points = (
+        (41.20, ((0.0971, 0.0000, 0.0000), (0.0485, 0.0000, 0.0000), (0.0485, 0.0000, 0.0000))),
+        (73.40, ((0.3129, 0.1088, 0.0000), (0.1905, 0.0408, 0.0000), (0.1633, 0.0136, 0.0000))),
+        (130.80, ((0.4499, 0.1906, 0.0686), (0.2898, 0.1144, 0.0305), (0.2211, 0.0762, 0.0076))),
+    )
     # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 42.9
     speech_harmonic_exp = 0.00
@@ -9129,6 +9153,14 @@ class HarmoniumClarinetteProperties(ReedOrganFreeProperties):
     # (m3/s at f, f, the exponent across the keyboard) -- simulated
     pressure_level_db = ((60, -75.62), (80, -54.71), (100, -31.80), (120, -16.04), (150, -10.48), (200, -7.35), (250, -5.50), (300, -4.22), (400, -2.39), (500, -1.05), (700, 0.00), (1000, 2.20), (1300, 3.85), (1600, 5.06))
     pressure_draw = (3.0328e-04, 440.00, -1.454)
+    # ITS ONSET (examples/harmonium_bake.py --onset: tonelib.harmonium_onset):
+    # its reed's wait to 10 % of its swing, s, at its keys -- a row per touch
+    # (gentle, middle, sharp), a column per wind (300, 700, 1500 Pa) -- simulated
+    onset_points = (
+        (233.10, ((0.4783, 0.2776, 0.1452), (0.4228, 0.1708, 0.0726), (0.2392, 0.1025, 0.0384))),
+        (440.00, ((0.3452, 0.1749, 0.1045), (0.3452, 0.1658, 0.0908), (0.3066, 0.1476, 0.0704))),
+        (784.00, ((0.2758, 0.1271, 0.0788), (0.2847, 0.1322, 0.0839), (0.2796, 0.1284, 0.0788))),
+    )
     # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 78.9
     speech_harmonic_exp = 0.00
@@ -9175,6 +9207,14 @@ class HarmoniumClaironProperties(ReedOrganFreeProperties):
     # (m3/s at f, f, the exponent across the keyboard) -- simulated
     pressure_level_db = ((60, -58.29), (80, -37.27), (100, -19.85), (120, -12.58), (150, -10.64), (200, -8.71), (250, -7.02), (300, -5.32), (400, -3.09), (500, -1.82), (700, 0.00), (1000, 1.89), (1300, 3.28), (1600, 4.36))
     pressure_draw = (4.8889e-04, 293.70, -1.445)
+    # ITS ONSET (examples/harmonium_bake.py --onset: tonelib.harmonium_onset):
+    # its reed's wait to 10 % of its swing, s, at its keys -- a row per touch
+    # (gentle, middle, sharp), a column per wind (300, 700, 1500 Pa) -- simulated
+    onset_points = (
+        (164.80, ((0.5153, 0.2304, 0.0970), (0.3031, 0.1273, 0.0424), (0.2182, 0.0788, 0.0182))),
+        (293.70, ((0.3396, 0.1732, 0.0985), (0.3260, 0.1494, 0.0713), (0.2683, 0.1155, 0.0475))),
+        (523.30, ((0.3943, 0.1801, 0.1062), (0.3488, 0.1649, 0.0948), (0.3166, 0.1441, 0.0739))),
+    )
     # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 52.9
     speech_harmonic_exp = 0.00
@@ -9218,6 +9258,14 @@ class HarmoniumFifreProperties(HarmoniumClaironProperties):
     # (m3/s at f, f, the exponent across the keyboard) -- simulated
     pressure_level_db = ((60, -79.96), (80, -76.40), (100, -73.31), (120, -69.81), (150, -61.12), (200, -25.96), (250, -9.83), (300, -7.82), (400, -4.92), (500, -2.86), (700, 0.00), (1000, 2.83), (1300, 4.86), (1600, 6.42))
     pressure_draw = (4.9513e-05, 1661.20, -1.013)
+    # ITS ONSET (examples/harmonium_bake.py --onset: tonelib.harmonium_onset):
+    # its reed's wait to 10 % of its swing, s, at its keys -- a row per touch
+    # (gentle, middle, sharp), a column per wind (300, 700, 1500 Pa) -- simulated
+    onset_points = (
+        (932.30, ((0.2816, 0.1232, 0.0776), (0.2848, 0.1296, 0.0744), (0.2869, 0.1349, 0.0701))),
+        (1661.20, ((0.3512, 0.1202, 0.0548), (0.3926, 0.1015, 0.0455), (0.4212, 0.0922, 0.0408))),
+        (1661.20, ((0.3512, 0.1202, 0.0548), (0.3926, 0.1015, 0.0455), (0.4212, 0.0922, 0.0408))),
+    )
     # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 124.7
     speech_harmonic_exp = 0.00
@@ -9263,6 +9311,14 @@ class HarmoniumHautboisProperties(ReedOrganFreeProperties):
     # (m3/s at f, f, the exponent across the keyboard) -- simulated
     pressure_level_db = ((60, -73.77), (80, -63.41), (100, -31.71), (120, -15.66), (150, -12.88), (200, -10.13), (250, -8.13), (300, -6.49), (400, -4.08), (500, -2.37), (700, 0.00), (1000, 2.43), (1300, 4.21), (1600, 5.83))
     pressure_draw = (8.4743e-05, 880.00, -1.224)
+    # ITS ONSET (examples/harmonium_bake.py --onset: tonelib.harmonium_onset):
+    # its reed's wait to 10 % of its swing, s, at its keys -- a row per touch
+    # (gentle, middle, sharp), a column per wind (300, 700, 1500 Pa) -- simulated
+    onset_points = (
+        (466.20, ((0.3145, 0.1551, 0.0914), (0.3464, 0.2061, 0.0892), (0.2444, 0.1105, 0.0510))),
+        (880.00, ((0.2047, 0.1069, 0.0641), (0.1924, 0.0979, 0.0574), (0.1935, 0.0979, 0.0585))),
+        (1568.00, ((0.2294, 0.1106, 0.0669), (0.2437, 0.1025, 0.0456), (0.2662, 0.0894, 0.0425))),
+    )
     # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 99.0
     speech_harmonic_exp = 0.00
@@ -9307,6 +9363,14 @@ class HarmoniumBassonProperties(ReedOrganFreeProperties):
     # (m3/s at f, f, the exponent across the keyboard) -- simulated
     pressure_level_db = ((60, -22.45), (80, -16.29), (100, -13.29), (120, -11.49), (150, -8.68), (200, -6.30), (250, -5.13), (300, -4.28), (400, -2.88), (500, -1.76), (700, 0.00), (1000, 1.67), (1300, 2.92), (1600, 3.82))
     pressure_draw = (1.0425e-03, 146.80, -1.259)
+    # ITS ONSET (examples/harmonium_bake.py --onset: tonelib.harmonium_onset):
+    # its reed's wait to 10 % of its swing, s, at its keys -- a row per touch
+    # (gentle, middle, sharp), a column per wind (300, 700, 1500 Pa) -- simulated
+    onset_points = (
+        (82.40, ((0.2546, 0.0849, 0.0000), (0.1576, 0.0364, 0.0000), (0.1334, 0.0243, 0.0000))),
+        (146.80, ((0.4007, 0.1562, 0.0611), (0.2105, 0.0883, 0.0272), (0.1562, 0.0543, 0.0068))),
+        (261.60, ((0.3088, 0.1639, 0.0953), (0.3164, 0.1258, 0.0534), (0.1754, 0.0762, 0.0305))),
+    )
     # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 39.9
     speech_harmonic_exp = 0.00
@@ -9351,6 +9415,14 @@ class HarmoniumCelesteProperties(ReedOrganFreeProperties):
     # (m3/s at f, f, the exponent across the keyboard) -- simulated
     pressure_level_db = ((60, -76.07), (80, -52.50), (100, -29.06), (120, -15.07), (150, -10.70), (200, -7.46), (250, -5.53), (300, -4.19), (400, -2.32), (500, -0.95), (700, 0.00), (1000, 2.05), (1300, 3.80), (1600, 5.06))
     pressure_draw = (2.6648e-04, 440.00, -1.413)
+    # ITS ONSET (examples/harmonium_bake.py --onset: tonelib.harmonium_onset):
+    # its reed's wait to 10 % of its swing, s, at its keys -- a row per touch
+    # (gentle, middle, sharp), a column per wind (300, 700, 1500 Pa) -- simulated
+    onset_points = (
+        (233.10, ((0.4484, 0.2520, 0.1324), (0.4484, 0.1666, 0.0683), (0.2221, 0.0940, 0.0384))),
+        (440.00, ((0.3179, 0.1612, 0.0976), (0.3202, 0.1567, 0.0886), (0.2748, 0.1340, 0.0636))),
+        (784.00, ((0.2605, 0.1207, 0.0750), (0.2707, 0.1258, 0.0801), (0.2669, 0.1245, 0.0762))),
+    )
     # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 75.9
     speech_harmonic_exp = 0.00
@@ -9399,6 +9471,14 @@ class HarmoniumVioloncelleProperties(ReedOrganFreeProperties):
     # (m3/s at f, f, the exponent across the keyboard) -- simulated
     pressure_level_db = ((60, -53.00), (80, -38.30), (100, -25.23), (120, -14.10), (150, -9.06), (200, -7.11), (250, -5.40), (300, -4.25), (400, -2.68), (500, -1.57), (700, 0.00), (1000, 1.62), (1300, 2.90), (1600, 3.83))
     pressure_draw = (1.0791e-03, 146.80, -1.249)
+    # ITS ONSET (examples/harmonium_bake.py --onset: tonelib.harmonium_onset):
+    # its reed's wait to 10 % of its swing, s, at its keys -- a row per touch
+    # (gentle, middle, sharp), a column per wind (300, 700, 1500 Pa) -- simulated
+    onset_points = (
+        (82.40, ((0.3516, 0.1212, 0.0000), (0.2425, 0.0606, 0.0000), (0.2182, 0.0364, 0.0000))),
+        (146.80, ((0.5977, 0.2649, 0.1019), (0.3532, 0.1358, 0.0408), (0.2649, 0.0883, 0.0136))),
+        (261.60, ((0.5604, 0.2783, 0.1258), (0.4842, 0.2783, 0.1792), (0.3469, 0.1334, 0.0534))),
+    )
     # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 39.9
     speech_harmonic_exp = 0.00
@@ -9442,6 +9522,14 @@ class HarmoniumSourdineProperties(ReedOrganFreeProperties):
     # (m3/s at f, f, the exponent across the keyboard) -- simulated
     pressure_level_db = ((60, -66.95), (80, -56.40), (100, -47.43), (120, -39.55), (150, -29.22), (200, -16.26), (250, -10.31), (300, -7.50), (400, -4.88), (500, -2.99), (700, 0.00), (1000, 2.75), (1300, 4.13), (1600, 5.10))
     pressure_draw = (5.9981e-04, 146.80, -1.370)
+    # ITS ONSET (examples/harmonium_bake.py --onset: tonelib.harmonium_onset):
+    # its reed's wait to 10 % of its swing, s, at its keys -- a row per touch
+    # (gentle, middle, sharp), a column per wind (300, 700, 1500 Pa) -- simulated
+    onset_points = (
+        (82.40, ((0.3880, 0.3395, 0.1455), (0.3395, 0.2182, 0.0606), (0.3152, 0.1819, 0.0485))),
+        (146.80, ((0.5705, 0.6112, 0.2581), (0.5162, 0.2988, 0.1358), (0.4415, 0.2173, 0.0815))),
+        (261.60, ((0.6176, 0.4308, 0.2326), (0.6252, 0.4537, 0.1944), (0.5490, 0.2440, 0.1144))),
+    )
     # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 75.8
     speech_harmonic_exp = 0.00
@@ -9486,6 +9574,14 @@ class HarmoniumMusetteProperties(ReedOrganFreeProperties):
     # (m3/s at f, f, the exponent across the keyboard) -- simulated
     pressure_level_db = ((60, -68.44), (80, -35.94), (100, -16.35), (120, -11.60), (150, -9.09), (200, -6.75), (250, -5.20), (300, -4.02), (400, -2.48), (500, -2.06), (700, 0.00), (1000, 2.61), (1300, 4.36), (1600, 5.66))
     pressure_draw = (2.2317e-04, 440.00, -1.424)
+    # ITS ONSET (examples/harmonium_bake.py --onset: tonelib.harmonium_onset):
+    # its reed's wait to 10 % of its swing, s, at its keys -- a row per touch
+    # (gentle, middle, sharp), a column per wind (300, 700, 1500 Pa) -- simulated
+    onset_points = (
+        (233.10, ((0.4057, 0.2264, 0.1110), (0.3289, 0.1409, 0.0555), (0.1836, 0.0726, 0.0299))),
+        (440.00, ((0.2589, 0.1340, 0.0840), (0.2566, 0.1317, 0.0818), (0.2180, 0.1045, 0.0500))),
+        (784.00, ((0.2160, 0.1055, 0.0661), (0.2237, 0.1118, 0.0712), (0.2249, 0.1156, 0.0699))),
+    )
     # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 63.9
     speech_harmonic_exp = 0.00
@@ -9835,12 +9931,84 @@ def harmonium_draw(cls, f):
     return q * (f / fr) ** ex
 
 
-# PERCUSSION: a hammer strikes the front 8-foot reeds as the key goes down, so
-# they speak at once instead of swelling in (EB1911: "percussion ... on the
-# diapason rows"). Register 1 in each half and nothing else. The attack becomes
-# min(attack, this) -- the legato-attack machinery, used for a hammer.
+# THE ONSET (step 5f; Ben: model the whole wait): a free reed does not speak
+# at its key -- the pallet opens (15 ms for a gentle key, 4 ms for a sharp
+# one), the cell fills, and the tongue's swing grows from the jet's
+# turbulence until it catches. Simulated per stop (onset_points: the wait to
+# 10 % of its swing, s, at its low, middle and high key; each a row per touch
+# ONSET_TOUCH, a column per pressure ONSET_PRESSURES: examples/harmonium_bake.py
+# --onset) -- a sharp key ~100 ms sooner than a gentle one, a strong wind
+# sooner than a weak. A note starts that wait late, less the time the
+# engine's own attack (a smoothstep over its speech) takes to reach 10 %.
+HARMONIUM_ONSET_TOUCH = (0.0, 0.5, 1.0)
+HARMONIUM_ONSET_PRESSURES = (300.0, 700.0, 1500.0)
+SMOOTHSTEP_10 = 0.19580010565909173     # (3x^2 - 2x^3 = 0.1)
+
+
+def harmonium_touch(vel):
+    """A key's velocity (1-127) as the pallet's touch, 0 gentle .. 1 sharp."""
+    t = (float(vel) - 1.0) / 126.0
+    return 0.0 if t < 0.0 else (1.0 if t > 1.0 else t)
+
+
+def _lerp_axis(xs, x):
+    """(i, w): x between xs[i] and xs[i + 1] (held past the ends), linear."""
+    if x <= xs[0]:
+        return 0, 0.0
+    if x >= xs[-1]:
+        return len(xs) - 2, 1.0
+    i = 0
+    while xs[i + 1] < x:
+        i += 1
+    return i, (x - xs[i]) / (xs[i + 1] - xs[i])
+
+
+def harmonium_onset(cls, f, touch, p):
+    """A stop's reed's wait to 10 % of its swing (s) at f Hz, touch, wind p:
+    its table interpolated in log f, touch, log p, held past the ends."""
+    pts = getattr(cls, 'onset_points', None)
+    if not pts:
+        return 0.0
+    lf = [_log(x[0]) for x in pts]
+    i, w = _lerp_axis(lf, _log(f))
+    j, u = _lerp_axis(HARMONIUM_ONSET_TOUCH, touch)
+    lp = [_log(x) for x in HARMONIUM_ONSET_PRESSURES]
+    k, v = _lerp_axis(lp, _log(p))
+
+    def at(a):
+        t = pts[a][1]
+        r0 = t[j][k] + (t[j][k + 1] - t[j][k]) * v
+        r1 = t[j + 1][k] + (t[j + 1][k + 1] - t[j + 1][k]) * v
+        return r0 + (r1 - r0) * u
+    return at(i) + (at(i + 1) - at(i)) * w
+
+
+def harmonium_onset_delay(cls, f, vel, p, speech_s):
+    """A note's start delayed by its reed's wait (s): the wait less what the
+    engine's attack over speech_s takes to reach 10 %."""
+    d = harmonium_onset(cls, f, harmonium_touch(vel), p) - SMOOTHSTEP_10 * speech_s
+    return d if d > 0.0 else 0.0
+
+
+# PERCUSSION (step 5e; Mustel, glossary p. 154): a felt hammer, thrown by the
+# key, strikes the Cor anglais / Flute's tongue as its pallet opens -- the
+# tongue speaks at once ("le vent n'a plus qu'a maintenir la lame en
+# vibration": no onset wait) and reaches its swing sooner the harder the key
+# (percussion_rise_points: its rise against the unstruck reed's at each key,
+# per touch HARMONIUM_HAMMER_TOUCH, simulated: freereed_sim.hammer_impulse).
 ReedOrganFreeProperties.percussion_ranks = ("cor anglais 1", "flute 1")
-ReedOrganFreeProperties.percussion_attack_s = 0.003
+HARMONIUM_HAMMER_TOUCH = (0.2, 0.6, 1.0)
+
+
+def harmonium_percussion_rise(cls, f, vel):
+    """The struck reed's speech against the unstruck one's at f Hz, key vel."""
+    pts = getattr(cls, 'percussion_rise_points', None)
+    if not pts:
+        return 1.0
+    i, w = _lerp_axis([_log(x[0]) for x in pts], _log(f))
+    j, u = _lerp_axis(HARMONIUM_HAMMER_TOUCH, harmonium_touch(vel))
+    at = lambda a: pts[a][1][j] + (pts[a][1][j + 1] - pts[a][1][j]) * u
+    return at(i) + (at(i + 1) - at(i)) * w
 
 # TREMOLO: a small bellows in the wind trunk makes the wind flutter. An
 # amplitude swing, through the same machinery as the electric pianos' panel

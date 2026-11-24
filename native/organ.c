@@ -200,8 +200,16 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
             hpw = n->organ_hx;
             fade_r *= pow(hpw / og->pres_ref, -scp->pres_sexp);
         }
-        if (n->organ_perc && rk->perc)              /* the Percussion stop's hammer: min(attack, hammer) */
-            fade_r = pymin(fade_r, pymax(1e-4, pymin(og->perc_attack_s, og->afm * t->dur)) * sr);
+        /* A HARMONIUM'S REED SPEAKS LATE (harmonium_onset_delay), the
+           Percussion's hammer starting it at once and sooner the harder the key */
+        double hdel = 0.0;
+        if (og->hwind && scp->on_n) {
+            double rf = f0 * (rk->compound ? rmin : rk->ratio[0]);
+            if (n->organ_perc && rk->perc)
+                fade_r *= nv_hperc_rise(og, hp, rf, n->vel);
+            else
+                hdel = nv_honset_delay(og, scp, rf, n->vel, isnan(n->organ_hx) ? og->pres_ref : hpw, fade_r / sr);
+        }
         double gr = n->rank_gr[ri], cr = n->organ_cr;
         tr.br = n->rank_br[ri];                     /* its chest's wind */
         double non_r = t->non;
@@ -211,6 +219,8 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
             rel_r = 1.0;                            /* pushed in before the key-up */
         if (!isnan(n->rank_sp[ri]))                 /* ...and a Hammond's drawbar when its contact closes */
             non_r = (n->rank_sp[ri] + rk->contact[note]) * sr;
+        if (hdel > 0.0)                             /* (the reed's wait: no later than its key-up) */
+            non_r = pymin(non_r + hdel * sr, t->noff);
         /* ...AND IT BOUNCES (contact_noise_db): a burst of noise a band at
            that contact, under its drawbar's fundamental, no images */
         if (!isnan(n->rank_sp[ri]) && og->n_cn) {

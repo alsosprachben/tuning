@@ -6529,6 +6529,7 @@ struct Part {
     // bent, its strings struck
     void strike(int ch, int note, int vel, long long n0, bool slur = false)
     {
+        hvel[std::make_pair(ch, note)] = vel;   // (a harmonium's touch: its pallet, its hammer)
         organ_sustain_cut(ch, note, n0);
         if (prolong_down(ch, note, n0))
             return;                         // (a latched key pressed again: it goes on sounding)
@@ -7264,12 +7265,34 @@ struct Part {
             for (long s : sl)
                 S.f4[F4_fa][s] = (float)((double)S.f4[F4_fa][s] * ss);
         }
-        if (og->perc_rank >= 0 && dr[og->perc_rank] && og->rank[ri].perc) {
-            double dur = T.dur ? T.dur / rate : 1.0;
-            float fa = (float)(std::max(1e-4, std::min(og->perc_attack_s, og->afm * dur)) * rate);
-            for (long s : sl)
-                if (fa < S.f4[F4_fa][s])
-                    S.f4[F4_fa][s] = fa;
+        // ...ITS REED SPEAKS LATE (harmonium_onset_delay: the key's touch, the
+        // half's wind), the Percussion's hammer starting it at once and sooner
+        // the harder the key (harmonium_percussion_rise) -- live._harmonium_stamp's
+        if (og->hwind) {
+            std::vector<int> ms2;
+            const OrganPipe *qr = hstop(og, ri, note, R.hrel.data(), sl.size(), ms2);
+            if (qr->on_n) {
+                const OrganRank &rk = og->rank[ri];
+                double rmin = rk.ratio[0];
+                if (rk.compound)
+                    for (int q = 1; q < rk.n_ratio; q++)
+                        rmin = rk.ratio[q] < rmin ? rk.ratio[q] : rmin;
+                double rf = nv_tcache_freq(cache, note + transpose) * (rk.compound ? rmin : rk.ratio[0]);
+                auto hv = hvel.find(std::make_pair(ch, note));
+                double vel = hv != hvel.end() ? hv->second : 100;
+                if (og->perc_rank >= 0 && dr[og->perc_rank] && rk.perc) {
+                    double rr = nv_hperc_rise(og, &og->pipe[0], rf, vel);
+                    for (long s : sl)
+                        S.f4[F4_fa][s] = (float)((double)S.f4[F4_fa][s] * rr);
+                } else {
+                    float mx = S.f4[F4_fa][sl[0]];
+                    for (long s : sl)
+                        mx = std::max(mx, S.f4[F4_fa][s]);
+                    double d = nv_honset_delay(og, qr, rf, vel, p, (double)mx / rate);
+                    if (d > 0.0)
+                        S.retime(sl, (long long)floor(d * rate + 0.5));
+                }
+            }
         }
         if (og->htrem_rank >= 0 && dr[og->htrem_rank] && og->htrem_depth > 0.0)   // (its bellows: the wind's)
             S.stop_tremolo_arm(sl, og->htrem_depth, nv_htremolo_hz(og, og->htrem_hz, p, note));
@@ -11777,6 +11800,7 @@ struct Part {
     // latched key pressed again goes on sounding; set_stops lets them go when
     // it is pushed in
     std::map<std::pair<long long, int>, std::set<int>> prolong;
+    std::map<std::pair<int, int>, int> hvel;    // (channel, key) -> its velocity (a harmonium's touch: live.hvel)
     bool prolong_latch(int ch, int note)
     {
         const OrganSpec *og = patches[cur].organ;

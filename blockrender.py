@@ -7641,9 +7641,17 @@ def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TB
         if _hx is not None:                      # (its speech, the wind's at its onset)
             _hp = _hx
             fade_r *= T.harmonium_speech_scale(_sc, _hp)
-        if _hperc and key in getattr(props, 'percussion_ranks', ()):
-            # The hammer: min(attack, hammer), as a slur is min(attack, legato).
-            fade_r = min(fade_r, max(1e-4, min(props.percussion_attack_s, _afm*dur))*SR)
+        # A HARMONIUM'S REED SPEAKS LATE (tonelib.harmonium_onset_delay: its
+        # pallet, its cell, its swing growing to catch), the Percussion's hammer
+        # starting it at once and sooner the harder the key (harmonium_percussion_rise)
+        _hdel = 0.0
+        if nt.organ and getattr(_sc, 'onset_points', None):
+            _rf = nt.f0 * (min(ratio) if isinstance(ratio, (list, tuple)) else ratio)
+            if _hperc and key in getattr(props, 'percussion_ranks', ()):
+                fade_r *= T.harmonium_percussion_rise(props, _rf, nt.vel)
+            else:
+                _hdel = T.harmonium_onset_delay(_sc, _rf, nt.vel, _hx if _hx is not None else T.HARMONIUM_PRESSURE_REF,
+                                                fade_r / SR)
         rank_B = (spv or props).inharmonicity_coefficient_for_frequency(nt.f0) if dyn else B
         gr = grow_of[(nt.organ_key,key)] if nt.organ else -1; cr = crow_of[nt.organ_key] if nt.organ else 0
         # A drawn stop speaks (phase + attack fade start) at its draw time, not
@@ -7705,6 +7713,8 @@ def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TB
                 em.player = _pl_keep
         else:
             non_r = nt.non
+        if _hdel > 0.0:                          # (the reed's wait: no later than its key-up)
+            non_r = min(non_r + _hdel * SR, nt.noff)
         # Place this drawstop at its case position (shared across a compound rank).
         if nt.organ and getattr(props,'spiral_spatial',False):
             _rx = props.rank_position_x(key)

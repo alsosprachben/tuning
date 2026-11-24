@@ -252,10 +252,33 @@ def _useful_millot(prof, L, W, t, rest_curl):
     return sides + front
 
 
-def simulate(f0, p0, secs=1.0, cell=True, attack_s=0.02, out_sr=48000, vel=None):
+# THE PERCUSSION'S HAMMER (Mustel, glossary p. 154; Martin de Provins, p. 41:
+# "un petit marteau garni de feutre ... vient frapper la lame ... la fait
+# partir : le vent n'a plus qu'a maintenir la lame en vibration"): a felt
+# hammer, its momentum given by the key through an escapement, strikes the
+# tongue at STRIKE_X of its length -- a half-sine force over the felt's
+# contact time, pushing the tongue the way the wind does (into its slot).
+# The hammer's mass and its speed range are a typical action's, named for the
+# ear (Mustel gives none); its speed follows the key's (vel 0..1).
+HAMMER_KG = 0.0006
+HAMMER_SPEED_MS = (0.25, 1.0)        # (gentle, sharp)
+HAMMER_CONTACT_S = 0.0015
+HAMMER_RESTITUTION = 0.5
+STRIKE_X = 0.85
+
+
+def hammer_impulse(vel):
+    """The hammer's impulse on the tongue (N s) at key velocity vel 0..1."""
+    lo, hi = HAMMER_SPEED_MS
+    v = lo * (hi / lo) ** min(max(vel, 0.0), 1.0)
+    return HAMMER_KG * v * (1.0 + HAMMER_RESTITUTION)
+
+
+def simulate(f0, p0, secs=1.0, cell=True, attack_s=0.02, out_sr=48000, vel=None, strike=None):
     """The reed sounding f0 at chest pressure p0 (Pa), the pallet opening
     over attack_s: (the radiated signal at out_sr, the tongue's tip motion,
-    the playing frequency from its zero crossings)."""
+    the playing frequency from its zero crossings). strike: the Percussion's
+    hammer at key velocity strike (0..1; None, none) as the pallet opens."""
     L, W, t = tongue(f0)
     K = MODES
     m_k = BRASS_RHO * W * t * L * _I2K[:K]
@@ -302,6 +325,10 @@ def simulate(f0, p0, secs=1.0, cell=True, attack_s=0.02, out_sr=48000, vel=None)
     u_out_prev = 0.0
     wi = 0
     u_sum = 0.0
+    if strike is not None:
+        j_h = hammer_impulse(strike)
+        psi_x = np.array([_PSIK[k][int(round(STRIKE_X * (len(_PSIK[k]) - 1)))] for k in range(MODES)])
+        n_h = max(1, int(HAMMER_CONTACT_S * SR))
     for i in range(n):
         ramp = 1.0 if PALLET_STEP else (min(1.0, i * dt / attack_s) if attack_s > 0 else 1.0)
         P = p0 * ramp
@@ -357,6 +384,9 @@ def simulate(f0, p0, secs=1.0, cell=True, attack_s=0.02, out_sr=48000, vel=None)
         else:
             dp_t = dp
         acc = (-Sr_k * dp_t + Sr_k * p_ex - k_k * q - m_k * w_k / Q_REED * qv) / m_k - c_aero * qv
+        if strike is not None and i < n_h:      # (the felt's half-sine, its integral the impulse)
+            fh = j_h * np.pi / (2.0 * HAMMER_CONTACT_S) * np.sin(np.pi * i / n_h)
+            acc = acc - fh * psi_x / m_k
         qv += acc * dt
         q += qv * dt
         # the cell: the flow goes in at the reed end, comes out at the pallet

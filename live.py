@@ -3477,7 +3477,6 @@ class Patch:
         # whose pipes answer a shared pressure (Live._wind_block)
         self.wind_pc = (pc if pc is not None and getattr(pc, "registerable", False)
                         and (T.organ_wind(pc) or getattr(pc, "harmonium_wind", False)) else None)
-        self.percussion_attack_s = float(getattr(pc, "percussion_attack_s", 0.0)) if pc else 0.0
         # Where this voice's stop word lives: CC11/43 on the pipe organ and the
         # harpsichord, CC43/44 on the harmonium (its CC11 is the bellows).
         self.stop_word_ccs = tuple(getattr(pc, "stop_word_ccs", (11, 43))) if pc else (11, 43)
@@ -4704,6 +4703,7 @@ class Live:
         self.stopword = {}           # channel -> [CC43, CC44, CC45], a harmonium's stop word
         self.knee = {}               # (channel, half) -> a harmonium's knee set-point, Pa (Double-Expression)
         self.prolong = {}            # (part, channel) -> the keys its Prolongement holds latched
+        self.hvel = {}               # (channel, key) -> the velocity it was struck at (a harmonium's touch)
         self.note_touch = {}         # (part, channel, note) -> its velocity's level, if the part follows it
         # MIDI 2.0. `midi2` is the bridge (ump.Midi1to2) when the keyboard's
         # MIDI 1.0 is being carried as MIDI 2.0; None means MIDI 1.0 straight in.
@@ -6934,6 +6934,7 @@ class Live:
                 and (self._drive(part) > 0.0 or self._efx_od(part) is not None))
 
     def _note_on(self, part, ch, note, vel, n0):
+        self.hvel[(ch, note)] = vel     # (a harmonium's touch: its pallet, its hammer)
         self._organ_sustain_cut(part, ch, note, n0)    # (a sustaining key struck again: let go now)
         if self._prolong_down(part, ch, note, n0):
             return                      # (a latched key pressed again: it goes on sounding)
@@ -12370,13 +12371,25 @@ class Live:
             self.slab.channel_gain(sl, g.astype(np.float32))
             a = self.slab.a
             a["fa"][idx] = (a["fa"][idx].astype(np.float64) * T.harmonium_speech_scale(cls, p)).astype(np.float32)
-        if "percussion" in part.drawn and rank in part.patch.percussion_ranks:
-            pc = part.patch._voice_class(note + part.transpose)
-            dur = tmpl["dur"] / float(B.SR) if tmpl.get("dur") else 1.0
-            afm = getattr(pc, "attack_fraction_max", 0.45)
+        # ...ITS REED SPEAKS LATE (harmonium_onset_delay: the key's touch, the
+        # half's wind), the Percussion's hammer starting it at once and sooner
+        # the harder the key (harmonium_percussion_rise) -- as the file's
+        cls_r, _ms = self._hstop(part, note, rank, hrel)
+        if getattr(cls_r, "onset_points", None):
+            r = next(r for r in part.patch.stop_ranks if r[0] == rank)
+            ratio = r[1]
+            tgt = note + part.transpose
+            rf = float(part.patch.freqs()[tgt]) * (min(ratio) if isinstance(ratio, (list, tuple)) else ratio)
+            vel = self.hvel.get((ch, note), 100)
             a = self.slab.a
-            a["fa"][idx] = np.minimum(a["fa"][idx], np.float32(
-                max(1e-4, min(part.patch.percussion_attack_s, afm * dur)) * B.SR))
+            if "percussion" in part.drawn and rank in part.patch.percussion_ranks:
+                pc = part.patch._voice_class(tgt)
+                a["fa"][idx] = (a["fa"][idx].astype(np.float64)
+                                * T.harmonium_percussion_rise(pc, rf, vel)).astype(np.float32)
+            else:
+                d = T.harmonium_onset_delay(cls_r, rf, vel, p, float(a["fa"][idx].max()) / self.rate)
+                if d > 0.0:
+                    self.slab.retime(list(sl), int(math.floor(d * self.rate + 0.5)))
         if "tremolo" in part.drawn and part.patch.stop_tremolo_depth > 0.0:
             # at the stop's own rate, its bellows quicker with the wind, the
             # treble half's its own

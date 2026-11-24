@@ -586,6 +586,11 @@ struct OrganPipe {
     int hl_n;
     double hl_p[16], hl_db[16], hd_q, hd_fr, hd_ex;
     int box_back;           /* a back stop: it sounds into the Forte's box (tonelib box_back) */
+    /* ...ITS ONSET (tonelib.harmonium_onset: on_n keys, each a row per touch
+       and a column per pressure, s) and ITS HAMMER's rise (the host's:
+       harmonium_percussion_rise, perc_n keys, a column per touch) */
+    int on_n, perc_n;
+    double on_f[4], on_t[4][3][3], perc_f[4], perc_r[4][3];
 };
 
 /* AN ORGAN's RANKS AT MOST: the divider organ's upper manual is 39 with its
@@ -686,6 +691,9 @@ typedef struct OrganSpec {
     /* ...AND ITS PROLONGEMENT (_prep_prolongement): its stop's bit (-1 none)
        and the keys it latches */
     int prolong_rank, prolong_lo, prolong_hi;
+    /* ...and its onset's axes (HARMONIUM_ONSET_TOUCH, _PRESSURES, HAMMER_TOUCH,
+       SMOOTHSTEP_10) */
+    double on_touch[3], on_p[3], ham_touch[3], ss10;
 } OrganSpec;
 
 /* tonelib.harmonium_pressure / _pressure_gain / _tremolo_hz, operation for operation */
@@ -744,6 +752,75 @@ static inline double nv_haim(const OrganSpec *og, double e, int expr)
     return og->pres_min + (og->hw_full - og->pres_min) * e;
 }
 static inline double nv_hknee(const OrganSpec *og, int v) { return v >= 127 ? INFINITY : nv_hpressure(og, v / 127.0); }
+
+/* tonelib._lerp_axis, harmonium_touch, _onset, _onset_delay, _percussion_rise */
+static inline void nv_lerp_axis(const double *xs, int n, double x, int *i, double *w)
+{
+    if (x <= xs[0]) {
+        *i = 0;
+        *w = 0.0;
+        return;
+    }
+    if (x >= xs[n - 1]) {
+        *i = n - 2;
+        *w = 1.0;
+        return;
+    }
+    int k = 0;
+    while (xs[k + 1] < x)
+        k++;
+    *i = k;
+    *w = (x - xs[k]) / (xs[k + 1] - xs[k]);
+}
+static inline double nv_htouch(double vel)
+{
+    double t = (vel - 1.0) / 126.0;
+    return t < 0.0 ? 0.0 : (t > 1.0 ? 1.0 : t);
+}
+static inline double nv_honset(const OrganSpec *og, const OrganPipe *q, double f, double touch, double p)
+{
+    if (!q->on_n)
+        return 0.0;
+    double lf[4], lp[3];
+    for (int a = 0; a < q->on_n; a++)
+        lf[a] = log(q->on_f[a]);
+    for (int a = 0; a < 3; a++)
+        lp[a] = log(og->on_p[a]);
+    int i, j, k;
+    double w, u, v;
+    nv_lerp_axis(lf, q->on_n, log(f), &i, &w);
+    nv_lerp_axis(og->on_touch, 3, touch, &j, &u);
+    nv_lerp_axis(lp, 3, log(p), &k, &v);
+    double at[2];
+    for (int b = 0; b < 2; b++) {
+        const double (*t)[3] = q->on_t[i + b];
+        double r0 = t[j][k] + (t[j][k + 1] - t[j][k]) * v;
+        double r1 = t[j + 1][k] + (t[j + 1][k + 1] - t[j + 1][k]) * v;
+        at[b] = r0 + (r1 - r0) * u;
+    }
+    return at[0] + (at[1] - at[0]) * w;
+}
+static inline double nv_honset_delay(const OrganSpec *og, const OrganPipe *q, double f, double vel, double p,
+                                     double speech_s)
+{
+    double d = nv_honset(og, q, f, nv_htouch(vel), p) - og->ss10 * speech_s;
+    return d > 0.0 ? d : 0.0;
+}
+static inline double nv_hperc_rise(const OrganSpec *og, const OrganPipe *q, double f, double vel)
+{
+    if (!q->perc_n)
+        return 1.0;
+    double lf[4];
+    for (int a = 0; a < q->perc_n; a++)
+        lf[a] = log(q->perc_f[a]);
+    int i, j;
+    double w, u;
+    nv_lerp_axis(lf, q->perc_n, log(f), &i, &w);
+    nv_lerp_axis(og->ham_touch, 3, nv_htouch(vel), &j, &u);
+    double a0 = q->perc_r[i][j] + (q->perc_r[i][j + 1] - q->perc_r[i][j]) * u;
+    double a1 = q->perc_r[i + 1][j] + (q->perc_r[i + 1][j + 1] - q->perc_r[i + 1][j]) * u;
+    return a0 + (a1 - a0) * w;
+}
 
 /* tonelib.harmonium_box_t, _open, _level, _tone */
 static inline double nv_hbox_t(const OrganSpec *og, double o, double f)

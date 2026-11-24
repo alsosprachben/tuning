@@ -3186,7 +3186,8 @@ class OrganPipe(ctypes.Structure):
                 + [('n_pp', I), ('pp_partials', I), ('pp_hz', C * 8), ('pp_s', C * 8), ('pp_db', C),
                    ('pp_snap_s', C), ('n_pres', I), ('pres_p', C * 8), ('pres_db', (C * 12) * 8),
                    ('pres_cents', C), ('pres_sexp', C), ('hl_n', I), ('hl_p', C * 16), ('hl_db', C * 16),
-                   ('hd_q', C), ('hd_fr', C), ('hd_ex', C), ('box_back', I)])
+                   ('hd_q', C), ('hd_fr', C), ('hd_ex', C), ('box_back', I), ('on_n', I), ('perc_n', I),
+                   ('on_f', C * 4), ('on_t', ((C * 3) * 3) * 4), ('perc_f', C * 4), ('perc_r', (C * 3) * 4)])
 
 
 class OrganRank(ctypes.Structure):
@@ -3230,7 +3231,8 @@ class OrganSpec(ctypes.Structure):
                    ('fexpr_rank', I * 2), ('meta_rank', I * 2)]
                 + [(f, C) for f in ('box_s', 'box_alpha', 'box_alpha_hz', 'box_gap', 'box_lid', 'fexpr_pa',
                                     'fexpr_span', 'meta_hz')]
-                + [('prolong_rank', I), ('prolong_lo', I), ('prolong_hi', I)])
+                + [('prolong_rank', I), ('prolong_lo', I), ('prolong_hi', I), ('on_touch', C * 3), ('on_p', C * 3),
+                   ('ham_touch', C * 3), ('ss10', C)])
 
 
 _ORGAN = {}
@@ -3387,6 +3389,18 @@ def organ(cls):
                 q.hl_p[j], q.hl_db[j] = float(pp), float(db)
             q.hd_q, q.hd_fr, q.hd_ex = (float(x) for x in getattr(pr, 'pressure_draw', (0.0, 261.63, 0.0)))
             q.box_back = int(bool(getattr(pr, 'box_back', False)))
+            onp = getattr(pr, 'onset_points', None) or ()
+            pcp = getattr(pr, 'percussion_rise_points', None) or ()
+            if len(onp) > 4 or len(pcp) > 4:
+                return None
+            q.on_n, q.perc_n = len(onp), len(pcp)
+            for a, (ff, tab) in enumerate(onp):
+                q.on_f[a] = float(ff)
+                for jj in range(3):
+                    q.on_t[a][jj][:] = [float(x) for x in tab[jj]]
+            for a, (ff, rr) in enumerate(pcp):
+                q.perc_f[a] = float(ff)
+                q.perc_r[a][:] = [float(x) for x in rr]
             q.push_gain = float(getattr(pr, 'bellows_push_gain', 0.0) or 0.0)
             if q.push_gain:
                 q.push_rise_s, q.push_dbs = float(pr.bellows_push_rise_s), float(pr.bellows_push_dbs)
@@ -3549,6 +3563,8 @@ def organ(cls):
     # (its Prolongement: blockrender._prep_prolongement)
     o.prolong_rank = [r[0] for r in ranks].index('prolongement') if any(r[0] == 'prolongement' for r in ranks) else -1
     o.prolong_lo, o.prolong_hi = T.HARMONIUM_PROLONG_KEYS
+    o.on_touch[:], o.on_p[:] = list(T.HARMONIUM_ONSET_TOUCH), list(T.HARMONIUM_ONSET_PRESSURES)
+    o.ham_touch[:], o.ss10 = list(T.HARMONIUM_HAMMER_TOUCH), T.SMOOTHSTEP_10
     if getattr(cls, 'harmonium_wind', False):
         # THE HARMONIUM'S CHEST (wind.HarmoniumWind), its ranks by half and stop
         import wind as WND

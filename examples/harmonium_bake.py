@@ -501,7 +501,110 @@ def wind_write(cache):
     print("  the instrument's draw exponent (median): %.3f" % float(np.median(pes)))
 
 
+# THE ONSET AND THE HAMMER (step 5e/5f): the reed's wait before it catches --
+# to 10 % of its swing, the pallet opening over 15 ms (a gentle key) to 4 ms (a
+# sharp one: freereed_sim's touch) -- per stop at its low, middle and high key,
+# three touches, three pressures; and the Percussion's hammer on the
+# foundation (freereed_sim.hammer_impulse): its onset (none) and its rise
+# against the unstruck reed's, at four keys and three touches.
+ONSET_TOUCH = (0.0, 0.5, 1.0)
+ONSET_PRESSURES = (300.0, 700.0, 1500.0)
+HAMMER_KEYS = (130.81, 261.63, 523.25, 1046.5)
+HAMMER_TOUCH = (0.2, 0.6, 1.0)
+
+
+def _swing(tip, f0):
+    hop = max(1, int(48000 / f0))
+    e = np.array([np.ptp(tip[i:i + 2 * hop]) for i in range(0, len(tip) - 2 * hop, hop)]) / 2
+    pl = np.median(e[int(0.8 * len(e)):])
+    t = np.arange(len(e)) * hop / 48000.0
+    t10, t90 = t[np.argmax(e > 0.1 * pl)], t[np.argmax(e > 0.9 * pl)]
+    return float(t10), float(t90 - t10)
+
+
+def _onset_one(job):
+    name, v, f0, vel, p, strike = job
+    H._set(v)
+    L, _, _ = F.tongue(f0)
+    F.CURL_M = v["curl"] * L
+    _, tip, _ = F.simulate(f0, p * v["pressure"], secs=1.2, vel=vel, strike=strike)
+    t10, rise = _swing(tip, f0)
+    k = "O|%s|%.2f|%.2f|%.0f|%s" % (name, f0, vel, p, "-" if strike is None else "%.2f" % strike)
+    return k, dict(t10=t10, rise=rise)
+
+
+def onset_simulate(procs=6):
+    from multiprocessing import Pool
+    cache = json.load(open(CACHE)) if os.path.exists(CACHE) else {}
+    jobs = []
+    for name, v in [("Foundation", dict(H.FOUNDATION, cls="ReedOrganFreeProperties"))] + list(H.STOPS.items()):
+        for f0 in _stop_keys(v["cls"]):
+            for vel in ONSET_TOUCH:
+                for p in ONSET_PRESSURES:
+                    jobs.append((name, dict(v, celeste=False), f0, vel, p, None))
+    for f0 in HAMMER_KEYS:
+        for vel in HAMMER_TOUCH:
+            jobs.append(("Foundation", H.FOUNDATION, f0, vel, 700.0, vel))
+        jobs.append(("Foundation", H.FOUNDATION, f0, 0.6, 700.0, None))
+    key = lambda j: "O|%s|%.2f|%.2f|%.0f|%s" % (j[0], j[2], j[3], j[4], "-" if j[5] is None else "%.2f" % j[5])
+    todo = [j for j in jobs if key(j) not in cache]
+    print("  %d runs, %d cached" % (len(jobs), len(jobs) - len(todo)), flush=True)
+    with Pool(procs) as pool:
+        for k, rec in pool.imap_unordered(_onset_one, todo):
+            cache[k] = rec
+            json.dump(cache, open(CACHE, "w"))
+            print("  %s: onset %.1f ms, rise %.1f ms" % (k, 1000 * rec["t10"], 1000 * rec["rise"]), flush=True)
+    return cache
+
+
+def onset_write(cache):
+    p = os.path.join(HERE, "tonelib.py")
+    K = lambda name, f0, vel, pp, st=None: "O|%s|%.2f|%.2f|%.0f|%s" % (name, f0, vel, pp,
+                                                                       "-" if st is None else "%.2f" % st)
+    for name, v in [("Foundation", dict(H.FOUNDATION, cls="ReedOrganFreeProperties"))] + list(H.STOPS.items()):
+        rows = []
+        for f0 in _stop_keys(v["cls"]):
+            tab = tuple(tuple(round(cache[K(name, f0, vel, pp)]["t10"], 4) for pp in ONSET_PRESSURES)
+                        for vel in ONSET_TOUCH)
+            rows.append((f0, tab))
+        lines = ["    # ITS ONSET (examples/harmonium_bake.py --onset: tonelib.harmonium_onset):",
+                 "    # its reed's wait to 10 % of its swing, s, at its keys -- a row per touch",
+                 "    # (gentle, middle, sharp), a column per wind (300, 700, 1500 Pa) -- simulated",
+                 "    onset_points = ("]
+        for f0, tab in rows:
+            lines.append("        (%.2f, (%s))," % (f0, ", ".join("(" + ", ".join("%.4f" % x for x in r) + ")" for r in tab)))
+        lines.append("    )")
+        if name == "Foundation":
+            lines += ["    # ITS HAMMER (the Percussion: tonelib.harmonium_percussion_rise): the struck",
+                      "    # reed's rise against the unstruck one's, a column per touch (0.2, 0.6, 1.0) -- simulated",
+                      "    percussion_rise_points = ("]
+            for f0 in HAMMER_KEYS:
+                r0 = cache[K(name, f0, 0.6, 700.0)]["rise"]
+                lines.append("        (%.2f, (%s))," % (f0, ", ".join(
+                    "%.4f" % (cache[K(name, f0, vel, 700.0, vel)]["rise"] / r0) for vel in HAMMER_TOUCH)))
+            lines.append("    )")
+        cname = "ReedOrganFreeProperties" if name == "Foundation" else H.STOPS[name]["cls"]
+        s = open(p).read()
+        i = s.index("class %s(" % cname)
+        j = s.index("\nclass ", i + 10)
+        c = s[i:j]
+        c = re.sub(r"    # ITS ONSET \(examples.*?\n    \)\n", "", c, flags=re.S)
+        c = re.sub(r"    # ITS HAMMER \(the Percussion.*?\n    \)\n", "", c, flags=re.S)
+        k = c.index("    pressure_draw = ")
+        k = c.index("\n", k) + 1
+        c = c[:k] + "\n".join(lines) + "\n" + c[k:]
+        s = s[:i] + c + s[j:]
+        open(p, "w").write(s)
+        mid = rows[1][1]
+        print("  %-11s onset at its middle key, 700 Pa: gentle %.0f ms, sharp %.0f ms"
+              % (name, 1000 * mid[0][1], 1000 * mid[2][1]), flush=True)
+
+
 if __name__ == "__main__":
+    if "--onset-write" in sys.argv:
+        onset_write(json.load(open(CACHE)))
+    if "--onset-simulate" in sys.argv:
+        onset_simulate()
     if "--wind-simulate" in sys.argv:
         wind_simulate()
     if "--wind-write" in sys.argv:
