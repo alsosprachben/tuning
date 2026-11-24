@@ -7160,7 +7160,7 @@ struct Part {
     // A HARMONIUM'S (live's): the Expression's bellows each key's ranks were
     // stamped at (xnote), each channel's stop word as sent (CC43-45; -1 not
     // yet), each part's wheel tremolo depth (trem_depth)
-    std::map<Key, double> xnote;
+    std::map<Key, std::pair<double, int>> xnote;      // (the wind's e, the rank)
     int stopword[NV_NCH][3];
     std::map<long long, double> trem_depth;
 
@@ -7187,11 +7187,30 @@ struct Part {
         return m < 1e300 ? m : 1.0;
     }
 
+    // live._hstop: a harmonium rank's stop (its speech class's pipe) and each
+    // slot's harmonic of it (hrel against the rank's own pitch)
+    const OrganPipe *hstop(const OrganSpec *og, int ri, int note, const float *hrel, size_t n, std::vector<int> &ms)
+    {
+        const OrganRank &rk = og->rank[ri];
+        const OrganPipe *host = &og->pipe[0], *q = host;
+        if (rk.pipe >= 0)
+            q = &og->pipe[rk.pipe];
+        else if (rk.spec >= 0 && og->pipe[rk.spec].rank_is_pipe)
+            q = &og->pipe[rk.spec];
+        else if (rk.spec >= 0 && og->own_pitch && og->pipe[rk.spec].rank_speech)
+            q = &og->pipe[rk.spec];
+        double ratio = rk.n_ratio && !rk.compound ? rk.ratio[0] : 1.0, h8_ = h8(note);
+        ms.resize(n);
+        for (size_t i = 0; i < n; i++)
+            ms[i] = (int)floor((double)hrel[i] * h8_ / ratio + 0.5);
+        return q;
+    }
+
     // live._harmonium_stamp: the effect stops on the slots just stamped --
-    // the Expression's bellows (each partial by harmonium_expression_gain),
-    // the Percussion's hammer, the Tremolo
+    // the Expression's wind (the stop's tone, pitch and speech at it), the
+    // Percussion's hammer, the Tremolo
     void harmonium_stamp(const nv::live::Template &T, const nv::live::Template &R, int ch, int note, int ri,
-                         const Key &key)
+                         const Key &key, long long n0)
     {
         const std::vector<long> sl = S.last_slots;
         if (sl.empty() || (long)sl.size() != R.P)
@@ -7200,14 +7219,18 @@ struct Part {
         const std::vector<char> &dr = patches[cur].drawn;
         sound_stamp(og, ch, sl);            // CC73/72 first: the hammer is a min over the attack
         if (og->expr_rank >= 0 && dr[og->expr_rank]) {
-            double e = expr[ch] / 127.0, h8_ = h8(note);
+            double e = expr[ch] / 127.0, p = nv_hpressure(og, e);
+            std::vector<int> ms;
+            const OrganPipe *q_ = hstop(og, ri, note, R.hrel.data(), sl.size(), ms);
             std::vector<float> g(sl.size());
-            for (size_t q = 0; q < sl.size(); q++) {
-                double h = (double)R.hrel[q] * h8_;
-                g[q] = (float)pow(h > 1.0 ? h : 1.0, og->expr_tilt * (e - 1.0));
-            }
+            for (size_t q = 0; q < sl.size(); q++)
+                g[q] = (float)nv_hpressure_gain(q_, ms[q], p);
             S.channel_gain_each(sl, g);
-            xnote[key] = e;
+            double ss = pow(p / og->pres_ref, -q_->pres_sexp);
+            for (long s : sl)
+                S.f4[F4_fa][s] = (float)((double)S.f4[F4_fa][s] * ss);
+            retune(sl, n0, pow(2.0, q_->pres_cents * (p - og->pres_ref) / 1000.0 / 1200.0));
+            xnote[key] = {e, ri};
         }
         if (og->perc_rank >= 0 && dr[og->perc_rank] && og->rank[ri].perc) {
             double dur = T.dur ? T.dur / rate : 1.0;
@@ -7216,8 +7239,11 @@ struct Part {
                 if (fa < S.f4[F4_fa][s])
                     S.f4[F4_fa][s] = fa;
         }
-        if (og->htrem_rank >= 0 && dr[og->htrem_rank] && og->htrem_depth > 0.0)
-            S.stop_tremolo_arm(sl, og->htrem_depth, og->htrem_hz);   // (at the stop's own rate)
+        if (og->htrem_rank >= 0 && dr[og->htrem_rank] && og->htrem_depth > 0.0)   // (its bellows: the wind's)
+            S.stop_tremolo_arm(sl, og->htrem_depth,
+                               nv_htremolo_hz(og, og->htrem_hz,
+                                              og->expr_rank >= 0 && dr[og->expr_rank] ? nv_hpressure(og, expr[ch] / 127.0)
+                                                                                      : og->pres_ref, note));
     }
 
     // live's CC11 on a harmonium: the Expression's bellows moved under the
@@ -7232,7 +7258,7 @@ struct Part {
                 gone.push_back(kv.first);
                 continue;
             }
-            if (std::get<1>(kv.first) != ch || kv.second == e)
+            if (std::get<1>(kv.first) != ch || kv.second.first == e)
                 continue;
             int pi = -1;
             for (size_t q = 0; q < patches.size(); q++)
@@ -7242,15 +7268,18 @@ struct Part {
                 continue;
             Use u(*this, pi);
             const std::vector<long> &sl = S.live[li].second;
-            double h8_ = h8((int)std::get<2>(kv.first)), tilt = patches[cur].organ->expr_tilt;
+            const OrganSpec *og = patches[cur].organ;
+            std::vector<float> hr(sl.size());
+            for (size_t q = 0; q < sl.size(); q++)
+                hr[q] = S.hrel[sl[q]];
+            std::vector<int> ms;
+            const OrganPipe *q_ = hstop(og, kv.second.second, (int)std::get<2>(kv.first), hr.data(), sl.size(), ms);
+            double p = nv_hpressure(og, e), p0 = nv_hpressure(og, kv.second.first);
             std::vector<float> g(sl.size());
-            for (size_t q = 0; q < sl.size(); q++) {
-                double h = (double)S.hrel[sl[q]] * h8_;
-                h = h > 1.0 ? h : 1.0;
-                g[q] = (float)(pow(h, tilt * (e - 1.0)) / pow(h, tilt * (kv.second - 1.0)));
-            }
+            for (size_t q = 0; q < sl.size(); q++)
+                g[q] = (float)(nv_hpressure_gain(q_, ms[q], p) / nv_hpressure_gain(q_, ms[q], p0));
             S.channel_gain_each(sl, g);
-            kv.second = e;
+            kv.second.first = e;
         }
         for (auto &k : gone)
             xnote.erase(k);
@@ -8685,7 +8714,7 @@ struct Part {
         }
         const OrganSpec *og = patches[cur].organ;
         if (og->wccs[0] == 43)              // a harmonium's effect stops (_harmonium_stamp)
-            harmonium_stamp(T, R, ch, note, ri, key);
+            harmonium_stamp(T, R, ch, note, ri, key, n0);
         auto td = trem_depth.find(pid);     // the wheel's tremolo, the wheel already up
         if (td != trem_depth.end() && td->second > 0.0)
             S.tremolo_arm(S.last_slots, td->second, og->wtrem_stereo);

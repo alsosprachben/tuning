@@ -7458,6 +7458,10 @@ def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TB
             chiff_r = nt.chiff * (_sc.chiff_time(_f0s, _ra) / _hc) if _hc > 0 else nt.chiff
         else:
             fade_r, rel_r, chiff_r = nt.fade, nt.rel, nt.chiff
+        if _hx is not None:                      # (the Expression stop: its speech, the wind's)
+            _hp = T.harmonium_pressure(_hx)
+            _hpr = T.harmonium_pressure_ratio(_sc, _hp)
+            fade_r *= T.harmonium_speech_scale(_sc, _hp)
         if _hperc and key in getattr(props, 'percussion_ranks', ()):
             # The hammer: min(attack, hammer), as a slur is min(attack, legato).
             fade_r = min(fade_r, max(1e-4, min(props.percussion_attack_s, _afm*dur))*SR)
@@ -7598,6 +7602,8 @@ def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TB
                 h, hf = _hh
                 if _cho:
                     hf += T.choir_partial_hz(props, _cho, nt.note, m)
+                if _hx is not None:              # (its pitch falling with the wind)
+                    hf *= _hpr
                 if hf > SR/2: break
                 hv = hv_sub(m)
                 if hv == 0.0: continue
@@ -7649,8 +7655,8 @@ def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TB
                 em.radius = (props.pipe_radius(nt.f0*eff_ratio)
                               if nt.organ and hasattr(props, 'pipe_radius') else None)
                 gM = hv*gain*props.radiation_gain(hf, radius=em.radius)
-                if _hx is not None:
-                    gM *= float(T.harmonium_expression_gain(h, _hx))
+                if _hx is not None:              # (the Expression stop: the stop's answer to the wind)
+                    gM *= float(T.harmonium_pressure_gain(_sc, m, _hp))
                 gL = gM*props.hrtf_gain(hf, nt.li); gR = gM*props.hrtf_gain(hf, nt.ri)
                 cvp = cv_r * _cp.chiff_harmonic_gain(h)   # roll chiff off the upper harmonics
                 if mls > 0.0:
@@ -9578,7 +9584,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
         stops = props.stop_ranks if nt.organ else [("_",1.0,1.0)]
         # THE HARMONIUM'S EFFECT STOPS, each read at NOTE-ON -- the moment CC11
         # is read for loudness -- from the gate events the stop word made. See
-        # tonelib above harmonium_expression_gain for all three.
+        # tonelib above harmonium_pressure (the Expression) for all three.
         _hx = None; _hperc = False
         if nt.organ and 'expression' in rankev_of[nt.organ_key]:
             _st = lambda k: T.stop_drawn_at(rankev_of[nt.organ_key].get(k, ()), nt.on)
@@ -9586,7 +9592,10 @@ def _prepare(path, tuner='hybrid440', sink=None):
                 _hx = nt.v11
             _hperc = _st('percussion')
             if _st('tremolo') and getattr(props, 'stop_tremolo_depth', 0.0) > 0.0:
-                _HTREM_CH[em.channel] = (float(props.stop_tremolo_hz),
+                # (its bellows quicker with the wind -- the feet's, or the
+                # reservoir's -- and in the treble half its own smaller one)
+                _twind = T.harmonium_pressure(nt.v11) if _hx is not None else T.HARMONIUM_PRESSURE_REF
+                _HTREM_CH[em.channel] = (float(T.harmonium_tremolo_hz(props, _twind, nt.note >= T.HARMONIUM_SPLIT)),
                                  float(props.stop_tremolo_depth), False)
                 em.htrem_pending = len(A['om'])
                 em.htrem_cfg = _HTREM_CH[em.channel]    # (this note's own: _HT_ROWS keeps it)

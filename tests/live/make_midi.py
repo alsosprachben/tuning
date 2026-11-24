@@ -609,7 +609,10 @@ def harmonium_stops():
     L10): three registrations on its stop word (CC43 bits 0-6, CC44 7-13, CC45
     14+; stop_ranks' order), each a bass and a treble pair -- the default (Cor
     anglais + Flute); Bourdon, Clairon, Basson, Hautbois, Celeste; Clarinette,
-    Fifre, Violoncelle, Sourdine, Musette with the tremolo."""
+    Fifre, Violoncelle, Sourdine, Musette with the tremolo. THEN THE EXPRESSION
+    (CC44 4: the feet the wind, tonelib.harmonium_pressure): Basson + Hautbois
+    soft (CC11 30) and loud (120), the loud with the tremolo, the feet moving
+    under the last held pair (live's bellows)."""
     mid, tr = one_track()
     ev = [(0.0, mido.Message('program_change', channel=0, program=20))]
     regs = ((None, None, None), (2 | 4 | 8, 1 | 2, 0), (32 | 64, 16 | 32 | 64, 1))
@@ -623,6 +626,17 @@ def harmonium_stops():
             ev += [(t + 0.05, mido.Message('note_on', channel=0, note=k, velocity=100)),
                    (t + 1.6, mido.Message('note_off', channel=0, note=k, velocity=0))]
         t += 2.2
+    for cc44, cc11 in ((1 | 4, 30), (1 | 4 | 8, 120)):
+        ev += [(t, mido.Message('control_change', channel=0, control=43, value=8)),
+               (t, mido.Message('control_change', channel=0, control=44, value=cc44)),
+               (t, mido.Message('control_change', channel=0, control=45, value=0)),
+               (t, mido.Message('control_change', channel=0, control=11, value=cc11))]
+        for k in (48, 55, 72, 79):
+            ev += [(t + 0.05, mido.Message('note_on', channel=0, note=k, velocity=100)),
+                   (t + 1.6, mido.Message('note_off', channel=0, note=k, velocity=0))]
+        t += 2.2
+    ev += [(t - 1.4, mido.Message('control_change', channel=0, control=11, value=70)),
+           (t - 1.0, mido.Message('control_change', channel=0, control=11, value=110))]
     ev.append((t + 0.5, mido.Message('control_change', channel=0, control=7, value=100)))
     now = 0
     for at, msg in sorted(ev, key=lambda e: e[0]):

@@ -106,7 +106,7 @@ CHECKS = [
     # the biwa: its sawari's fed share (SawariContact's table, SAWR)
     ("biwa_live", "nvlive_check.py", ["@biwa_compass.mid", "14", "--programs"], {}),
     # the harmonium: its stops baked from their construction (CC43-45 stop word)
-    ("harmonium_live", "nvlive_check.py", ["@harmonium_stops.mid", "10", "--programs"], {}),
+    ("harmonium_live", "nvlive_check.py", ["@harmonium_stops.mid", "16", "--programs"], {}),
     # the gopichand: its scoop (a log-pitch tension bend) and short skin-loaded ring
     ("gopichant_live", "nvlive_check.py", ["@gopichant_compass.mid", "12", "--programs"], {}),
     # the tonewheel: the spinet speaker (breakup), the drawbars, the percussion's circuit decay

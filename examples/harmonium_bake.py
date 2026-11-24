@@ -24,6 +24,14 @@ in the bass and faster in the treble.
 
     python3 examples/harmonium_bake.py --simulate     the stops' ladders, speech, levels (cached)
     python3 examples/harmonium_bake.py --write        into tonelib.py (series, speech, level, celeste)
+    python3 examples/harmonium_bake.py --pressure     the stops' answer to the wind (step 4), into tonelib.py
+
+THE PRESSURE (step 4: the Expression stop, the feet the wind): each stop's
+middle note simulated at PRESSURES; per stop -- its first 12 harmonics' gain
+re 700 Pa at each (dB; the reed's low harmonics rise against its fundamental
+while its upper ones fall back, so no single tilt holds), its pitch's slope
+(cents a kPa: Cottingham's falling pitch), its speech's exponent (rise ~
+p^-exp).
 """
 import json
 import os
@@ -322,7 +330,87 @@ def write_celeste():
     print("  celeste: rows +/-, %.1f cents apart at the middle" % mid)
 
 
+PRESSURES = (300.0, 500.0, 700.0, 1000.0, 1500.0)
+
+
+def pressure_simulate():
+    import tonelib as T
+    cache = json.load(open(CACHE)) if os.path.exists(CACHE) else {}
+    out = {}
+    for name, v in [("Foundation", dict(H.FOUNDATION, cls="ReedOrganFreeProperties"))] + list(H.STOPS.items()):
+        pts = getattr(getattr(T, v["cls"]), "mode_gains_points", None)
+        f0 = pts[len(pts) // 2][0] if pts else 261.63
+        rows = []
+        for p in PRESSURES:
+            ck = "P|%s|%.2f|%.0f" % (name, f0, p)
+            if ck not in cache:
+                keep = H.PRESSURE_PA
+                H.PRESSURE_PA = p
+                vv = dict(v, celeste=False)
+                y = H.sound(vv, f0, secs=1.0)
+                lad, fp = ladder(y, f0)
+                rise, _ = speech(vv, f0, p=p)
+                H.PRESSURE_PA = keep
+                cache[ck] = dict(p=p, f0=f0, played=fp, lad=list(lad), rise=rise)
+                json.dump(cache, open(CACHE, "w"))
+            rows.append(cache[ck])
+        out[name] = rows
+    return out
+
+
+def pressure_fit(rows):
+    """(((p, 12 gains dB re 700 Pa), ...), cents a kPa, speech exponent) --
+    pressures where the stop barely speaks (its level far down) left out."""
+    ref = next(r for r in rows if r["p"] == 700.0)
+    good = [r for r in rows if np.isfinite(r["rise"]) and r["rise"] > 0]
+    L0 = np.array(ref["lad"][:12])
+    tab = []
+    for r in good:
+        if r["p"] == 700.0:
+            continue
+        d = np.array(r["lad"][:12]) - L0
+        tab.append((r["p"], tuple(round(float(x), 2) for x in d - d[0])))   # (re its h1: shape, the level CC11's)
+    P = np.array([r["p"] for r in good]) / 1000.0
+    c = np.array([1200 * np.log2(r["played"] / r["f0"]) for r in good])
+    cs = float(np.polyfit(P, c, 1)[0])
+    a = float(-np.polyfit(np.log(P), np.log([r["rise"] for r in good]), 1)[0])
+    return tuple(tab), cs, a
+
+
+def pressure_write(res):
+    import tonelib as T
+    p = os.path.join(HERE, "tonelib.py")
+    for name, rows in res.items():
+        tab, cs, a = pressure_fit(rows)
+        if name == "Sourdine":                       # (its throttle: at 300 Pa it barely speaks)
+            tab = tuple(t for t in tab if t[0] >= 500.0)
+        cname = "ReedOrganFreeProperties" if name == "Foundation" else H.STOPS[name]["cls"]
+        s = open(p).read()
+        i = s.index("class %s(" % cname)
+        j = s.index("\nclass ", i + 10)
+        c = s[i:j]
+        c = re.sub(r"    # ITS ANSWER TO THE WIND.*?pressure_speech_exp = [^\n]*\n", "", c, flags=re.S)
+        lines = ["    # ITS ANSWER TO THE WIND (examples/harmonium_bake.py --pressure: the",
+                 "    # Expression stop, the feet the wind): its first 12 harmonics' gain re",
+                 "    # 700 Pa at each pressure (dB, re its h1), its pitch's slope, its speech's",
+                 "    # exponent -- simulated",
+                 "    pressure_gains_db = ("]
+        for pp, g in tab:
+            lines.append("        (%.0f, (%s))," % (pp, ", ".join("%.2f" % x for x in g)))
+        lines += ["    )",
+                  "    pressure_cents_per_kpa = %.2f" % cs,
+                  "    pressure_speech_exp = %.3f" % a]
+        k = c.index("    initial_gain = ") if "    initial_gain = " in c else c.index("    default_stops = ")
+        k = c.index("\n", k) + 1
+        c = c[:k] + "\n".join(lines) + "\n" + c[k:]
+        s = s[:i] + c + s[j:]
+        open(p, "w").write(s)
+        print("  %-11s %d pressures, %+.1f cents/kPa, speech exp %.2f" % (name, len(tab), cs, a), flush=True)
+
+
 if __name__ == "__main__":
+    if "--pressure" in sys.argv:
+        pressure_write(pressure_simulate())
     if "--simulate" in sys.argv:
         r = simulate()
     if "--write" in sys.argv:

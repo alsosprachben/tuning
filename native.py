@@ -3183,7 +3183,8 @@ class OrganPipe(ctypes.Structure):
                                     'push_tilt_oct')]
                 + [('push_band', C * 2), ('push_reg', (C * 2) * 8)]
                 + [('n_pp', I), ('pp_partials', I), ('pp_hz', C * 8), ('pp_s', C * 8), ('pp_db', C),
-                   ('pp_snap_s', C)])
+                   ('pp_snap_s', C), ('n_pres', I), ('pres_p', C * 8), ('pres_db', (C * 12) * 8),
+                   ('pres_cents', C), ('pres_sexp', C)])
 
 
 class OrganRank(ctypes.Structure):
@@ -3208,7 +3209,7 @@ class OrganSpec(ctypes.Structure):
                                     'sag_max', 'sag_per_unit', 'c1', 'c2', 'g', 'trem_hz', 'trem_depth', 'tdecay',
                                     'unit_hz', 'draw_exp', 'blk_s')]
                 + [('fam_a', C * NV_MAX_RANK), ('fam_b', C * NV_MAX_RANK), ('expr_rank', I), ('perc_rank', I), ('htrem_rank', I),
-                   ('expr_tilt', C), ('perc_attack_s', C), ('afm', C), ('pipe_radius', I), ('wheel_trem', C),
+                   ('perc_attack_s', C), ('afm', C), ('pipe_radius', I), ('wheel_trem', C),
                    ('wtrem_hz', C), ('htrem_depth', C), ('htrem_hz', C), ('wtrem_stereo', I),
                    ('wtrem_scatter', C), ('snd_mask', I), ('n_cn', I), ('leak', I), ('cn_hz', C * 16),
                    ('cn_db', C * 16), ('cn_dbs', C), ('leak_db', C), ('phase_spread', C), ('contact_on', I),
@@ -3220,7 +3221,8 @@ class OrganSpec(ctypes.Structure):
                    ('n_lvl', I), ('lvl_rank', I * 8), ('lvl_group', I * 8), ('lvl_mask', ctypes.c_longlong * 8),
                    ('lvl_db', (C * NV_MAX_RANK) * 8),
                    ('has_cpl', I), ('cpl_default', I), ('cpl_tab', I * NV_MAX_RANK), ('cpl_bit', I * NV_MAX_RANK),
-                   ('cpl_want', I * NV_MAX_RANK)])
+                   ('cpl_want', I * NV_MAX_RANK), ('pres_min', C), ('pres_max', C), ('pres_ref', C),
+                   ('trem_pk', C), ('trem_treble', C), ('split', I)])
 
 
 _ORGAN = {}
@@ -3358,6 +3360,17 @@ def organ(cls):
             q.rank_speech = int(bool(getattr(pr, 'rank_speech', False)))
             q.pipe_ceiling_hz = getattr(pr, 'pipe_ceiling_hz', None) or 0.0
             q.truncate = int(getattr(pr, 'pipe_break_mode', 'fold') == 'truncate')
+            tab = getattr(pr, 'pressure_gains_db', None)
+            if tab:                                 # (tonelib.harmonium_pressure_gain's, sorted, the reservoir's in)
+                pts = sorted(list(tab) + [(T.HARMONIUM_PRESSURE_REF, (0.0,) * 12)], key=lambda r: r[0])
+                if len(pts) > 8 or any(len(g) != 12 for _, g in pts):
+                    return None
+                q.n_pres = len(pts)
+                for j, (pp, g) in enumerate(pts):
+                    q.pres_p[j] = float(pp)
+                    q.pres_db[j][:] = [float(x) for x in g]
+            q.pres_cents = float(getattr(pr, 'pressure_cents_per_kpa', 0.0))
+            q.pres_sexp = float(getattr(pr, 'pressure_speech_exp', 0.0))
             q.push_gain = float(getattr(pr, 'bellows_push_gain', 0.0) or 0.0)
             if q.push_gain:
                 q.push_rise_s, q.push_dbs = float(pr.bellows_push_rise_s), float(pr.bellows_push_dbs)
@@ -3464,7 +3477,8 @@ def organ(cls):
     o.expr_rank = keys.index('expression') if 'expression' in keys else -1
     o.perc_rank = keys.index('percussion') if 'percussion' in keys else -1
     o.htrem_rank = keys.index('tremolo') if 'tremolo' in keys else -1
-    o.expr_tilt = T.HARMONIUM_EXPRESSION_TILT
+    o.pres_min, o.pres_max, o.pres_ref = T.HARMONIUM_PRESSURE_MIN, T.HARMONIUM_PRESSURE_MAX, T.HARMONIUM_PRESSURE_REF
+    o.trem_pk, o.trem_treble, o.split = T.HARMONIUM_TREMOLO_P_K, T.HARMONIUM_TREMOLO_TREBLE_RATIO, T.HARMONIUM_SPLIT
     o.perc_attack_s = float(getattr(cls, 'percussion_attack_s', 0.0) or 0.0)
     o.afm = float(getattr(cls, 'attack_fraction_max', 0.45))
     o.wheel_trem = float(getattr(cls, 'tremolo_depth', 0.0) or 0.0)

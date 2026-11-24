@@ -2665,7 +2665,12 @@ int nv_song_organ_note(void *s, int i, int family, NoteIn *n)
     S->htrem_note[i] = o->spec->expr_rank >= 0 && o->spec->htrem_depth > 0.0 && drawn_at(o->spec->htrem_rank);
     if (S->htrem_cfg.size() < S->notes.size())
         S->htrem_cfg.resize(S->notes.size());
-    S->htrem_cfg[i] = {o->spec->htrem_hz, o->spec->htrem_depth};     // (the note's own: _HT_ROWS keeps it)
+    // (the note's own: _HT_ROWS keeps it -- its bellows quicker with the wind,
+    // the feet's or the reservoir's, the treble half's its own)
+    S->htrem_cfg[i] = {nv_htremolo_hz(o->spec, o->spec->htrem_hz,
+                                      std::isnan(n->organ_hx) ? o->spec->pres_ref : nv_hpressure(o->spec, n->organ_hx),
+                                      e.note),
+                       o->spec->htrem_depth};
     return 1;
 }
 

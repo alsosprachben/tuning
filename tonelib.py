@@ -8987,6 +8987,18 @@ class ReedOrganFreeProperties(FreeReedProperties):
     # ...and HELD there through the harmonium fit (-44.61 dB, the mean of
     # C4-G5's first second at velocity 100): the brighter reed had it 4.6 over
     initial_gain = 0.05964 * 10 ** (-4.594 / 20.0)
+    # ITS ANSWER TO THE WIND (examples/harmonium_bake.py --pressure: the
+    # Expression stop, the feet the wind): its first 12 harmonics' gain re
+    # 700 Pa at each pressure (dB, re its h1), its pitch's slope, its speech's
+    # exponent -- simulated
+    pressure_gains_db = (
+        (300, (0.00, -8.56, -5.67, -4.72, 6.13, -4.61, -5.71, 2.51, -8.63, -5.08, -8.73, 4.97)),
+        (500, (0.00, -2.81, -2.44, -0.49, -1.38, -1.13, 0.57, 6.30, -0.39, 2.42, -1.62, -5.72)),
+        (1000, (0.00, 2.08, 1.91, -0.38, 3.62, 0.67, -1.13, -11.96, -0.08, -6.16, 3.70, 6.82)),
+        (1500, (0.00, 3.88, 3.60, -0.78, 6.51, 1.24, -2.62, -0.82, -0.52, -9.02, 6.80, 8.12)),
+    )
+    pressure_cents_per_kpa = -9.45
+    pressure_speech_exp = 0.525
 
     registerable = True
     # ...AND STILL PLAYED, not only set up: its onset and release (CC73/72)
@@ -9049,7 +9061,19 @@ class HarmoniumBourdonProperties(ReedOrganFreeProperties):
     rank_is_pipe = True
     # LEVEL: its simulated level re the foundation, held on our renders
     initial_gain = 0.0482365
-    # ITS SPEECH, simulated: the tongue's rise 10-90 %% in cycles of the note
+    # ITS ANSWER TO THE WIND (examples/harmonium_bake.py --pressure: the
+    # Expression stop, the feet the wind): its first 12 harmonics' gain re
+    # 700 Pa at each pressure (dB, re its h1), its pitch's slope, its speech's
+    # exponent -- simulated
+    pressure_gains_db = (
+        (300, (0.00, -7.98, -8.25, 0.10, 0.02, -7.33, 12.29, -11.12, -16.76, -4.29, -13.68, -9.91)),
+        (500, (0.00, -2.35, -2.06, -0.95, -3.79, 0.69, 12.83, -4.75, 0.69, -2.54, -5.13, 0.85)),
+        (1000, (0.00, 1.62, 0.92, 3.29, 1.91, -0.54, 3.14, 1.38, -3.67, 7.32, 0.93, -7.15)),
+        (1500, (0.00, 3.03, 0.76, 6.43, 0.02, -0.60, 12.96, 2.10, -14.10, 10.84, 0.02, -3.37)),
+    )
+    pressure_cents_per_kpa = -17.96
+    pressure_speech_exp = 0.285
+    # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 42.9
     speech_harmonic_exp = 0.00
     attack_time = 0.012
@@ -9075,7 +9099,19 @@ class HarmoniumClarinetteProperties(ReedOrganFreeProperties):
     rank_is_pipe = True
     # LEVEL: its simulated level re the foundation, held on our renders
     initial_gain = 0.0537667
-    # ITS SPEECH, simulated: the tongue's rise 10-90 %% in cycles of the note
+    # ITS ANSWER TO THE WIND (examples/harmonium_bake.py --pressure: the
+    # Expression stop, the feet the wind): its first 12 harmonics' gain re
+    # 700 Pa at each pressure (dB, re its h1), its pitch's slope, its speech's
+    # exponent -- simulated
+    pressure_gains_db = (
+        (300, (0.00, -9.07, -3.10, -4.05, -0.41, 6.75, 1.27, 7.26, -15.79, 4.48, -7.32, -4.76)),
+        (500, (0.00, -3.85, -2.55, 1.67, 2.03, 5.56, 1.50, 6.19, -0.30, 5.64, -6.18, 2.84)),
+        (1000, (0.00, 3.67, 3.00, -0.62, -1.18, 3.10, 0.09, 4.10, 5.04, 5.41, -0.78, -0.27)),
+        (1500, (0.00, 6.61, 5.18, 0.10, 0.27, 5.44, -1.81, 9.98, 7.38, 2.79, 4.32, 4.52)),
+    )
+    pressure_cents_per_kpa = -5.28
+    pressure_speech_exp = 0.554
+    # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 78.9
     speech_harmonic_exp = 0.00
     attack_time = 0.012
@@ -9102,7 +9138,19 @@ class HarmoniumClaironProperties(ReedOrganFreeProperties):
     rank_is_pipe = True
     # LEVEL: its simulated level re the foundation, held on our renders
     initial_gain = 0.0374878
-    # ITS SPEECH, simulated: the tongue's rise 10-90 %% in cycles of the note
+    # ITS ANSWER TO THE WIND (examples/harmonium_bake.py --pressure: the
+    # Expression stop, the feet the wind): its first 12 harmonics' gain re
+    # 700 Pa at each pressure (dB, re its h1), its pitch's slope, its speech's
+    # exponent -- simulated
+    pressure_gains_db = (
+        (300, (0.00, -10.09, -6.62, -7.11, -0.44, -4.62, -4.70, 9.64, -6.34, 1.08, -8.03, -3.63)),
+        (500, (0.00, -2.84, -2.05, -0.36, -3.56, -1.94, -0.14, 7.72, -0.32, 2.80, -3.55, -2.39)),
+        (1000, (0.00, 2.21, 1.76, -0.84, 3.28, 1.37, -0.43, -7.97, -0.15, -13.04, 2.67, 0.22)),
+        (1500, (0.00, 4.06, 3.43, -2.64, 6.03, 2.41, -0.91, 3.05, -0.37, -0.30, 4.56, -1.88)),
+    )
+    pressure_cents_per_kpa = -8.29
+    pressure_speech_exp = 0.562
+    # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 52.9
     speech_harmonic_exp = 0.00
     attack_time = 0.012
@@ -9126,7 +9174,19 @@ class HarmoniumFifreProperties(HarmoniumClaironProperties):
     rank_is_pipe = True
     # LEVEL: its simulated level re the foundation, held on our renders
     initial_gain = 0.0479613
-    # ITS SPEECH, simulated: the tongue's rise 10-90 %% in cycles of the note
+    # ITS ANSWER TO THE WIND (examples/harmonium_bake.py --pressure: the
+    # Expression stop, the feet the wind): its first 12 harmonics' gain re
+    # 700 Pa at each pressure (dB, re its h1), its pitch's slope, its speech's
+    # exponent -- simulated
+    pressure_gains_db = (
+        (300, (0.00, -0.27, -6.45, -1.37, -11.14, -18.32, -7.30, -12.44, -6.06, -22.60, -23.23, -13.51)),
+        (500, (0.00, 0.10, -0.79, 0.72, -3.98, 0.62, -6.05, -3.74, 6.76, -11.96, -1.62, 2.41)),
+        (1000, (0.00, -0.54, 0.43, -0.75, 1.74, -2.59, 5.44, -1.22, 5.83, 3.27, -6.62, 9.31)),
+        (1500, (0.00, -1.60, 1.02, -1.82, 2.90, -6.85, 8.04, -4.14, 11.72, 2.40, 4.27, 10.10)),
+    )
+    pressure_cents_per_kpa = -1.85
+    pressure_speech_exp = 0.908
+    # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 124.7
     speech_harmonic_exp = 0.00
     attack_time = 0.012
@@ -9152,7 +9212,19 @@ class HarmoniumHautboisProperties(ReedOrganFreeProperties):
     rank_is_pipe = True
     # LEVEL: its simulated level re the foundation, held on our renders
     initial_gain = 0.0758417
-    # ITS SPEECH, simulated: the tongue's rise 10-90 %% in cycles of the note
+    # ITS ANSWER TO THE WIND (examples/harmonium_bake.py --pressure: the
+    # Expression stop, the feet the wind): its first 12 harmonics' gain re
+    # 700 Pa at each pressure (dB, re its h1), its pitch's slope, its speech's
+    # exponent -- simulated
+    pressure_gains_db = (
+        (300, (0.00, 0.43, -0.99, 7.32, -3.28, -8.66, -4.56, 2.23, -9.87, 14.14, -19.51, 3.63)),
+        (500, (0.00, 0.12, -0.58, 4.36, -1.03, -3.66, -1.07, -7.15, -1.88, 7.69, -4.12, 4.93)),
+        (1000, (0.00, 0.94, 1.09, -6.57, 0.62, 3.33, 1.47, 4.04, 0.60, 13.47, 3.08, -9.33)),
+        (1500, (0.00, 5.52, 5.08, 6.44, -3.50, 6.57, 3.74, 6.37, 3.14, 14.03, 2.88, 5.88)),
+    )
+    pressure_cents_per_kpa = -3.01
+    pressure_speech_exp = 0.599
+    # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 99.0
     speech_harmonic_exp = 0.00
     attack_time = 0.012
@@ -9177,7 +9249,19 @@ class HarmoniumBassonProperties(ReedOrganFreeProperties):
     rank_is_pipe = True
     # LEVEL: its simulated level re the foundation, held on our renders
     initial_gain = 0.0496467
-    # ITS SPEECH, simulated: the tongue's rise 10-90 %% in cycles of the note
+    # ITS ANSWER TO THE WIND (examples/harmonium_bake.py --pressure: the
+    # Expression stop, the feet the wind): its first 12 harmonics' gain re
+    # 700 Pa at each pressure (dB, re its h1), its pitch's slope, its speech's
+    # exponent -- simulated
+    pressure_gains_db = (
+        (300, (0.00, -4.80, -4.48, 0.05, -7.98, -1.14, 1.97, -4.75, 2.17, 0.29, -5.99, 11.94)),
+        (500, (0.00, -1.46, -1.40, -2.24, -2.08, -0.34, -0.87, -1.50, 0.98, -4.05, -0.76, 6.49)),
+        (1000, (0.00, 1.25, 1.19, 4.34, 1.34, 0.19, 1.76, 1.29, -1.21, 3.33, -0.12, 2.40)),
+        (1500, (0.00, 2.43, 2.12, 8.35, 1.87, 0.33, 3.40, 2.53, -3.03, 5.92, -1.09, 8.57)),
+    )
+    pressure_cents_per_kpa = -14.90
+    pressure_speech_exp = 0.433
+    # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 39.9
     speech_harmonic_exp = 0.00
     attack_time = 0.012
@@ -9203,7 +9287,19 @@ class HarmoniumCelesteProperties(ReedOrganFreeProperties):
     rank_is_pipe = True
     # LEVEL: its simulated level re the foundation, held on our renders
     initial_gain = 0.0352766
-    # ITS SPEECH, simulated: the tongue's rise 10-90 %% in cycles of the note
+    # ITS ANSWER TO THE WIND (examples/harmonium_bake.py --pressure: the
+    # Expression stop, the feet the wind): its first 12 harmonics' gain re
+    # 700 Pa at each pressure (dB, re its h1), its pitch's slope, its speech's
+    # exponent -- simulated
+    pressure_gains_db = (
+        (300, (0.00, -8.61, -2.74, -4.78, -0.80, 5.65, 0.94, 6.25, -16.85, 5.48, -8.07, -5.51)),
+        (500, (0.00, -3.58, -2.13, 0.68, 1.53, 4.70, 0.94, 4.93, -0.08, 6.46, -7.48, 1.14)),
+        (1000, (0.00, 3.58, 2.96, -0.67, -1.89, 1.19, 1.27, 1.15, 4.42, 5.22, -1.58, -2.83)),
+        (1500, (0.00, 6.46, 5.21, 0.23, -1.01, 3.88, 0.71, 7.83, 7.29, 4.74, 2.05, 1.88)),
+    )
+    pressure_cents_per_kpa = -5.94
+    pressure_speech_exp = 0.551
+    # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 75.9
     speech_harmonic_exp = 0.00
     attack_time = 0.012
@@ -9232,7 +9328,19 @@ class HarmoniumVioloncelleProperties(ReedOrganFreeProperties):
     rank_is_pipe = True
     # LEVEL: its simulated level re the foundation, held on our renders
     initial_gain = 0.0662032
-    # ITS SPEECH, simulated: the tongue's rise 10-90 %% in cycles of the note
+    # ITS ANSWER TO THE WIND (examples/harmonium_bake.py --pressure: the
+    # Expression stop, the feet the wind): its first 12 harmonics' gain re
+    # 700 Pa at each pressure (dB, re its h1), its pitch's slope, its speech's
+    # exponent -- simulated
+    pressure_gains_db = (
+        (300, (0.00, -8.85, -6.35, -1.43, -5.20, -6.44, -1.35, 2.79, -3.23, -3.50, 6.10, -11.56)),
+        (500, (0.00, -1.64, -1.54, 1.26, -2.88, -1.20, -0.01, -1.76, -1.28, 0.93, -1.74, -0.51)),
+        (1000, (0.00, 1.28, 1.28, -2.29, 2.35, 0.60, 0.26, 1.92, 0.90, -1.36, 7.08, -0.29)),
+        (1500, (0.00, 2.39, 2.35, -7.12, 4.19, 0.49, 0.91, 3.49, 1.68, -3.15, 10.42, -1.12)),
+    )
+    pressure_cents_per_kpa = -16.92
+    pressure_speech_exp = 0.511
+    # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 39.9
     speech_harmonic_exp = 0.00
     attack_time = 0.012
@@ -9258,7 +9366,18 @@ class HarmoniumSourdineProperties(ReedOrganFreeProperties):
     rank_is_pipe = True
     # LEVEL: its simulated level re the foundation, held on our renders
     initial_gain = 0.0230359
-    # ITS SPEECH, simulated: the tongue's rise 10-90 %% in cycles of the note
+    # ITS ANSWER TO THE WIND (examples/harmonium_bake.py --pressure: the
+    # Expression stop, the feet the wind): its first 12 harmonics' gain re
+    # 700 Pa at each pressure (dB, re its h1), its pitch's slope, its speech's
+    # exponent -- simulated
+    pressure_gains_db = (
+        (500, (0.00, -3.60, -1.61, -2.93, -2.63, -1.42, -9.79, -6.03, -4.18, -6.94, 3.13, -5.00)),
+        (1000, (0.00, 4.27, 3.83, 1.34, -6.53, 7.74, 1.14, -2.30, 7.10, 10.33, 11.33, 12.64)),
+        (1500, (0.00, 7.23, 6.59, 1.52, -4.02, 9.61, -2.07, 1.43, 9.69, 8.78, 17.18, 14.97)),
+    )
+    pressure_cents_per_kpa = -5.19
+    pressure_speech_exp = 0.272
+    # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 75.8
     speech_harmonic_exp = 0.00
     attack_time = 0.012
@@ -9283,7 +9402,19 @@ class HarmoniumMusetteProperties(ReedOrganFreeProperties):
     rank_is_pipe = True
     # LEVEL: its simulated level re the foundation, held on our renders
     initial_gain = 0.0488702
-    # ITS SPEECH, simulated: the tongue's rise 10-90 %% in cycles of the note
+    # ITS ANSWER TO THE WIND (examples/harmonium_bake.py --pressure: the
+    # Expression stop, the feet the wind): its first 12 harmonics' gain re
+    # 700 Pa at each pressure (dB, re its h1), its pitch's slope, its speech's
+    # exponent -- simulated
+    pressure_gains_db = (
+        (300, (0.00, -8.76, -5.99, -6.69, 2.97, 5.56, -1.26, 7.74, -6.08, 2.98, -8.59, 3.63)),
+        (500, (0.00, -4.09, -3.09, -3.41, 1.55, -0.41, -0.50, -0.72, -3.53, -4.70, -0.21, 0.34)),
+        (1000, (0.00, 3.12, 2.30, 1.72, 1.42, 3.52, -0.96, 8.30, 2.13, -0.25, 3.03, 4.50)),
+        (1500, (0.00, 5.59, 4.17, 1.88, 3.76, 5.50, -2.49, 12.16, 3.02, -1.69, 6.14, 6.07)),
+    )
+    pressure_cents_per_kpa = -6.68
+    pressure_speech_exp = 0.597
+    # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 63.9
     speech_harmonic_exp = 0.00
     attack_time = 0.012
@@ -9360,22 +9491,19 @@ ReedOrganFreeProperties.stop_rows = [
 # ratio) read at NOTE-ON in both renderers, the same moment CC11 is read for
 # loudness, so a note stamped live under a setting is the note the file renders.
 #
-# EXPRESSION: the reservoir shut, the feet ARE the wind. A free reed driven
-# harder swings further and its upper harmonics grow faster than its
-# fundamental -- measured on this model, opening the tongue's swing (reed_gate
-# 0 -> 0.8) lifts everything above the sixth harmonic from -31 to -18 dB. The
-# law is a tilt on the harmonic number h (the partial against the NOTE's 8-foot
-# pitch, floored at 1 so the 16-foot's fundamental is not boosted):
-#
-#     g(h, e) = max(h, 1) ** (HARMONIUM_EXPRESSION_TILT * (e - 1))
-#
-# with e = CC11 / 127. At e = 1 -- full wind, and every file that sends no CC11
-# -- g is exactly 1, so drawing the stop changes nothing until the bellows move.
-# At e = 0.5 the eighth harmonic is 7 dB under where it was, on top of the
-# loudness CC11 already takes. NOT MEASURED ON A HARMONIUM: EB1911 says only
-# that Expression puts the pressure under the feet; the slope is this model's
-# own gate-to-brightness ratio, halved to stay inside one register's voicing.
-HARMONIUM_EXPRESSION_TILT = 0.8
+# EXPRESSION: the reservoir shut, the feet ARE the wind (Mustel p. 115).
+# SINCE 2026-11-23 FROM THE REEDS' PHYSICS (step 4; the asserted tilt is gone):
+# CC11 is the wind pressure, HARMONIUM_PRESSURE_MIN..MAX Pa (Mustel's ff
+# 150-170 mm of water; a reed starts near 200 Pa), and each stop answers it as
+# its reeds were simulated to (examples/harmonium_bake.py --pressure): its
+# harmonics' gains (pressure_gains_db), its pitch falling (pressure_cents_per_
+# kpa, Cottingham's), its speech quickening (pressure_speech_exp), its
+# tremolo's bellows faster -- re the reservoir's HARMONIUM_PRESSURE_REF, where
+# the stops were baked and where an undrawn Expression leaves them. Read at
+# note-on, with CC11's loudness, which stays continuous.
+HARMONIUM_PRESSURE_MIN = 200.0
+HARMONIUM_PRESSURE_MAX = 1600.0
+HARMONIUM_PRESSURE_REF = 700.0
 
 
 def organ_wind(cls):
@@ -9411,13 +9539,53 @@ def stop_drawn_at(events, t):
     return cur >= 0.5
 
 
-def harmonium_expression_gain(h, e):
-    """The Expression stop's per-partial gain: h the harmonic against the
-    note's 8-foot pitch, e the bellows (CC11 / 127). Scalar or array."""
-    import numpy as _np
-    import native as _NV           # (libm's pow: the native engine's)
-    h = _np.maximum(_np.asarray(h, dtype=_np.float64), 1.0)
-    return _NV.xpow(h, HARMONIUM_EXPRESSION_TILT * (float(e) - 1.0))
+def harmonium_pressure(e):
+    """The wind, Pa, under the feet at CC11 / 127 = e."""
+    return HARMONIUM_PRESSURE_MIN + (HARMONIUM_PRESSURE_MAX - HARMONIUM_PRESSURE_MIN) * float(e)
+
+
+def harmonium_pressure_gain(cls, m, p):
+    """A stop's harmonic m's gain at wind p re the reservoir's: its table
+    (pressure_gains_db, h1-h12; past h12 its h12's) interpolated in log p,
+    0 dB at HARMONIUM_PRESSURE_REF, held past the table's ends."""
+    tab = getattr(cls, 'pressure_gains_db', None)
+    if not tab:
+        return 1.0
+    k = min(max(int(m), 1), 12) - 1
+    pts = sorted(list(tab) + [(HARMONIUM_PRESSURE_REF, (0.0,) * 12)], key=lambda r: r[0])
+    if p <= pts[0][0]:
+        db = pts[0][1][k]
+    elif p >= pts[-1][0]:
+        db = pts[-1][1][k]
+    else:
+        i = 0
+        while pts[i + 1][0] < p:
+            i += 1
+        x = (_log(p) - _log(pts[i][0])) / (_log(pts[i + 1][0]) - _log(pts[i][0]))
+        db = pts[i][1][k] + (pts[i + 1][1][k] - pts[i][1][k]) * x
+    return 10.0 ** (db / 20.0)
+
+
+def harmonium_pressure_ratio(cls, p):
+    """A stop's pitch at wind p re the reservoir's (Cottingham: falling)."""
+    return 2.0 ** (getattr(cls, 'pressure_cents_per_kpa', 0.0) * (p - HARMONIUM_PRESSURE_REF) / 1000.0 / 1200.0)
+
+
+def harmonium_speech_scale(cls, p):
+    """A stop's speech at wind p re the reservoir's: quicker as it rises."""
+    return (p / HARMONIUM_PRESSURE_REF) ** (-getattr(cls, 'pressure_speech_exp', 0.0))
+
+
+def harmonium_tremolo_hz(cls, p, treble):
+    """The tremolo's bellows at wind p (freereed_sim.TREMOLO_*: rate ~
+    sqrt(1 + p / P_K)), the treble half's own bellows its ratio quicker."""
+    hz = getattr(cls, 'stop_tremolo_hz', 0.0) * ((1.0 + p / HARMONIUM_TREMOLO_P_K)
+                                                  / (1.0 + HARMONIUM_PRESSURE_REF / HARMONIUM_TREMOLO_P_K)) ** 0.5
+    return hz * (HARMONIUM_TREMOLO_TREBLE_RATIO if treble else 1.0)
+
+
+HARMONIUM_TREMOLO_P_K = 700.0
+HARMONIUM_TREMOLO_TREBLE_RATIO = 1.15
 
 
 # PERCUSSION: a hammer strikes the front 8-foot reeds as the key goes down, so

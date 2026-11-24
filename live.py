@@ -6389,9 +6389,11 @@ class Live:
                     if ch not in self.stamped:
                         self.slab.channel_gain(self._sounding(ch), g / max(was, 1e-9))
                 if msg.control == 11 and self.xnote:
-                    # THE HARMONIUM'S EXPRESSION: its bellows brighten as well
-                    # as swell, on the notes stamped with the stop drawn. The
-                    # law's ratio between two pressures needs only the delta.
+                    # THE HARMONIUM'S EXPRESSION: its bellows change each stop's
+                    # tone as well as its loudness, on the notes stamped with
+                    # the stop drawn -- the ratio of its gains at the two winds
+                    # (tonelib.harmonium_pressure_gain; its pitch and speech
+                    # stay the note-on's, as the file renderer's)
                     e = msg.value / 127.0
                     for key, e0 in list(self.xnote.items()):
                         sl = self.slab.live.get(key)
@@ -6404,10 +6406,11 @@ class Live:
                         if part is None:
                             continue
                         idx = np.fromiter(sl, np.int64, len(sl))
-                        h = self.slab.hrel[idx].astype(np.float64) * self._h8(part, key[2])
-                        self.slab.channel_gain(sl, (T.harmonium_expression_gain(h, e)
-                                                    / T.harmonium_expression_gain(h, e0)
-                                                    ).astype(np.float32))
+                        cls, ms = self._hstop(part, key[2], key[3], self.slab.hrel[idx])
+                        p, p0 = T.harmonium_pressure(e), T.harmonium_pressure(e0)
+                        self.slab.channel_gain(sl, np.array([T.harmonium_pressure_gain(cls, m, p)
+                                                             / T.harmonium_pressure_gain(cls, m, p0) for m in ms],
+                                                            np.float64).astype(np.float32))
                         self.xnote[key] = e
             elif msg.control == T.COUPLER_CC:       # a divider organ's coupler switches
                 for part in parts:
@@ -12306,9 +12309,30 @@ class Live:
               and (len(r) < 7 or r[6] is None or r[6][0] <= tgt <= r[6][1])]
         return min(fs) if fs else 1.0
 
+    def _hstop(self, part, note, rank, hrel):
+        """A harmonium rank's stop class -- blockrender's speech class (_sc):
+        its named pipe, its spectrum where that is a pipe, else the host's --
+        and each slot's harmonic of it (hrel against the rank's own pitch)."""
+        host = part.patch._voice_class(note + part.transpose)
+        r = next(r for r in part.patch.stop_ranks if r[0] == rank)
+        spec = r[3] if len(r) > 3 else None
+        pipe = r[5] if len(r) > 5 else None
+        if pipe is not None:
+            cls = T.rank_spectrum(pipe)
+        elif spec is not None and getattr(T.rank_spectrum(spec), 'rank_is_pipe', False):
+            cls = T.rank_spectrum(spec)
+        elif (spec is not None and getattr(host, 'rank_speech_own_pitch', False)
+              and getattr(T.rank_spectrum(spec), 'rank_speech', False)):
+            cls = T.rank_spectrum(spec)
+        else:
+            cls = host
+        ratio = r[1] if r[1] is not None and not isinstance(r[1], (list, tuple)) else 1.0
+        h = np.asarray(hrel, np.float64) * self._h8(part, note) / float(ratio)
+        return cls, [int(math.floor(x + 0.5)) for x in h]
+
     def _harmonium_stamp(self, part, tmpl, ch, note, rank, key, hrel):
         """The harmonium's effect stops on the slots just stamped, as the file
-        renderer reads them: at note-on. See tonelib's harmonium_expression_gain."""
+        renderer reads them: at note-on. See tonelib's harmonium_pressure."""
         sl = self.slab.last_slots
         if sl is None or not len(sl) or len(sl) != len(hrel):
             return
@@ -12316,9 +12340,15 @@ class Live:
         # CC73/72 first, as the file scales the attack before the hammer's min.
         self._sound_stamp(part, ch, note, sl)
         if "expression" in part.drawn:
+            # THE FEET ARE THE WIND: the stop's tone, pitch and speech at it
             e = self.expr.get(ch, T.GM_DEFAULT_EXPRESSION) / 127.0
-            g = T.harmonium_expression_gain(np.asarray(hrel, np.float64) * self._h8(part, note), e)
+            p = T.harmonium_pressure(e)
+            cls, ms = self._hstop(part, note, rank, hrel)
+            g = np.array([T.harmonium_pressure_gain(cls, m, p) for m in ms], np.float64)
             self.slab.channel_gain(sl, g.astype(np.float32))
+            a = self.slab.a
+            a["fa"][idx] = (a["fa"][idx].astype(np.float64) * T.harmonium_speech_scale(cls, p)).astype(np.float32)
+            self.slab.retune(list(sl), self._n0_stamp, om_scale=T.harmonium_pressure_ratio(cls, p))
             self.xnote[key] = e
         if "percussion" in part.drawn and rank in part.patch.percussion_ranks:
             pc = part.patch._voice_class(note + part.transpose)
@@ -12328,9 +12358,12 @@ class Live:
             a["fa"][idx] = np.minimum(a["fa"][idx], np.float32(
                 max(1e-4, min(part.patch.percussion_attack_s, afm * dur)) * B.SR))
         if "tremolo" in part.drawn and part.patch.stop_tremolo_depth > 0.0:
-            # at the stop's own rate (stop_tremolo_hz), not the wheel's
+            # at the stop's own rate, its bellows quicker with the wind (the
+            # feet's or the reservoir's), the treble half's its own
+            pw = (T.harmonium_pressure(self.expr.get(ch, T.GM_DEFAULT_EXPRESSION) / 127.0)
+                  if "expression" in part.drawn else T.HARMONIUM_PRESSURE_REF)
             self.slab.stop_tremolo_arm(sl, part.patch.stop_tremolo_depth,
-                                       part.patch.stop_tremolo_hz)
+                                       T.harmonium_tremolo_hz(part.patch, pw, note >= T.HARMONIUM_SPLIT))
         self.slab.dirty = True
 
     def _draw(self, part, tmpl, ch, note, rank, n0):
@@ -12355,6 +12388,7 @@ class Live:
             self.dropped += 1
             return
         if part.patch.stop_word_ccs[0] == 43:
+            self._n0_stamp = n0
             self._harmonium_stamp(part, tmpl, ch, note, rank, key, hrel)
         # THE WHEEL'S TREMOLO on a note struck with the wheel already up, as
         # _note_on arms one (this path returns before it)

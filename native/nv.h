@@ -14,6 +14,7 @@ extern "C" {
 #endif
 
 #define NCOLS 50                /* blockrender.EMIT_COLS */
+#include <math.h>
 #define NV_TOO_SMALL (-2000000000)      /* nv_play: the row store was too small */
 
 typedef struct {
@@ -574,6 +575,11 @@ struct OrganPipe {
        moving meanwhile (pp_partials) at pp_db, the slip's snap pp_snap_s */
     int n_pp, pp_partials;
     double pp_hz[8], pp_s[8], pp_db, pp_snap_s;
+    /* A HARMONIUM STOP'S ANSWER TO THE WIND (tonelib.harmonium_pressure_gain
+       and friends): its table's pressures (the reservoir's among them, 0 dB),
+       h1-h12's dB at each, sorted; its pitch's cents a kPa, speech exponent */
+    int n_pres;
+    double pres_p[8], pres_db[8][12], pres_cents, pres_sexp;
 };
 
 /* AN ORGAN's RANKS AT MOST: the divider organ's upper manual is 39 with its
@@ -608,7 +614,7 @@ typedef struct OrganSpec {
        Percussion and Tremolo stops' ranks (-1 none), the Expression's tilt,
        the hammer's attack and the attack's share of the note (attack_fraction_max) */
     int expr_rank, perc_rank, htrem_rank;
-    double expr_tilt, perc_attack_s, afm;
+    double perc_attack_s, afm;
     int pipe_radius;        /* each pipe's own aperture (pipe_radius); 0: the class's (a reed organ's) */
     double wheel_trem;      /* the wheel's tremolo depth (tremolo_depth), 0 none */
     /* live's tremolos: the wheel's rate and stereo (tremolo_hz, tremolo_stereo),
@@ -653,7 +659,42 @@ typedef struct OrganSpec {
        rule -- the tab it follows (-1 none: its own bit alone), the switch's bit,
        the state it wants (a copy: on; a coupled tab: its 8' Off off) */
     int has_cpl, cpl_default, cpl_tab[NV_MAX_RANK], cpl_bit[NV_MAX_RANK], cpl_want[NV_MAX_RANK];
+    /* A HARMONIUM'S WIND (tonelib.HARMONIUM_PRESSURE_*: CC11's range under the
+       Expression, the reservoir's), its tremolo's bellows (HARMONIUM_TREMOLO_*)
+       and the treble half's first key (HARMONIUM_SPLIT) */
+    double pres_min, pres_max, pres_ref, trem_pk, trem_treble;
+    int split;
 } OrganSpec;
+
+/* tonelib.harmonium_pressure / _pressure_gain / _tremolo_hz, operation for operation */
+static inline double nv_hpressure(const OrganSpec *og, double e)
+{
+    return og->pres_min + (og->pres_max - og->pres_min) * e;
+}
+static inline double nv_hpressure_gain(const OrganPipe *q, int m, double p)
+{
+    if (!q->n_pres)
+        return 1.0;
+    int k = (m < 1 ? 1 : m > 12 ? 12 : m) - 1, n = q->n_pres;
+    double db;
+    if (p <= q->pres_p[0])
+        db = q->pres_db[0][k];
+    else if (p >= q->pres_p[n - 1])
+        db = q->pres_db[n - 1][k];
+    else {
+        int i = 0;
+        while (q->pres_p[i + 1] < p)
+            i++;
+        double x = (log(p) - log(q->pres_p[i])) / (log(q->pres_p[i + 1]) - log(q->pres_p[i]));
+        db = q->pres_db[i][k] + (q->pres_db[i + 1][k] - q->pres_db[i][k]) * x;
+    }
+    return pow(10.0, db / 20.0);
+}
+static inline double nv_htremolo_hz(const OrganSpec *og, double hz, double p, int note)
+{
+    hz = hz * pow((1.0 + p / og->trem_pk) / (1.0 + og->pres_ref / og->trem_pk), 0.5);
+    return hz * (note >= og->split ? og->trem_treble : 1.0);
+}
 
 /* what the note setup reads of the voice besides its VoiceSnap */
 typedef struct {

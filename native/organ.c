@@ -192,6 +192,12 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
             double hc = pipe_chiff_time(hp, f0, ha);
             chiff_r = hc > 0 ? t->chiff * (pipe_chiff_time(scp, f0s, ra) / hc) : t->chiff;
         }
+        double hpw = 0.0, hpr = 1.0;                /* the Expression stop: its wind, its pitch, its speech */
+        if (!isnan(n->organ_hx)) {
+            hpw = nv_hpressure(og, n->organ_hx);
+            hpr = pow(2.0, scp->pres_cents * (hpw - og->pres_ref) / 1000.0 / 1200.0);
+            fade_r *= pow(hpw / og->pres_ref, -scp->pres_sexp);
+        }
         if (n->organ_perc && rk->perc)              /* the Percussion stop's hammer: min(attack, hammer) */
             fade_r = pymin(fade_r, pymax(1e-4, pymin(og->perc_attack_s, og->afm * t->dur)) * sr);
         double gr = n->rank_gr[ri], cr = n->organ_cr;
@@ -318,6 +324,8 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
                 double h = hh[0], hf = hh[1];
                 if (rk->beat)                           /* ...and its partials a little off it (choir_partial_hz) */
                     hf += choir_beat(og, rk, note, m);
+                if (!isnan(n->organ_hx))                /* (its pitch falling with the wind) */
+                    hf *= hpr;
                 if (hf > sr / 2)
                     break;
                 double hv = nv_harmonic_volume(tsrc, m);
@@ -348,8 +356,8 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
                     tr.has_radius = 0;
                 }
                 double gM = hv * rk->gain * nv_radiation_gain(host, hf, radius, og->pipe_radius);
-                if (!isnan(n->organ_hx))                /* the Expression stop (harmonium_expression_gain) */
-                    gM *= pow(h > 1.0 ? h : 1.0, og->expr_tilt * (n->organ_hx - 1.0));
+                if (!isnan(n->organ_hx))                /* the Expression stop (harmonium_pressure_gain) */
+                    gM *= nv_hpressure_gain(scp, m, hpw);
                 double gL = gM * nv_hrtf_gain(host, hf, tr.li), gR = gM * nv_hrtf_gain(host, hf, tr.ri);
                 double cvp = cv_r * nv_chiff_harmonic_gain(cpv, h);
                 memcpy(tr.tb, t->tb, sizeof tr.tb);
