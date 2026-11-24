@@ -8476,12 +8476,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
             _end = min(_end, max(_on, _t[_j[0]] - RETRIGGER_FADE))
         return _end
 
-    _next_same = {}
-    _seen = {}
-    for _n in sorted(notes, key=lambda e: -e[2]):
-        _k = (_n[0], _n[1])
-        if _k in _seen: _next_same[(_k, _n[2])] = _seen[_k]
-        _seen[_k] = _n[2]
+    # (_next_same, each key's next strike: made below, once the drones are in)
     # THE ENGINE'S CHANNELS (native/channel.cpp), from the same events and
     # notes: 'check' asks each note's end, soft pedal and next strike of both
     _SONG = None
@@ -8670,6 +8665,18 @@ def _prepare(path, tuner='hybrid440', sink=None):
                           max(1, int(round(_e[4] * _dv))), _e[5], _e[6]))
             _DRONE_PC[(_c, _tpc.drone_strike_note, _don)] = _dcls
     notes = notes + _dnew
+    # EACH KEY'S NEXT STRIKE (_next_same), made with the drones among the notes
+    # -- as the engine's Song.finish makes it, after nv_song_drones: a drone
+    # stroke re-struck by the next is cut by it over the retrigger fade (a
+    # string struck again does not ring twice over itself: the taishogoto's
+    # struck drone), twins at one onset (a bagpipe's tenors) never cutting each
+    # other (the rule asks for a strike after the note's end)
+    _next_same = {}
+    _seen = {}
+    for _n in sorted(notes, key=lambda e: -e[2]):
+        _k = (_n[0], _n[1])
+        if _k in _seen: _next_same[(_k, _n[2])] = _seen[_k]
+        _seen[_k] = _n[2]
     # what the last prepare() sounded as drones: (channel, note, on, off, class
     # name), for the selftests to read
     global LAST_DRONES
