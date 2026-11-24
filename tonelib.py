@@ -9154,6 +9154,7 @@ class HarmoniumClaironProperties(ReedOrganFreeProperties):
     bore_corner_hz = 0.0
     # its own speech and decay, not the host's (blockrender's rank_is_pipe)
     rank_is_pipe = True
+    box_back = True                  # (a back stop: it sounds into the Forte's box)
     # LEVEL: its simulated level re the foundation, held on our renders
     initial_gain = 0.0374878
     # ITS ANSWER TO THE WIND (examples/harmonium_bake.py --pressure: the
@@ -9196,6 +9197,7 @@ class HarmoniumFifreProperties(HarmoniumClaironProperties):
     bore_corner_hz = 0.0
     # its own speech and decay, not the host's (blockrender's rank_is_pipe)
     rank_is_pipe = True
+    box_back = True                  # (a back stop: it sounds into the Forte's box)
     # LEVEL: its simulated level re the foundation, held on our renders
     initial_gain = 0.0479613
     # ITS ANSWER TO THE WIND (examples/harmonium_bake.py --pressure: the
@@ -9240,6 +9242,7 @@ class HarmoniumHautboisProperties(ReedOrganFreeProperties):
     bore_corner_hz = 0.0
     # its own speech and decay, not the host's (blockrender's rank_is_pipe)
     rank_is_pipe = True
+    box_back = True                  # (a back stop: it sounds into the Forte's box)
     # LEVEL: its simulated level re the foundation, held on our renders
     initial_gain = 0.0758417
     # ITS ANSWER TO THE WIND (examples/harmonium_bake.py --pressure: the
@@ -9283,6 +9286,7 @@ class HarmoniumBassonProperties(ReedOrganFreeProperties):
     bore_corner_hz = 0.0
     # its own speech and decay, not the host's (blockrender's rank_is_pipe)
     rank_is_pipe = True
+    box_back = True                  # (a back stop: it sounds into the Forte's box)
     # LEVEL: its simulated level re the foundation, held on our renders
     initial_gain = 0.0496467
     # ITS ANSWER TO THE WIND (examples/harmonium_bake.py --pressure: the
@@ -9374,6 +9378,7 @@ class HarmoniumVioloncelleProperties(ReedOrganFreeProperties):
     bore_corner_hz = 0.0
     # its own speech and decay, not the host's (blockrender's rank_is_pipe)
     rank_is_pipe = True
+    box_back = True                  # (a back stop: it sounds into the Forte's box)
     # LEVEL: its simulated level re the foundation, held on our renders
     initial_gain = 0.0662032
     # ITS ANSWER TO THE WIND (examples/harmonium_bake.py --pressure: the
@@ -9460,6 +9465,7 @@ class HarmoniumMusetteProperties(ReedOrganFreeProperties):
     bore_corner_hz = 0.0
     # its own speech and decay, not the host's (blockrender's rank_is_pipe)
     rank_is_pipe = True
+    box_back = True                  # (a back stop: it sounds into the Forte's box)
     # LEVEL: its simulated level re the foundation, held on our renders
     initial_gain = 0.0488702
     # ITS ANSWER TO THE WIND (examples/harmonium_bake.py --pressure: the
@@ -9536,6 +9542,15 @@ ReedOrganFreeProperties.stop_ranks = [
     ("violoncelle",   1.0, 0.85, HarmoniumVioloncelleProperties, False, None, _BASS),
     ("sourdine",      1.0, 0.85, HarmoniumSourdineProperties, False, None, _BASS),
     ("musette",       0.5, 0.80, HarmoniumMusetteProperties, False, None, _TREBLE),
+    # bits 15-20, THE BOXES (Mustel pp. 116-123; harmonium_box_* below): the
+    # Forte-Fixe's lids lifted, the Forte-Expressif's opened by the wind, the
+    # Metaphone's Fausse-Table closed over the back stops -- each half its own
+    ("forte fixe B",  None, 0.0),
+    ("forte fixe T",  None, 0.0),
+    ("forte expr B",  None, 0.0),
+    ("forte expr T",  None, 0.0),
+    ("metaphone B",   None, 0.0),
+    ("metaphone T",   None, 0.0),
 ]
 # THE CELESTE'S TWO ROWS AT EACH KEY: the first at the key's 16-foot, the
 # second its own measured cents above (mixture_ratios reads a composition by
@@ -9550,6 +9565,7 @@ ReedOrganFreeProperties.stop_rows = [
      "flute 1", "clarinette 2", "fifre 3", "hautbois 4", "celeste"],
     ["expression", "percussion", "tremolo"],
     ["violoncelle", "sourdine", "|", "musette"],
+    ["forte fixe B", "forte expr B", "metaphone B", "|", "forte fixe T", "forte expr T", "metaphone T"],
 ]
 
 
@@ -9666,7 +9682,76 @@ HARMONIUM_TREMOLO_TREBLE_RATIO = 1.15
 # set it, full at harmonium_reservoir_full_pa -- the pressure the stops were
 # baked and tuned at, so a file at CC11 127 with no Expression plays the
 # baked voice -- and CC11 is how hard the player pumps toward it.
-HARMONIUM_KNEE_CC = (21, 22)       # Double-Expression's knee boards, bass and treble (MIDI's undefined 21, 22)
+HARMONIUM_KNEE_CC = (21, 22)
+
+# THE BOXES (Mustel pp. 116-123). The BACK stops (box_back) sound into a box,
+# a half each, closed by lids ("volets") well above the pallets. Shut, the
+# sound leaves only through the lids' gaps while the box's lining absorbs the
+# rest; a diffuse field's energy balance gives the share that leaves,
+#     T(o, f) = A(o) / (A(o) + S alpha(f)),   A(o) = gap + o * lid,
+# alpha rising with frequency (alpha0 (1 + (f / f_a)^2), at most 1) -- the
+# shut box's absorption above 2 kHz the stops were baked with. The baked tone
+# IS the shut box (o = 0); a lid opened by o (the Forte-Fixe: 1; the
+# Forte-Expressif: its bellows' opening from the half's wind, clamp((p -
+# p_th) / span), an open Fixe overriding it, p. 119) gives each partial
+# sqrt(T(o, f) / T(0, f)): "une subite et considerable augmentation
+# d'intensite" (p. 116), the highs back with it. Its level rides the wind's
+# rows (a held crescendo opens the lids); its tone is set at note-on. A
+# typical instrument's, named to be set by ear (Mustel gives no figures): a
+# half's box 45 x 12 x 6 cm, its lid 45 x 10 cm with 1 mm gaps round it, a
+# wooden box's alpha 0.1.
+HARMONIUM_BOX_SURFACE_M2 = 0.176
+HARMONIUM_BOX_ALPHA = 0.10
+HARMONIUM_BOX_ALPHA_HZ = 2000.0
+HARMONIUM_BOX_GAP_M2 = 1.1e-3
+HARMONIUM_BOX_LID_M2 = 0.045
+HARMONIUM_FORTE_EXPR_PA = 800.0         # the Forte-Expressif's bellows starts to open its lids...
+HARMONIUM_FORTE_EXPR_SPAN_PA = 600.0    # ...fully open this much above
+# THE METAPHONE (Charles Mustel 1878, pp. 120-123): a removable Fausse-Table
+# over the back stops' outlets -- "il se rapproche beaucoup du timbre des jeux
+# de devant", its level "pas sensiblement diminuee": the front stops' felt
+# cover (harmonium_stops.FOUNDATION's) on the back stops, set at note-on.
+HARMONIUM_METAPHONE_HZ = 1500.0
+
+
+def harmonium_box_t(o, f):
+    """The share of a back stop's sound leaving its box, lids open by o, at f Hz."""
+    al = HARMONIUM_BOX_ALPHA * (1.0 + (f / HARMONIUM_BOX_ALPHA_HZ) ** 2)
+    al = 1.0 if al > 1.0 else al
+    a = HARMONIUM_BOX_GAP_M2 + o * HARMONIUM_BOX_LID_M2
+    return a / (a + HARMONIUM_BOX_SURFACE_M2 * al)
+
+
+def harmonium_box_open(p, fixe, expr):
+    """A half's lids: 1 under its Forte-Fixe, else its Forte-Expressif's
+    opening at the half's wind p, else shut."""
+    if fixe:
+        return 1.0
+    if not expr:
+        return 0.0
+    o = (p - HARMONIUM_FORTE_EXPR_PA) / HARMONIUM_FORTE_EXPR_SPAN_PA
+    return 0.0 if o < 0.0 else (1.0 if o > 1.0 else o)
+
+
+def harmonium_box_level(o):
+    """A back stop's level, lids open by o, re shut: its low frequencies'."""
+    if o == 0.0:
+        return 1.0
+    return (harmonium_box_t(o, 0.0) / harmonium_box_t(0.0, 0.0)) ** 0.5
+
+
+def harmonium_box_tone(cls, f, o, meta):
+    """A partial at f Hz of stop cls at note-on: the box's colour beyond its
+    level (lids open by o), and the Metaphone's felt where drawn -- back
+    stops only."""
+    if not getattr(cls, 'box_back', False):
+        return 1.0
+    g = 1.0
+    if o != 0.0:
+        g = (harmonium_box_t(o, f) / harmonium_box_t(0.0, f)) ** 0.5 / harmonium_box_level(o)
+    if meta:
+        g = g / (1.0 + (f / HARMONIUM_METAPHONE_HZ) ** 2) ** 0.5
+    return g       # Double-Expression's knee boards, bass and treble (MIDI's undefined 21, 22)
 
 
 def harmonium_stop_class(host, rank):

@@ -358,6 +358,8 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
                 double gM = hv * rk->gain * nv_radiation_gain(host, hf, radius, og->pipe_radius);
                 if (!isnan(n->organ_hx))                /* the Expression stop (harmonium_pressure_gain) */
                     gM *= nv_hpressure_gain(scp, m, hpw);
+                if (og->hwind && (n->organ_box != 0.0 || n->organ_meta))   /* its box's colour, the Metaphone's felt */
+                    gM *= nv_hbox_tone(og, scp, hf, n->organ_box, n->organ_meta);
                 double gL = gM * nv_hrtf_gain(host, hf, tr.li), gR = gM * nv_hrtf_gain(host, hf, tr.ri);
                 double cvp = cv_r * nv_chiff_harmonic_gain(cpv, h);
                 memcpy(tr.tb, t->tb, sizeof tr.tb);

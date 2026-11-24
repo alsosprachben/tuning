@@ -2557,7 +2557,24 @@ static int harmonium_wind(nv::Song *Sg, const nv::Song::Organ &o, long nblk, int
     const OrganSpec *sp = o.spec;
     std::vector<double> edge, pts;
     harmonium_edges(Sg, o, nblk, blk, sr, G, edge, pts);
-    // a row a (half, stop): its ratio, phase and level (harmonium_rows)
+    // each half's lids at each edge (harmonium_box_open: the Fortes, a step a block)
+    std::vector<double> open_((size_t)(nblk + 1) * 2, 0.0);
+    for (int h = 0; h < 2; h++) {
+        std::vector<double> fx(nblk, 0.0), fe(nblk, 0.0);
+        const int rr[2] = {sp->fixe_rank[h], sp->fexpr_rank[h]};
+        for (int k = 0; k < 2; k++)
+            if (rr[k] >= 0)
+                for (auto &e : o.rank_ev[rr[k]])
+                    for (long b = 0; b < nblk; b++)
+                        if (((double)b + 0.5) * blk / sr >= e.first)
+                            (k ? fe : fx)[b] = e.second;
+        for (long b = 0; b <= nblk; b++) {
+            long bb = std::min(b, nblk - 1);
+            open_[(size_t)b * 2 + h] = nv_hbox_open(sp, edge[(size_t)b * 2 + h], fx[bb] >= 0.5, fe[bb] >= 0.5);
+        }
+    }
+    // a row a (half, stop): its ratio, phase and level (harmonium_rows) -- a
+    // back stop's times its box's
     std::vector<std::pair<int, int>> keys;
     for (int ri = 0; ri < sp->n_rank; ri++) {
         if (o.wrow[ri] < 0)
@@ -2579,9 +2596,13 @@ static int harmonium_wind(nv::Song *Sg, const nv::Song::Organ &o, long nblk, int
             R[b] = (float)(sum / 8.0);
             Cc[b] = acc;
             acc += ((double)R[b] - 1.0) * blk;
-            L[b] = (float)nv_hlevel_gain(q, edge[(size_t)b * 2 + h]);
+            L[b] = (float)(q->box_back ? nv_hlevel_gain(q, edge[(size_t)b * 2 + h])
+                                             * nv_hbox_level(sp, open_[(size_t)b * 2 + h])
+                                       : nv_hlevel_gain(q, edge[(size_t)b * 2 + h]));
         }
-        L[nblk] = (float)nv_hlevel_gain(q, edge[(size_t)nblk * 2 + h]);
+        L[nblk] = (float)(q->box_back ? nv_hlevel_gain(q, edge[(size_t)nblk * 2 + h])
+                                            * nv_hbox_level(sp, open_[(size_t)nblk * 2 + h])
+                                      : nv_hlevel_gain(q, edge[(size_t)nblk * 2 + h]));
         row++;
     }
     return row;
@@ -2844,6 +2865,14 @@ int nv_song_organ_note(void *s, int i, int family, NoteIn *n)
             if (p != o->spec->pres_ref)
                 n->organ_hx = p;
         }
+        // ...and its half's box (harmonium_note_box)
+        int h = e.note < o->spec->split ? 0 : 1;
+        n->organ_box = nv_hbox_open(o->spec, std::isnan(n->organ_hx) ? o->spec->pres_ref : n->organ_hx,
+                                    drawn_at(o->spec->fixe_rank[h]), drawn_at(o->spec->fexpr_rank[h]));
+        n->organ_meta = drawn_at(o->spec->meta_rank[h]);
+    } else {
+        n->organ_box = 0.0;
+        n->organ_meta = 0;
     }
     n->organ_perc = drawn_at(o->spec->perc_rank);
     // ...and its Tremolo stop (_HTREM_CH: the notes struck with it drawn)

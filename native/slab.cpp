@@ -7232,7 +7232,25 @@ struct Part {
         sound_stamp(og, ch, sl);            // CC73/72 first: the hammer is a min over the attack
         // THE WIND AT ITS ONSET (its half's): the stop's tone and speech at it --
         // its level and pitch ride the chest's rows (wind.HarmoniumWind)
-        double p = og->hwind ? hwind_now(patches[cur], note < og->split ? 0 : 1) : og->pres_ref;
+        const int half = note < og->split ? 0 : 1;
+        double p = og->hwind ? hwind_now(patches[cur], half) : og->pres_ref;
+        // ...ITS HALF'S BOX (harmonium_box_tone): each slot by its own frequency
+        if (og->hwind) {
+            int fx = og->fixe_rank[half] >= 0 && dr[og->fixe_rank[half]];
+            int fe = og->fexpr_rank[half] >= 0 && dr[og->fexpr_rank[half]];
+            int meta = og->meta_rank[half] >= 0 && dr[og->meta_rank[half]];
+            double o = nv_hbox_open(og, p, fx, fe);
+            if (o != 0.0 || meta) {
+                std::vector<int> ms_;
+                const OrganPipe *qb = hstop(og, ri, note, R.hrel.data(), sl.size(), ms_);
+                if (qb->box_back) {
+                    std::vector<float> g(sl.size());
+                    for (size_t q = 0; q < sl.size(); q++)
+                        g[q] = (float)nv_hbox_tone(og, qb, S.f8[F8_om][sl[q]] * (rate / (2.0 * M_PI)), o, meta);
+                    S.channel_gain_each(sl, g);
+                }
+            }
+        }
         if (p != og->pres_ref) {
             std::vector<int> ms;
             const OrganPipe *q_ = hstop(og, ri, note, R.hrel.data(), sl.size(), ms);
@@ -8998,8 +9016,16 @@ struct Part {
                 sum = sum + nv_hratio(og, q, e0[h] + (out[h] - e0[h]) * (j / 8.0));
             BRt[row] = (float)(sum / 8.0);
             BCt[row] = st.acc[row];
-            BLt[2 * row] = (float)nv_hlevel_gain(q, e0[h]);
-            BLt[2 * row + 1] = (float)nv_hlevel_gain(q, out[h]);
+            if (q->box_back) {              // (a back stop's box: its half's lids at the block's two edges)
+                int fx = og->fixe_rank[h] >= 0 && p.drawn[og->fixe_rank[h]];
+                int fe = og->fexpr_rank[h] >= 0 && p.drawn[og->fexpr_rank[h]];
+                BLt[2 * row] = (float)(nv_hlevel_gain(q, e0[h]) * nv_hbox_level(og, nv_hbox_open(og, e0[h], fx, fe)));
+                BLt[2 * row + 1] = (float)(nv_hlevel_gain(q, out[h])
+                                           * nv_hbox_level(og, nv_hbox_open(og, out[h], fx, fe)));
+            } else {
+                BLt[2 * row] = (float)nv_hlevel_gain(q, e0[h]);
+                BLt[2 * row + 1] = (float)nv_hlevel_gain(q, out[h]);
+            }
             st.acc[row] += ((double)BRt[row] - 1.0) * frames;
         }
         st.hw.edge[0] = out[0];

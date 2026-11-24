@@ -12315,7 +12315,19 @@ class Live:
         idx = np.fromiter(sl, np.int64, len(sl))
         # CC73/72 first, as the file scales the attack before the hammer's min.
         self._sound_stamp(part, ch, note, sl)
-        p = self._hwind_now(part, 0 if note < T.HARMONIUM_SPLIT else 1)
+        half = 0 if note < T.HARMONIUM_SPLIT else 1
+        p = self._hwind_now(part, half)
+        # ...ITS HALF'S BOX (harmonium_box_tone): each slot by its own frequency
+        fx, fe = self._hbox_stops(part, half)
+        o = T.harmonium_box_open(p, fx, fe)
+        meta = "metaphone " + "BT"[half] in part.drawn
+        if o != 0.0 or meta:
+            cls, _ms = self._hstop(part, note, rank, hrel)
+            if getattr(cls, "box_back", False):
+                om = self.slab.a["om"][idx].astype(np.float64)
+                g = np.array([T.harmonium_box_tone(cls, float(w) * (self.rate / (2.0 * math.pi)), o, meta)
+                              for w in om], np.float64)
+                self.slab.channel_gain(sl, g.astype(np.float32))
         if p != T.HARMONIUM_PRESSURE_REF:
             # THE WIND AT ITS ONSET: the stop's tone and speech at it
             cls, ms = self._hstop(part, note, rank, hrel)
@@ -12785,6 +12797,11 @@ class Live:
         return (T.harmonium_aim(part.patch.wind_pc, e, expr), expr,
                 (self.knee.get((ch, 0), float("inf")), self.knee.get((ch, 1), float("inf"))))
 
+    def _hbox_stops(self, part, half):
+        """A harmonium part's half's Fortes drawn: (Fixe, Expressif)."""
+        sd = "BT"[half]
+        return "forte fixe " + sd in part.drawn, "forte expr " + sd in part.drawn
+
     def _hwind_now(self, part, half):
         """A harmonium part's half's wind (Pa) for a note struck now: its
         chest's last block's end -- or, before its first, where the player
@@ -12813,7 +12830,10 @@ class Live:
         pts, edges = st["hwind"].blocks(np.array([q7]), np.array([aim]), np.array([1.0 if expr else 0.0]),
                                         np.array([knee]))
         for (h, _cn), row in st["rows"].items():
-            r, lv = _WND.harmonium_rows(st["key_cls"][(h, _cn)], pts[:, h, :], edges[:, h])
+            # (a back stop's box: its half's lids at the block's two edges)
+            fx, fe = self._hbox_stops(part, h)
+            opening = [T.harmonium_box_open(float(edges[i, h]), fx, fe) for i in range(2)]
+            r, lv = _WND.harmonium_rows(st["key_cls"][(h, _cn)], pts[:, h, :], edges[:, h], opening)
             sl.BR[row, 0] = r[0]
             sl.BC[row, 0] = st["acc"][row]
             sl.BL[row, 0] = lv[0]

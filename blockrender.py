@@ -2989,6 +2989,16 @@ def _prep_harmonium_wind(pc, ch, Grows, grow_of, nblk, notes, rankev_of, ccs, _W
             _q7[_b0:_b1, T.harmonium_half(r)] += _w * Grows[grow_of[(_wk, r[0])]][_b0:_b1]
     _hw = _WND.HarmoniumWind(pc, BLK / SR)
     _pts, _edges = _hw.blocks(_q7, _aim, _expr, _knee)
+    # each half's lids at each edge (tonelib.harmonium_box_open: the Fortes, a step a block)
+    _open = np.zeros((nblk + 1, 2))
+    for _h, _sd in enumerate("BT"):
+        _fx, _fe = np.zeros(nblk), np.zeros(nblk)
+        for _arr, _nm in ((_fx, 'forte fixe '), (_fe, 'forte expr ')):
+            for _t, tg in rankev_of[_wk].get(_nm + _sd, ()):
+                _arr[_bt >= _t] = tg
+        for b in range(nblk + 1):
+            _bb = min(b, nblk - 1)
+            _open[b, _h] = T.harmonium_box_open(float(_edges[b, _h]), _fx[_bb] >= 0.5, _fe[_bb] >= 0.5)
     _WROWS[ch] = {}
     for r in _ranks:
         _sc = T.harmonium_stop_class(pc, r)
@@ -2996,7 +3006,7 @@ def _prep_harmonium_wind(pc, ch, Grows, grow_of, nblk, notes, rankev_of, ccs, _W
         _key = ('harmonium', _h, _sc.__name__)
         wrow_key[(ch, r[0])] = _key
         if _key not in _WROWS[ch]:
-            _WROWS[ch][_key] = _WND.harmonium_rows(_sc, _pts[:, _h, :], _edges[:, _h])
+            _WROWS[ch][_key] = _WND.harmonium_rows(_sc, _pts[:, _h, :], _edges[:, _h], _open[:, _h])
     if _VERBOSE_WIND:
         print("  harmonium wind ch%d: bass %.0f..%.0f Pa, treble %.0f..%.0f Pa, peak draw %.2f l/s"
               % (ch, _edges[:, 0].min(), _edges[:, 0].max(), _edges[:, 1].min(), _edges[:, 1].max(),
@@ -3005,6 +3015,17 @@ def _prep_harmonium_wind(pc, ch, Grows, grow_of, nblk, notes, rankev_of, ccs, _W
             print("    %5.1f s: aim %4.0f, draw %5.1f l/s, bass %4.0f Pa, treble %4.0f Pa"
                   % (_b * BLK / SR, _aim[_b], 1000.0 * _q7[_b].sum(), _edges[_b, 0], _edges[_b, 1]))
     return _edges
+
+
+def harmonium_note_box(em, nt, rev):
+    """A harmonium note's half's box at its onset: (the lids' opening, the
+    Metaphone drawn) -- tonelib.harmonium_box_open at its wind."""
+    sd = "B" if nt.note < T.HARMONIUM_SPLIT else "T"
+    dr = lambda k: T.stop_drawn_at(rev.get(k, ()), nt.on)
+    p = harmonium_note_pressure(em, nt)
+    o = T.harmonium_box_open(p if p is not None else T.HARMONIUM_PRESSURE_REF,
+                             dr('forte fixe ' + sd), dr('forte expr ' + sd))
+    return o, dr('metaphone ' + sd)
 
 
 def harmonium_note_pressure(em, nt):
@@ -6796,7 +6817,7 @@ def _tone_native(em, props, nt, stops, onsets, seats, mls, _als, _hx, _hperc, _p
     import native as _NV
     if (seats or onsets) and not _NV.harmonic_voice(type(props)):
         return None                         # (a section's players: a bowed string's alone)
-    if _als is not None or _hx is not None or _hperc or _pjit:
+    if _als is not None or _hx is not None or _hperc or _pjit or getattr(em, 'hbox', None) is not None:
         return None
     P = props
     if (getattr(P, 'bloom_seconds', 0.0) > 0.0
@@ -7167,6 +7188,8 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
         _pe = rev.get('percussion')
         _hp = harmonium_note_pressure(em, nt)              # (its wind, Pa: NaN the reference)
         n.organ_hx = _hp if _hp is not None else math.nan
+        n.organ_box, n.organ_meta = (harmonium_note_box(em, nt, rev) if 'forte fixe B' in rev
+                                     else (0.0, False))
         n.organ_perc = int(_pe is not None and T.stop_drawn_at(_pe, nt.on))
     n.has_nx, n.nx = int(nx is not None), (nx if nx is not None else 0.0)
     n.mcut, n.slurred, n.slur_out = int(bool(mcut)), int(bool(slurred)), int(bool(slur_out))
@@ -7735,6 +7758,8 @@ def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TB
                 gM = hv*gain*props.radiation_gain(hf, radius=em.radius)
                 if _hx is not None:              # (its tone at the wind: the stop's answer)
                     gM *= float(T.harmonium_pressure_gain(_sc, m, _hp))
+                if em.hbox is not None:          # (its box's colour and the Metaphone's felt)
+                    gM *= float(T.harmonium_box_tone(_sc, hf, em.hbox[0], em.hbox[1]))
                 gL = gM*props.hrtf_gain(hf, nt.li); gR = gM*props.hrtf_gain(hf, nt.ri)
                 cvp = cv_r * _cp.chiff_harmonic_gain(h)   # roll chiff off the upper harmonics
                 if mls > 0.0:
@@ -9664,10 +9689,13 @@ def _prepare(path, tuner='hybrid440', sink=None):
         # THE HARMONIUM'S EFFECT STOPS, each read at NOTE-ON -- the moment CC11
         # is read for loudness -- from the gate events the stop word made. See
         # tonelib above harmonium_pressure (the Expression) for all three.
-        _hx = None; _hperc = False
+        _hx = None; _hperc = False; _hbox = None
         if nt.organ and 'expression' in rankev_of[nt.organ_key]:
             _st = lambda k: T.stop_drawn_at(rankev_of[nt.organ_key].get(k, ()), nt.on)
             _hx = harmonium_note_pressure(em, nt)       # (its half's wind at its onset, Pa)
+            _hbox = harmonium_note_box(em, nt, rankev_of[nt.organ_key])   # (its half's box)
+            if _hbox == (0.0, False):
+                _hbox = None
             _hperc = _st('percussion')
             if _st('tremolo') and getattr(props, 'stop_tremolo_depth', 0.0) > 0.0:
                 # (its bellows quicker with the wind, and in the treble half
@@ -9677,6 +9705,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
                                  float(props.stop_tremolo_depth), False)
                 em.htrem_pending = len(A['om'])
                 em.htrem_cfg = _HTREM_CH[em.channel]    # (this note's own: _HT_ROWS keeps it)
+        em.hbox = _hbox                 # (its half's box: the tone loop's, harmonium_box_tone)
         transverse = []   # (freq, raw gain, decay dbps) of the main partials, for phantom pairing
         em.msgr_knobs = _msgr_at(nt.ch, nt.on)     # (a Messenger-mode channel's knobs: CC86)
         stops = _note_moog(em, props, nt, A, _CBW, _CMXEV, _MF104, _MOOG_FT, _MOOG_KN, _MOOG_KROW,

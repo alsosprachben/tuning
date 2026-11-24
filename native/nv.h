@@ -585,6 +585,7 @@ struct OrganPipe {
        reference, m3/s = hd_q * (f / hd_fr) ^ hd_ex */
     int hl_n;
     double hl_p[16], hl_db[16], hd_q, hd_fr, hd_ex;
+    int box_back;           /* a back stop: it sounds into the Forte's box (tonelib box_back) */
 };
 
 /* AN ORGAN's RANKS AT MOST: the divider organ's upper manual is 39 with its
@@ -676,6 +677,12 @@ typedef struct OrganSpec {
     int hwind;
     double hw_full, hw_vres, hw_qmax, hw_dexp, hw_afoot, hw_tplayer, hw_blk_s;
     int rank_half[NV_MAX_RANK], rank_hpipe[NV_MAX_RANK];
+    /* ...AND ITS BOXES (tonelib.harmonium_box_*): each half's Forte-Fixe,
+       Forte-Expressif and Metaphone stop (-1 none), the box's surface, its
+       lining's alpha and where it rises, the gaps, the lid, the Expressif's
+       start and span (Pa), the Metaphone's felt (Hz) */
+    int fixe_rank[2], fexpr_rank[2], meta_rank[2];
+    double box_s, box_alpha, box_alpha_hz, box_gap, box_lid, fexpr_pa, fexpr_span, meta_hz;
 } OrganSpec;
 
 /* tonelib.harmonium_pressure / _pressure_gain / _tremolo_hz, operation for operation */
@@ -734,6 +741,41 @@ static inline double nv_haim(const OrganSpec *og, double e, int expr)
     return og->pres_min + (og->hw_full - og->pres_min) * e;
 }
 static inline double nv_hknee(const OrganSpec *og, int v) { return v >= 127 ? INFINITY : nv_hpressure(og, v / 127.0); }
+
+/* tonelib.harmonium_box_t, _open, _level, _tone */
+static inline double nv_hbox_t(const OrganSpec *og, double o, double f)
+{
+    double al = og->box_alpha * (1.0 + pow(f / og->box_alpha_hz, 2.0));
+    al = al > 1.0 ? 1.0 : al;
+    double a = og->box_gap + o * og->box_lid;
+    return a / (a + og->box_s * al);
+}
+static inline double nv_hbox_open(const OrganSpec *og, double p, int fixe, int expr)
+{
+    if (fixe)
+        return 1.0;
+    if (!expr)
+        return 0.0;
+    double o = (p - og->fexpr_pa) / og->fexpr_span;
+    return o < 0.0 ? 0.0 : (o > 1.0 ? 1.0 : o);
+}
+static inline double nv_hbox_level(const OrganSpec *og, double o)
+{
+    if (o == 0.0)
+        return 1.0;
+    return pow(nv_hbox_t(og, o, 0.0) / nv_hbox_t(og, 0.0, 0.0), 0.5);
+}
+static inline double nv_hbox_tone(const OrganSpec *og, const OrganPipe *q, double f, double o, int meta)
+{
+    if (!q->box_back)
+        return 1.0;
+    double g = 1.0;
+    if (o != 0.0)
+        g = pow(nv_hbox_t(og, o, f) / nv_hbox_t(og, 0.0, f), 0.5) / nv_hbox_level(og, o);
+    if (meta)
+        g = g / pow(1.0 + pow(f / og->meta_hz, 2.0), 0.5);
+    return g;
+}
 
 /* wind.HarmoniumWind: a harmonium channel's chest, block by block, operation
    for operation (step): the halves' pressures at the block's end into out */
@@ -1486,6 +1528,10 @@ typedef struct {
     // NaN: not drawn), and the Percussion stop drawn
     double organ_hx;
     int organ_perc;
+    // ...and its half's box at its onset (tonelib.harmonium_box_tone): the
+    // lids' opening (0 shut) and the Metaphone drawn
+    double organ_box;
+    int organ_meta;
     // THE BREATH'S OWN ROW (bbr_set: the player's breath noise wobbling on
     // its own, bbrow_of's second); else the note's
     int bbr_set;

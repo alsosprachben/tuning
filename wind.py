@@ -309,11 +309,12 @@ class HarmoniumWind:
         return pts, edges
 
 
-def harmonium_rows(cls, pts, edges):
+def harmonium_rows(cls, pts, edges, opening=None):
     """A stop's rows from its half's pressure: the pitch ratio each block (its
     mean over the block's points, summed in order: the kernel's bend row) and
     the level at the block edges -- tonelib.harmonium_pitch_ratio and
-    harmonium_level_gain, point by point."""
+    harmonium_level_gain, point by point -- a back stop's times its box's
+    (tonelib.harmonium_box_level, the lids' opening at each edge)."""
     import tonelib as T
     n = pts.shape[0]
     r = np.empty(n)
@@ -323,4 +324,6 @@ def harmonium_rows(cls, pts, edges):
             s = s + T.harmonium_pressure_ratio(cls, float(pts[b, j]))
         r[b] = s / float(pts.shape[1] - 1)
     lv = np.array([T.harmonium_level_gain(cls, float(x)) for x in edges])
+    if opening is not None and getattr(cls, 'box_back', False):
+        lv = np.array([lv[i] * T.harmonium_box_level(float(opening[i])) for i in range(len(lv))])
     return r, lv

@@ -690,6 +690,46 @@ def harmonium_wind():
     return mid
 
 
+def harmonium_boxes():
+    """GM 20's boxes (tonelib.harmonium_box_*, step 5c): the back stops
+    (Basson, Hautbois, Clairon, Fifre) on a chord under the Metaphone B+T,
+    shut, and the Forte-Fixe B+T (CC45 bits 15-20); then the Forte-Expressif
+    B+T under the Expression, the feet swelling a held chord past its 800 Pa
+    and back; a Metaphone drawn on the treble alone under the swell."""
+    mid, tr = one_track()
+    ev = [(0.0, mido.Message('program_change', channel=0, program=20))]
+    cc = lambda t, c, v: ev.append((t, mido.Message('control_change', channel=0, control=c, value=v)))
+
+    def chord(t0, t1, keys):
+        for k in keys:
+            ev.append((t0, mido.Message('note_on', channel=0, note=k, velocity=100)))
+            ev.append((t1, mido.Message('note_off', channel=0, note=k, velocity=0)))
+    keys = (48, 55, 64, 72, 76)
+    t = 0.2
+    for c45 in (32 | 64, 0, 2 | 4):
+        for c, v in ((43, 4 | 8 | 64), (44, 1), (45, c45), (11, 127)):
+            cc(t, c, v)
+        chord(t + 0.1, t + 2.0, keys)
+        t += 2.5
+    for c, v in ((43, 4 | 8 | 64), (44, 1 | 4), (45, 8 | 16), (11, 20)):
+        cc(t, c, v)
+    chord(t + 0.2, t + 5.0, keys)
+    for i in range(21):
+        cc(t + 0.4 + i * 0.1, 11, int(round(20 + 107 * i / 20)))
+    cc(t + 2.6, 45, 8 | 16 | 64)                  # (the treble's Metaphone drawn under it: the next notes')
+    chord(t + 3.0, t + 5.0, (79,))
+    for i in range(16):
+        cc(t + 3.4 + i * 0.1, 11, int(round(127 - 100 * i / 15)))
+    ev.append((t + 5.5, mido.Message('control_change', channel=0, control=7, value=100)))
+    now = 0
+    for at, msg in sorted(ev, key=lambda e: e[0]):
+        tk = int(round(at * 960))
+        msg.time = tk - now
+        now = tk
+        tr.append(msg)
+    return mid
+
+
 def couplers(variation, steps):
     """A 60's organ manual (bank 16, program 16: 16 the upper's 60's Organ 1, 41
     the lower) holding a chord from 0.3 s while its COUPLER SWITCHES change
@@ -991,7 +1031,7 @@ def biwa_compass():
     return mid
 
 
-MAKERS = {"harmonium_wind": harmonium_wind, "harmonium_stops": harmonium_stops, "biwa_compass": biwa_compass, "rhodes_compass": rhodes_compass, "basses_all": basses_all, "eguitars_six": eguitars_six, "stab_chords": stab_chords, "harpsi_four": harpsi_four, "tonewheel_spinet": tonewheel_spinet, "gopichant_compass": gopichant_compass, "hawaiian_compass": hawaiian_compass, "guitar12_compass": guitar12_compass, "flugel_phrase": flugel_phrase, "mandolin_compass": mandolin_compass, "dulcimer_compass": dulcimer_compass, "feedback_held": feedback_held, "clav_compass": clav_compass,
+MAKERS = {"harmonium_boxes": harmonium_boxes, "harmonium_wind": harmonium_wind, "harmonium_stops": harmonium_stops, "biwa_compass": biwa_compass, "rhodes_compass": rhodes_compass, "basses_all": basses_all, "eguitars_six": eguitars_six, "stab_chords": stab_chords, "harpsi_four": harpsi_four, "tonewheel_spinet": tonewheel_spinet, "gopichant_compass": gopichant_compass, "hawaiian_compass": hawaiian_compass, "guitar12_compass": guitar12_compass, "flugel_phrase": flugel_phrase, "mandolin_compass": mandolin_compass, "dulcimer_compass": dulcimer_compass, "feedback_held": feedback_held, "clav_compass": clav_compass,
           "couplers_upper": lambda: couplers(16, ((1.5, 0), (2.5, 1 | 4), (3.5, 2), (4.5, 2 | 4 | 8), (6.0, 1 | 2 | 8))),
           "couplers_lower": lambda: couplers(41, ((1.5, 4), (3.0, 1 | 4), (4.5, 0), (6.0, 4))), "spectra_rotor": lambda: spectra(10), "spectra_chorus": lambda: spectra(11),
           "spectra_sustain": lambda: spectra_sustain(10), "spectra_sustain_chorus": lambda: spectra_sustain(11), "dense_pedal": dense_pedal, "assign_mode": assign_mode, "mpe_organ": lambda: mpe_zone(19), "cmx_live": cmx_live, "userdrums": userdrums, "drumdelay": drumdelay, "moog_cmx": moog_cmx, "two_organs": two_organs, "rhythmpart": rhythmpart, "gsrx_2port": gsrx_2port, "drumnrpn": drumnrpn, "drumnrpn2": drumnrpn2, "gsvsense": gsvsense,

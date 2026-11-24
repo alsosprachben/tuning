@@ -343,7 +343,8 @@ class NoteIn(ctypes.Structure):
                    ('seat', C), ('held', C), ('rnd_draws', C * 4), ('stroke_tilt', C), ('stroke_mouth', C),
                    ('stroke_morph', C), ('snd_at', C), ('snd_rt', C), ('rank_gr', C * NV_MAX_RANK), ('rank_sp', C * NV_MAX_RANK),
                    ('rank_skip', I * NV_MAX_RANK), ('rank_rel1', I * NV_MAX_RANK), ('organ_cr', C), ('rank_br', C * NV_MAX_RANK),
-                   ('carry_radius', C), ('organ_hx', C), ('organ_perc', I), ('bbr_set', I), ('bbr', C),
+                   ('carry_radius', C), ('organ_hx', C), ('organ_perc', I), ('organ_box', C), ('organ_meta', I),
+                   ('bbr_set', I), ('bbr', C),
                    ('rank_drawn_off', I * NV_MAX_RANK), ('snd_moog', I), ('snd_d', C * 8),
                    ('sung_hz', C), ('part', I), ('dist', C), ('gliss_lv', C),
                    ('ring_on', I), ('ring_f', C * 48), ('fbr', C),
@@ -3185,7 +3186,7 @@ class OrganPipe(ctypes.Structure):
                 + [('n_pp', I), ('pp_partials', I), ('pp_hz', C * 8), ('pp_s', C * 8), ('pp_db', C),
                    ('pp_snap_s', C), ('n_pres', I), ('pres_p', C * 8), ('pres_db', (C * 12) * 8),
                    ('pres_cents', C), ('pres_sexp', C), ('hl_n', I), ('hl_p', C * 16), ('hl_db', C * 16),
-                   ('hd_q', C), ('hd_fr', C), ('hd_ex', C)])
+                   ('hd_q', C), ('hd_fr', C), ('hd_ex', C), ('box_back', I)])
 
 
 class OrganRank(ctypes.Structure):
@@ -3225,7 +3226,10 @@ class OrganSpec(ctypes.Structure):
                    ('cpl_want', I * NV_MAX_RANK), ('pres_min', C), ('pres_max', C), ('pres_ref', C),
                    ('trem_pk', C), ('trem_treble', C), ('split', I), ('hwind', I)]
                 + [(f, C) for f in ('hw_full', 'hw_vres', 'hw_qmax', 'hw_dexp', 'hw_afoot', 'hw_tplayer', 'hw_blk_s')]
-                + [('rank_half', I * NV_MAX_RANK), ('rank_hpipe', I * NV_MAX_RANK)])
+                + [('rank_half', I * NV_MAX_RANK), ('rank_hpipe', I * NV_MAX_RANK), ('fixe_rank', I * 2),
+                   ('fexpr_rank', I * 2), ('meta_rank', I * 2)]
+                + [(f, C) for f in ('box_s', 'box_alpha', 'box_alpha_hz', 'box_gap', 'box_lid', 'fexpr_pa',
+                                    'fexpr_span', 'meta_hz')])
 
 
 _ORGAN = {}
@@ -3381,6 +3385,7 @@ def organ(cls):
             for j, (pp, db) in enumerate(lv):
                 q.hl_p[j], q.hl_db[j] = float(pp), float(db)
             q.hd_q, q.hd_fr, q.hd_ex = (float(x) for x in getattr(pr, 'pressure_draw', (0.0, 261.63, 0.0)))
+            q.box_back = int(bool(getattr(pr, 'box_back', False)))
             q.push_gain = float(getattr(pr, 'bellows_push_gain', 0.0) or 0.0)
             if q.push_gain:
                 q.push_rise_s, q.push_dbs = float(pr.bellows_push_rise_s), float(pr.bellows_push_dbs)
@@ -3556,6 +3561,14 @@ def organ(cls):
             if sc not in pipes:
                 return None
             o.rank_half[i], o.rank_hpipe[i] = T.harmonium_half(r), pipes.index(sc)
+        names = [r[0] for r in ranks]
+        for h, side in enumerate("BT"):
+            for fld, nm in (('fixe_rank', 'forte fixe '), ('fexpr_rank', 'forte expr '), ('meta_rank', 'metaphone ')):
+                getattr(o, fld)[h] = names.index(nm + side) if nm + side in names else -1
+        o.box_s, o.box_alpha, o.box_alpha_hz = T.HARMONIUM_BOX_SURFACE_M2, T.HARMONIUM_BOX_ALPHA, T.HARMONIUM_BOX_ALPHA_HZ
+        o.box_gap, o.box_lid = T.HARMONIUM_BOX_GAP_M2, T.HARMONIUM_BOX_LID_M2
+        o.fexpr_pa, o.fexpr_span, o.meta_hz = (T.HARMONIUM_FORTE_EXPR_PA, T.HARMONIUM_FORTE_EXPR_SPAN_PA,
+                                               T.HARMONIUM_METAPHONE_HZ)
     if T.organ_wind(cls):
         import wind as WND
         o.wind = 1
