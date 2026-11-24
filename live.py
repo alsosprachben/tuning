@@ -4703,6 +4703,7 @@ class Live:
         self.chanstate = {}
         self.stopword = {}           # channel -> [CC43, CC44, CC45], a harmonium's stop word
         self.knee = {}               # (channel, half) -> a harmonium's knee set-point, Pa (Double-Expression)
+        self.prolong = {}            # (part, channel) -> the keys its Prolongement holds latched
         self.note_touch = {}         # (part, channel, note) -> its velocity's level, if the part follows it
         # MIDI 2.0. `midi2` is the bridge (ump.Midi1to2) when the keyboard's
         # MIDI 1.0 is being carried as MIDI 2.0; None means MIDI 1.0 straight in.
@@ -6394,12 +6395,12 @@ class Live:
                 for part in parts:
                     if self._listens(part, ch) and part.organ and getattr(part.patch, "coupler_switches", ()):
                         self.set_couplers(part, msg.value, n0)
-            elif msg.control in (43, 44, 45):       # a harmonium's stop word
+            elif msg.control in (43, 44, 45, 46):   # a harmonium's stop word
                 # CC43 low seven, CC44 the next, CC45 the Debain's three more --
                 # on a voice that says its stop word lives there (the
                 # harmonium, whose CC11 is the bellows). The pipe organ's
                 # registration is the panel's here.
-                w = self.stopword.setdefault(ch, [None, None, None])
+                w = self.stopword.setdefault(ch, [None, None, None, None])
                 w[msg.control - 43] = msg.value
                 for part in parts:
                     if not (self._listens(part, ch) and part.organ):
@@ -6797,6 +6798,8 @@ class Live:
                     continue            # an open string: the palm, not the key, stops it
                 if ch not in self.mono and self._organ_sustain_open(part, ch, msg.note, n0):
                     continue            # AN ORGAN'S SUSTAIN: let go at its land (_damp_block)
+                if self._prolong_latch(part, ch, msg.note):
+                    continue            # A HARMONIUM'S PROLONGEMENT: the key latched down
                 self._note_off(part, ch, msg.note, n0)
             if pedalled:
                 self.pedalled.add((ch, msg.note))
@@ -6932,6 +6935,8 @@ class Live:
 
     def _note_on(self, part, ch, note, vel, n0):
         self._organ_sustain_cut(part, ch, note, n0)    # (a sustaining key struck again: let go now)
+        if self._prolong_down(part, ch, note, n0):
+            return                      # (a latched key pressed again: it goes on sounding)
         if not self._amp_holds(part):
             return self._note_on_now(part, ch, note, vel, n0)
         self.amp_shifted.pop((part.pid, ch, note), None)
@@ -7714,6 +7719,29 @@ class Live:
         for k in ks:
             self._damp_mark(st, k)
         return True
+
+    # THE HARMONIUM'S PROLONGEMENT (tonelib.HARMONIUM_PROLONG_KEYS; the file's
+    # blockrender._prep_prolongement): a key-up in its octave while it is drawn
+    # latched, its note sounding on; the next key down there releases every
+    # latched key (lowest first), a latched key pressed again goes on sounding;
+    # the stop pushed in releases them all (set_stops)
+    def _prolong_latch(self, part, ch, note):
+        lo, hi = T.HARMONIUM_PROLONG_KEYS
+        if "prolongement" not in part.drawn or not lo <= note <= hi:
+            return False
+        self.prolong.setdefault((part.pid, ch), set()).add(note)
+        return True
+
+    def _prolong_down(self, part, ch, note, n0):
+        lat = self.prolong.get((part.pid, ch))
+        lo, hi = T.HARMONIUM_PROLONG_KEYS
+        if not lat or not lo <= note <= hi:
+            return False
+        again = note in lat
+        self.prolong[(part.pid, ch)] = set()
+        for k in sorted(lat - {note}):
+            self._note_off(part, ch, k, n0)
+        return again
 
     def _organ_sustain_cut(self, part, ch, note, n0):
         st = self.damp_tracks.get((part.pid, ch, note))
@@ -12262,8 +12290,11 @@ class Live:
                     if _ix:
                         self.slab.channel_gain(_ix, _r)
         part.lvl_want = want
+        # (the keys down, and those a Prolongement holds: their pallets are open too)
+        _keys = self._held_any() + sorted({(c, nn) for (pid, c), ss in self.prolong.items() if pid == part.pid
+                                           for nn in ss} - set(self._held_any()))
         for rank in [r for r in part.patch.rank_names if r in s1 and r not in s0]:   # (in order)
-            for (c, note) in self._held_any():
+            for (c, note) in _keys:
                 if part.matches(self._pc(c), note):
                     t = part.patch.get(note + part.transpose, 127)
                     if t is not None:
@@ -12275,6 +12306,10 @@ class Live:
         part.drawn = set(want)
         part.couplers = cpl1
         part.lvl_want = None
+        if "prolongement" not in part.drawn:        # (pushed in: what it held, let go)
+            for (pid, c) in [k for k in self.prolong if k[0] == part.pid]:
+                for nn in sorted(self.prolong.pop((pid, c))):
+                    self._note_off(part, c, nn, n0)
         # A drawbar IS a parent, so the amplifier's products are now wrong --
         # drawing all nine bars changes what is intermodulating with what.
         self._amp_touch(part)
@@ -12891,6 +12926,7 @@ class Live:
                   and (k[0], k[1], k[2]) not in self.cutting
                   and (k[0], k[1], k[2]) not in self.open_ring
                   and self.damp_tracks.get((k[0], k[1], k[2]), {}).get('org_land', -1) < 0
+                  and k[2] not in self.prolong.get((k[0], k[1]), ())
                   and not self.slab.oneshot.get(k)]:
             self.slab.release(k, n)
             self.stuck += 1

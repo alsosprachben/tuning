@@ -224,6 +224,7 @@ void nv_midi_chprog(void *p, int i, int *iv);
 void nv_song_channel(void *s, long long ch, double btun, const double *otun, int fader);
 void nv_song_finish(void *s, double total);
 void nv_song_harmonium_pre(void *s, long nblk, int blk, double sr, double tau);
+void nv_midi_prolong(void *p, int n, const int *chs, const int *ccb, const int *sh, const int *d0, int lo, int hi);
 long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, const double *br, int nbr,
                      PyRandom *rs, double **rowsp, double *qacc, double *azimuth, const int *kind, double scale,
                      double full_db_s, double residual, double beta, long long blk, double total, double ring_floor,
@@ -1138,6 +1139,31 @@ static int run(int argc, char **argv)
         }
         return r;
     };
+    {
+        // THE HARMONIUM'S PROLONGEMENT (_prep_prolongement): each channel whose
+        // notes (the first such) a voice with the stop plays, its key-ups latched
+        std::vector<int> pch, pcc, psh, pd0;
+        int plo = 0, phi = -1;
+        for (int i = 0, n = nv_midi_n_notes(midi); i < n; i++) {
+            int iv[5];
+            double dv[5];
+            nv_midi_note(midi, i, iv, dv);
+            if (iv[4] || std::find(pch.begin(), pch.end(), iv[0]) != pch.end() || iv[3] < 0 || iv[3] > 127
+                || E.prog_organ[iv[3]] < 0)
+                continue;
+            const OrganSpec &og = E.organs[E.prog_organ[iv[3]]];
+            if (og.prolong_rank < 0 || og.prolong_rank / 7 >= og.n_wccs)
+                continue;
+            pch.push_back(iv[0]);
+            pcc.push_back(og.wccs[og.prolong_rank / 7]);
+            psh.push_back(og.prolong_rank % 7);
+            pd0.push_back((og.default_stops >> og.prolong_rank) & 1);
+            plo = og.prolong_lo;
+            phi = og.prolong_hi;
+        }
+        if (!pch.empty())
+            nv_midi_prolong(midi, (int)pch.size(), pch.data(), pcc.data(), psh.data(), pd0.data(), plo, phi);
+    }
     if (nv_midi_banked(midi) && E.vgs.empty()) {
         fprintf(stderr, "nvrender: %s is an export from before bank select (native_export.py again)\n", argv[1]);
         return 1;

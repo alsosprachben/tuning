@@ -3229,7 +3229,8 @@ class OrganSpec(ctypes.Structure):
                 + [('rank_half', I * NV_MAX_RANK), ('rank_hpipe', I * NV_MAX_RANK), ('fixe_rank', I * 2),
                    ('fexpr_rank', I * 2), ('meta_rank', I * 2)]
                 + [(f, C) for f in ('box_s', 'box_alpha', 'box_alpha_hz', 'box_gap', 'box_lid', 'fexpr_pa',
-                                    'fexpr_span', 'meta_hz')])
+                                    'fexpr_span', 'meta_hz')]
+                + [('prolong_rank', I), ('prolong_lo', I), ('prolong_hi', I)])
 
 
 _ORGAN = {}
@@ -3545,6 +3546,9 @@ def organ(cls):
                 m |= 1 << i
                 o.lvl_db[q][i] = float(tabs[b])
         o.lvl_mask[q] = m
+    # (its Prolongement: blockrender._prep_prolongement)
+    o.prolong_rank = [r[0] for r in ranks].index('prolongement') if any(r[0] == 'prolongement' for r in ranks) else -1
+    o.prolong_lo, o.prolong_hi = T.HARMONIUM_PROLONG_KEYS
     if getattr(cls, 'harmonium_wind', False):
         # THE HARMONIUM'S CHEST (wind.HarmoniumWind), its ranks by half and stop
         import wind as WND

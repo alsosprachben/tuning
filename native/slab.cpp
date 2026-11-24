@@ -4830,7 +4830,7 @@ struct Part {
         for (int c = 0; c < NV_NCH; c++) {
             vol[c] = 100; expr[c] = 127; cpan[c] = 64; pedal_v[c] = 0;     // GM's power-on
             soft[c] = false; cgain[c] = 1.0; cgain_set[c] = false;
-            stopword[c][0] = stopword[c][1] = stopword[c][2] = -1;
+            stopword[c][0] = stopword[c][1] = stopword[c][2] = stopword[c][3] = -1;
             knee_v[c][0] = knee_v[c][1] = 127;          // (hooked shut: no limit)
             nrpn_msb[c] = nrpn_lsb[c] = 127;
             bend[c] = 1.0;
@@ -6530,6 +6530,8 @@ struct Part {
     void strike(int ch, int note, int vel, long long n0, bool slur = false)
     {
         organ_sustain_cut(ch, note, n0);
+        if (prolong_down(ch, note, n0))
+            return;                         // (a latched key pressed again: it goes on sounding)
         int pi = 0 <= note && note <= 127 ? patch_for(ch, note) : -1;
         if (!amp_holds(pi)) {
             strike_now(ch, note, vel, n0, slur);
@@ -7173,7 +7175,7 @@ struct Part {
     long dropped = 0;                           // ranks the slab had no room for (live.dropped)
     // A HARMONIUM'S (live's): each channel's stop word as sent (CC43-45; -1
     // not yet), each part's wheel tremolo depth (trem_depth)
-    int stopword[NV_NCH][3];
+    int stopword[NV_NCH][4];
     std::map<long long, double> trem_depth;
 
     // live._h8: a key's 8-foot pitch against its template's lowest partial
@@ -7283,7 +7285,7 @@ struct Part {
             if (!og || og->wccs[0] != 43 || !(patches[pi].channel < 0 || patches[pi].channel == pc(ch)))
                 continue;
             long long word = 0;
-            for (int i = 0; i < og->n_wccs && i < 3; i++)
+            for (int i = 0; i < og->n_wccs && i < 4; i++)
                 word |= (long long)(stopword[ch][i] >= 0 ? stopword[ch][i] : (og->default_stops >> (7 * i)) & 0x7F)
                         << (7 * i);
             std::vector<char> want(og->n_rank, 0);
@@ -8906,10 +8908,21 @@ struct Part {
                 S.channel_gain(ix, r);
             }
         lvl_want = &want;
+        // (the keys down, and those a Prolongement holds: their pallets are open too)
+        std::vector<std::pair<int, int>> keys(down.begin(), down.end());
+        {
+            std::set<std::pair<int, int>> lk;
+            for (auto &x : prolong)
+                if (x.first.first == pid)
+                    for (int nn : x.second)
+                        if (!down.count(std::make_pair(x.first.second, nn)))
+                            lk.insert(std::make_pair(x.first.second, nn));
+            keys.insert(keys.end(), lk.begin(), lk.end());
+        }
         for (int ri = 0; ri < og->n_rank; ri++) {
             if (!s1[ri] || s0[ri])
                 continue;
-            for (auto &d : down) {
+            for (auto &d : keys) {
                 if (!claims(pi, d.first, d.second))
                     continue;
                 int sn = d.second + transpose;
@@ -8934,6 +8947,21 @@ struct Part {
         lvl_want = nullptr;
         dr = want;
         patches[cur].cpl = cpl1;
+        if (og->hwind && og->prolong_rank >= 0 && !dr[og->prolong_rank]) {     // (pushed in: what it held, let go)
+            std::vector<std::pair<long long, int>> ks;
+            for (auto &x : prolong)
+                if (x.first.first == pid)
+                    ks.push_back(x.first);
+            for (auto &k : ks) {
+                std::set<int> lat;
+                lat.swap(prolong[k]);
+                prolong.erase(k);
+                for (int nn : lat) {
+                    Force f(*this, pi);
+                    let_go(k.second, nn, n0);
+                }
+            }
+        }
         amp_touch(pi);                      // a drawbar is a parent: the valve's products are stale
     }
 
@@ -9264,6 +9292,8 @@ struct Part {
                     if (t60 > 0.0 && !mono[ch] && organ_sustain_open(ch, note, n0, t60))
                         continue;                   // AN ORGAN's SUSTAIN: let go at its land (damp_block)
                 }
+                if (prolong_latch(ch, note))
+                    continue;                       // A HARMONIUM's PROLONGEMENT: the key latched down
                 let_go(ch, note, n0);
             }
             if (held)
@@ -9286,6 +9316,8 @@ struct Part {
             if (t60 > 0.0 && !mono[ch] && organ_sustain_open(ch, note, n0, t60))
                 return;                             // AN ORGAN's SUSTAIN: let go at its land (damp_block)
         }
+        if (prolong_latch(ch, note))
+            return;                                 // A HARMONIUM's PROLONGEMENT: the key latched down
         let_go(ch, note, n0);
     }
 
@@ -11284,7 +11316,7 @@ struct Part {
             }
         } else if (cc == 21 || cc == 22) {      // a harmonium's knee boards (Double-Expression)
             knee_v[ch][cc - 21] = v;
-        } else if (cc >= 43 && cc <= 45 && harmonium_on()) {
+        } else if (cc >= 43 && cc <= 46 && harmonium_on()) {
             harmonium_word(ch, cc, v, n0);
         } else if (cc == 10) {
             int was = cpan[ch];
@@ -11737,6 +11769,45 @@ struct Part {
         for (const Key &k : ks)
             damp_mark(dt, k);
         return true;
+    }
+
+    // THE HARMONIUM'S PROLONGEMENT (live._prolong_latch, _prolong_down): a
+    // key-up in its octave while it is drawn latched, its note sounding on;
+    // the next key down there releases every latched key (lowest first), a
+    // latched key pressed again goes on sounding; set_stops lets them go when
+    // it is pushed in
+    std::map<std::pair<long long, int>, std::set<int>> prolong;
+    bool prolong_latch(int ch, int note)
+    {
+        const OrganSpec *og = patches[cur].organ;
+        if (!og || !og->hwind || og->prolong_rank < 0 || !patches[cur].drawn[og->prolong_rank]
+            || note < og->prolong_lo || note > og->prolong_hi)
+            return false;
+        prolong[std::make_pair(pid, ch)].insert(note);
+        return true;
+    }
+    bool prolong_down(int ch, int note, long long n0)
+    {
+        int pi = 0 <= note && note <= 127 ? patch_for(ch, note) : -1;
+        if (pi < 0)
+            return false;
+        auto it = prolong.find(std::make_pair(patches[pi].pid, ch));
+        const OrganSpec *og = patches[pi].organ;
+        if (it == prolong.end() || it->second.empty() || !og || note < og->prolong_lo || note > og->prolong_hi)
+            return false;
+        std::set<int> lat;
+        lat.swap(it->second);
+        for (int k : lat)
+            if (k != note) {
+                Force f(*this, pi);
+                let_go(ch, k, n0);
+            }
+        return lat.count(note) > 0;
+    }
+    bool prolonged(long long id, int ch, int note) const
+    {
+        auto it = prolong.find(std::make_pair(id, ch));
+        return it != prolong.end() && it->second.count(note);
     }
 
     // ...a key let go whose sustain still holds it (the sweep leaves it: its land lets it go)
@@ -13901,6 +13972,7 @@ struct Part {
                 && !siren_of(std::get<0>(kv.first), ck.first, ck.second)
                 && !open_ring.count(std::make_tuple((long long)std::get<0>(kv.first), ck.first, ck.second))
                 && !organ_sustaining(ck.first, ck.second)
+                && !prolonged(std::get<0>(kv.first), ck.first, ck.second)
                 && std::none_of(cutting.begin(), cutting.end(), [&](const Cut &c) {
                        return c.pid == std::get<0>(kv.first) && c.ch == ck.first && c.cnote == ck.second;
                    }))

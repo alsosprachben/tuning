@@ -683,6 +683,9 @@ typedef struct OrganSpec {
        start and span (Pa), the Metaphone's felt (Hz) */
     int fixe_rank[2], fexpr_rank[2], meta_rank[2];
     double box_s, box_alpha, box_alpha_hz, box_gap, box_lid, fexpr_pa, fexpr_span, meta_hz;
+    /* ...AND ITS PROLONGEMENT (_prep_prolongement): its stop's bit (-1 none)
+       and the keys it latches */
+    int prolong_rank, prolong_lo, prolong_hi;
 } OrganSpec;
 
 /* tonelib.harmonium_pressure / _pressure_gain / _tremolo_hz, operation for operation */

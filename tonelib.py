@@ -9011,7 +9011,7 @@ class ReedOrganFreeProperties(FreeReedProperties):
     # are the bellows and the player's, as they were before it had stops. The
     # blanket "registerable answers nothing" rule is the pipe organ's.
     answers_sound_controls = True
-    stop_word_ccs = (43, 44, 45)
+    stop_word_ccs = (43, 44, 45, 46)   # (CC46 from bit 21: the Prolongement)
     # Registers 1 in both halves: the plain 8-foot, what GM 20 has always been.
     default_stops = (1 << 0) | (1 << 4)
     # ITS SPEECH, simulated (examples/harmonium_bake.py): the tongue's rise
@@ -9551,6 +9551,10 @@ ReedOrganFreeProperties.stop_ranks = [
     ("forte expr T",  None, 0.0),
     ("metaphone B",   None, 0.0),
     ("metaphone T",   None, 0.0),
+    # bit 21, THE PROLONGEMENT (Auguste Mustel, pp. 123-128; on CC46): the
+    # lowest octave's keys latched (HARMONIUM_PROLONG_KEYS, blockrender's
+    # _prep_prolongement)
+    ("prolongement",  None, 0.0),
 ]
 # THE CELESTE'S TWO ROWS AT EACH KEY: the first at the key's 16-foot, the
 # second its own measured cents above (mixture_ratios reads a composition by
@@ -9563,7 +9567,7 @@ ReedOrganFreeProperties.mixture_compositions = {"celeste": [
 ReedOrganFreeProperties.stop_rows = [
     ["cor anglais 1", "bourdon 2", "clairon 3", "basson 4", "|",
      "flute 1", "clarinette 2", "fifre 3", "hautbois 4", "celeste"],
-    ["expression", "percussion", "tremolo"],
+    ["expression", "percussion", "tremolo", "prolongement"],
     ["violoncelle", "sourdine", "|", "musette"],
     ["forte fixe B", "forte expr B", "metaphone B", "|", "forte fixe T", "forte expr T", "metaphone T"],
 ]
@@ -9683,6 +9687,16 @@ HARMONIUM_TREMOLO_TREBLE_RATIO = 1.15
 # baked and tuned at, so a file at CC11 127 with no Expression plays the
 # baked voice -- and CC11 is how hard the player pumps toward it.
 HARMONIUM_KNEE_CC = (21, 22)
+
+# THE PROLONGEMENT (Auguste Mustel; L'Orgue-Expressif pp. 123-128): a light
+# latch bar under the keys' hooks. While it is drawn a key released in its
+# region stays down; pressing ANY key there releases every latched key -- a
+# new bass note takes over without a gap -- and a latched key pressed again
+# goes on sounding, held by the finger once more; pushing the stop in (or the
+# heel lever) releases them all. On a one-manual instrument "son action est
+# alors bornee a une seule octave, la premiere octave grave du clavier"
+# (p. 128): C2-B2 here (the compass C2-C7).
+HARMONIUM_PROLONG_KEYS = (36, 47)
 
 # THE BOXES (Mustel pp. 116-123). The BACK stops (box_back) sound into a box,
 # a half each, closed by lids ("volets") well above the pallets. Shut, the

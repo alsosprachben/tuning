@@ -2717,6 +2717,82 @@ def _prep_sound_controls(_CMXEV, _cmx_at, _sys, gmon):
     return (_SND_TL, _snd_d)
 
 
+def _prep_prolongement(ccs, notes, total):
+    """THE HARMONIUM'S PROLONGEMENT (tonelib.HARMONIUM_PROLONG_KEYS): on a
+    channel whose notes a voice with the stop plays (the first such note's),
+    the lowest octave's key-ups while it is drawn held until the next key down
+    in the octave, the stop pushed in, or the file's end; a latched key pressed
+    again absorbed into the note it holds. The stop's state from its stop word
+    controllers alone (no program change recalls it). In one pass, by time:
+    key-ups, then the stop's changes, then key-downs (each by its order).
+    Returns notes. native/midi.cpp nv_midi_prolong is the same."""
+    chans = {}
+    _pcs = {}
+    for n in notes:
+        if n[0] in chans or isinstance(n[6], DrumProgram):
+            continue
+        _k = id(n[6])
+        if _k not in _pcs:
+            _pcs[_k] = property_class_for_program(n[6])
+        _pc = _pcs[_k]
+        if _pc is not None and any(r[0] == 'prolongement' for r in getattr(_pc, 'stop_ranks', ())):
+            chans[n[0]] = _pc
+    if not chans:
+        return notes
+    out = list(notes)
+    drop = set()
+    lo, hi = T.HARMONIUM_PROLONG_KEYS
+    for ch, pc in chans.items():
+        bit = [r[0] for r in pc.stop_ranks].index('prolongement')
+        wccs = tuple(pc.stop_word_ccs)
+        if bit // 7 >= len(wccs):
+            continue
+        ccb, sh = wccs[bit // 7], bit % 7
+        drawn = (int(getattr(pc, 'default_stops', 0)) >> bit) & 1
+        ev = []
+        for q, (_t, _cc, _v) in enumerate(in_order(ccs.get(ch, []))):
+            if _cc == ccb:
+                ev.append((_t, 1, q, (_v >> sh) & 1))
+        if not drawn and not any(e[3] for e in ev):
+            continue
+        for i, n in enumerate(notes):
+            if n[0] == ch and lo <= n[1] <= hi:
+                ev.append((n[2], 2, i, None))         # its key down
+                ev.append((n[3], 0, i, None))         # its key up
+        ev.sort(key=lambda e: (e[0], e[1], e[2]))
+        latched = {}                                  # key -> the note it holds
+        owner = {}                                    # an absorbed note -> the note it went on
+        newoff = {}
+        for t, kind, i, d in ev:
+            if kind == 1:
+                if not d:
+                    for j in latched.values():
+                        newoff[j] = t
+                    latched = {}
+                drawn = d
+            elif kind == 2:
+                k = notes[i][1]
+                if k in latched:                      # (pressed again: held by the finger once more)
+                    owner[i] = latched.pop(k)
+                    drop.add(i)
+                for j in latched.values():
+                    newoff[j] = t
+                latched = {}
+            else:
+                j = owner.get(i, i)
+                if drawn:
+                    latched[notes[i][1]] = j
+                else:
+                    newoff[j] = t
+        for j in latched.values():
+            newoff[j] = total
+        for j, t in newoff.items():
+            if t != notes[j][3]:
+                n = out[j]
+                out[j] = (n[0], n[1], n[2], t) + tuple(n[4:])
+    return [n for i, n in enumerate(out) if i not in drop]
+
+
 def _prep_notes_off(ccs, notes):
     """ALL NOTES OFF and the four channel-mode messages that carry it
     (CC123-127): every key held on the channel lifted there. Returns notes."""
@@ -8116,6 +8192,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     notes = _prep_notes_off(ccs, notes)
 
     (_MONO_CUT, _MONO_SLUR, notes) = _prep_mono_mode(ccs, gmon, notes, total)
+    notes = _prep_prolongement(ccs, notes, total)
 
 
     _OTUN = _prep_octave_tuning(notes, sotas)

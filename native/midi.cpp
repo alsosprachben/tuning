@@ -2392,6 +2392,103 @@ int nv_midi_mpe_manager(void *p, int ch, double t)
     return 16 * it->second.first + (it->second.second == 0 ? 0 : 15);
 }
 
+// THE HARMONIUM'S PROLONGEMENT (blockrender._prep_prolongement, operation for
+// operation): on each of n channels (chs), its stop's controller (ccb), bit
+// (sh) and default (d0), the keys lo-hi latched while it is drawn -- by time,
+// key-ups then the stop's changes then key-downs, each by its order; a
+// latched key pressed again absorbed into the note it holds (that note
+// dropped, every channel's at the end)
+void nv_midi_prolong(void *p, int n, const int *chs, const int *ccb, const int *sh, const int *d0, int lo, int hi)
+{
+    nv::Parsed &P = *(nv::Parsed *)p;
+    std::vector<char> drop(P.notes.size(), 0);
+    std::vector<double> off0(P.notes.size());
+    for (size_t i = 0; i < P.notes.size(); i++)
+        off0[i] = P.notes[i].off;
+    for (int c = 0; c < n; c++) {
+        struct E {
+            double t;
+            int kind;
+            long q;
+            int d;
+        };
+        std::vector<nv::CCEv> cc;
+        for (const nv::CCEv &e : P.ccs)
+            if (e.ch == chs[c])
+                cc.push_back(e);
+        std::stable_sort(cc.begin(), cc.end(), [](const nv::CCEv &a, const nv::CCEv &b) { return a.t < b.t; });
+        std::vector<E> ev;
+        bool any = d0[c] != 0;
+        for (size_t q = 0; q < cc.size(); q++)
+            if (cc[q].cc == ccb[c]) {
+                int d = (cc[q].v >> sh[c]) & 1;
+                ev.push_back(E{cc[q].t, 1, (long)q, d});
+                any = any || d;
+            }
+        if (!any)
+            continue;
+        for (size_t i = 0; i < P.notes.size(); i++)
+            if (P.notes[i].ch == chs[c] && lo <= P.notes[i].note && P.notes[i].note <= hi) {
+                ev.push_back(E{P.notes[i].on, 2, (long)i, 0});
+                ev.push_back(E{off0[i], 0, (long)i, 0});
+            }
+        std::sort(ev.begin(), ev.end(), [](const E &a, const E &b) {
+            return std::make_tuple(a.t, a.kind, a.q) < std::make_tuple(b.t, b.kind, b.q);
+        });
+        int drawn = d0[c];
+        std::vector<std::pair<int, long>> latched;      // (key, the note it holds), in the order latched
+        std::map<long, long> owner;
+        std::map<long, double> newoff;
+        auto find = [&](int k) {
+            for (size_t q = 0; q < latched.size(); q++)
+                if (latched[q].first == k)
+                    return (int)q;
+            return -1;
+        };
+        for (const E &e : ev) {
+            if (e.kind == 1) {
+                if (!e.d) {
+                    for (auto &x : latched)
+                        newoff[x.second] = e.t;
+                    latched.clear();
+                }
+                drawn = e.d;
+            } else if (e.kind == 2) {
+                int k = P.notes[e.q].note, f = find(k);
+                if (f >= 0) {                       // (pressed again: held by the finger once more)
+                    owner[e.q] = latched[f].second;
+                    drop[e.q] = 1;
+                    latched.erase(latched.begin() + f);
+                }
+                for (auto &x : latched)
+                    newoff[x.second] = e.t;
+                latched.clear();
+            } else {
+                auto o = owner.find(e.q);
+                long j = o != owner.end() ? o->second : e.q;
+                if (drawn) {
+                    int k = P.notes[e.q].note, f = find(k);
+                    if (f >= 0)
+                        latched[f].second = j;
+                    else
+                        latched.push_back(std::make_pair(k, j));
+                } else {
+                    newoff[j] = e.t;
+                }
+            }
+        }
+        for (auto &x : latched)
+            newoff[x.second] = P.total;
+        for (auto &x : newoff)
+            P.notes[x.first].off = x.second;
+    }
+    std::vector<nv::Note> keep;
+    for (size_t i = 0; i < P.notes.size(); i++)
+        if (!drop[i])
+            keep.push_back(P.notes[i]);
+    P.notes.swap(keep);
+}
+
 // whether the file has MPE at all (an MCM that made a zone)
 int nv_midi_has_mpe(void *p) { return ((const nv::Parsed *)p)->mpe.empty() ? 0 : 1; }
 
