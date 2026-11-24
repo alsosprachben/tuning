@@ -4463,7 +4463,9 @@ struct Part {
         std::vector<std::pair<std::pair<double, double>, int>> rows;
         std::map<int, double> acc;
         int rank_row[NV_MAX_RANK] = {0};      // (each rank's: as many as an organ has, nv.h)
+        NvHWind hw;                           // (a harmonium's chest: wind.HarmoniumWind)
     };
+    int knee_v[NV_NCH][2];                    // a harmonium's knee boards (CC21/22), as sent
     std::map<long long, WindSt> wind_st;
     std::vector<long long> wind_order;          // the parts' wind, in the order made
     int wind_next = 1;
@@ -4829,6 +4831,7 @@ struct Part {
             vol[c] = 100; expr[c] = 127; cpan[c] = 64; pedal_v[c] = 0;     // GM's power-on
             soft[c] = false; cgain[c] = 1.0; cgain_set[c] = false;
             stopword[c][0] = stopword[c][1] = stopword[c][2] = -1;
+            knee_v[c][0] = knee_v[c][1] = 127;          // (hooked shut: no limit)
             nrpn_msb[c] = nrpn_lsb[c] = 127;
             bend[c] = 1.0;
             vsd[c] = vso[c] = 64;
@@ -4844,9 +4847,20 @@ struct Part {
         return b < nbuckets - 1 ? b : nbuckets - 1;
     }
 
+    // live._wind11: is channel ch's CC11 a harmonium's wind (a part on it
+    // whose voice has one), not a level?
+    bool wind11(int ch) const
+    {
+        for (const Patch &p : patches)
+            if (p.organ && p.organ->hwind && !p.muted && !p.gone && (p.channel < 0 || p.channel == pc(ch)))
+                return true;
+        return false;
+    }
+
     double chan_gain(int ch) const
     {
-        const double g = pow((vol[ch] / 127.0) * (expr[ch] / 127.0), 2.0);
+        const int e = wind11(ch) ? 127 : expr[ch];
+        const double g = pow((vol[ch] / 127.0) * (e / 127.0), 2.0);
         auto c = cmx_now.find(ch);              // (the matrix's amplitude)
         return c != cmx_now.end() && c->second[0] != 1.0 ? g * c->second[0] : g;
     }
@@ -7157,10 +7171,8 @@ struct Part {
     }
 
     long dropped = 0;                           // ranks the slab had no room for (live.dropped)
-    // A HARMONIUM'S (live's): the Expression's bellows each key's ranks were
-    // stamped at (xnote), each channel's stop word as sent (CC43-45; -1 not
-    // yet), each part's wheel tremolo depth (trem_depth)
-    std::map<Key, std::pair<double, int>> xnote;      // (the wind's e, the rank)
+    // A HARMONIUM'S (live's): each channel's stop word as sent (CC43-45; -1
+    // not yet), each part's wheel tremolo depth (trem_depth)
     int stopword[NV_NCH][3];
     std::map<long long, double> trem_depth;
 
@@ -7218,8 +7230,10 @@ struct Part {
         const OrganSpec *og = patches[cur].organ;
         const std::vector<char> &dr = patches[cur].drawn;
         sound_stamp(og, ch, sl);            // CC73/72 first: the hammer is a min over the attack
-        if (og->expr_rank >= 0 && dr[og->expr_rank]) {
-            double e = expr[ch] / 127.0, p = nv_hpressure(og, e);
+        // THE WIND AT ITS ONSET (its half's): the stop's tone and speech at it --
+        // its level and pitch ride the chest's rows (wind.HarmoniumWind)
+        double p = og->hwind ? hwind_now(patches[cur], note < og->split ? 0 : 1) : og->pres_ref;
+        if (p != og->pres_ref) {
             std::vector<int> ms;
             const OrganPipe *q_ = hstop(og, ri, note, R.hrel.data(), sl.size(), ms);
             std::vector<float> g(sl.size());
@@ -7229,8 +7243,6 @@ struct Part {
             double ss = pow(p / og->pres_ref, -q_->pres_sexp);
             for (long s : sl)
                 S.f4[F4_fa][s] = (float)((double)S.f4[F4_fa][s] * ss);
-            retune(sl, n0, pow(2.0, q_->pres_cents * (p - og->pres_ref) / 1000.0 / 1200.0));
-            xnote[key] = {e, ri};
         }
         if (og->perc_rank >= 0 && dr[og->perc_rank] && og->rank[ri].perc) {
             double dur = T.dur ? T.dur / rate : 1.0;
@@ -7240,49 +7252,7 @@ struct Part {
                     S.f4[F4_fa][s] = fa;
         }
         if (og->htrem_rank >= 0 && dr[og->htrem_rank] && og->htrem_depth > 0.0)   // (its bellows: the wind's)
-            S.stop_tremolo_arm(sl, og->htrem_depth,
-                               nv_htremolo_hz(og, og->htrem_hz,
-                                              og->expr_rank >= 0 && dr[og->expr_rank] ? nv_hpressure(og, expr[ch] / 127.0)
-                                                                                      : og->pres_ref, note));
-    }
-
-    // live's CC11 on a harmonium: the Expression's bellows moved under the
-    // notes stamped with it drawn -- each by the law's ratio between the two
-    void harmonium_bellows(int ch, int v)
-    {
-        double e = v / 127.0;
-        std::vector<Key> gone;
-        for (auto &kv : xnote) {
-            long li = S.live_find(kv.first);
-            if (li < 0 || S.live[li].second.empty()) {
-                gone.push_back(kv.first);
-                continue;
-            }
-            if (std::get<1>(kv.first) != ch || kv.second.first == e)
-                continue;
-            int pi = -1;
-            for (size_t q = 0; q < patches.size(); q++)
-                if (patches[q].pid == std::get<0>(kv.first))
-                    pi = (int)q;
-            if (pi < 0 || !patches[pi].organ)
-                continue;
-            Use u(*this, pi);
-            const std::vector<long> &sl = S.live[li].second;
-            const OrganSpec *og = patches[cur].organ;
-            std::vector<float> hr(sl.size());
-            for (size_t q = 0; q < sl.size(); q++)
-                hr[q] = S.hrel[sl[q]];
-            std::vector<int> ms;
-            const OrganPipe *q_ = hstop(og, kv.second.second, (int)std::get<2>(kv.first), hr.data(), sl.size(), ms);
-            double p = nv_hpressure(og, e), p0 = nv_hpressure(og, kv.second.first);
-            std::vector<float> g(sl.size());
-            for (size_t q = 0; q < sl.size(); q++)
-                g[q] = (float)(nv_hpressure_gain(q_, ms[q], p) / nv_hpressure_gain(q_, ms[q], p0));
-            S.channel_gain_each(sl, g);
-            kv.second.first = e;
-        }
-        for (auto &k : gone)
-            xnote.erase(k);
+            S.stop_tremolo_arm(sl, og->htrem_depth, nv_htremolo_hz(og, og->htrem_hz, p, note));
     }
 
     // live's CC43-45 on a harmonium: its stop word, a controller each seven
@@ -8601,6 +8571,36 @@ struct Part {
     {
         const OrganSpec *og = patches[cur].organ;
         auto it = wind_st.find(pid);
+        if (it == wind_st.end() && og->hwind) {
+            // THE HARMONIUM'S CHEST (live._wind_row's): a row a (half, stop)
+            WindSt &st = wind_st[pid];
+            wind_order.push_back(pid);
+            st.og = og;
+            nv_hwind_init(&st.hw, og);
+            for (int r = 0; r < og->n_rank; r++) {
+                if (!og->rank[r].n_ratio)
+                    continue;
+                std::pair<double, double> key((double)og->rank_half[r], (double)og->rank_hpipe[r]);
+                int row = 0;
+                for (auto &x : st.rows)
+                    if (x.first == key)
+                        row = x.second;
+                if (!row) {
+                    if (!wind_free.empty()) {
+                        row = wind_free.front();
+                        wind_free.pop_front();
+                    } else if (wind_next > WIND_ROWS) {
+                        continue;
+                    } else {
+                        row = wind_next++;
+                    }
+                    st.rows.push_back(std::make_pair(key, row));
+                    st.acc[row] = 0.0;
+                }
+                st.rank_row[r] = row;
+            }
+            it = wind_st.find(pid);
+        }
         if (it == wind_st.end()) {
             WindSt &st = wind_st[pid];
             wind_order.push_back(pid);
@@ -8718,7 +8718,7 @@ struct Part {
         auto td = trem_depth.find(pid);     // the wheel's tremolo, the wheel already up
         if (td != trem_depth.end() && td->second > 0.0)
             S.tremolo_arm(S.last_slots, td->second, og->wtrem_stereo);
-        if (og->wind) {
+        if (og->wind || og->hwind) {
             int wr = wind_row(ri);
             if (wr > 0)
                 for (long s : S.last_slots)
@@ -8935,6 +8935,77 @@ struct Part {
     // live._wind_block: every organ part's chest, one block on -- its demand
     // from its ranks sounding, the pressure (wind.Wind.blocks for one block),
     // a row a family: this block's ratio, the phase accrued, the level at its edges
+    // live._hwind_inputs: a harmonium part's (aim Pa, Expression drawn, knees) now
+    void hwind_inputs(const Patch &p, double *aim, int *ex, double *knee) const
+    {
+        const OrganSpec *og = p.organ;
+        int ch = p.channel >= 0 ? p.channel : 0;
+        *ex = og->expr_rank >= 0 && p.drawn[og->expr_rank];
+        *aim = nv_haim(og, expr[ch] / 127.0, *ex);
+        knee[0] = nv_hknee(og, knee_v[ch][0]);
+        knee[1] = nv_hknee(og, knee_v[ch][1]);
+    }
+
+    // live._hwind_now: a harmonium part's half's wind (Pa) for a note struck
+    // now -- its chest's last block's end, or before its first where the
+    // player means to begin
+    double hwind_now(const Patch &p, int half)
+    {
+        auto it = wind_st.find(p.pid);
+        if (it != wind_st.end() && it->second.og && it->second.og->hwind && it->second.hw.has_edge)
+            return it->second.hw.edge[half];
+        double aim, knee[2];
+        int ex;
+        hwind_inputs(p, &aim, &ex, knee);
+        const OrganSpec *og = p.organ;
+        double a = aim < og->hw_full ? aim : og->hw_full, f = a / og->hw_full;
+        f = 0.0 > f ? 0.0 : f;
+        f = f < 1.0 ? f : 1.0;
+        double pc_ = ex ? aim : og->hw_full * f;
+        return knee[half] < pc_ ? knee[half] : pc_;
+    }
+
+    // live._hwind_block: a harmonium part's chest one block on -- the sounding
+    // reeds' draw, the feet, the knees -> its rows
+    void hwind_block(const Patch &p, WindSt &st, long long frames)
+    {
+        const OrganSpec *og = st.og;
+        double q7[2] = {0.0, 0.0};
+        for (auto &kv : S.live) {
+            if (std::get<0>(kv.first) != p.pid)
+                continue;
+            long long ri = rank_of(og, std::get<3>(kv.first));
+            if (ri < 0 || ri >= og->n_rank || !og->rank[ri].n_ratio || !st.rank_row[ri])
+                continue;
+            const OrganRank &rk = og->rank[ri];
+            const OrganPipe *q = &og->pipe[og->rank_hpipe[ri]];
+            double f = 440.0 * pow(2.0, (std::get<2>(kv.first) + p.transpose - 69) / 12.0);
+            double d[8];
+            for (int k = 0; k < rk.n_ratio; k++)
+                d[k] = nv_hdraw(q, f * rk.ratio[k]);
+            q7[og->rank_half[ri]] += pysum(d, rk.n_ratio);
+        }
+        double aim, knee[2], out[2];
+        int ex;
+        hwind_inputs(p, &aim, &ex, knee);
+        nv_hwind_step(&st.hw, og, q7, aim, ex, knee, out);
+        double e0[2] = {st.hw.edge[0], st.hw.edge[1]};
+        for (auto &x : st.rows) {
+            int h = (int)x.first.first, row = x.second;
+            const OrganPipe *q = &og->pipe[(int)x.first.second];
+            double sum = 0.0;
+            for (int j = 0; j < 8; j++)
+                sum = sum + nv_hratio(og, q, e0[h] + (out[h] - e0[h]) * (j / 8.0));
+            BRt[row] = (float)(sum / 8.0);
+            BCt[row] = st.acc[row];
+            BLt[2 * row] = (float)nv_hlevel_gain(q, e0[h]);
+            BLt[2 * row + 1] = (float)nv_hlevel_gain(q, out[h]);
+            st.acc[row] += ((double)BRt[row] - 1.0) * frames;
+        }
+        st.hw.edge[0] = out[0];
+        st.hw.edge[1] = out[1];
+    }
+
     void wind_block(long long n0, long long frames)
     {
         (void)n0;
@@ -8962,6 +9033,10 @@ struct Part {
             WindSt &st = it->second;
             const OrganSpec *og = st.og;
             int tp = patches[pi].transpose;
+            if (og->hwind) {
+                hwind_block(patches[pi], st, frames);
+                continue;
+            }
             double dem = 0.0;
             for (auto &kv : S.live) {
                 if (std::get<0>(kv.first) != patches[pi].pid)
@@ -11181,8 +11256,8 @@ struct Part {
                 if (!(stamped.load(std::memory_order_relaxed) >> ch & 1u))
                     S.channel_gain(sounding(ch), g / std::max(was, 1e-9));
             }
-            if (cc == 11 && !xnote.empty())         // a harmonium's bellows: its Expression
-                harmonium_bellows(ch, v);
+        } else if (cc == 21 || cc == 22) {      // a harmonium's knee boards (Double-Expression)
+            knee_v[ch][cc - 21] = v;
         } else if (cc >= 43 && cc <= 45 && harmonium_on()) {
             harmonium_word(ch, cc, v, n0);
         } else if (cc == 10) {

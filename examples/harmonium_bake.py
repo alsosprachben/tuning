@@ -25,6 +25,8 @@ in the bass and faster in the treble.
     python3 examples/harmonium_bake.py --simulate     the stops' ladders, speech, levels (cached)
     python3 examples/harmonium_bake.py --write        into tonelib.py (series, speech, level, celeste)
     python3 examples/harmonium_bake.py --pressure     the stops' answer to the wind (step 4), into tonelib.py
+    python3 examples/harmonium_bake.py --wind-simulate  each stop's level and draw, 150-1600 Pa (step 5, cached)
+    python3 examples/harmonium_bake.py --wind-write     ...into tonelib.py (pressure_level_db, pressure_draw)
 
 THE PRESSURE (step 4: the Expression stop, the feet the wind): each stop's
 middle note simulated at PRESSURES; per stop -- its first 12 harmonics' gain
@@ -408,7 +410,102 @@ def pressure_write(res):
         print("  %-11s %d pressures, %+.1f cents/kPa, speech exp %.2f" % (name, len(tab), cs, a), flush=True)
 
 
+# THE WIND (step 5): each stop's absolute level and the wind its reeds draw,
+# across the pressures a harmonium's wind reaches -- near each reed's threshold
+# too, where its swing collapses ("le Pianissimo, qui disparait meme", Mustel
+# p. 78) -- and its draw across the keyboard. The level law and the draw are
+# what the shared wind (wind.py's HarmoniumWind) and its rows read.
+WIND_PRESSURES = (60.0, 80.0, 100.0, 120.0, 150.0, 200.0, 250.0, 300.0, 400.0, 500.0, 700.0, 1000.0, 1300.0, 1600.0)
+
+
+def _wind_one(job):
+    name, v, f0, p = job
+    keep = H.PRESSURE_PA
+    H.PRESSURE_PA = p
+    y = H.sound(dict(v, celeste=False), f0, secs=1.6)
+    H.PRESSURE_PA = keep
+    s = y[-int(0.3 * 48000):]
+    lv = 10.0 * np.log10(np.mean(s ** 2) + 1e-30)
+    return "W|%s|%.2f|%.0f" % (name, f0, p), dict(p=p, f0=f0, level_db=float(lv), flow=float(F.LAST_FLOW))
+
+
+def _stop_keys(cls_name):
+    import tonelib as T
+    pts = getattr(getattr(T, cls_name), "mode_gains_points", None)
+    if not pts:
+        return 130.81, 261.63, 523.25
+    return pts[0][0], pts[len(pts) // 2][0], pts[-1][0]
+
+
+def wind_simulate(procs=6):
+    from multiprocessing import Pool
+    cache = json.load(open(CACHE)) if os.path.exists(CACHE) else {}
+    jobs = []
+    for name, v in [("Foundation", dict(H.FOUNDATION, cls="ReedOrganFreeProperties"))] + list(H.STOPS.items()):
+        lo, mid, hi = _stop_keys(v["cls"])
+        for p in WIND_PRESSURES:
+            jobs.append((name, v, mid, p))
+        for f0 in (lo, hi):
+            jobs.append((name, v, f0, 700.0))
+    todo = [j for j in jobs if "W|%s|%.2f|%.0f" % (j[0], j[2], j[3]) not in cache]
+    print("  %d runs, %d cached" % (len(jobs), len(jobs) - len(todo)), flush=True)
+    with Pool(procs) as pool:
+        for k, rec in pool.imap_unordered(_wind_one, todo):
+            cache[k] = rec
+            json.dump(cache, open(CACHE, "w"))
+            print("  %s: %.1f dB, %.3f l/s" % (k, rec["level_db"], rec["flow"] * 1000.0), flush=True)
+    return cache
+
+
+def wind_fit(cache):
+    """{stop: (level table ((p, dB re 700),...), (q at f_mid, f_mid, f exponent),
+    flow's pressure exponent)}"""
+    out = {}
+    for name, v in [("Foundation", dict(H.FOUNDATION, cls="ReedOrganFreeProperties"))] + list(H.STOPS.items()):
+        lo, mid, hi = _stop_keys(v["cls"])
+        rows = [cache["W|%s|%.2f|%.0f" % (name, mid, p)] for p in WIND_PRESSURES]
+        L0 = next(r["level_db"] for r in rows if r["p"] == 700.0)
+        lev = tuple((r["p"], round(r["level_db"] - L0, 2)) for r in rows)
+        fq = [(f, cache["W|%s|%.2f|700" % (name, f)]["flow"]) for f in (lo, mid, hi)]
+        fe = float(np.polyfit(np.log([f for f, _ in fq]), np.log([q for _, q in fq]), 1)[0])
+        pp = [r for r in rows if r["p"] >= 300.0]          # (where every reed speaks)
+        pe = float(np.polyfit(np.log([r["p"] for r in pp]), np.log([r["flow"] for r in pp]), 1)[0])
+        out[name] = (lev, (fq[1][1], mid, fe), pe)
+    return out
+
+
+def wind_write(cache):
+    p = os.path.join(HERE, "tonelib.py")
+    fit = wind_fit(cache)
+    for name, (lev, draw, pe) in fit.items():
+        cname = "ReedOrganFreeProperties" if name == "Foundation" else H.STOPS[name]["cls"]
+        s = open(p).read()
+        i = s.index("class %s(" % cname)
+        j = s.index("\nclass ", i + 10)
+        c = s[i:j]
+        c = re.sub(r"    # ITS LEVEL AND ITS DRAW.*?pressure_draw = [^\n]*\n", "", c, flags=re.S)
+        lines = ["    # ITS LEVEL AND ITS DRAW (examples/harmonium_bake.py --wind: the harmonium's",
+                 "    # wind, wind.HarmoniumWind): its level at each pressure, dB re 700 Pa -- near",
+                 "    # threshold its swing collapses -- and the wind its reed draws at 700 Pa",
+                 "    # (m3/s at f, f, the exponent across the keyboard) -- simulated",
+                 "    pressure_level_db = (" + ", ".join("(%.0f, %.2f)" % x for x in lev) + ")",
+                 "    pressure_draw = (%.4e, %.2f, %.3f)" % draw]
+        k = c.index("    pressure_speech_exp = ")
+        k = c.index("\n", k) + 1
+        c = c[:k] + "\n".join(lines) + "\n" + c[k:]
+        s = s[:i] + c + s[j:]
+        open(p, "w").write(s)
+        print("  %-11s level %+.1f dB at 200 Pa, %+.1f at 1600; draw %.2f l/s at %.0f Hz, f^%.2f; flow p^%.2f"
+              % (name, dict(lev)[200.0], dict(lev)[1600.0], draw[0] * 1000, draw[1], draw[2], pe), flush=True)
+    pes = [pe for _, _, pe in fit.values()]
+    print("  the instrument's draw exponent (median): %.3f" % float(np.median(pes)))
+
+
 if __name__ == "__main__":
+    if "--wind-simulate" in sys.argv:
+        wind_simulate()
+    if "--wind-write" in sys.argv:
+        wind_write(json.load(open(CACHE)))
     if "--pressure" in sys.argv:
         pressure_write(pressure_simulate())
     if "--simulate" in sys.argv:

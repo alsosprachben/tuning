@@ -8999,6 +8999,12 @@ class ReedOrganFreeProperties(FreeReedProperties):
     )
     pressure_cents_per_kpa = -9.45
     pressure_speech_exp = 0.525
+    # ITS LEVEL AND ITS DRAW (examples/harmonium_bake.py --wind: the harmonium's
+    # wind, wind.HarmoniumWind): its level at each pressure, dB re 700 Pa -- near
+    # threshold its swing collapses -- and the wind its reed draws at 700 Pa
+    # (m3/s at f, f, the exponent across the keyboard) -- simulated
+    pressure_level_db = ((60, -52.83), (80, -35.32), (100, -21.50), (120, -14.91), (150, -11.59), (200, -8.73), (250, -6.81), (300, -5.18), (400, -2.24), (500, -1.12), (700, 0.00), (1000, 1.45), (1300, 2.68), (1600, 3.66))
+    pressure_draw = (5.6449e-04, 261.63, -1.374)
 
     registerable = True
     # ...AND STILL PLAYED, not only set up: its onset and release (CC73/72)
@@ -9073,6 +9079,12 @@ class HarmoniumBourdonProperties(ReedOrganFreeProperties):
     )
     pressure_cents_per_kpa = -17.96
     pressure_speech_exp = 0.285
+    # ITS LEVEL AND ITS DRAW (examples/harmonium_bake.py --wind: the harmonium's
+    # wind, wind.HarmoniumWind): its level at each pressure, dB re 700 Pa -- near
+    # threshold its swing collapses -- and the wind its reed draws at 700 Pa
+    # (m3/s at f, f, the exponent across the keyboard) -- simulated
+    pressure_level_db = ((60, -31.68), (80, -22.74), (100, -17.40), (120, -14.14), (150, -11.18), (200, -8.07), (250, -5.69), (300, -4.36), (400, -2.68), (500, -1.53), (700, 0.00), (1000, 1.51), (1300, 2.41), (1600, 2.79))
+    pressure_draw = (3.0764e-03, 73.40, -1.030)
     # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 42.9
     speech_harmonic_exp = 0.00
@@ -9111,6 +9123,12 @@ class HarmoniumClarinetteProperties(ReedOrganFreeProperties):
     )
     pressure_cents_per_kpa = -5.28
     pressure_speech_exp = 0.554
+    # ITS LEVEL AND ITS DRAW (examples/harmonium_bake.py --wind: the harmonium's
+    # wind, wind.HarmoniumWind): its level at each pressure, dB re 700 Pa -- near
+    # threshold its swing collapses -- and the wind its reed draws at 700 Pa
+    # (m3/s at f, f, the exponent across the keyboard) -- simulated
+    pressure_level_db = ((60, -75.62), (80, -54.71), (100, -31.80), (120, -16.04), (150, -10.48), (200, -7.35), (250, -5.50), (300, -4.22), (400, -2.39), (500, -1.05), (700, 0.00), (1000, 2.20), (1300, 3.85), (1600, 5.06))
+    pressure_draw = (3.0328e-04, 440.00, -1.454)
     # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 78.9
     speech_harmonic_exp = 0.00
@@ -9150,6 +9168,12 @@ class HarmoniumClaironProperties(ReedOrganFreeProperties):
     )
     pressure_cents_per_kpa = -8.29
     pressure_speech_exp = 0.562
+    # ITS LEVEL AND ITS DRAW (examples/harmonium_bake.py --wind: the harmonium's
+    # wind, wind.HarmoniumWind): its level at each pressure, dB re 700 Pa -- near
+    # threshold its swing collapses -- and the wind its reed draws at 700 Pa
+    # (m3/s at f, f, the exponent across the keyboard) -- simulated
+    pressure_level_db = ((60, -58.29), (80, -37.27), (100, -19.85), (120, -12.58), (150, -10.64), (200, -8.71), (250, -7.02), (300, -5.32), (400, -3.09), (500, -1.82), (700, 0.00), (1000, 1.89), (1300, 3.28), (1600, 4.36))
+    pressure_draw = (4.8889e-04, 293.70, -1.445)
     # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 52.9
     speech_harmonic_exp = 0.00
@@ -9186,6 +9210,12 @@ class HarmoniumFifreProperties(HarmoniumClaironProperties):
     )
     pressure_cents_per_kpa = -1.85
     pressure_speech_exp = 0.908
+    # ITS LEVEL AND ITS DRAW (examples/harmonium_bake.py --wind: the harmonium's
+    # wind, wind.HarmoniumWind): its level at each pressure, dB re 700 Pa -- near
+    # threshold its swing collapses -- and the wind its reed draws at 700 Pa
+    # (m3/s at f, f, the exponent across the keyboard) -- simulated
+    pressure_level_db = ((60, -79.96), (80, -76.40), (100, -73.31), (120, -69.81), (150, -61.12), (200, -25.96), (250, -9.83), (300, -7.82), (400, -4.92), (500, -2.86), (700, 0.00), (1000, 2.83), (1300, 4.86), (1600, 6.42))
+    pressure_draw = (4.9513e-05, 1661.20, -1.013)
     # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 124.7
     speech_harmonic_exp = 0.00
@@ -9224,6 +9254,12 @@ class HarmoniumHautboisProperties(ReedOrganFreeProperties):
     )
     pressure_cents_per_kpa = -3.01
     pressure_speech_exp = 0.599
+    # ITS LEVEL AND ITS DRAW (examples/harmonium_bake.py --wind: the harmonium's
+    # wind, wind.HarmoniumWind): its level at each pressure, dB re 700 Pa -- near
+    # threshold its swing collapses -- and the wind its reed draws at 700 Pa
+    # (m3/s at f, f, the exponent across the keyboard) -- simulated
+    pressure_level_db = ((60, -73.77), (80, -63.41), (100, -31.71), (120, -15.66), (150, -12.88), (200, -10.13), (250, -8.13), (300, -6.49), (400, -4.08), (500, -2.37), (700, 0.00), (1000, 2.43), (1300, 4.21), (1600, 5.83))
+    pressure_draw = (8.4743e-05, 880.00, -1.224)
     # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 99.0
     speech_harmonic_exp = 0.00
@@ -9261,6 +9297,12 @@ class HarmoniumBassonProperties(ReedOrganFreeProperties):
     )
     pressure_cents_per_kpa = -14.90
     pressure_speech_exp = 0.433
+    # ITS LEVEL AND ITS DRAW (examples/harmonium_bake.py --wind: the harmonium's
+    # wind, wind.HarmoniumWind): its level at each pressure, dB re 700 Pa -- near
+    # threshold its swing collapses -- and the wind its reed draws at 700 Pa
+    # (m3/s at f, f, the exponent across the keyboard) -- simulated
+    pressure_level_db = ((60, -22.45), (80, -16.29), (100, -13.29), (120, -11.49), (150, -8.68), (200, -6.30), (250, -5.13), (300, -4.28), (400, -2.88), (500, -1.76), (700, 0.00), (1000, 1.67), (1300, 2.92), (1600, 3.82))
+    pressure_draw = (1.0425e-03, 146.80, -1.259)
     # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 39.9
     speech_harmonic_exp = 0.00
@@ -9299,6 +9341,12 @@ class HarmoniumCelesteProperties(ReedOrganFreeProperties):
     )
     pressure_cents_per_kpa = -5.94
     pressure_speech_exp = 0.551
+    # ITS LEVEL AND ITS DRAW (examples/harmonium_bake.py --wind: the harmonium's
+    # wind, wind.HarmoniumWind): its level at each pressure, dB re 700 Pa -- near
+    # threshold its swing collapses -- and the wind its reed draws at 700 Pa
+    # (m3/s at f, f, the exponent across the keyboard) -- simulated
+    pressure_level_db = ((60, -76.07), (80, -52.50), (100, -29.06), (120, -15.07), (150, -10.70), (200, -7.46), (250, -5.53), (300, -4.19), (400, -2.32), (500, -0.95), (700, 0.00), (1000, 2.05), (1300, 3.80), (1600, 5.06))
+    pressure_draw = (2.6648e-04, 440.00, -1.413)
     # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 75.9
     speech_harmonic_exp = 0.00
@@ -9340,6 +9388,12 @@ class HarmoniumVioloncelleProperties(ReedOrganFreeProperties):
     )
     pressure_cents_per_kpa = -16.92
     pressure_speech_exp = 0.511
+    # ITS LEVEL AND ITS DRAW (examples/harmonium_bake.py --wind: the harmonium's
+    # wind, wind.HarmoniumWind): its level at each pressure, dB re 700 Pa -- near
+    # threshold its swing collapses -- and the wind its reed draws at 700 Pa
+    # (m3/s at f, f, the exponent across the keyboard) -- simulated
+    pressure_level_db = ((60, -53.00), (80, -38.30), (100, -25.23), (120, -14.10), (150, -9.06), (200, -7.11), (250, -5.40), (300, -4.25), (400, -2.68), (500, -1.57), (700, 0.00), (1000, 1.62), (1300, 2.90), (1600, 3.83))
+    pressure_draw = (1.0791e-03, 146.80, -1.249)
     # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 39.9
     speech_harmonic_exp = 0.00
@@ -9377,6 +9431,12 @@ class HarmoniumSourdineProperties(ReedOrganFreeProperties):
     )
     pressure_cents_per_kpa = -5.19
     pressure_speech_exp = 0.272
+    # ITS LEVEL AND ITS DRAW (examples/harmonium_bake.py --wind: the harmonium's
+    # wind, wind.HarmoniumWind): its level at each pressure, dB re 700 Pa -- near
+    # threshold its swing collapses -- and the wind its reed draws at 700 Pa
+    # (m3/s at f, f, the exponent across the keyboard) -- simulated
+    pressure_level_db = ((60, -66.95), (80, -56.40), (100, -47.43), (120, -39.55), (150, -29.22), (200, -16.26), (250, -10.31), (300, -7.50), (400, -4.88), (500, -2.99), (700, 0.00), (1000, 2.75), (1300, 4.13), (1600, 5.10))
+    pressure_draw = (5.9981e-04, 146.80, -1.370)
     # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 75.8
     speech_harmonic_exp = 0.00
@@ -9414,6 +9474,12 @@ class HarmoniumMusetteProperties(ReedOrganFreeProperties):
     )
     pressure_cents_per_kpa = -6.68
     pressure_speech_exp = 0.597
+    # ITS LEVEL AND ITS DRAW (examples/harmonium_bake.py --wind: the harmonium's
+    # wind, wind.HarmoniumWind): its level at each pressure, dB re 700 Pa -- near
+    # threshold its swing collapses -- and the wind its reed draws at 700 Pa
+    # (m3/s at f, f, the exponent across the keyboard) -- simulated
+    pressure_level_db = ((60, -68.44), (80, -35.94), (100, -16.35), (120, -11.60), (150, -9.09), (200, -6.75), (250, -5.20), (300, -4.02), (400, -2.48), (500, -2.06), (700, 0.00), (1000, 2.61), (1300, 4.36), (1600, 5.66))
+    pressure_draw = (2.2317e-04, 440.00, -1.424)
     # ITS SPEECH, simulated: the tongue's rise 10-90 % in cycles of the note
     speech_cycles = 63.9
     speech_harmonic_exp = 0.00
@@ -9494,14 +9560,17 @@ ReedOrganFreeProperties.stop_rows = [
 # EXPRESSION: the reservoir shut, the feet ARE the wind (Mustel p. 115).
 # SINCE 2026-11-23 FROM THE REEDS' PHYSICS (step 4; the asserted tilt is gone):
 # CC11 is the wind pressure, HARMONIUM_PRESSURE_MIN..MAX Pa (Mustel's ff
-# 150-170 mm of water; a reed starts near 200 Pa), and each stop answers it as
+# 150-170 mm of water; at the floor the foundation's reeds are at their
+# threshold -- simulated, 35 dB down: the "pianissimo presque imperceptible",
+# p. 116 -- most stops speaking from 80-100 Pa, the Fifre from ~200, the
+# throttled Sourdine from ~150 -- examples/harmonium_bake.py --wind), and each stop answers it as
 # its reeds were simulated to (examples/harmonium_bake.py --pressure): its
 # harmonics' gains (pressure_gains_db), its pitch falling (pressure_cents_per_
 # kpa, Cottingham's), its speech quickening (pressure_speech_exp), its
 # tremolo's bellows faster -- re the reservoir's HARMONIUM_PRESSURE_REF, where
 # the stops were baked and where an undrawn Expression leaves them. Read at
 # note-on, with CC11's loudness, which stays continuous.
-HARMONIUM_PRESSURE_MIN = 200.0
+HARMONIUM_PRESSURE_MIN = 80.0
 HARMONIUM_PRESSURE_MAX = 1600.0
 HARMONIUM_PRESSURE_REF = 700.0
 
@@ -9588,6 +9657,85 @@ HARMONIUM_TREMOLO_P_K = 700.0
 HARMONIUM_TREMOLO_TREBLE_RATIO = 1.15
 
 
+# THE HARMONIUM'S WIND (step 5; wind.HarmoniumWind, which every engine runs):
+# the chest's pressure moving under the reeds' draw, the feet and the knees,
+# block by block -- each stop's level and pitch riding it (its rows), its tone,
+# speech and tremolo read from it at note-on. The aim, the pressure the
+# player's feet mean: with the Expression drawn the feet ARE the wind
+# (harmonium_pressure: CC11 200-1600 Pa); with it in, the reservoir's springs
+# set it, full at harmonium_reservoir_full_pa -- the pressure the stops were
+# baked and tuned at, so a file at CC11 127 with no Expression plays the
+# baked voice -- and CC11 is how hard the player pumps toward it.
+HARMONIUM_KNEE_CC = (21, 22)       # Double-Expression's knee boards, bass and treble (MIDI's undefined 21, 22)
+
+
+def harmonium_stop_class(host, rank):
+    """The class a harmonium rank's reeds are (blockrender's speech class,
+    _sc): its named pipe, its spectrum where that is a pipe (every stop's),
+    or the host (the foundation)."""
+    rest = rank[3:]
+    spec = rest[0] if rest else None
+    pipe = rest[2] if len(rest) > 2 else None
+    if pipe is not None:
+        return rank_spectrum(pipe)
+    if spec is not None and getattr(rank_spectrum(spec), 'rank_is_pipe', False):
+        return rank_spectrum(spec)
+    if (spec is not None and getattr(host, 'rank_speech_own_pitch', False)
+            and getattr(rank_spectrum(spec), 'rank_speech', False)):
+        return rank_spectrum(spec)
+    return host
+
+
+def harmonium_half(rank):
+    """0 a bass stop, 1 a treble stop (its key range against HARMONIUM_SPLIT)."""
+    kr = rank[6] if len(rank) > 6 else None
+    return 1 if kr is not None and kr[0] >= HARMONIUM_SPLIT else 0
+
+
+def harmonium_aim(cls, e, expr):
+    """The pressure (Pa) the player's feet mean at CC11 / 127 = e."""
+    if expr:
+        return harmonium_pressure(e)
+    full = cls.harmonium_reservoir_full_pa
+    return HARMONIUM_PRESSURE_MIN + (full - HARMONIUM_PRESSURE_MIN) * float(e)
+
+
+def harmonium_knee(v):
+    """A knee board's set-point (Pa) at its CC value: at rest the pianissimo,
+    pressed in the louder, fully in (127: also the knee boards hooked shut,
+    every file's) no limit (Mustel pp. 93-95)."""
+    if v >= 127:
+        return float('inf')
+    return harmonium_pressure(v / 127.0)
+
+
+def harmonium_level_gain(cls, p):
+    """A stop's level at wind p re the reference: its simulated table
+    (pressure_level_db, dB re HARMONIUM_PRESSURE_REF), interpolated in log p,
+    held past its ends -- near threshold the reed's swing collapses."""
+    tab = getattr(cls, 'pressure_level_db', None)
+    if not tab:
+        return 1.0
+    if p <= tab[0][0]:
+        db = tab[0][1]
+    elif p >= tab[-1][0]:
+        db = tab[-1][1]
+    else:
+        i = 0
+        while tab[i + 1][0] < p:
+            i += 1
+        x = (_log(p) - _log(tab[i][0])) / (_log(tab[i + 1][0]) - _log(tab[i][0]))
+        db = tab[i][1] + (tab[i + 1][1] - tab[i][1]) * x
+    return 10.0 ** (db / 20.0)
+
+
+def harmonium_draw(cls, f):
+    """The wind (m3/s) a stop's reed sounding f Hz draws at the reference
+    pressure (pressure_draw: (m3/s at f_ref, f_ref, exponent), simulated)."""
+    q, fr, ex = getattr(cls, 'pressure_draw', (0.0, 261.63, 0.0))
+    return q * (f / fr) ** ex
+
+
 # PERCUSSION: a hammer strikes the front 8-foot reeds as the key goes down, so
 # they speak at once instead of swelling in (EB1911: "percussion ... on the
 # diapason rows"). Register 1 in each half and nothing else. The attack becomes
@@ -9611,6 +9759,19 @@ ReedOrganFreeProperties.percussion_attack_s = 0.003
 # with the pressure, step 4). Its 10% swing of the wind swings the reeds'
 # level +/-6% (the simulation, middle C and C5): the depth, peak to peak
 ReedOrganFreeProperties.stop_tremolo_hz = 5.0
+# ITS WIND (wind.HarmoniumWind; Mustel gives the mechanism, no volumes or
+# rates -- a typical instrument's, named to be set by ear): the reservoir's
+# springs full at the pressure the stops were baked at; a reservoir 60 x 40 cm
+# rising 10 cm (24 l); two wedge pumps, ~7 l a stroke, trodden ~1.4 strokes a
+# second each at most (20 l/s); the player answering the wind over 0.4 s, the
+# feet the chest over 30 ms; a reed's draw ~ p^harmonium_draw_exp (simulated)
+ReedOrganFreeProperties.harmonium_wind = True
+ReedOrganFreeProperties.harmonium_reservoir_full_pa = HARMONIUM_PRESSURE_REF
+ReedOrganFreeProperties.harmonium_reservoir_m3 = 0.024
+ReedOrganFreeProperties.harmonium_pump_max_m3s = 0.020
+ReedOrganFreeProperties.harmonium_player_s = 0.4
+ReedOrganFreeProperties.harmonium_foot_s = 0.03
+ReedOrganFreeProperties.harmonium_draw_exp = 0.773
 ReedOrganFreeProperties.stop_tremolo_depth = 0.125
 
 

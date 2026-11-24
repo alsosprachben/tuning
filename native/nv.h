@@ -580,6 +580,11 @@ struct OrganPipe {
        h1-h12's dB at each, sorted; its pitch's cents a kPa, speech exponent */
     int n_pres;
     double pres_p[8], pres_db[8][12], pres_cents, pres_sexp;
+    /* ...ITS LEVEL AND ITS DRAW (tonelib.harmonium_level_gain, harmonium_draw):
+       hl_n points of (Pa, dB re the reference); a reed's wind at the
+       reference, m3/s = hd_q * (f / hd_fr) ^ hd_ex */
+    int hl_n;
+    double hl_p[16], hl_db[16], hd_q, hd_fr, hd_ex;
 };
 
 /* AN ORGAN's RANKS AT MOST: the divider organ's upper manual is 39 with its
@@ -664,6 +669,13 @@ typedef struct OrganSpec {
        and the treble half's first key (HARMONIUM_SPLIT) */
     double pres_min, pres_max, pres_ref, trem_pk, trem_treble;
     int split;
+    /* ...AND ITS CHEST (wind.HarmoniumWind): the reservoir's full pressure,
+       its volume, the pumps' most, the reeds' draw exponent, the feet's
+       per-block factor, the player's reaction (s), a block (s); each rank's
+       half (0 bass, 1 treble) and its stop's pipe (tonelib.harmonium_stop_class) */
+    int hwind;
+    double hw_full, hw_vres, hw_qmax, hw_dexp, hw_afoot, hw_tplayer, hw_blk_s;
+    int rank_half[NV_MAX_RANK], rank_hpipe[NV_MAX_RANK];
 } OrganSpec;
 
 /* tonelib.harmonium_pressure / _pressure_gain / _tremolo_hz, operation for operation */
@@ -690,6 +702,110 @@ static inline double nv_hpressure_gain(const OrganPipe *q, int m, double p)
     }
     return pow(10.0, db / 20.0);
 }
+/* tonelib.harmonium_level_gain, _pressure_ratio, _draw, _aim, _knee */
+static inline double nv_hlevel_gain(const OrganPipe *q, double p)
+{
+    if (!q->hl_n)
+        return 1.0;
+    int n = q->hl_n;
+    double db;
+    if (p <= q->hl_p[0])
+        db = q->hl_db[0];
+    else if (p >= q->hl_p[n - 1])
+        db = q->hl_db[n - 1];
+    else {
+        int i = 0;
+        while (q->hl_p[i + 1] < p)
+            i++;
+        double x = (log(p) - log(q->hl_p[i])) / (log(q->hl_p[i + 1]) - log(q->hl_p[i]));
+        db = q->hl_db[i] + (q->hl_db[i + 1] - q->hl_db[i]) * x;
+    }
+    return pow(10.0, db / 20.0);
+}
+static inline double nv_hratio(const OrganSpec *og, const OrganPipe *q, double p)
+{
+    return pow(2.0, q->pres_cents * (p - og->pres_ref) / 1000.0 / 1200.0);
+}
+static inline double nv_hdraw(const OrganPipe *q, double f) { return q->hd_q * pow(f / q->hd_fr, q->hd_ex); }
+static inline double nv_haim(const OrganSpec *og, double e, int expr)
+{
+    if (expr)
+        return nv_hpressure(og, e);
+    return og->pres_min + (og->hw_full - og->pres_min) * e;
+}
+static inline double nv_hknee(const OrganSpec *og, int v) { return v >= 127 ? INFINITY : nv_hpressure(og, v / 127.0); }
+
+/* wind.HarmoniumWind: a harmonium channel's chest, block by block, operation
+   for operation (step): the halves' pressures at the block's end into out */
+typedef struct {
+    double fill, pc, edge[2];
+    int sounded, has_edge;
+} NvHWind;
+static inline void nv_hwind_init(NvHWind *w, const OrganSpec *og)
+{
+    w->fill = 1.0;
+    w->pc = og->hw_full;
+    w->sounded = 0;
+    w->has_edge = 0;
+    w->edge[0] = w->edge[1] = 0.0;
+}
+static inline double nv_hwind_draw(const OrganSpec *og, double pc, const double *q7, const double *knee)
+{
+    double d = 0.0;
+    for (int h = 0; h < 2; h++)
+        if (q7[h] > 0.0)
+            d += q7[h] * pow((knee[h] < pc ? knee[h] : pc) / og->pres_ref, og->hw_dexp);
+    return d;
+}
+static inline void nv_hwind_step(NvHWind *w, const OrganSpec *og, const double *q7, double aim, int expr,
+                                 const double *knee, double *out)
+{
+    if (!w->sounded) {
+        double a = aim < og->hw_full ? aim : og->hw_full;
+        double f = a / og->hw_full;
+        f = 0.0 > f ? 0.0 : f;
+        w->fill = f < 1.0 ? f : 1.0;
+        w->pc = expr ? aim : og->hw_full * w->fill;
+        if (q7[0] == 0.0 && q7[1] == 0.0) {
+            out[0] = knee[0] < w->pc ? knee[0] : w->pc;
+            out[1] = knee[1] < w->pc ? knee[1] : w->pc;
+            if (!w->has_edge) {
+                w->edge[0] = out[0]; w->edge[1] = out[1];
+                w->has_edge = 1;
+            }
+            return;
+        }
+        w->sounded = 1;
+        if (!w->has_edge) {
+            w->edge[0] = knee[0] < w->pc ? knee[0] : w->pc;
+            w->edge[1] = knee[1] < w->pc ? knee[1] : w->pc;
+            w->has_edge = 1;
+        }
+    }
+    if (expr) {
+        double pc = aim + (w->pc - aim) * og->hw_afoot;
+        double d = nv_hwind_draw(og, pc, q7, knee);
+        if (d > og->hw_qmax)
+            pc = pc * pow(og->hw_qmax / d, 1.0 / og->hw_dexp);
+        w->pc = pc;
+    } else {
+        double p = og->hw_full * w->fill;
+        double d = nv_hwind_draw(og, p, q7, knee);
+        double c = og->hw_vres / og->hw_full;
+        double qp = d + ((aim < og->hw_full ? aim : og->hw_full) - p) * c / og->hw_tplayer;
+        qp = qp < 0.0 ? 0.0 : (qp > og->hw_qmax ? og->hw_qmax : qp);
+        double f = w->fill + (qp - d) * og->hw_blk_s / og->hw_vres;
+        w->fill = f < 0.0 ? 0.0 : (f > 1.0 ? 1.0 : f);
+        w->pc = og->hw_full * w->fill;
+    }
+    out[0] = knee[0] < w->pc ? knee[0] : w->pc;
+    out[1] = knee[1] < w->pc ? knee[1] : w->pc;
+    if (!w->has_edge) {
+        w->edge[0] = out[0]; w->edge[1] = out[1];
+        w->has_edge = 1;
+    }
+}
+
 static inline double nv_htremolo_hz(const OrganSpec *og, double hz, double p, int note)
 {
     hz = hz * pow((1.0 + p / og->trem_pk) / (1.0 + og->pres_ref / og->trem_pk), 0.5);

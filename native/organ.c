@@ -192,10 +192,12 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
             double hc = pipe_chiff_time(hp, f0, ha);
             chiff_r = hc > 0 ? t->chiff * (pipe_chiff_time(scp, f0s, ra) / hc) : t->chiff;
         }
-        double hpw = 0.0, hpr = 1.0;                /* the Expression stop: its wind, its pitch, its speech */
+        /* A HARMONIUM'S WIND AT ITS ONSET (organ_hx: its half's, Pa; NaN the
+           reference): its speech (its tone below) -- its level and pitch ride
+           the chest's rows (wind.HarmoniumWind) */
+        double hpw = 0.0;
         if (!isnan(n->organ_hx)) {
-            hpw = nv_hpressure(og, n->organ_hx);
-            hpr = pow(2.0, scp->pres_cents * (hpw - og->pres_ref) / 1000.0 / 1200.0);
+            hpw = n->organ_hx;
             fade_r *= pow(hpw / og->pres_ref, -scp->pres_sexp);
         }
         if (n->organ_perc && rk->perc)              /* the Percussion stop's hammer: min(attack, hammer) */
@@ -324,8 +326,6 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
                 double h = hh[0], hf = hh[1];
                 if (rk->beat)                           /* ...and its partials a little off it (choir_partial_hz) */
                     hf += choir_beat(og, rk, note, m);
-                if (!isnan(n->organ_hx))                /* (its pitch falling with the wind) */
-                    hf *= hpr;
                 if (hf > sr / 2)
                     break;
                 double hv = nv_harmonic_volume(tsrc, m);

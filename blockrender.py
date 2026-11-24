@@ -2949,7 +2949,77 @@ def _prep_swell_law(Srows, _laws, sh):
     return sh
 
 
-def _prep_chest_wind(Grows, ch_progs, grow_of, nblk, notes, rankev_of):
+def _prep_harmonium_wind(pc, ch, Grows, grow_of, nblk, notes, rankev_of, ccs, _WROWS, wrow_key):
+    """THE HARMONIUM'S WIND (wind.HarmoniumWind): its chest under the reeds'
+    draw, the feet (CC11 and the Expression stop) and the knees (CC21/22),
+    and a row a (half, stop) -- its level and pitch. Returns the halves'
+    pressures at the block edges (Pa, (nblk + 1, 2)), what note-on reads."""
+    import wind as _WND
+    _wk = (ch, organ_family(pc))
+    _bt = (np.arange(nblk) + 0.5) * BLK / SR
+    # the feet's aim, the Expression, the knees: a step a block
+    _e11 = np.full(nblk, T.GM_DEFAULT_EXPRESSION / 127.0)
+    _knee = np.full((nblk, 2), float('inf'))
+    for _t, _cc, _val in in_order(ccs.get(ch, [])):
+        if _cc == 11 or _cc == 121:
+            _e11[_bt >= _t] = (_val if _cc == 11 else 127) / 127.0
+        elif _cc in T.HARMONIUM_KNEE_CC:
+            _knee[_bt >= _t, T.HARMONIUM_KNEE_CC.index(_cc)] = T.harmonium_knee(_val)
+    _expr = np.zeros(nblk)
+    for _t, tg in rankev_of[_wk].get('expression', ()):
+        _expr[_bt >= _t] = tg
+    _aim = np.array([T.harmonium_aim(pc, _e11[b], _expr[b] >= 0.5) for b in range(nblk)])
+    # the reeds' draw at the reference, each half's, under each stop's gate
+    _q7 = np.zeros((nblk, 2))
+    _ranks = [r for r in pc.stop_ranks if r[1] is not None]
+    for _n in notes:
+        if _n[0] != ch or property_class_for_program(_n[6]) is not pc:
+            continue
+        _f = 440.0 * 2.0 ** ((_n[1] - 69) / 12.0)
+        _b0 = min(nblk, int(_n[2] * SR / BLK)); _b1 = min(nblk, int(_n[3] * SR / BLK) + 1)
+        if _b1 <= _b0:
+            continue
+        for r in _ranks:
+            _kr = r[6] if len(r) > 6 else None
+            if _kr is not None and not _kr[0] <= _n[1] <= _kr[1]:
+                continue
+            _sc = T.harmonium_stop_class(pc, r)
+            _rat = r[1] if isinstance(r[1], (list, tuple)) else [r[1]]
+            _w = sum(T.harmonium_draw(_sc, _f * q) for q in _rat)
+            _q7[_b0:_b1, T.harmonium_half(r)] += _w * Grows[grow_of[(_wk, r[0])]][_b0:_b1]
+    _hw = _WND.HarmoniumWind(pc, BLK / SR)
+    _pts, _edges = _hw.blocks(_q7, _aim, _expr, _knee)
+    _WROWS[ch] = {}
+    for r in _ranks:
+        _sc = T.harmonium_stop_class(pc, r)
+        _h = T.harmonium_half(r)
+        _key = ('harmonium', _h, _sc.__name__)
+        wrow_key[(ch, r[0])] = _key
+        if _key not in _WROWS[ch]:
+            _WROWS[ch][_key] = _WND.harmonium_rows(_sc, _pts[:, _h, :], _edges[:, _h])
+    if _VERBOSE_WIND:
+        print("  harmonium wind ch%d: bass %.0f..%.0f Pa, treble %.0f..%.0f Pa, peak draw %.2f l/s"
+              % (ch, _edges[:, 0].min(), _edges[:, 0].max(), _edges[:, 1].min(), _edges[:, 1].max(),
+                 1000.0 * _q7.sum(1).max()))
+        for _b in range(0, nblk, int(0.5 * SR / BLK)):
+            print("    %5.1f s: aim %4.0f, draw %5.1f l/s, bass %4.0f Pa, treble %4.0f Pa"
+                  % (_b * BLK / SR, _aim[_b], 1000.0 * _q7[_b].sum(), _edges[_b, 0], _edges[_b, 1]))
+    return _edges
+
+
+def harmonium_note_pressure(em, nt):
+    """A harmonium note's wind at its onset (Pa: its half's, from the chest's
+    block edges), or None where it is the reference -- the baked voice, as
+    every note was before the wind moved."""
+    E = getattr(em, 'hwind', {}).get(nt.ch)
+    if E is None:
+        return None
+    b = min(len(E) - 1, int(nt.on * SR / BLK))
+    p = float(E[b][0 if nt.note < T.HARMONIUM_SPLIT else 1])
+    return None if p == T.HARMONIUM_PRESSURE_REF else p
+
+
+def _prep_chest_wind(Grows, ch_progs, grow_of, nblk, notes, rankev_of, ccs=None, _HWIND=None):
     """THE CHEST'S WIND (wind.py): one pressure per organ channel, its wander,
     its sag under the pipes speaking, and the Tremulant. Returns (_WROWS, wrow_key)."""
     # THE CHEST'S WIND (wind.py): one pressure per organ channel -- a division
@@ -2965,6 +3035,10 @@ def _prep_chest_wind(Grows, ch_progs, grow_of, nblk, notes, rankev_of):
         pc = next((c for q in uniq_programs(_plist) for c in voice_classes(q)
                    if getattr(c, 'registerable', False)), None)
         if pc is None:
+            continue
+        if getattr(pc, 'harmonium_wind', False):
+            _HWIND[ch] = _prep_harmonium_wind(pc, ch, Grows, grow_of, nblk, notes, rankev_of, ccs or {},
+                                              _WROWS, wrow_key)
             continue
         if not T.organ_wind(pc):
             continue                            # not a pipe organ (nor a divider organ's vibrato)
@@ -3589,6 +3663,7 @@ def _prep_channel_fader(BCrows, BRrows, _BLrows, _CMXEV, _MPE_AT, _PN_AT, _SCAN_
     # member's note by its zone's manager.
     _LROW = {}
     _org = {}
+    _wind11 = set()          # (a harmonium's channels: its CC11 is the wind, not a level -- wind.HarmoniumWind)
 
     def _plain(_pg, _nt):
         if isinstance(_pg, DrumProgram):
@@ -3596,12 +3671,16 @@ def _prep_channel_fader(BCrows, BRrows, _BLrows, _CMXEV, _MPE_AT, _PN_AT, _SCAN_
         _k = (_pg, getattr(_pg, 'variation', 0), getattr(_pg, 'layer', None), _nt)
         if _k not in _org:
             _pc = property_class_for_note(_pg, _nt)
-            _org[_k] = not (getattr(_pc, 'registerable', False)
-                            and tuple(getattr(_pc, 'stop_word_ccs', (11, 43)))[0] == 11)
+            _org[_k] = (not (getattr(_pc, 'registerable', False)
+                             and tuple(getattr(_pc, 'stop_word_ccs', (11, 43)))[0] == 11),
+                        bool(getattr(_pc, 'harmonium_wind', False)))
         return _org[_k]
     _spans = {}
     for (_c, _nt, _on, _of, _v, _cvv, _pg) in notes:
-        if _plain(_pg, _nt):
+        _pl = _plain(_pg, _nt)
+        if not isinstance(_pl, bool) and _pl[1]:
+            _wind11.add(_c)
+        if _pl is True or _pl[0]:
             _spans.setdefault(_mpe_member.get((_c, _nt, _on), _c), []).append((_on, _of + FADER_TAIL))
     # ...BUT NOT A STAMPED CHANNEL. mt32mux carries several parts on one
     # channel by putting each part's CC7 (and CC11) a tick before EVERY note
@@ -3637,7 +3716,7 @@ def _prep_channel_fader(BCrows, BRrows, _BLrows, _CMXEV, _MPE_AT, _PN_AT, _SCAN_
             elif _cc == 7:
                 _v7 = _val
             elif _cc == 11:
-                _v11 = _val
+                _v11 = _val if _c not in _wind11 else 127
             elif _cc == 121:
                 _v11 = 127                      # reset: expression back up, volume kept
             else:
@@ -5338,6 +5417,7 @@ def _note_class_and_pitch(nt, FREQ, FREQ_E, _BTUN, _DRONE_PC, _F, _MEEND_AT, _MP
         # voice whose stop word lives elsewhere (the harmonium) keeps the
         # volume and expression every other voice has.
         nt.chan_vol = (1.0 if nt.organ and tuple(getattr(nt.pc, 'stop_word_ccs', (11, 43)))[0] == 11
+                    else nt.v7**2 if getattr(nt.pc, 'harmonium_wind', False)    # (its CC11 the wind's)
                     else (nt.v7*nt.v11)**2)
         nt.freq = _F(nt.ch, nt.on)
         if FREQ_E is not None and getattr(nt.pc, 'tuning_family', None) == 'indian':
@@ -7084,8 +7164,9 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
                 n.rank_rel1[i] = int(_drawn_off < 0.5)
         n.organ_cr = cr
         # ...and a reed organ's effect stops at its onset (_note_stops' _hx, _hperc)
-        _xe, _pe = rev.get('expression'), rev.get('percussion')
-        n.organ_hx = nt.v11 if (_xe is not None and T.stop_drawn_at(_xe, nt.on)) else math.nan
+        _pe = rev.get('percussion')
+        _hp = harmonium_note_pressure(em, nt)              # (its wind, Pa: NaN the reference)
+        n.organ_hx = _hp if _hp is not None else math.nan
         n.organ_perc = int(_pe is not None and T.stop_drawn_at(_pe, nt.on))
     n.has_nx, n.nx = int(nx is not None), (nx if nx is not None else 0.0)
     n.mcut, n.slurred, n.slur_out = int(bool(mcut)), int(bool(slurred)), int(bool(slur_out))
@@ -7458,9 +7539,8 @@ def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TB
             chiff_r = nt.chiff * (_sc.chiff_time(_f0s, _ra) / _hc) if _hc > 0 else nt.chiff
         else:
             fade_r, rel_r, chiff_r = nt.fade, nt.rel, nt.chiff
-        if _hx is not None:                      # (the Expression stop: its speech, the wind's)
-            _hp = T.harmonium_pressure(_hx)
-            _hpr = T.harmonium_pressure_ratio(_sc, _hp)
+        if _hx is not None:                      # (its speech, the wind's at its onset)
+            _hp = _hx
             fade_r *= T.harmonium_speech_scale(_sc, _hp)
         if _hperc and key in getattr(props, 'percussion_ranks', ()):
             # The hammer: min(attack, hammer), as a slur is min(attack, legato).
@@ -7602,8 +7682,6 @@ def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TB
                 h, hf = _hh
                 if _cho:
                     hf += T.choir_partial_hz(props, _cho, nt.note, m)
-                if _hx is not None:              # (its pitch falling with the wind)
-                    hf *= _hpr
                 if hf > SR/2: break
                 hv = hv_sub(m)
                 if hv == 0.0: continue
@@ -7655,7 +7733,7 @@ def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TB
                 em.radius = (props.pipe_radius(nt.f0*eff_ratio)
                               if nt.organ and hasattr(props, 'pipe_radius') else None)
                 gM = hv*gain*props.radiation_gain(hf, radius=em.radius)
-                if _hx is not None:              # (the Expression stop: the stop's answer to the wind)
+                if _hx is not None:              # (its tone at the wind: the stop's answer)
                     gM *= float(T.harmonium_pressure_gain(_sc, m, _hp))
                 gL = gM*props.hrtf_gain(hf, nt.li); gR = gM*props.hrtf_gain(hf, nt.ri)
                 cvp = cv_r * _cp.chiff_harmonic_gain(h)   # roll chiff off the upper harmonics
@@ -8053,7 +8131,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
     (Grows, Srows, _laws, crow_of, grow_of, rankev_of, sh) = _prep_organ_rows(_CMXEV, ccs, ch_progs, nblk,
         notes)
     sh = _prep_swell_law(Srows, _laws, sh)
-    (_WROWS, wrow_key) = _prep_chest_wind(Grows, ch_progs, grow_of, nblk, notes, rankev_of)
+    em.hwind = {}                   # (the harmonium's halves' pressures, Pa at block edges: note-on reads them)
+    (_WROWS, wrow_key) = _prep_chest_wind(Grows, ch_progs, grow_of, nblk, notes, rankev_of, ccs, em.hwind)
     _BREATH = _prep_breath(ch_progs, crow_of, nblk)
     G = np.ascontiguousarray(np.array(Grows if Grows else [[1.0]],np.float32))
     S = np.ascontiguousarray(np.array(Srows if Srows else [[1.0]],np.float32))
@@ -9588,13 +9667,12 @@ def _prepare(path, tuner='hybrid440', sink=None):
         _hx = None; _hperc = False
         if nt.organ and 'expression' in rankev_of[nt.organ_key]:
             _st = lambda k: T.stop_drawn_at(rankev_of[nt.organ_key].get(k, ()), nt.on)
-            if _st('expression'):
-                _hx = nt.v11
+            _hx = harmonium_note_pressure(em, nt)       # (its half's wind at its onset, Pa)
             _hperc = _st('percussion')
             if _st('tremolo') and getattr(props, 'stop_tremolo_depth', 0.0) > 0.0:
-                # (its bellows quicker with the wind -- the feet's, or the
-                # reservoir's -- and in the treble half its own smaller one)
-                _twind = T.harmonium_pressure(nt.v11) if _hx is not None else T.HARMONIUM_PRESSURE_REF
+                # (its bellows quicker with the wind, and in the treble half
+                # its own smaller one)
+                _twind = _hx if _hx is not None else T.HARMONIUM_PRESSURE_REF
                 _HTREM_CH[em.channel] = (float(T.harmonium_tremolo_hz(props, _twind, nt.note >= T.HARMONIUM_SPLIT)),
                                  float(props.stop_tremolo_depth), False)
                 em.htrem_pending = len(A['om'])

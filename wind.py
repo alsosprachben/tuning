@@ -195,3 +195,132 @@ def pitch_level(p, a, b):
     r = s / float(q.shape[1])
     lv = _NV.xpow(np.concatenate((p[:, 0], p[-1:, -1])), b)
     return r, lv
+
+
+# ---------------------------------------------------------------- the harmonium
+#
+# THE HARMONIUM'S WIND (Mustel, L'Orgue-Expressif I, pp. 73-95; tonelib's
+# ReedOrganFreeProperties.harmonium_wind_*): not a regulated chest but the
+# player's feet. Two wedge pumps push into a small, stiff wind-chest (the
+# "caisse a vent": "ce n'est pas un reservoir", p. 148), joined through a
+# valve to a RESERVOIR whose springs make its pressure grow with its fill
+# ("s'il est plein, les ressorts ... fournissent le Fortissimo", p. 78).
+#   THE RESERVOIR (Expression pushed in): pressure = full * fill. The player
+#     pumps toward the pressure they mean (CC11, the aim), as fast as the
+#     pumps allow (pump_max), reacting over player_s; the reeds' draw drains
+#     it. So a crescendo takes "plusieurs coups de pedales", a diminuendo
+#     waits on the notes to empty it, and a full chord sags when it draws
+#     more than the feet can give.
+#   THE FEET (Expression drawn: the reservoir shut off, p. 115): the chest's
+#     pressure IS the feet's (the aim), over foot_s -- and still no more than
+#     the pumps can feed: a draw past pump_max pulls it down.
+#   THE KNEES (Double-Expression, pp. 87-95): each half's compartment is fed
+#     through a valve that shuts above its knee's set-point -- the half's
+#     pressure is min(chest, set-point), whatever the feet do.
+# A reed draws q7 (m3/s at the reference pressure) * (p / ref) ** draw_exp
+# (examples/harmonium_bake.py --wind: the simulated reeds' flow). Scalar
+# libm arithmetic throughout, block by block, state carried: the native
+# engines' (native/channel.cpp, native/slab.cpp) is the same.
+
+class HarmoniumWind:
+    """A harmonium channel's chest and its two halves' pressures (Pa),
+    block by block. props: the voice's class (its harmonium_wind_*)."""
+
+    SUB = 8
+
+    def __init__(self, props, blk_s):
+        import tonelib as T
+        self.blk_s = float(blk_s)
+        self.ref = float(T.HARMONIUM_PRESSURE_REF)
+        self.full = float(props.harmonium_reservoir_full_pa)
+        self.vres = float(props.harmonium_reservoir_m3)
+        self.qmax = float(props.harmonium_pump_max_m3s)
+        self.dexp = float(props.harmonium_draw_exp)
+        self.a_player = math.exp(-self.blk_s / float(props.harmonium_player_s))
+        self.a_foot = math.exp(-self.blk_s / float(props.harmonium_foot_s))
+        self.tau_player = float(props.harmonium_player_s)
+        self.fill = 1.0
+        self.pc = self.full
+        self.sounded = False                # (the player readies the reservoir before the first note)
+        self.edge = None                    # the halves' pressures at the last block's end
+
+    def _draw(self, pc, q7, knee):
+        d = 0.0
+        for h in range(2):
+            if q7[h] > 0.0:
+                d += q7[h] * math.pow(min(pc, knee[h]) / self.ref, self.dexp)
+        return d
+
+    def step(self, q7, aim, expr, knee):
+        """One block on: q7 (bass, treble) the sounding reeds' draw at the
+        reference, aim the pressure the feet mean, expr the Expression drawn,
+        knee (bass, treble) the set-points (inf: hooked off). Returns the
+        halves' pressures at the block's end."""
+        if not self.sounded:
+            # (nothing has sounded yet: the reservoir where the player means
+            # to begin, the chest with it)
+            self.fill = min(1.0, max(0.0, min(aim, self.full) / self.full))
+            self.pc = aim if expr else self.full * self.fill
+            if q7[0] == 0.0 and q7[1] == 0.0:
+                out = (min(self.pc, knee[0]), min(self.pc, knee[1]))
+                if self.edge is None:
+                    self.edge = out
+                return out
+            self.sounded = True
+            if self.edge is None:
+                self.edge = (min(self.pc, knee[0]), min(self.pc, knee[1]))
+        if expr:
+            pc = aim + (self.pc - aim) * self.a_foot
+            d = self._draw(pc, q7, knee)
+            if d > self.qmax:               # (the pumps cannot keep up: the feet sink)
+                pc = pc * math.pow(self.qmax / d, 1.0 / self.dexp)
+            self.pc = pc
+        else:
+            p = self.full * self.fill
+            d = self._draw(p, q7, knee)
+            c = self.vres / self.full
+            qp = d + (min(aim, self.full) - p) * c / self.tau_player
+            qp = 0.0 if qp < 0.0 else (self.qmax if qp > self.qmax else qp)
+            f = self.fill + (qp - d) * self.blk_s / self.vres
+            self.fill = 0.0 if f < 0.0 else (1.0 if f > 1.0 else f)
+            self.pc = self.full * self.fill
+        out = (min(self.pc, knee[0]), min(self.pc, knee[1]))
+        if self.edge is None:
+            self.edge = out
+        return out
+
+    def blocks(self, q7, aim, expr, knee):
+        """n blocks: q7 (n, 2), aim (n,), expr (n,), knee (n, 2). Returns
+        (points (n, 2, SUB + 1) Pa, each block's ramp from its start edge to
+        its end edge; edges (n + 1, 2))."""
+        n = len(aim)
+        edges = np.empty((n + 1, 2))
+        pts = np.empty((n, 2, self.SUB + 1))
+        for b in range(n):
+            e1 = self.step((float(q7[b][0]), float(q7[b][1])), float(aim[b]), bool(expr[b] >= 0.5),
+                           (float(knee[b][0]), float(knee[b][1])))
+            e0 = self.edge
+            edges[b] = e0
+            for h in range(2):
+                for j in range(self.SUB + 1):
+                    pts[b, h, j] = e0[h] + (e1[h] - e0[h]) * (j / float(self.SUB))
+            self.edge = e1
+        edges[n] = self.edge
+        return pts, edges
+
+
+def harmonium_rows(cls, pts, edges):
+    """A stop's rows from its half's pressure: the pitch ratio each block (its
+    mean over the block's points, summed in order: the kernel's bend row) and
+    the level at the block edges -- tonelib.harmonium_pitch_ratio and
+    harmonium_level_gain, point by point."""
+    import tonelib as T
+    n = pts.shape[0]
+    r = np.empty(n)
+    for b in range(n):
+        s = 0.0
+        for j in range(pts.shape[1] - 1):
+            s = s + T.harmonium_pressure_ratio(cls, float(pts[b, j]))
+        r[b] = s / float(pts.shape[1] - 1)
+    lv = np.array([T.harmonium_level_gain(cls, float(x)) for x in edges])
+    return r, lv

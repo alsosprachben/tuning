@@ -3476,7 +3476,7 @@ class Patch:
         # THE CHEST'S WIND (wind.py): a pipe organ's class, or None -- a voice
         # whose pipes answer a shared pressure (Live._wind_block)
         self.wind_pc = (pc if pc is not None and getattr(pc, "registerable", False)
-                        and T.organ_wind(pc) else None)
+                        and (T.organ_wind(pc) or getattr(pc, "harmonium_wind", False)) else None)
         self.percussion_attack_s = float(getattr(pc, "percussion_attack_s", 0.0)) if pc else 0.0
         # Where this voice's stop word lives: CC11/43 on the pipe organ and the
         # harpsichord, CC43/44 on the harmonium (its CC11 is the bellows).
@@ -4702,7 +4702,7 @@ class Live:
         # panel. Culled by construction -- a later value replaces an earlier.
         self.chanstate = {}
         self.stopword = {}           # channel -> [CC43, CC44, CC45], a harmonium's stop word
-        self.xnote = {}              # slot key -> the bellows (0..1) its Expression was stamped at
+        self.knee = {}               # (channel, half) -> a harmonium's knee set-point, Pa (Double-Expression)
         self.note_touch = {}         # (part, channel, note) -> its velocity's level, if the part follows it
         # MIDI 2.0. `midi2` is the bridge (ump.Midi1to2) when the keyboard's
         # MIDI 1.0 is being carried as MIDI 2.0; None means MIDI 1.0 straight in.
@@ -6366,6 +6366,8 @@ class Live:
                 for job in _JOBS_OF_CC[msg.control]:
                     ps = [p for p in here if job in self.wheel_roles(p)]
                     self._wheel_job(job, ch, ps, msg.value, n0, held=here)
+            elif msg.control in T.HARMONIUM_KNEE_CC:  # a harmonium's knee boards (wind.HarmoniumWind)
+                self.knee[(ch, T.HARMONIUM_KNEE_CC.index(msg.control))] = T.harmonium_knee(msg.value)
             elif msg.control in (7, 11):            # volume and expression
                 # (v7*v11)^2, which is blockrender's law at line 840 -- the
                 # same squared MIDI curve velocity uses, applied to the
@@ -6388,30 +6390,6 @@ class Live:
                     # either way.
                     if ch not in self.stamped:
                         self.slab.channel_gain(self._sounding(ch), g / max(was, 1e-9))
-                if msg.control == 11 and self.xnote:
-                    # THE HARMONIUM'S EXPRESSION: its bellows change each stop's
-                    # tone as well as its loudness, on the notes stamped with
-                    # the stop drawn -- the ratio of its gains at the two winds
-                    # (tonelib.harmonium_pressure_gain; its pitch and speech
-                    # stay the note-on's, as the file renderer's)
-                    e = msg.value / 127.0
-                    for key, e0 in list(self.xnote.items()):
-                        sl = self.slab.live.get(key)
-                        if not sl:
-                            del self.xnote[key]
-                            continue
-                        if key[1] != ch or e0 == e:
-                            continue
-                        part = next((p for p in parts if p.pid == key[0]), None)
-                        if part is None:
-                            continue
-                        idx = np.fromiter(sl, np.int64, len(sl))
-                        cls, ms = self._hstop(part, key[2], key[3], self.slab.hrel[idx])
-                        p, p0 = T.harmonium_pressure(e), T.harmonium_pressure(e0)
-                        self.slab.channel_gain(sl, np.array([T.harmonium_pressure_gain(cls, m, p)
-                                                             / T.harmonium_pressure_gain(cls, m, p0) for m in ms],
-                                                            np.float64).astype(np.float32))
-                        self.xnote[key] = e
             elif msg.control == T.COUPLER_CC:       # a divider organ's coupler switches
                 for part in parts:
                     if self._listens(part, ch) and part.organ and getattr(part.patch, "coupler_switches", ()):
@@ -9109,10 +9087,17 @@ class Live:
         100, not 127, which is four decibels of room for a part to be turned
         UP. Both renderers read tonelib's constant so they cannot drift.
         """
-        g = ((self.vol.get(ch, T.GM_DEFAULT_VOLUME) / 127.0)
-             * (self.expr.get(ch, T.GM_DEFAULT_EXPRESSION) / 127.0)) ** 2
+        # (a harmonium's CC11 is its wind, wind.HarmoniumWind: its level rides the wind's rows)
+        e = 127 if self._wind11(ch) else self.expr.get(ch, T.GM_DEFAULT_EXPRESSION)
+        g = ((self.vol.get(ch, T.GM_DEFAULT_VOLUME) / 127.0) * (e / 127.0)) ** 2
         cm = self.cmx_now.get(ch)
         return g * cm['amp'] if cm and cm['amp'] != 1.0 else g     # (the matrix's amplitude)
+
+    def _wind11(self, ch):
+        """Is this channel's CC11 a harmonium's wind (a part on it whose voice
+        has one), not a level?"""
+        return any(getattr(p.patch.wind_pc, "harmonium_wind", False) for p in self.parts
+                   if p.patch.wind_pc is not None and self._listens(p, ch))
 
     CHORUS_SLOT = "chorus"
     CHORUS_MAX = 2              # copies, live: see _chorus
@@ -12310,46 +12295,34 @@ class Live:
         return min(fs) if fs else 1.0
 
     def _hstop(self, part, note, rank, hrel):
-        """A harmonium rank's stop class -- blockrender's speech class (_sc):
-        its named pipe, its spectrum where that is a pipe, else the host's --
-        and each slot's harmonic of it (hrel against the rank's own pitch)."""
+        """A harmonium rank's stop class (tonelib.harmonium_stop_class, the
+        file's _sc) and each slot's harmonic of it (hrel against the rank's
+        own pitch)."""
         host = part.patch._voice_class(note + part.transpose)
         r = next(r for r in part.patch.stop_ranks if r[0] == rank)
-        spec = r[3] if len(r) > 3 else None
-        pipe = r[5] if len(r) > 5 else None
-        if pipe is not None:
-            cls = T.rank_spectrum(pipe)
-        elif spec is not None and getattr(T.rank_spectrum(spec), 'rank_is_pipe', False):
-            cls = T.rank_spectrum(spec)
-        elif (spec is not None and getattr(host, 'rank_speech_own_pitch', False)
-              and getattr(T.rank_spectrum(spec), 'rank_speech', False)):
-            cls = T.rank_spectrum(spec)
-        else:
-            cls = host
+        cls = T.harmonium_stop_class(host, r)
         ratio = r[1] if r[1] is not None and not isinstance(r[1], (list, tuple)) else 1.0
         h = np.asarray(hrel, np.float64) * self._h8(part, note) / float(ratio)
         return cls, [int(math.floor(x + 0.5)) for x in h]
 
     def _harmonium_stamp(self, part, tmpl, ch, note, rank, key, hrel):
         """The harmonium's effect stops on the slots just stamped, as the file
-        renderer reads them: at note-on. See tonelib's harmonium_pressure."""
+        renderer reads them: at note-on -- and the wind's at it (wind.HarmoniumWind:
+        its level and pitch ride the chest's rows; its tone and speech are set here)."""
         sl = self.slab.last_slots
         if sl is None or not len(sl) or len(sl) != len(hrel):
             return
         idx = np.fromiter(sl, np.int64, len(sl))
         # CC73/72 first, as the file scales the attack before the hammer's min.
         self._sound_stamp(part, ch, note, sl)
-        if "expression" in part.drawn:
-            # THE FEET ARE THE WIND: the stop's tone, pitch and speech at it
-            e = self.expr.get(ch, T.GM_DEFAULT_EXPRESSION) / 127.0
-            p = T.harmonium_pressure(e)
+        p = self._hwind_now(part, 0 if note < T.HARMONIUM_SPLIT else 1)
+        if p != T.HARMONIUM_PRESSURE_REF:
+            # THE WIND AT ITS ONSET: the stop's tone and speech at it
             cls, ms = self._hstop(part, note, rank, hrel)
             g = np.array([T.harmonium_pressure_gain(cls, m, p) for m in ms], np.float64)
             self.slab.channel_gain(sl, g.astype(np.float32))
             a = self.slab.a
             a["fa"][idx] = (a["fa"][idx].astype(np.float64) * T.harmonium_speech_scale(cls, p)).astype(np.float32)
-            self.slab.retune(list(sl), self._n0_stamp, om_scale=T.harmonium_pressure_ratio(cls, p))
-            self.xnote[key] = e
         if "percussion" in part.drawn and rank in part.patch.percussion_ranks:
             pc = part.patch._voice_class(note + part.transpose)
             dur = tmpl["dur"] / float(B.SR) if tmpl.get("dur") else 1.0
@@ -12358,12 +12331,10 @@ class Live:
             a["fa"][idx] = np.minimum(a["fa"][idx], np.float32(
                 max(1e-4, min(part.patch.percussion_attack_s, afm * dur)) * B.SR))
         if "tremolo" in part.drawn and part.patch.stop_tremolo_depth > 0.0:
-            # at the stop's own rate, its bellows quicker with the wind (the
-            # feet's or the reservoir's), the treble half's its own
-            pw = (T.harmonium_pressure(self.expr.get(ch, T.GM_DEFAULT_EXPRESSION) / 127.0)
-                  if "expression" in part.drawn else T.HARMONIUM_PRESSURE_REF)
+            # at the stop's own rate, its bellows quicker with the wind, the
+            # treble half's its own
             self.slab.stop_tremolo_arm(sl, part.patch.stop_tremolo_depth,
-                                       T.harmonium_tremolo_hz(part.patch, pw, note >= T.HARMONIUM_SPLIT))
+                                       T.harmonium_tremolo_hz(part.patch, p, note >= T.HARMONIUM_SPLIT))
         self.slab.dirty = True
 
     def _draw(self, part, tmpl, ch, note, rank, n0):
@@ -12388,7 +12359,6 @@ class Live:
             self.dropped += 1
             return
         if part.patch.stop_word_ccs[0] == 43:
-            self._n0_stamp = n0
             self._harmonium_stamp(part, tmpl, ch, note, rank, key, hrel)
         # THE WHEEL'S TREMOLO on a note struck with the wheel already up, as
         # _note_on arms one (this path returns before it)
@@ -12449,6 +12419,33 @@ class Live:
     def _wind_row(self, part, rank):
         """The slab row `rank` of this organ part rides (0: none, rows spent)."""
         st = self.wind_st.get(part.pid)
+        if st is None and getattr(part.patch.wind_pc, "harmonium_wind", False):
+            # THE HARMONIUM'S CHEST (wind.HarmoniumWind): a row a (half, stop)
+            import wind as _WND
+            pc = part.patch.wind_pc
+            st = dict(hwind=_WND.HarmoniumWind(pc, B.BLK / float(self.rate)), rows={}, rank_row={}, acc={},
+                      ratios={}, rank_cls={}, rank_half={})
+            for r in part.patch.stop_ranks:
+                if r[1] is None:
+                    continue
+                sc, h = T.harmonium_stop_class(pc, r), T.harmonium_half(r)
+                key = (h, sc.__name__)
+                if key not in st["rows"]:
+                    if self.wind_free:
+                        row = self.wind_free.popleft()
+                    elif self.wind_next > WIND_ROWS:
+                        continue
+                    else:
+                        row = self.wind_next
+                        self.wind_next += 1
+                    st["rows"][key] = row
+                    st["acc"][row] = 0.0
+                st["rank_row"][r[0]] = st["rows"][key]
+                st["ratios"][r[0]] = (list(r[1]) if isinstance(r[1], (list, tuple)) else [r[1]])
+                st["rank_cls"][r[0]], st["rank_half"][r[0]] = sc, h
+            st["key_cls"] = {k: next(st["rank_cls"][n] for n, rw in st["rank_row"].items() if rw == row)
+                             for k, row in st["rows"].items()}
+            self.wind_st[part.pid] = st
         if st is None:
             import wind as _WND
             pc = part.patch.wind_pc
@@ -12761,6 +12758,9 @@ class Live:
             st = self.wind_st.get(part.pid)
             if st is None:
                 continue
+            if "hwind" in st:
+                self._hwind_block(part, st, frames)
+                continue
             ratios = st["ratios"]
             dem = 0.0
             for k in sl.live:
@@ -12776,6 +12776,49 @@ class Live:
                 sl.BL[row, 0] = lv[0]
                 sl.BL[row, 1] = lv[1]
                 st["acc"][row] += (float(sl.BR[row, 0]) - 1.0) * frames
+
+    def _hwind_inputs(self, part):
+        """A harmonium part's wind inputs now: (aim Pa, Expression drawn, knees)."""
+        ch = part.channel if part.channel is not None else 0
+        expr = "expression" in part.drawn
+        e = self.expr.get(ch, T.GM_DEFAULT_EXPRESSION) / 127.0
+        return (T.harmonium_aim(part.patch.wind_pc, e, expr), expr,
+                (self.knee.get((ch, 0), float("inf")), self.knee.get((ch, 1), float("inf"))))
+
+    def _hwind_now(self, part, half):
+        """A harmonium part's half's wind (Pa) for a note struck now: its
+        chest's last block's end -- or, before its first, where the player
+        means to begin (wind.HarmoniumWind.step's)."""
+        st = self.wind_st.get(part.pid)
+        hw = st.get("hwind") if st else None
+        if hw is not None and hw.edge is not None:
+            return hw.edge[half]
+        aim, expr, knee = self._hwind_inputs(part)
+        full = float(part.patch.wind_pc.harmonium_reservoir_full_pa)
+        pc = aim if expr else full * min(1.0, max(0.0, min(aim, full) / full))
+        return min(pc, knee[half])
+
+    def _hwind_block(self, part, st, frames):
+        """A harmonium part's chest one block on (_prep_harmonium_wind's, live):
+        the sounding reeds' draw, the feet, the knees -> its rows."""
+        import wind as _WND
+        sl = self.slab
+        q7 = [0.0, 0.0]
+        for k in sl.live:
+            if k[0] == part.pid and len(k) == 4 and k[3] in st["ratios"]:
+                f = 440.0 * 2.0 ** ((k[2] + part.transpose - 69) / 12.0)
+                sc = st["rank_cls"][k[3]]
+                q7[st["rank_half"][k[3]]] += sum(T.harmonium_draw(sc, f * q) for q in st["ratios"][k[3]])
+        aim, expr, knee = self._hwind_inputs(part)
+        pts, edges = st["hwind"].blocks(np.array([q7]), np.array([aim]), np.array([1.0 if expr else 0.0]),
+                                        np.array([knee]))
+        for (h, _cn), row in st["rows"].items():
+            r, lv = _WND.harmonium_rows(st["key_cls"][(h, _cn)], pts[:, h, :], edges[:, h])
+            sl.BR[row, 0] = r[0]
+            sl.BC[row, 0] = st["acc"][row]
+            sl.BL[row, 0] = lv[0]
+            sl.BL[row, 1] = lv[1]
+            st["acc"][row] += (float(sl.BR[row, 0]) - 1.0) * frames
 
     def _listens(self, part, ch):
         return ((part.channel is None or part.channel == self._pc(ch)) and not part.muted

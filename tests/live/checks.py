@@ -70,7 +70,7 @@ CHECKS = [
     ("moog_cmx", "nvrender_check.py", ["@moog_cmx.mid"], {}),
     # a part's speaker and pickup (CC83, CC85: after the program change that
     # puts them back), a channel's Messenger mode (CC86), presets' setup measures
-    ("choices_files", "nvrender_check.py", ["@pk_reset.mid", "@pk_strat_bridge.mid", "@pk_clav_anti.mid", "@clav_compass.mid", "@feedback_held.mid", "@dulcimer_compass.mid", "@flugel_phrase.mid", "@mandolin_compass.mid", "@guitar12_compass.mid", "@hawaiian_compass.mid", "@gopichant_compass.mid", "@tonewheel_spinet.mid", "@harpsi_four.mid", "@eguitars_six.mid", "@basses_all.mid", "@rhodes_compass.mid", "@biwa_compass.mid", "@harmonium_stops.mid",
+    ("choices_files", "nvrender_check.py", ["@pk_reset.mid", "@pk_strat_bridge.mid", "@pk_clav_anti.mid", "@clav_compass.mid", "@feedback_held.mid", "@dulcimer_compass.mid", "@flugel_phrase.mid", "@mandolin_compass.mid", "@guitar12_compass.mid", "@hawaiian_compass.mid", "@gopichant_compass.mid", "@tonewheel_spinet.mid", "@harpsi_four.mid", "@eguitars_six.mid", "@basses_all.mid", "@rhodes_compass.mid", "@biwa_compass.mid", "@harmonium_stops.mid", "@harmonium_wind.mid",
                                             "@pk_ibanez_inside.mid", "@cab_gt412.mid", "@cab_org16les.mid",
                                             "@msgr_mode.mid", "@setup_guitar_rig.mid", "@setup_organ_full.mid",
                                             "@setup_moog.mid", "4"], {}),
@@ -107,6 +107,7 @@ CHECKS = [
     ("biwa_live", "nvlive_check.py", ["@biwa_compass.mid", "14", "--programs"], {}),
     # the harmonium: its stops baked from their construction (CC43-45 stop word)
     ("harmonium_live", "nvlive_check.py", ["@harmonium_stops.mid", "16", "--programs"], {}),
+    ("harmonium_wind_live", "nvlive_check.py", ["@harmonium_wind.mid", "16", "--programs"], {}),
     # the gopichand: its scoop (a log-pitch tension bend) and short skin-loaded ring
     ("gopichant_live", "nvlive_check.py", ["@gopichant_compass.mid", "12", "--programs"], {}),
     # the tonewheel: the spinet speaker (breakup), the drawbars, the percussion's circuit decay

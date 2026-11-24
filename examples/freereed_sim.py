@@ -301,6 +301,7 @@ def simulate(f0, p0, secs=1.0, cell=True, attack_s=0.02, out_sr=48000, vel=None)
     w0 = 2.0 * np.pi * f0
     u_out_prev = 0.0
     wi = 0
+    u_sum = 0.0
     for i in range(n):
         ramp = 1.0 if PALLET_STEP else (min(1.0, i * dt / attack_s) if attack_s > 0 else 1.0)
         P = p0 * ramp
@@ -382,8 +383,11 @@ def simulate(f0, p0, secs=1.0, cell=True, attack_s=0.02, out_sr=48000, vel=None)
             out[k] = (u_out - u_out_prev) * SR
             tip[k] = q.sum()
         u_out_prev = u_out
-    global LAST_P1
+        if i >= n // 2:
+            u_sum += u_in
+    global LAST_P1, LAST_FLOW
     LAST_P1 = p1                          # (the chest's pressure at the end, for the checks)
+    LAST_FLOW = u_sum / max(1, n - n // 2)   # (the mean flow the reed drew over its last half, m3/s: its draw on the wind)
     # the playing frequency over the last half
     seg = tip[len(tip) // 2:]
     zc = np.flatnonzero((seg[:-1] < np.mean(seg)) & (seg[1:] >= np.mean(seg)))

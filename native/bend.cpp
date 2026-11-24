@@ -423,6 +423,7 @@ int nv_bend_fader(void *midi, void *song, int ch, long nblk, int blk, double sr,
 {
     std::vector<std::pair<double, double>> spans;
     std::vector<double> ons;
+    bool wind11 = false;
     int nn = nv_midi_n_notes(midi);
     for (int i = 0; i < nn; i++) {
         int iv[5];
@@ -431,9 +432,12 @@ int nv_bend_fader(void *midi, void *song, int ch, long nblk, int blk, double sr,
         const int fc = i < (int)g_fch.size() && g_fch[i] >= 0 ? g_fch[i] : iv[0];
         if (fc != ch)
             continue;
-        // (not an organ's note whose CC7 is its swell: _plain)
-        if (!(swell && swell[i]))
+        // (not an organ's note whose CC7 is its swell: _plain; a harmonium's
+        // is, its channel's CC11 its wind: _wind11)
+        if (!(swell && swell[i] == 1))
             spans.push_back(std::make_pair(dv[0], dv[1] + fader_tail));
+        if (swell && swell[i] == 2)
+            wind11 = true;
         ons.push_back(dv[0]);
     }
     if (spans.empty())
@@ -502,7 +506,7 @@ int nv_bend_fader(void *midi, void *song, int ch, long nblk, int blk, double sr,
         else if (e.cc == 7)
             v7 = e.v;
         else if (e.cc == 11)
-            v11 = e.v;
+            v11 = wind11 ? 127 : e.v;
         else if (e.cc == 121)
             v11 = 127;                      // reset: expression back up, volume kept
         else

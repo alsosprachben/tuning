@@ -451,6 +451,12 @@ struct Song {
     };
     std::vector<Organ> organs;
     int n_grows = 0;
+    // A HARMONIUM'S WIND (_prep_harmonium_wind): each channel's halves'
+    // pressures at the block edges ((nblk + 1) x 2, Pa), what its notes read
+    std::map<long long, std::vector<double>> hedge;
+    long hw_nblk = 0;
+    int hw_blk = 0;
+    double hw_sr = 0.0;
 
     // registration_blocks' events for an organ on channel ch: its stop word
     // (and the crescendo, and the swell) from the channel's controllers, a
@@ -636,6 +642,26 @@ struct Song {
                 continue;
             seen.insert(o.ch);
             const OrganSpec *sp = o.spec;
+            if (sp->hwind) {                // (a harmonium's: a row a (half, stop), _prep_harmonium_wind)
+                std::vector<std::pair<int, int>> keys;
+                std::vector<int> krow;
+                for (int ri = 0; ri < sp->n_rank; ri++) {
+                    if (sp->rank[ri].n_ratio == 0)
+                        continue;
+                    std::pair<int, int> k(sp->rank_half[ri], sp->rank_hpipe[ri]);
+                    int f = -1;
+                    for (size_t q = 0; q < keys.size(); q++)
+                        if (keys[q] == k)
+                            f = (int)q;
+                    if (f < 0) {
+                        keys.push_back(k);
+                        krow.push_back(r++);
+                        f = (int)keys.size() - 1;
+                    }
+                    o.wrow[ri] = krow[f];
+                }
+                continue;
+            }
             if (!sp->wind)
                 continue;
             bool trem = false;
@@ -2440,6 +2466,153 @@ static double wind_sat(double x, double m) { return m > 0.0 ? m * tanh(x / m) : 
 // seeded by the channel), the sag and the regulator, the Tremulant -- and a
 // row a family: its ratio (BR, nblk), its phase (BC, nblk) and its level at
 // the block edges (BL, nblk + 1), in organ_wind_rows' order
+// THE HARMONIUM'S WIND (_prep_harmonium_wind, wind.HarmoniumWind.blocks,
+// wind.harmonium_rows): organ o's chest under its reeds' draw (each rank's
+// stop's, under its gate), the feet (CC11, the Expression stop), the knees
+// (CC21/22) -- its rows from `row` on, its halves' edges kept for its notes
+static void harmonium_edges(nv::Song *Sg, const nv::Song::Organ &o, long nblk, int blk, double sr, const float *G,
+                            std::vector<double> &edge, std::vector<double> &pts)
+{
+    const OrganSpec *sp = o.spec;
+    // the feet's aim, the Expression, the knees: a step a block (in_order: by time, stably)
+    std::vector<double> e11(nblk, 127 / 127.0);
+    std::vector<double> knee((size_t)nblk * 2, INFINITY);
+    const nv::Channel *C = Sg->get(o.ch);
+    if (C) {
+        std::vector<nv::CC> ev(C->ccs.begin(), C->ccs.end());
+        std::stable_sort(ev.begin(), ev.end(), [](const nv::CC &a, const nv::CC &b) { return a.t < b.t; });
+        for (const nv::CC &e : ev) {
+            int k = e.cc == 21 ? 0 : (e.cc == 22 ? 1 : -1);
+            if (e.cc != 11 && e.cc != 121 && k < 0)
+                continue;
+            double v = k < 0 ? (e.cc == 11 ? e.v : 127) / 127.0 : nv_hknee(sp, e.v);
+            for (long b = 0; b < nblk; b++)
+                if (((double)b + 0.5) * blk / sr >= e.t) {
+                    if (k < 0)
+                        e11[b] = v;
+                    else
+                        knee[(size_t)b * 2 + k] = v;
+                }
+        }
+    }
+    std::vector<double> expr(nblk, 0.0);
+    if (sp->expr_rank >= 0)
+        for (auto &e : o.rank_ev[sp->expr_rank])
+            for (long b = 0; b < nblk; b++)
+                if (((double)b + 0.5) * blk / sr >= e.first)
+                    expr[b] = e.second;
+    // the reeds' draw at the reference, each half's, under each stop's gate
+    std::vector<double> q7((size_t)nblk * 2, 0.0);
+    for (const auto &e : Sg->notes) {
+        if (e.ch != o.ch || Sg->porg(e) != sp)
+            continue;
+        double f = 440.0 * pow(2.0, (e.note - 69) / 12.0);
+        long b0 = std::min(nblk, (long)(e.on * sr / blk)), b1 = std::min(nblk, (long)(e.off * sr / blk) + 1);
+        if (b1 <= b0)
+            continue;
+        for (int ri = 0; ri < sp->n_rank; ri++) {
+            const OrganRank &rk = sp->rank[ri];
+            if (rk.n_ratio == 0 || e.note < rk.lo || e.note > rk.hi)
+                continue;
+            const OrganPipe *q = &sp->pipe[sp->rank_hpipe[ri]];
+            double d[8];
+            for (int k = 0; k < rk.n_ratio; k++)
+                d[k] = nv_hdraw(q, f * rk.ratio[k]);
+            float wf = (float)pysum(d, rk.n_ratio);
+            const float *g = G + (long)(o.g0 + ri) * nblk;
+            int h = sp->rank_half[ri];
+            for (long b = b0; b < b1; b++)
+                q7[(size_t)b * 2 + h] += (double)(wf * g[b]);
+        }
+    }
+    // the chest
+    NvHWind w;
+    nv_hwind_init(&w, sp);
+    edge.assign((size_t)(nblk + 1) * 2, 0.0);
+    pts.assign((size_t)nblk * 2 * 9, 0.0);
+    for (long b = 0; b < nblk; b++) {
+        double out[2];
+        double aim = nv_haim(sp, e11[b], expr[b] >= 0.5);
+        nv_hwind_step(&w, sp, &q7[(size_t)b * 2], aim, expr[b] >= 0.5, &knee[(size_t)b * 2], out);
+        for (int h = 0; h < 2; h++) {
+            double e0 = w.edge[h];
+            edge[(size_t)b * 2 + h] = e0;
+            for (int j = 0; j <= 8; j++)
+                pts[((size_t)b * 2 + h) * 9 + j] = e0 + (out[h] - e0) * (j / 8.0);
+        }
+        w.edge[0] = out[0];
+        w.edge[1] = out[1];
+    }
+    edge[(size_t)nblk * 2] = w.edge[0];
+    edge[(size_t)nblk * 2 + 1] = w.edge[1];
+    Sg->hedge[o.ch] = edge;
+    Sg->hw_nblk = nblk;
+    Sg->hw_blk = blk;
+    Sg->hw_sr = sr;
+}
+
+static int harmonium_wind(nv::Song *Sg, const nv::Song::Organ &o, long nblk, int blk, double sr, const float *G,
+                          float *BR, double *BC, float *BL, int row)
+{
+    const OrganSpec *sp = o.spec;
+    std::vector<double> edge, pts;
+    harmonium_edges(Sg, o, nblk, blk, sr, G, edge, pts);
+    // a row a (half, stop): its ratio, phase and level (harmonium_rows)
+    std::vector<std::pair<int, int>> keys;
+    for (int ri = 0; ri < sp->n_rank; ri++) {
+        if (o.wrow[ri] < 0)
+            continue;
+        std::pair<int, int> k(sp->rank_half[ri], sp->rank_hpipe[ri]);
+        if (std::find(keys.begin(), keys.end(), k) != keys.end())
+            continue;
+        keys.push_back(k);
+        const OrganPipe *q = &sp->pipe[k.second];
+        int h = k.first;
+        float *R = BR + (long)row * nblk;
+        double *Cc = BC + (long)row * nblk;
+        float *L = BL + (long)row * (nblk + 1);
+        double acc = 0.0;
+        for (long b = 0; b < nblk; b++) {
+            double sum = 0.0;
+            for (int j = 0; j < 8; j++)
+                sum = sum + nv_hratio(sp, q, pts[((size_t)b * 2 + h) * 9 + j]);
+            R[b] = (float)(sum / 8.0);
+            Cc[b] = acc;
+            acc += ((double)R[b] - 1.0) * blk;
+            L[b] = (float)nv_hlevel_gain(q, edge[(size_t)b * 2 + h]);
+        }
+        L[nblk] = (float)nv_hlevel_gain(q, edge[(size_t)nblk * 2 + h]);
+        row++;
+    }
+    return row;
+}
+
+// THE HARMONIUMS' WIND BEFORE THE NOTES (Python builds the chests' wind before
+// any note: harmonium_note_pressure reads it at each onset): each harmonium
+// channel's halves' pressures, its ranks' gates made here as nv_song_organ_rows
+// makes them
+void nv_song_harmonium_pre(void *s, long nblk, int blk, double sr, double tau)
+{
+    nv::Song *Sg = (nv::Song *)s;
+    std::set<long long> seen;
+    std::vector<float> G;
+    for (const auto &o : Sg->organs) {
+        if (seen.count(o.ch))
+            continue;
+        seen.insert(o.ch);
+        if (!o.spec->hwind)
+            continue;
+        if (G.empty()) {
+            G.assign((size_t)std::max(1, Sg->n_grows) * nblk, 1.0f);
+            for (const auto &q : Sg->organs)
+                for (int ri = 0; ri < q.spec->n_rank; ri++)
+                    nv::Song::onepole(q.rank_ev[ri], nblk, blk, sr, tau, G.data() + (long)(q.g0 + ri) * nblk);
+        }
+        std::vector<double> edge, pts;
+        harmonium_edges(Sg, o, nblk, blk, sr, G.data(), edge, pts);
+    }
+}
+
 void nv_song_organ_wind(void *s, long nblk, int blk, double sr, const float *G, float *BR, double *BC, float *BL)
 {
     nv::Song *Sg = (nv::Song *)s;
@@ -2455,6 +2628,10 @@ void nv_song_organ_wind(void *s, long nblk, int blk, double sr, const float *G, 
             any |= o.wrow[ri] >= 0;
         if (!any)
             continue;
+        if (sp->hwind) {
+            row = harmonium_wind(Sg, o, nblk, blk, sr, G, BR, BC, BL, row);
+            continue;
+        }
         // the demand: every note of this organ's class on the channel, each rank under its gate
         std::vector<double> dem(nblk + 1, 0.0);
         for (const auto &e : Sg->notes) {
@@ -2657,7 +2834,17 @@ int nv_song_organ_note(void *s, int i, int family, NoteIn *n)
         }
         return cur >= 0.5;
     };
-    n->organ_hx = drawn_at(o->spec->expr_rank) ? e.v11 : NAN;
+    // a harmonium's wind at its onset (harmonium_note_pressure: its half's, Pa; NaN the reference)
+    n->organ_hx = NAN;
+    if (o->spec->hwind) {
+        auto he = S->hedge.find(e.ch);
+        if (he != S->hedge.end() && S->hw_blk > 0) {
+            long b = std::min(S->hw_nblk, (long)(e.on * S->hw_sr / S->hw_blk));
+            double p = he->second[(size_t)b * 2 + (e.note < o->spec->split ? 0 : 1)];
+            if (p != o->spec->pres_ref)
+                n->organ_hx = p;
+        }
+    }
     n->organ_perc = drawn_at(o->spec->perc_rank);
     // ...and its Tremolo stop (_HTREM_CH: the notes struck with it drawn)
     if (S->htrem_note.size() < S->notes.size())
@@ -2668,7 +2855,7 @@ int nv_song_organ_note(void *s, int i, int family, NoteIn *n)
     // (the note's own: _HT_ROWS keeps it -- its bellows quicker with the wind,
     // the feet's or the reservoir's, the treble half's its own)
     S->htrem_cfg[i] = {nv_htremolo_hz(o->spec, o->spec->htrem_hz,
-                                      std::isnan(n->organ_hx) ? o->spec->pres_ref : nv_hpressure(o->spec, n->organ_hx),
+                                      std::isnan(n->organ_hx) ? o->spec->pres_ref : n->organ_hx,
                                       e.note),
                        o->spec->htrem_depth};
     return 1;
@@ -3747,7 +3934,8 @@ int nv_song_pitch_level_ks(void *s, int i, int effort_tilt, int indian, double s
     }
     out[1] = e.vel;
     out[2] = e.pan;
-    double cv = pow(e.v7 * e.v11, 2.0);
+    const OrganSpec *hog_ = S->porg(e);
+    double cv = hog_ && hog_->hwind ? pow(e.v7, 2.0) : pow(e.v7 * e.v11, 2.0);   // (a harmonium's CC11 is its wind)
     if (e.drum) {
         int dv[9];
         if (S->udst(e, on, dv) & 2)

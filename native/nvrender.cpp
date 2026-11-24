@@ -223,6 +223,7 @@ int nv_midi_n_chprogs(void *p);
 void nv_midi_chprog(void *p, int i, int *iv);
 void nv_song_channel(void *s, long long ch, double btun, const double *otun, int fader);
 void nv_song_finish(void *s, double total);
+void nv_song_harmonium_pre(void *s, long nblk, int blk, double sr, double tau);
 long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, const double *br, int nbr,
                      PyRandom *rs, double **rowsp, double *qacc, double *azimuth, const int *kind, double scale,
                      double full_db_s, double residual, double beta, long long blk, double total, double ring_floor,
@@ -1637,10 +1638,14 @@ static int run(int argc, char **argv)
         nv_midi_note(midi, i, iv, dv);
         if (iv[4])
             continue;
-        for (int q : note_ks(i, iv))
+        for (int q : note_ks(i, iv)) {
             if (q < (int)E.cmap.size() && E.cmap[q] >= 0 && E.cls_organ[E.cmap[q]] >= 0
                 && E.organs[E.cls_organ[E.cmap[q]]].swells)
                 swell[i] = 1;
+            else if (q < (int)E.cmap.size() && E.cmap[q] >= 0 && E.cls_organ[E.cmap[q]] >= 0
+                     && E.organs[E.cls_organ[E.cmap[q]]].hwind && !swell[i])
+                swell[i] = 2;               // (a harmonium's: its CC11 its wind, not a level -- _wind11)
+        }
     }
     std::vector<int> chs;               // the channels in ch_progs' order, each's programs (uniq_programs)
     std::map<int, std::vector<int>> uniq;
@@ -2701,6 +2706,9 @@ static int run(int argc, char **argv)
         nv_play_set_sink(&scan_d);
         nv_play_set_reg_sink(&scan_r);
     }
+    // (a harmonium's wind before its notes: they read it at their onsets)
+    nv_song_harmonium_pre(song, (long)(((long long)(total * SR) + (long long)SR) / (long long)BLK + 2), (int)BLK, SR,
+                          E.k[K_TAU]);
     long long P = nv_prepare(song, K.data(), &t, rows_ ? br.data() : nullptr, rows_ ? 1024 : 0, &rs, &rows,
                              qacc, &az, E.kind.data(),
                              E.k[K_REG_SCALE], E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_BETA], BLK, total,

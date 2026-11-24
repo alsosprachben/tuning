@@ -3184,7 +3184,8 @@ class OrganPipe(ctypes.Structure):
                 + [('push_band', C * 2), ('push_reg', (C * 2) * 8)]
                 + [('n_pp', I), ('pp_partials', I), ('pp_hz', C * 8), ('pp_s', C * 8), ('pp_db', C),
                    ('pp_snap_s', C), ('n_pres', I), ('pres_p', C * 8), ('pres_db', (C * 12) * 8),
-                   ('pres_cents', C), ('pres_sexp', C)])
+                   ('pres_cents', C), ('pres_sexp', C), ('hl_n', I), ('hl_p', C * 16), ('hl_db', C * 16),
+                   ('hd_q', C), ('hd_fr', C), ('hd_ex', C)])
 
 
 class OrganRank(ctypes.Structure):
@@ -3222,7 +3223,9 @@ class OrganSpec(ctypes.Structure):
                    ('lvl_db', (C * NV_MAX_RANK) * 8),
                    ('has_cpl', I), ('cpl_default', I), ('cpl_tab', I * NV_MAX_RANK), ('cpl_bit', I * NV_MAX_RANK),
                    ('cpl_want', I * NV_MAX_RANK), ('pres_min', C), ('pres_max', C), ('pres_ref', C),
-                   ('trem_pk', C), ('trem_treble', C), ('split', I)])
+                   ('trem_pk', C), ('trem_treble', C), ('split', I), ('hwind', I)]
+                + [(f, C) for f in ('hw_full', 'hw_vres', 'hw_qmax', 'hw_dexp', 'hw_afoot', 'hw_tplayer', 'hw_blk_s')]
+                + [('rank_half', I * NV_MAX_RANK), ('rank_hpipe', I * NV_MAX_RANK)])
 
 
 _ORGAN = {}
@@ -3371,6 +3374,13 @@ def organ(cls):
                     q.pres_db[j][:] = [float(x) for x in g]
             q.pres_cents = float(getattr(pr, 'pressure_cents_per_kpa', 0.0))
             q.pres_sexp = float(getattr(pr, 'pressure_speech_exp', 0.0))
+            lv = getattr(pr, 'pressure_level_db', None) or ()
+            if len(lv) > 16:
+                return None
+            q.hl_n = len(lv)
+            for j, (pp, db) in enumerate(lv):
+                q.hl_p[j], q.hl_db[j] = float(pp), float(db)
+            q.hd_q, q.hd_fr, q.hd_ex = (float(x) for x in getattr(pr, 'pressure_draw', (0.0, 261.63, 0.0)))
             q.push_gain = float(getattr(pr, 'bellows_push_gain', 0.0) or 0.0)
             if q.push_gain:
                 q.push_rise_s, q.push_dbs = float(pr.bellows_push_rise_s), float(pr.bellows_push_dbs)
@@ -3530,6 +3540,22 @@ def organ(cls):
                 m |= 1 << i
                 o.lvl_db[q][i] = float(tabs[b])
         o.lvl_mask[q] = m
+    if getattr(cls, 'harmonium_wind', False):
+        # THE HARMONIUM'S CHEST (wind.HarmoniumWind), its ranks by half and stop
+        import wind as WND
+        hw = WND.HarmoniumWind(cls, BR.BLK / BR.SR)
+        if hw.SUB != 8:
+            return None
+        o.hwind = 1
+        o.hw_full, o.hw_vres, o.hw_qmax, o.hw_dexp = hw.full, hw.vres, hw.qmax, hw.dexp
+        o.hw_afoot, o.hw_tplayer, o.hw_blk_s = hw.a_foot, hw.tau_player, hw.blk_s
+        for i, r in enumerate(ranks):
+            if r[1] is None:
+                continue
+            sc = T.harmonium_stop_class(cls, r)
+            if sc not in pipes:
+                return None
+            o.rank_half[i], o.rank_hpipe[i] = T.harmonium_half(r), pipes.index(sc)
     if T.organ_wind(cls):
         import wind as WND
         o.wind = 1
