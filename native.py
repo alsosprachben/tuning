@@ -3213,7 +3213,8 @@ class OrganSpec(ctypes.Structure):
                                     'sag_max', 'sag_per_unit', 'c1', 'c2', 'g', 'trem_hz', 'trem_depth', 'tdecay',
                                     'unit_hz', 'draw_exp', 'blk_s')]
                 + [('fam_a', C * NV_MAX_RANK), ('fam_b', C * NV_MAX_RANK),
-                   ('draw_u', C * NV_MAX_RANK), ('draw_e', C * NV_MAX_RANK), ('groove_margin', C), ('expr_rank', I), ('perc_rank', I), ('htrem_rank', I),
+                   ('draw_u', C * NV_MAX_RANK), ('draw_e', C * NV_MAX_RANK), ('groove_margin', C), ('touch_gentle', C), ('touch_sharp', C), ('touch_file_vel', I),
+                   ('touch_cyc', C * NV_MAX_RANK), ('touch_att', C * NV_MAX_RANK), ('expr_rank', I), ('perc_rank', I), ('htrem_rank', I),
                    ('perc_attack_s', C), ('afm', C), ('pipe_radius', I), ('wheel_trem', C),
                    ('wtrem_hz', C), ('htrem_depth', C), ('htrem_hz', C), ('wtrem_stereo', I),
                    ('wtrem_scatter', C), ('snd_mask', I), ('n_cn', I), ('leak', I), ('cn_hz', C * 16),
@@ -3616,7 +3617,12 @@ def organ(cls):
             o.fam_a[i], o.fam_b[i] = float(wc.wind_pitch_exp), float(wc.wind_level_exp)
             import wind as _WD
             o.draw_u[i], o.draw_e[i] = _WD.draw_law(wc)
+            o.touch_cyc[i] = float(getattr(wc, 'speech_cycles', 0.0) or 0.0)
+            o.touch_att[i] = float(wc.attack_time if wc.attack_time is not None else wc.chiff_max_valve_time)
         o.groove_margin = float(getattr(cls, 'groove_margin', None) or 0.0)
+        o.touch_gentle = float(getattr(cls, 'pallet_gentle_s', None) or 0.0)
+        o.touch_sharp = float(getattr(cls, 'pallet_sharp_s', None) or 0.0)
+        o.touch_file_vel = int(getattr(cls, 'pallet_file_vel', 100) or 100)
     _ORGAN[cls] = o
     return o
 

@@ -192,6 +192,15 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
             double hc = pipe_chiff_time(hp, f0, ha);
             chiff_r = hc > 0 ? t->chiff * (pipe_chiff_time(scp, f0s, ra) / hc) : t->chiff;
         }
+        /* TOUCH THROUGH THE PALLET (touch_speech_scale): the key's velocity
+           opens it, the floor of the rank's speech */
+        if (og->touch_gentle > 0.0 && scp->speech_cycles > 0.0 && f0s > 0.0) {
+            int v = og->touch_file_vel < 1 ? 1 : (og->touch_file_vel > 127 ? 127 : og->touch_file_vel);   /* (the file's touch) */
+            double pal = og->touch_gentle * pow(og->touch_sharp / og->touch_gentle, (v - 1) / 126.0);
+            double att = scp->attack_set ? scp->attack_time : scp->chiff_max_valve_time;
+            double cyc = scp->speech_cycles / f0s;
+            fade_r *= (pal + cyc) / (att + cyc);
+        }
         /* A HARMONIUM'S WIND AT ITS ONSET (organ_hx: its half's, Pa; NaN the
            reference): its speech (its tone below) -- its level and pitch ride
            the chest's rows (wind.HarmoniumWind) */

@@ -7665,6 +7665,11 @@ def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TB
             chiff_r = nt.chiff * (_sc.chiff_time(_f0s, _ra) / _hc) if _hc > 0 else nt.chiff
         else:
             fade_r, rel_r, chiff_r = nt.fade, nt.rel, nt.chiff
+        if nt.organ and getattr(nt.pc, 'pallet_gentle_s', None):
+            # TOUCH THROUGH THE PALLET (tonelib.touch_speech_scale): the floor of
+            # the rank's speech -- at the file's one touch (pallet_file_vel: a
+            # file's velocity is its mix, Ben); live rescales by the player's
+            fade_r *= T.touch_speech_scale(nt.pc, _sc, _f0s, nt.pc.pallet_file_vel)
         if _hx is not None:                      # (its speech, the wind's at its onset)
             _hp = _hx
             fade_r *= T.harmonium_speech_scale(_sc, _hp)

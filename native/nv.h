@@ -627,6 +627,11 @@ typedef struct OrganSpec {
     // the key's groove (tonelib.groove_pressure): its pallet's capacity over
     // the key's full-organ draw, 0 none
     double groove_margin;
+    // touch through the pallet (tonelib.pallet_time): its opening at velocity
+    // 1 and 127, s; 0 none
+    double touch_gentle, touch_sharp;
+    int touch_file_vel;     // (a file's touch: its velocity is its mix)
+    double touch_cyc[NV_MAX_RANK], touch_att[NV_MAX_RANK];   // (live's: each rank's wind class's speech)
     /* A REED ORGAN'S EFFECT STOPS (the harmonium's): its Expression,
        Percussion and Tremolo stops' ranks (-1 none), the Expression's tilt,
        the hammer's attack and the attack's share of the note (attack_fraction_max) */

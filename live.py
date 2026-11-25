@@ -12412,6 +12412,27 @@ class Live:
                                        T.harmonium_tremolo_hz(part.patch, p, note >= T.HARMONIUM_SPLIT))
         self.slab.dirty = True
 
+    def _touch_stamp(self, part, note, rank, vel):
+        """The key's touch through the pallet on the slots just stamped
+        (tonelib.touch_speech_scale): the rank's attack under its wind class's
+        speech at its own pitch, the velocity opening the pallet."""
+        sl = self.slab.last_slots
+        if sl is None or not len(sl):
+            return
+        pc = part.patch.wind_pc
+        r = next(r for r in part.patch.stop_ranks if r[0] == rank)
+        wc = T.rank_wind_class(pc, r)
+        ratio = r[1]
+        rf = float(part.patch.freqs()[note + part.transpose]) * (min(ratio) if isinstance(ratio, (list, tuple)) else ratio)
+        # (the template was built at the file's touch: the player's over it)
+        ts = T.touch_speech_scale(pc, wc, rf, vel) / T.touch_speech_scale(pc, wc, rf, pc.pallet_file_vel)
+        if ts == 1.0:
+            return
+        idx = np.fromiter(sl, np.int64, len(sl))
+        a = self.slab.a
+        a["fa"][idx] = (a["fa"][idx].astype(np.float64) * ts).astype(np.float32)
+        self.slab.dirty = True
+
     def _groove_stamp(self, part, rank, gx):
         """The key's groove on the slots just stamped (tonelib.groove_pressure):
         the rank's pipes answer the groove's pressure as theirs -- pitch x gx^a,
@@ -12453,6 +12474,8 @@ class Live:
         _gx = self.note_groove.get((part.pid, ch, note), 1.0)
         if _gx != 1.0:
             self._groove_stamp(part, rank, _gx)
+        if part.patch.wind_pc is not None and getattr(part.patch.wind_pc, 'pallet_gentle_s', None):
+            self._touch_stamp(part, note, rank, self.hvel.get((ch, note), 100))
         # THE WHEEL'S TREMOLO on a note struck with the wheel already up, as
         # _note_on arms one (this path returns before it)
         _td = self.trem_depth.get(part.pid, 0.0)

@@ -8779,6 +8779,26 @@ struct Part {
                 S.channel_gain_each(sl, std::vector<float>(sl.size(), (float)pow(gx, og->fam_b[ri])));
             }
         }
+        if (og->touch_gentle > 0.0 && og->touch_cyc[ri] > 0.0 && !S.last_slots.empty()) {
+            // ...and the key's touch through the pallet (_touch_stamp): the rank's attack
+            const OrganRank &rk = og->rank[ri];
+            double rmin = rk.ratio[0];
+            if (rk.compound)
+                for (int q = 1; q < rk.n_ratio; q++)
+                    rmin = rk.ratio[q] < rmin ? rk.ratio[q] : rmin;
+            double rf = nv_tcache_freq(cache, note + transpose) * (rk.compound ? rmin : rk.ratio[0]);
+            auto hv = hvel.find(std::make_pair(ch, note));
+            int v = hv != hvel.end() ? hv->second : 100;
+            v = v < 1 ? 1 : (v > 127 ? 127 : v);
+            int vf = og->touch_file_vel < 1 ? 1 : (og->touch_file_vel > 127 ? 127 : og->touch_file_vel);
+            double pal = og->touch_gentle * pow(og->touch_sharp / og->touch_gentle, (v - 1) / 126.0);
+            double palf = og->touch_gentle * pow(og->touch_sharp / og->touch_gentle, (vf - 1) / 126.0);
+            double cyc = og->touch_cyc[ri] / rf;
+            // (the template was built at the file's touch: the player's over it)
+            double ts = ((pal + cyc) / (og->touch_att[ri] + cyc)) / ((palf + cyc) / (og->touch_att[ri] + cyc));
+            for (long s : S.last_slots)
+                S.f4[F4_fa][s] = (float)((double)S.f4[F4_fa][s] * ts);
+        }
         auto td = trem_depth.find(pid);     // the wheel's tremolo, the wheel already up
         if (td != trem_depth.end() && td->second > 0.0)
             S.tremolo_arm(S.last_slots, td->second, og->wtrem_stereo);

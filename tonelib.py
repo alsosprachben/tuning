@@ -8498,6 +8498,17 @@ class FlueOrganProperties(OrganProperties):
     # 0.7 dB down), a single stop to ~99.9%. A builder's ratio, by Ben's ear
     # (2026-11-24, of none / 2.5 / 1.5: "1.5 is starting to approach a tremolo")
     groove_margin = 2.5
+    # ...AND TOUCH THROUGH THE PALLET (tonelib.touch_speech_scale): a tracker
+    # action opens the pallet as fast as the key goes down -- 15 ms gentle to
+    # 4 ms sharp, the harmonium's (Ben's ear there) -- and that opening is the
+    # floor of every rank's speech. (The foot's fill through its toe hole is
+    # ~1 ms at organ pressures: left out.)
+    pallet_gentle_s = 0.015
+    pallet_sharp_s = 0.004
+    # ...but A FILE'S VELOCITY IS ITS MIX (Ben: velocities of fixed things are
+    # the arranger's level), so a rendered file plays every key at this one
+    # touch, moderately firm; live, the player's own velocity is the touch
+    pallet_file_vel = 100
     # ...AND EACH PIPE RELEASES AS ITSELF (tonelib.release_band_scale): when the
     # pallet shuts, each harmonic rings down at its own mode's rate (2Q/w, the
     # pipe's impedance: fluepipe_sim.mode_times), so the upper bands go first
@@ -26594,6 +26605,32 @@ def mixture_ratios(props, key, ratio, f0):
         if f0 >= hz:
             got = rs
     return list(got), True
+
+
+def pallet_time(cls, vel):
+    """THE PALLET'S OPENING on a tracker action (s): the key pulls the pallet
+    open, quick for a sharp touch and slow for a gentle one -- log between
+    pallet_gentle_s (velocity 1) and pallet_sharp_s (127), as the harmonium's
+    (freereed_sim.PALLET_*). None where the class has no touch."""
+    g = getattr(cls, 'pallet_gentle_s', None)
+    if not g:
+        return None
+    v = max(1, min(127, int(vel)))
+    return g * (cls.pallet_sharp_s / g) ** ((v - 1) / 126.0)
+
+
+def touch_speech_scale(host, sc, f, vel):
+    """A rank's speech under the key's touch: its ramp is the pallet's opening
+    plus its pipe's own build (speech_cycles / f), where the class's floor
+    (attack_time) stood for the pallet -- so the rank's ramp x (pallet(vel) +
+    cycles/f) / (attack + cycles/f). sc the rank's speech class, f its pitch,
+    host the organ (its pallet). 1.0 with no touch or no speech."""
+    p = pallet_time(host, vel)
+    if p is None or not getattr(sc, 'speech_cycles', 0.0) or f <= 0.0:
+        return 1.0
+    a = sc.attack_time if sc.attack_time is not None else sc.chiff_max_valve_time
+    c = sc.speech_cycles / f
+    return (p + c) / (a + c)
 
 
 def groove_pressure(cls, note, drawn_of):
