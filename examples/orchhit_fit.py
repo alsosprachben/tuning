@@ -10,9 +10,9 @@
 AN ORCHESTRA HIT IS A SAMPLE. The patch GM names is the Fairlight-era stab
 (ORCH5): one recorded chord of a real orchestra, played back up and down the
 keyboard. So the GM sets' own hits are the instrument itself, not stand-ins
-for it -- the way a Messenger patch is measured on the Messenger. Four sets on
-disk (examples/gm_release.SETS): FluidR3 and MuseScore General share their
-G#6/G#7 pair, GeneralUser GS has two of its own, TimGM6mb one. Measured only.
+for it -- the way a Messenger patch is measured on the Messenger. Three sets
+on disk (examples/gm_release.SETS): FluidR3 and MuseScore General share their
+G#6/G#7 pair, GeneralUser GS has two of its own. Measured only.
 
 Each hit, measured: its PITCH CLASSES (one note in octaves, or a chord?) as
 a chroma against the sample's root key; its energy per OCTAVE from two below
@@ -29,9 +29,8 @@ HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "examples"))
 NAMES = "C C# D D# E F F# G G# A A# B".split()
-# NOT READ (since 2026-11-23, licences.md L12): TimGM6mb's hit -- a GPL-2 set;
-# the fit stands on FluidR3's pair (MuseScore's is the same) and GeneralUser's two
-EXCLUDE = ("TimGM6mb",)
+# (a set left out of the fit by name; none)
+EXCLUDE = ()
 
 
 def envelope(x, sr):
@@ -360,8 +359,7 @@ def main(argv):
                    26.9, np.log(H.strike_noise_dbs), 20.0, np.log(0.05), 20.0, np.log(40.0)]
         only = None
         if "--refit-all" in argv:
-            # (since 2026-11-23, TimGM6mb's hit no longer read: every number at
-            # once, from the class as it stands -- its timpani and cymbal, the
+            # (every number at once, from the class as it stands -- its timpani and cymbal, the
             # noise as an offset from the hits' new median colour)
             x0 = np.r_[np.log([r[2] for r in H.stop_ranks]), np.log(H.decay_db), H.harmonic_decay_db,
                        float(np.mean([v - min(NOISE, key=lambda q: abs(np.log(q[0] / f)))[1]

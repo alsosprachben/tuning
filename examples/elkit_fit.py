@@ -12,7 +12,7 @@ sets play.
 LIKE THE ORCHESTRA HIT, A SAMPLED SET: Roland's Electronic set -- drum-machine
 kick and snare, Simmons-style toms, a gated snare -- and the GM sets' own kits
 are the instrument's lineage (FluidR3 and MuseScore General share theirs;
-GeneralUser GS has its own; TimGM6mb builds its from synthetic waves).
+GeneralUser GS has its own).
 Measured only. Each set's kit is rendered through TIMIDITY note by note, as
 examples/sfx_levels.py renders the GM sets (every generator applied: the
 transpositions, the envelopes), reverb and chorus off; ours through
@@ -144,8 +144,9 @@ def show(label, m):
 
 
 # ---- the fit: ours toward the MEDIAN of the sets, feature by feature --------
-# The three sets disagree (TimGM6mb's toms do not sweep at all; GeneralUser's
-# fall over an octave), so no one of them is the target: each feature's median.
+# The sets disagree (GeneralUser's toms fall over an octave), so no one of
+# them is the target: each feature's median. (The shipped kit is fitted by
+# two levels instead: --fit=skick|stoms --target=GeneralUser.)
 GROUPS = {
     "toms":  ("ElectronicTomProperties", (41, 45, 50)),
     "kick":  ("ElectronicKickProperties", (36,)),

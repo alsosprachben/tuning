@@ -8,8 +8,8 @@ NOTE-OFF STARTS A RELEASE, IT DOES NOT SILENCE. Roland GS (VE-GS Pro MIDI
 Implementation, ~/Documents/refs/roland): a note-off starts the tone's
 release envelope, whose length is a per-tone preset with only a relative
 change (NRPN 1/102 = CC72, -64..+63). GM itself specifies no envelope. So the
-consensus is what the sets do: four on disk (FluidR3, GeneralUser GS,
-MuseScore General, TimGM6mb), each preset's volume-envelope release (SF2
+consensus is what the sets do: three on disk (FluidR3, GeneralUser GS,
+MuseScore General; TimGM6mb, GPL-2, dropped 2026-11-25), each preset's volume-envelope release (SF2
 generator 38, timecents, instrument plus preset offset) per sample zone; the
 median zone per set, the median over the sets.
 
@@ -30,8 +30,7 @@ import sys
 
 SETS = (("FluidR3", "/usr/share/sounds/sf2/FluidR3_GM.sf2"),
         ("GeneralUser GS", os.path.expanduser("~/Documents/refs/soundfonts/GeneralUser-GS.sf2")),
-        ("MuseScore General", os.path.expanduser("~/Documents/refs/soundfonts/MuseScore_General.sf2")),
-        ("TimGM6mb", (sorted(glob.glob("/snap/*/*/usr/share/sounds/sf2/TimGM6mb.sf2")) or [""])[-1]))
+        ("MuseScore General", os.path.expanduser("~/Documents/refs/soundfonts/MuseScore_General.sf2")))
 # the plucked strings (GM 15, 24-37, 45, 46, 104-108) and the voices (52-54)
 PROGRAMS = (15,) + tuple(range(24, 38)) + (45, 46, 52, 53, 54) + tuple(range(104, 109))
 L_PER_R = (40.0 / 96.0) / 0.94

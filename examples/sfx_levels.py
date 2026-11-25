@@ -8,8 +8,8 @@ program's note played alone, its level re a piano C4 at the same velocity.
     python3 examples/sfx_levels.py --kit-trim the tones made of a drum set's sound to its level there
     python3 examples/sfx_levels.py --bass-trim the basses (32-39 and their variations) on the LOW BAND
 
-Each SoundFont (examples/gm_release.py's four: FluidR3, GeneralUser GS,
-MuseScore General, TimGM6mb) through timidity, reverb and chorus off; ours
+Each SoundFont (examples/gm_release.py's three: FluidR3, GeneralUser GS,
+MuseScore General) through timidity, reverb and chorus off; ours
 rendered dry (no reflections, master -14 dB) as examples/kit_levels.py renders
 the kit. Roland's own SC-55 is not on this machine; GeneralUser GS is voiced
 after Roland's GS set and is the nearest witness. Two readings, both the
@@ -485,7 +485,7 @@ def main(argv):
                 row.append("%15s" % ("%+.1f" % (v[k] - r[k]) if v and r else "--"))
             print("  %4d %3d " % (p, key) + "".join(row))
     # ...AND RANKED: ours less GeneralUser GS (K), the most unbalanced first,
-    # with the four sets' median beside it
+    # with the sets' median beside it
     gu = next((lv for c, lv in cols if c.startswith("GeneralUser")), None)
     if gu:
         import patch_map as PM

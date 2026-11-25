@@ -378,8 +378,11 @@ store build.
   DROPPED FROM THE FIT 2026-11-23 (Ben: "OK, drop it"): `examples/orchhit_fit.py`
   no longer reads its hit (EXCLUDE), and every number of the voice, its timpani
   and cymbal with them, was refitted on FluidR3's and GeneralUser's four
-  (score 1344 -> 1157; Ben: "Orchestra Hit is good"). It is still one of the
-  release consensus's four sets and a level reference.
+  (score 1344 -> 1157; Ben: "Orchestra Hit is good"). CLOSED 2026-11-25
+  (Ben: "drop TimGM6mb completely"): out of examples/gm_release.SETS too, so
+  the release consensus is FluidR3's, GeneralUser's and MuseScore's (18
+  plucked and choir voices' releases recomputed from the three) and no level
+  is read against it; its credit removed. Nothing GPL is left.
   An open replacement: the US Marine Band's "Infernal Dance" from the
   Firebird (Commons, public domain as a US government recording), the passage
   the original Fairlight stab came from, though a wind-band arrangement; or a
@@ -577,7 +580,9 @@ terms, and the audio is lossy, so fit below about 15 kHz.
 
 - **The Sankey corpus** (Bach MIDI, John Sankey): personal use; audio must
   come from his soundfont. It feeds demo renders, not the app. The `sankey`
-  tuner reproduces a temperament (Werckmeister III), which is not his work.
+  tuner is Sankey and Sethares's published Scarlatti tuning (J. Acoust. Soc.
+  Am. 101(4), 1997): the paper's cents, a published result, cited in the
+  credits (2026-11-25; the credit had named the MIDI corpus).
 - **Pergolesi, Stabat Mater** score (CC BY-NC-SA): a demo render only.
 - **Roland**: names only, used nominatively (what a GS file asks for); no
   Roland module or sample was fitted (memory: no Roland sounds).
