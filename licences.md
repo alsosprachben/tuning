@@ -411,8 +411,14 @@ store build.
   to use these samples for ANY purpose. We ask that you do not sell the
   samples directly"). Fitted numbers aren't the samples: fine. Credit both.
   Versilian's own "Upright Nr1" is the fallback with no third party.
-- **CC BY-SA** (the Piteå organ, the oud and traverso Commons files): see the
-  share-alike question above.
+- **CC BY-SA** (the oud and traverso Commons files): see the share-alike
+  question above. THE PITEÅ ORGAN (Lars Palo's GrandOrgue set, CC BY-SA 2.5 SE)
+  NO LONGER APPLIES, 2026-11-24 (Ben: "physical modeling the way we did for the
+  harmonium"): every pipe stop of GM 19 -- tone, speech, release, wind noise,
+  levels, Mixture III, the celeste -- is simulated from its construction
+  (Audsley's public-domain books; examples/fluepipe_sim.py, reedpipe_sim.py,
+  pipe_impedance.py, organ_bake.py), judged by Ben's ear against our own
+  renders, no recording compared. Its fit scripts retired, its credit removed.
 
 ### L13. Trademarks: other makers' names in ours
 

@@ -5482,6 +5482,8 @@ is for channels "entering or leaving MPE control".
 
 ## Pipe-organ wind — Lars Palo's Piteå sample set (added for the organ's wind)
 
+*History (2026-11-24): the pipe organ no longer reads any of this -- its stops, wind and releases are simulated from their construction (examples/fluepipe_sim.py, reedpipe_sim.py, organ_bake.py; licences.md). Kept as the record of what was measured.*
+
 **The set.** *Piteå School of Music* (Grönlunds Orgelbyggeri, 1989; 3 manuals
 and pedal, 35 stops), sampled in December 2010 by Lars Palo with two Studio
 Projects B1 condensers, built into a GrandOrgue sample set by Lars Palo,

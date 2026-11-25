@@ -3483,7 +3483,7 @@ class TUI:
             # ALT+DIGIT is ESC then the digit, and read as two keys it toggled
             # the FIRST row's stop. The next key, if it is a stop key, is the
             # third row's (Alt+digit) or the fourth's (Alt+shift+digit): the
-            # church organ's recorded Pitea ranks, bits 14 and up.
+            # church organ's added ranks, bits 14 and up.
             n = self.read(scr)
             if isinstance(n, int) and 0 < n < 0x110000 and chr(n) in STOP_KEYS:
                 row, i = STOP_KEYS[chr(n)]

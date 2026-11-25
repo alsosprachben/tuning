@@ -2209,7 +2209,7 @@ def registration_blocks(ch, prop, ccs, nblk, amp=None, recalls=()):
     # stay the channel's volume and expression, as on any other voice.
     # SEVEN BITS A CONTROLLER, as many controllers as the voice names: the
     # church organ's is CC11 | CC43<<7 | CC44<<14 | CC45<<21, 28 stops (its
-    # recorded Pitea ranks past bit 13). A file that sends only CC11/CC43 draws
+    # added ranks past bit 13). A file that sends only CC11/CC43 draws
     # what it always drew: the higher bytes start at the default's.
     wccs = tuple(getattr(prop, 'stop_word_ccs', (11, 43)))
     ev = in_order(ccs.get(ch, [])); ds = getattr(prop,'default_stops',1); cres = 0.0; vol = 1.0
@@ -7576,7 +7576,7 @@ def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TB
         # pitch, not the key's -- the shape only, its level as the class sets
         # it (the church organ's 4' over a low key is a middle-register pipe)
         # -- and so does a borrowed spectrum with tables of its own (the
-        # console's Gedakt and reeds, measured on Pitea's)
+        # console's Gedakt and reeds, each simulated as its own pipe)
         _tsrc = spv or props
         if (nt.organ and (getattr(_tsrc, 'mode_gains_low', None) is not None
                        or getattr(_tsrc, 'mode_gains_points', None))
@@ -7828,9 +7828,8 @@ def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TB
                     _shc = getattr(_sc, 'speech_harmonic_cap', None)
                     pfade = max(1.0, fade_r * (min(m, _shc) if _shc else m) ** (-_she))
                 # ...AND ITS RELEASE IS ITS OWN, band by band (tonelib.
-                # release_band_scale): as the wind falls a pipe may let its
-                # fundamental go and ring on in an upper band -- the release's
-                # squeak, Pitea's, on some pipes and not others
+                # release_band_scale): as the wind falls each band rings down at
+                # its own mode's rate (and with the scatter a class voices)
                 prel = rel_r * T.release_band_scale(_sc, key, nt.note, m) if _own else rel_r
                 dbps, logr, aftL, logrA = partial_decay(rp, nt.f0, m)
                 # What the instrument radiates toward here: directivity at
@@ -7947,7 +7946,7 @@ def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TB
                     _wad = getattr(_wsrc, 'wind_attack_db', None) if WIND_ATTACK else None
                     if _wad is not None:
                         # ...falling up the keyboard (wind_attack_slope, dB an
-                        # octave above middle C), as Pitea's does
+                        # octave above middle C)
                         _wad = float(_wad) - float(_wsrc.wind_attack_slope) * math.log2(nt.f0 / 261.6)
                         _ag = _wg * 10.0 ** (_wad / 20.0)
                         _CBW[0] = -max(float(_wsrc.wind_skirt_hz) / hf,
@@ -10410,7 +10409,7 @@ REGISTER = os.environ.get('TUNING_REGISTER', '1') not in ('0', 'off', '')
 # THE ORGAN'S WIND, per pipe (examples/organ_wind_measure.py, sources.md): each
 # partial of a registered rank wears a narrow band of noise -- the jet's
 # turbulence, filtered by the pipe's own resonance -- so it flutters on its own
-# a few times a second, as Pitea's pipes do (their partials' level wobbles are
+# a few times a second, as real pipes do (their partials' level wobbles are
 # uncorrelated: turbulence, not the bellows). TUNING_WIND=1 turns it on, a
 # number scales it; off by default until Ben has heard it.
 WIND = os.environ.get('TUNING_WIND', '0') not in ('0', 'off', '')

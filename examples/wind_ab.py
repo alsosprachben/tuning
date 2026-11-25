@@ -10,7 +10,7 @@ Two passages, each at every flexibility in turn (0 = the shared wind off):
          surge as it gives it back
   CHORALE  the file's every voice on ONE channel (one division, one chest),
          program 19
-Each through the matched hall (pitea_fit.PITEA_HALL), a spoken-free second
+Each through ORGAN_HALL (a sox reverb, the organ's big hall), a spoken-free second
 of silence between.
 """
 import os
@@ -26,7 +26,7 @@ sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "examples"))
 import blockrender as B  # noqa: E402
 import tonelib as T  # noqa: E402
-import pitea_fit as PF  # noqa: E402
+ORGAN_HALL = "reverb 45 50 60 100 5 -4"   # (a sox reverb: the organ's hall)
 
 
 def word_msgs(stops):
@@ -90,7 +90,7 @@ def render(m, flex):
         from scipy.io import wavfile
         wavfile.write(os.path.join(d, "a.wav"), B.SR, (y / max(np.abs(y).max(), 1e-9) * 0.5).astype(np.float32))
         subprocess.run(["sox", os.path.join(d, "a.wav"), "-e", "floating-point", "-b", "32",
-                        os.path.join(d, "b.wav")] + PF.PITEA_HALL.split(), check=True, stderr=subprocess.DEVNULL)
+                        os.path.join(d, "b.wav")] + ORGAN_HALL.split(), check=True, stderr=subprocess.DEVNULL)
         return wavfile.read(os.path.join(d, "b.wav"))[1].astype(np.float64)
 
 

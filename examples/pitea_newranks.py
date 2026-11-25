@@ -23,6 +23,9 @@ with):
   4  WRITE   the class's stub in tonelib.py replaced by the fitted body
              (--dry prints it instead)
 """
+
+# RETIRED 2026-11-24: the pipe organ is simulated from its construction now (fluepipe_sim, reedpipe_sim, organ_bake), off the Piteå recordings
+raise SystemExit("pitea_newranks: retired 2026-11-24 -- the pipe organ is simulated from its construction now (fluepipe_sim, reedpipe_sim, organ_bake), off the Piteå recordings")
 import glob
 import os
 import re

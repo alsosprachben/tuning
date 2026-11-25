@@ -1031,7 +1031,7 @@ over a quarter second; put in, it dies away as fast. A channel is a division
 and a division is a chest: a tremulant on one channel leaves the others still.
 
 **The chest's own wind** is `TUNING_WIND` (off by default; a number scales
-it), as the pipes' turbulence is: a slow wander under Pitea's bound, and a
+it), as the pipes' turbulence is: a slow wander (a regulator's ripple), and a
 sag when a chord draws its wind — the bellows dips, overshoots a little and
 settles a shade flat (`wind.py`; `examples/organ_chest_check.py`). The
 Tremulant is a stop and does not wait for it. Live has both, per organ part,

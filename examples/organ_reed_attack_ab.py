@@ -15,6 +15,9 @@ through examples/organ.py's recipe, the wind on in all three:
 
 as MP3s at one common gain. Default 75 s into ~/Downloads/organ_wind.
 """
+
+# RETIRED 2026-11-24: the pipe organ is simulated from its construction now (fluepipe_sim, reedpipe_sim, organ_bake), off the Piteå recordings
+raise SystemExit("organ_reed_attack_ab: retired 2026-11-24 -- the pipe organ is simulated from its construction now (fluepipe_sim, reedpipe_sim, organ_bake), off the Piteå recordings")
 import os
 import subprocess
 import sys

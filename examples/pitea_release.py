@@ -16,6 +16,9 @@ the ORDER, and how far a band rises over its own start (a squeak).
 Ours: the stop alone, held as long as the sample's note, its release read
 from the note-off, dry -- the same measurement.
 """
+
+# RETIRED 2026-11-24: the pipe organ is simulated from its construction now (fluepipe_sim, reedpipe_sim, organ_bake), off the Piteå recordings
+raise SystemExit("pitea_release: retired 2026-11-24 -- the pipe organ is simulated from its construction now (fluepipe_sim, reedpipe_sim, organ_bake), off the Piteå recordings")
 import glob
 import os
 import sys

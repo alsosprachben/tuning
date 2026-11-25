@@ -1118,8 +1118,8 @@ class SynthProperties:
     register_gain = 0.0
     # THE ORGAN'S WIND (blockrender.WIND): each partial of a registered rank
     # wears a band of noise this far under it (dB) and this wide (Hz) -- the
-    # jet's turbulence through the pipe's resonance. Measured per family from
-    # Pitea (sources.md); a LOWER BOUND, that set being noise-reduced. None = none.
+    # jet's turbulence through the pipe's resonance (the organ's from its
+    # simulated pipes' Q and the jet's turbulence, organ_bake). None = none.
     wind_skirt_db = None
     wind_skirt_hz = 1.0             # its width: the wider of this (Hz) ...
     wind_skirt_rel = None           # ... and this fraction of the partial
@@ -3345,10 +3345,9 @@ class SynthProperties:
         its key's: a 4' over a low key is the middle register's pipe."""
         pts = getattr(self, 'mode_gains_points', None)
         if pts:
-            # MEASURED TABLES AT ANCHOR PITCHES (Hz, gains): between two, the
-            # gains blended in dB along log frequency; held past the ends. A
-            # register need not lie between its neighbours -- the Pitea organ's
-            # 4' and 2' are brightest over the middle keys
+            # TABLES AT ANCHOR PITCHES (Hz, gains): between two, the gains
+            # blended in dB along log frequency; held past the ends. A register
+            # need not lie between its neighbours
             if frequency <= pts[0][0]:
                 return pts[0][1]
             if frequency >= pts[-1][0]:
@@ -6614,17 +6613,15 @@ class WurlitzerProperties(ElectricPianoProperties):
 
 class StoppedPipeProperties(SynthProperties):
     # THE WIND (blockrender.WIND), for a stopped flute rank (Gedackt, Bourdon,
-    # Koppelflojt): a band of noise 24 dB under each partial, as wide as the
-    # wider of 10 Hz and 3% of the partial -- a resonance of constant Q, with a
-    # floor the bass pipes need. FITTED, our pipes rendered and measured as
-    # Pitea's were (examples/organ_wind_check.py), C3 to C6: noise -29.0,
-    # -25.5, -25.7, -24.8 dB under the tone and wander 1.53, 0.94, 0.62, 0.48
-    # cents, against Pitea's -26.2, -27.7, -25.2, -28.1 dB and 1.60, 0.94,
-    # 0.71, 0.45 c (sources.md). An organ rank only: a flute voice keeps its
-    # own breath.
-    wind_skirt_db = -24.0
-    wind_skirt_hz = 10.0
-    wind_skirt_rel = 0.03
+    # Koppelflöte): the jet's turbulence through the pipe's resonance -- a band
+    # of noise under each partial AS WIDE AS THE RESONANCE, f/Q: 1/61 of the
+    # partial (the simulated Gedeckt's Q at middle C, fluepipe_sim.mode_times),
+    # its level the turbulence's share of the jet's flow (fluepipe_sim.TURB_REL,
+    # 2%: -34 dB; the literature's few percent; by ear). An organ rank only: a
+    # flute voice keeps its own breath.
+    wind_skirt_db = -34.0
+    wind_skirt_hz = 1.0
+    wind_skirt_rel = 0.016
     # ITS PRESSURE (wind.py): Pykett's stopped pipe, f = 0.0829 p + 170.2 Hz
     # about 80 mm wg, is p**0.0375 -- 10% more wind, 6.5 cents sharp. Its
     # level as p**1 is a starting value for the ear. Every flue inherits both.
@@ -8225,7 +8222,7 @@ def divider_registration(tabs, couplers=()):
 
 class OrganProperties(StoppedPipeProperties):
     # THE CHEST (wind.py), shared by every rank on a division's channel: a
-    # wander under Pitea's bound (0.3% RMS is 0.2 cents on a flue), and a
+    # regulator's wander (0.3% RMS, 0.2 cents on a flue; by ear), and a
     # SWING under the pipes' demand -- 0.4% of the pressure per unit of draw
     # (an 8' middle C one unit: an eight-unit chord dips 3%) at wind_flex 1,
     # through a reservoir resonant at 4 Hz, damped 0.3 (a cycle or two of
@@ -8373,15 +8370,14 @@ class OrganProperties(StoppedPipeProperties):
 
 
 class FlueOrganProperties(OrganProperties):
-    # THE WIND: principals and octaves -- 26 dB under each partial, the wider
-    # of 6 Hz and 2% of it, fitted as the flute's was. C3 to C6, noise -37.6,
-    # -31.6, -28.2, -28.7 dB and wander 0.71, 0.48, 0.35, 0.28 cents, against
-    # Pitea's -32.7, -32.0, -29.7, -28.9 dB and 0.77, 0.47, 0.35, 0.30 c: the
-    # smaller pipe the noisier, as Ben hears it, because a mode's resonance
-    # widens with its frequency (sources.md).
-    wind_skirt_db = -26.0
-    wind_skirt_hz = 6.0
-    wind_skirt_rel = 0.02
+    # THE WIND: principals and octaves -- the jet's turbulence through the
+    # resonance, as the stopped flute's: as wide as f/Q (1/46 of the partial,
+    # the simulated principal's Q at middle C), 34 dB under (2% turbulence; by
+    # ear). The smaller pipe the noisier, as Ben hears it, because a mode's
+    # resonance widens with its frequency.
+    wind_skirt_db = -34.0
+    wind_skirt_hz = 1.0
+    wind_skirt_rel = 0.022
     # A pallet valve is open or shut and a pipe is cut to length.
     pitch_bendable = False
     # NO TOUCH. A pipe organ key opens a pallet valve. The pipe then speaks at
@@ -8401,8 +8397,7 @@ class FlueOrganProperties(OrganProperties):
     # reed's 1.4 is not an error to be corrected, it is the other half of the
     # distinction.
     tonal_dampening = 2.2
-    # ...SIMULATED FROM THE PIPE (2026-11-24, off the Piteå recordings: the
-    # harmonium's way): Audsley's Major Principal -- CC 6.16 in on 1:2.66,
+    # ...SIMULATED FROM THE PIPE (2026-11-24: the harmonium's way): Audsley's Major Principal -- CC 6.16 in on 1:2.66,
     # mouth 1/4 of the circumference, cut-up 1/4 of the diameter, 3.5 in of
     # wind -- through examples/fluepipe_sim.py (the jet driving the pipe's
     # resonances, solved by harmonic balance over the compass) and
@@ -8490,14 +8485,12 @@ class FlueOrganProperties(OrganProperties):
     # 2 cents from a held note as it enters and gives it back as it lifts
     shared_wind = True
     wind_flex = 1.0
-    # ...AND EACH PIPE RELEASES AS ITSELF (tonelib.release_band_scale): Pitea's
-    # principals let the fundamental go first on most pipes and ring on in an
-    # upper band on some -- 2x and more on one in five, the release's squeak.
-    # Fitted to the spread across 33 pipes of the 8', 4' and 2' through the
-    # matched hall (examples/pitea_release.py --fit=release): 0.74 -> 0.45
-    # octaves rms over the bands' 20th/50th/80th percentiles
-    release_band_mu = 0.5
-    release_band_sigma = 1.0
+    # ...AND EACH PIPE RELEASES AS ITSELF (tonelib.release_band_scale): when the
+    # pallet shuts, each harmonic rings down at its own mode's rate (2Q/w, the
+    # pipe's impedance: fluepipe_sim.mode_times), so the upper bands go first
+    # and the release darkens as it fades (2026-11-24)
+    release_band_mu = -2.45      # (SIMULATED: h2-4 ring down at their modes' 2Q/w, ~1/5.5 of the fundamental's)
+    release_band_sigma = 0.0     # (the physics has no scatter: any is voicing, by ear)
     bellows_push_every_note = True
     bellows_push_band = (3.0, 0.6)
     bellows_push_gain = 0.0      # (organ_bake: the simulated pipe shows no overshoot mid-compass)
@@ -8521,9 +8514,9 @@ class FlueOrganProperties(OrganProperties):
     chiff_volume = 1.3
 
     # A MIXTURE breaks back near c'' -- so an ascending run re-colors at the peak
-    # instead of climbing (see OrganProperties). Not a single 2' or quint: the
-    # Pitea organ's Oktava 2 runs its whole compass, 61 pipes to C7 at 8.4 kHz,
-    # where this broke it back from C5 and played a 4' (examples/pitea_fit.py)
+    # instead of climbing (see OrganProperties). Not a single 2' or quint: a
+    # Fifteenth runs its whole compass, its top pipe ~3/4 in long (Audsley: only
+    # compound stops break back)
     pipe_ceiling_hz = 2100.0
 
     # --- Stop list (drawn via CC11 bitfield / CC4 crescendo) ---
@@ -8614,24 +8607,15 @@ FlueOrganProperties.stop_ranks = [
 
 
 class ReedOrganProperties(OrganProperties):
-    # THE WIND: trumpets, basun, cromorne -- 32 dB under each partial, the
-    # wider of 8 Hz and 2.5% of it. C3 to C6, noise -36.7, -34.0, -34.4, -33.4
-    # dB and wander 0.44, 0.31, 0.22, 0.17 cents, against Pitea's -33.3,
-    # -34.4, -33.3, -30.9 dB and 0.29, 0.20, 0.15, 0.30 c. A reed's tone is
-    # held by its tongue; its turbulence is quieter against it than a flue's.
-    wind_skirt_db = -32.0
-    wind_skirt_hz = 8.0
-    wind_skirt_rel = 0.025
-    # THE ATTACK'S RUSH: Pitea's reeds have more noise between their partials
-    # in the first 80 ms than in the sustain -- +14.5, +14.0, +12.6, +10.0 dB
-    # at C3 to C6. A burst 24 dB over the skirt at middle C, 3.5 dB less an
-    # octave up, half an octave wide (it is a rush, not a line), dying at 100
-    # dB/s, measures +15.7, +13.5, +13.9, +9.4 (examples/organ_wind_check.py
-    # --attack), the sustain's noise untouched.
-    wind_attack_db = 24.0
-    wind_attack_slope = 3.5
-    wind_attack_rel = 0.5
-    wind_attack_dbps = 100.0
+    # THE WIND: the reeds -- the slot's turbulence through the resonator, as
+    # wide as its resonance (1/43 of the partial, the simulated trumpet's
+    # resonator Q at middle C), 34 dB under (2% turbulence; by ear). No attack
+    # rush (2026-11-24): the simulated tongue's own onset carries the reed's
+    # bite (reedpipe_sim).
+    wind_skirt_db = -34.0
+    wind_skirt_hz = 1.0
+    wind_skirt_rel = 0.023
+    wind_attack_db = None
     # ITS PRESSURE: the tongue holds the pitch (Pykett: a tremulant hardly
     # moves a reed's), the level moves more than a flue's. Starting values.
     wind_pitch_exp = 0.01
@@ -10698,32 +10682,27 @@ FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [("flute 8", 1
 # keyboard instead of turning shrill. A COMPOUND rank: ratio is a list of the ranks'
 # footages; the build loops expand it, each sub-rank breaking back on the note's grid
 # (so all stay hybrid-locked). Drawn by bit 7 (14-bit stop word: CC11 | CC43<<7).
-FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [("mixture III", [6.0, 8.0, 12.0], 0.28)]
-# ...ITS COMPOSITION, PITEA'S: the Huvudverk's Mixtur IV breaks back at every
-# C -- 1 1/3 1 2/3 1/2 at C2, 2 1 1/3 1 2/3 at C3, 2 2/3 2 1 1/3 1 at C4,
-# 4 2 2/3 2 1 1/3 from C5 (examples/pitea_stops.py, its harmonics key by
-# key) -- and a Mixtur III is that composition's lowest three. Each break a
-# quarter-tone under its C, so a tuner cannot move a key across it. It was
-# broken back at the pipe ceiling, which kept the 1 1/3 doubled and no 2 2/3
-# from C4 up.
+FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [("mixture III", [4.0, 6.0, 8.0], 0.28)]
+# ...ITS COMPOSITION, AUDSLEY'S (The Organ of the Twentieth Century p.76,
+# Example VI, "Mixture III, single break, 8 ft series only"): 15 19 22 --
+# 2' 1 1/3' 1' -- from CC to f1, breaking back to 8 12 15 -- 4' 2 2/3' 2' --
+# from f#1 to the top (2026-11-24). The break a quarter-tone under its key,
+# so a tuner cannot move a key
+# across it; each rank the principal's pipe at its own pitch.
 FlueOrganProperties.mixture_compositions = {
-    "mixture III": ((0.0, (6.0, 8.0, 12.0)), (127.1, (4.0, 6.0, 8.0)),
-                    (254.2, (3.0, 4.0, 6.0)), (508.4, (2.0, 3.0, 4.0))),
+    "mixture III": ((0.0, (4.0, 6.0, 8.0)), (369.99 * 2.0 ** (-0.5 / 12.0), (2.0, 3.0, 4.0))),
 }
 # Trumpet rank gain 0.42: the climax Trompette read too bold; trimmed so the
 # peroration crowns without blaring (also relieves the dense close's headroom).
 ReedOrganProperties.stop_ranks = ReedOrganProperties.stop_ranks + [("trumpet", 1.0, 0.42, CylindricalBrassProperties, True)]
 
-# THE CONSOLE'S OTHER STOPS, EACH ITS PITEA STOP'S PIPE (examples/
-# pitea_stops.py; sources.md "Pipe organ"). The principals were fitted first
-# (pitea_fit.py); these took the 8''s speech and overshoot by inheritance,
-# and Pitea says no stopped pipe or reed of its overshoots, its reeds speak
-# slowly in the bass where ours spoke at once, and its Cromorne and Clarion
-# have the even harmonics our odd-only reed had not. So each is a class of its
-# own: the stop's measured series at three anchor pitches (mode_gains_points,
-# read at the rank's own pitch), its own speech (rank_speech, timed by its own
-# pitch -- FlueOrganProperties.rank_speech_own_pitch), no overshoot, and its
-# level HELD where the console's balance had it by ear.
+# THE CONSOLE'S OTHER STOPS, EACH ITS OWN PIPE. Each is a class of its own:
+# its series at three anchor pitches (mode_gains_points, read at the rank's
+# own pitch), its own speech (rank_speech, timed by its own pitch --
+# FlueOrganProperties.rank_speech_own_pitch), no overshoot, and its level held
+# where the console's balance had it by ear. Since 2026-11-24 every one is
+# SIMULATED from its construction (Audsley; examples/fluepipe_sim.py,
+# reedpipe_sim.py, organ_bake.py), off the recordings they were fitted to.
 class OrganGedaktProperties(StoppedPipeProperties):
     """The flute 8: a metal Gedeckt, a stopped pipe -- Audsley's C 2.55 in on
     root 8, mouth 1/4, cut-up 1/2 -- simulated (examples/organ_bake.py)."""
@@ -10761,10 +10740,9 @@ class OrganGedaktProperties(StoppedPipeProperties):
     # put 17-34 dB of hiss above 2 kHz on every attack; a stopped flute's
     # high cut-up speaks smoothly (Audsley: German mouths "fuller and purer")
     chiff_volume = 0.0
-    # its release spread (still the Piteå-measured one: the release is
-    # replaced from the simulated pipe in a later step, licences.md)
-    release_band_mu = 0.0
-    release_band_sigma = 0.5
+    # its release: the upper bands ring down at their modes' own rates
+    release_band_mu = -2.18      # (SIMULATED: a stopped pipe's h3 at its mode's 2Q/w)
+    release_band_sigma = 0.0     # (the physics has no scatter: any is voicing, by ear)
 
 
 class OrganBourdonProperties(OrganGedaktProperties):
@@ -10835,10 +10813,9 @@ class OrganCromorneProperties(ReedOrganProperties):
     attack_time = 0.004
     odd_only = False
     bellows_push_gain = 0.0
-    # its release spread (still the Piteå-measured one: the release is
-    # replaced from the simulated pipe in a later step, licences.md)
-    release_band_mu = 0.0
-    release_band_sigma = 1.0
+    # its release: the upper bands ring down at their modes' own rates
+    release_band_mu = -1.10      # (SIMULATED: the resonator's upper modes ring down at their 2Q/w)
+    release_band_sigma = 0.0     # (the physics has no scatter: any is voicing, by ear)
 
 
 class OrganBassonProperties(OrganCromorneProperties):
@@ -11004,7 +10981,7 @@ FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [
 FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [
     ("tremulant", None, 0.0),
 ]
-# ...and the flute 8 and the quint, defined before their Pitea pipes were,
+# ...and the flute 8 and the quint, defined before their own classes were,
 # take them here (the bit order is untouched)
 FlueOrganProperties.stop_ranks = [
     (r[0], r[1], r[2], {"flute 8": OrganGedaktProperties,
@@ -11026,16 +11003,12 @@ FlueOrganProperties.stop_rows = [
 ]
 
 
-# ---- THE RECORDED RANKS PITEA HAS AND THE CONSOLE DID NOT (bits 14-24) -------
-# Ben: "start adding ranks that we can find recordings for". Each is a Pitea
-# stop's own pipes (examples/pitea_fit.py --fit=tables for its series,
-# examples/pitea_stops.py --fit=speech for its speech, pitea_stops.level for
-# its level against the Principal 8 by Pitea's own balance). The 14-bit word was
-# full, so the church organ's word is now CC11 | CC43<<7 | CC44<<14 | CC45<<21:
-# a file that sends only CC11/CC43 draws what it always drew. The Grönlund
-# organ's own ranks where it has one (its swell is in tune; the extended set's
-# French second organ sits 4-18 cents sharp), the Voix humaine from that second
-# organ, Grönlund having none.
+# ---- THE RANKS ADDED PAST THE FIRST CONSOLE (bits 14-24) ---------------------
+# Ben: "start adding ranks". First fitted to recordings, since 2026-11-24 each
+# SIMULATED from its construction (Audsley), its level the simulated pipe's
+# against the principal's (organ_bake.sim_level; the vox humana by ear). The
+# 14-bit word was full, so the church organ's word is now CC11 | CC43<<7 |
+# CC44<<14 | CC45<<21: a file that sends only CC11/CC43 draws what it always drew.
 class OrganKoppelfluteProperties(OrganGedaktProperties):
     """koppelflute 4: a chimney flute (Audsley's Rohrflöte: C 2.66 in on root 8,
     the chimney 1/4 its diameter and 0.4 its length), simulated."""
@@ -26443,8 +26416,8 @@ def contact_offset_s(cls, rank, note):
 
 def mixture_ratios(props, key, ratio, f0):
     """A compound rank's footages at a key of pitch F0, and whether they are a
-    COMPOSITION (props.mixture_compositions: each octave's own ranks, broken
-    back by the builder, as Pitea's Mixtur is at every C) -- else the stop's
+    COMPOSITION (props.mixture_compositions: each range's own ranks, broken
+    back by the builder -- Audsley's Mixture III once, at f#1) -- else the stop's
     own list, broken back at the pipe ceiling as before."""
     comp = (getattr(props, 'mixture_compositions', None) or {}).get(key)
     if not comp:
@@ -26552,12 +26525,11 @@ def choir_partial_hz(cls, choir, note, m):
 
 def release_band_scale(cls, rank, note, m):
     """A PIPE'S OWN RELEASE, harmonic band by band: how much longer than its
-    fundamental harmonic m takes to die when the key lifts. Pitea's release
-    samples (examples/pitea_release.py) are irregular pipe to pipe -- on a
-    principal a band outlasts the fundamental 2x or more on one pipe in five,
-    and on some it rises as it goes, the release's squeak -- about a mild
-    lean of the upper bands to linger. So fixed per (rank, key, band),
-    irregular across the keys: 2 ** (release_band_mu + release_band_sigma * z)
+    fundamental harmonic m takes to die when the key lifts: release_band_mu
+    octaves, the pipe's own (each band ringing down at its mode's 2Q/w: the
+    organ's are simulated, organ_bake), and release_band_sigma of scatter if
+    a class voices one. Fixed per (rank, key, band), irregular across the
+    keys: 2 ** (release_band_mu + release_band_sigma * z)
     octaves, z a standard normal drawn per band (h2-4, h5-8, h9 and up),
     clipped at 2.5 sigma; 1 for the fundamental and where the class has none."""
     sd = float(getattr(cls, 'release_band_sigma', 0.0) or 0.0)
@@ -29832,7 +29804,7 @@ class SynthTone(BaseTone):
                 # Only upperwork (>=2) breaks; the 8'/16'/quint foundation keeps its pipes.
                 eff_ratio = sub
                 # only a MIXTURE breaks back: a single upperwork stop runs the
-                # full compass (the Pitea organ's Oktava 2, to C7 at 8.4 kHz)
+                # full compass (Audsley: only compound stops break back)
                 if (ceiling and not _comp and isinstance(ratio, (list, tuple)) and sub >= 2.0
                         and f * sub > ceiling):
                     if mode == 'truncate':

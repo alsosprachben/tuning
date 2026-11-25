@@ -21,6 +21,9 @@ after it speaks; the two microphones' spectra averaged as powers):
   BANDS   the harmonics pooled by third-octave of where they sound, re the
           pipe's harmonic power -- the voicing and the room together
 """
+
+# RETIRED 2026-11-24: the pipe organ is simulated from its construction now (fluepipe_sim, reedpipe_sim, organ_bake), off the Piteå recordings
+raise SystemExit("pitea_fit: retired 2026-11-24 -- the pipe organ is simulated from its construction now (fluepipe_sim, reedpipe_sim, organ_bake), off the Piteå recordings")
 import glob
 import os
 import subprocess

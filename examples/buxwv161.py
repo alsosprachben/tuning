@@ -45,7 +45,7 @@ pedal as a reed and it was one, in every way that a spectrum can be.
 UNDER IT, THE SUBBASS 16'. Stopped 16' + stopped 8' is the classic quiet pedal:
 the octave below gives the ground a floor without any of the open rank's
 brightness. Nothing is taken away, so it stays drawn to the end. It was the
-manual's Bourdon 16' standing in; Pitea's own pedal Subbas (bit 18) is the
+manual's Bourdon 16' standing in; the pedal Subbass (bit 18) is the
 stop. And the return's pedal reed stands on the 32' (the Kontrabasun, bit 19)
 under the Posaune: the weight the big North German pedals had.
 """

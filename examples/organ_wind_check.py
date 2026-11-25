@@ -13,6 +13,9 @@ from Pitea's pipes of the same families (sources.md) -- themselves a LOWER
 BOUND, that set being noise-reduced -- and the attack: the noise between
 the partials in the first 80 ms against the sustain's, the reeds' rush.
 """
+
+# RETIRED 2026-11-24: the pipe organ is simulated from its construction now (fluepipe_sim, reedpipe_sim, organ_bake), off the Piteå recordings
+raise SystemExit("organ_wind_check: retired 2026-11-24 -- the pipe organ is simulated from its construction now (fluepipe_sim, reedpipe_sim, organ_bake), off the Piteå recordings")
 import os
 import subprocess
 import sys

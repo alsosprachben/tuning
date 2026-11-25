@@ -16,6 +16,9 @@ courses over 600 ms, dB re the release's first 20 ms.
 Ours the same: the rank alone (pitea_fit.render), held 3 s for the attack; held
 450 ms and released for the release, read from the note-off.
 """
+
+# RETIRED 2026-11-24: the pipe organ is simulated from its construction now (fluepipe_sim, reedpipe_sim, organ_bake), off the Piteå recordings
+raise SystemExit("pitea_speech: retired 2026-11-24 -- the pipe organ is simulated from its construction now (fluepipe_sim, reedpipe_sim, organ_bake), off the Piteå recordings")
 import glob
 import os
 import sys

@@ -39,7 +39,7 @@ REGS = [
     ("plenum over the pedal's 16 and 32", ("principal 8", "octave 4", "super octave 2", "mixture III"),
      ("subbass 16", "contrabassoon 32", "principal 8")),
 ]
-# --set=p16: the two stops refitted on BORROWED pipes (pitea_newranks.py
+# --set=p16: the two stops once fitted on BORROWED pipes (now simulated, organ_bake.py;
 # --hold-level), alone enough to hear: the 16' under the 8', and the 5 1/3 in
 # a plenum -- an A/B between trees
 REGS_P16 = [

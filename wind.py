@@ -4,12 +4,10 @@ A pipe organ's pipes stand on a windchest fed by a bellows, and they all
 hear its pressure. Three things move it:
 
   w(t)  THE WANDER. The blower and the regulator never hold perfectly still.
-        Filtered noise, slow (under a hertz). How much is bounded by Pitea
-        (examples/organ_wind_measure.py, sources.md): a C4 principal there
-        wanders 0.47 cents in all, and its partials' level wobbles are
-        UNCORRELATED -- the jet's turbulence, which the skirts already make
-        (phase 2). Pressure moves every partial together, so what is shared
-        must sit under that: 0.3% RMS is 0.2 cents on a flue. (Abel, Ahnert and
+        Filtered noise, slow (under a hertz): a regulator's ripple, 0.3% RMS
+        -- 0.2 cents on a flue -- a named size, for the ear. The partials'
+        own uncorrelated wobble is the jet's turbulence, which the skirts make
+        (phase 2); pressure moves every partial together. (Abel, Ahnert and
         Bergweiler's 3.75% RMS at a pipe foot includes the foot's own
         turbulence, which is not the chest's.)
 
@@ -77,8 +75,8 @@ class Wind:
     def __init__(self, props, blk_s, seed=0, scale=1.0, wander_scale=None):
         self.blk_s = float(blk_s)
         self.scale = float(scale)
-        # the wander is MEASURED (Pitea), not a matter of flexibility: on at
-        # its own level whenever the shared wind is
+        # the wander is the regulator's own, not a matter of flexibility: on
+        # at its own level whenever the shared wind is
         ws = self.scale if wander_scale is None else float(wander_scale)
         self.wander_rms = float(getattr(props, 'wind_wander_rms', 0.0)) * ws
         self.reg_s = float(getattr(props, 'wind_regulator_s', 0.0) or 0.0)

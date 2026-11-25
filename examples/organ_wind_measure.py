@@ -35,6 +35,9 @@ The two microphones' spectra are averaged as POWERS: summing the channels
 first would cancel part of the room's decorrelated noise and flatter the
 floor.
 """
+
+# RETIRED 2026-11-24: the pipe organ is simulated from its construction now (fluepipe_sim, reedpipe_sim, organ_bake), off the Piteå recordings
+raise SystemExit("organ_wind_measure: retired 2026-11-24 -- the pipe organ is simulated from its construction now (fluepipe_sim, reedpipe_sim, organ_bake), off the Piteå recordings")
 import os
 import re
 import subprocess
