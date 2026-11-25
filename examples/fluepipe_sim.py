@@ -63,6 +63,7 @@ FOOT_RISE_S = 0.012           # the foot's fill once the pallet is open (named: 
 PALLET_GENTLE_S, PALLET_SHARP_S = 0.015, 0.004     # the pallet's opening, gentle to sharp key
 LIP_THICK_M = 0.0005          # the upper lip's thickness (metal) -- its inertance
 MAX_HZ = 16000.0              # the highest mode kept
+JET_PHASE_MAX = 1.9           # the jet's transit at most this many radians of the period (the voicer's cut)
 VOICE_REF_HZ = 261.63          # where a stop's own cut-up ratio holds; above it the jet keeps its timing
 MIN_Q = 4.0                   # a resonance, not the radiation's slope
 
@@ -126,6 +127,13 @@ STOPS = {
     "waldflute": dict(d_c=2 * math.sqrt(0.0826 * 0.1080 / math.pi), halve=18,
                       mouth=0.0826 / (2 * math.pi * math.sqrt(0.0826 * 0.1080 / math.pi)), cutup=0.33,
                       flue=0.015, pressure=870.0, end="open", wood=True, offset=1.0),
+    # ---- the strings (AOB2 p.550-558; organ_notes 1.5): Viola da Gamba, OTC
+    # spec, cylindrical, CC 3.51 in on 1:2.519 (halving on the 19th), mouth
+    # 1/4 of the circumference, cut-up 1/4, and a HARMONIC BRIDGE -- which
+    # "curbs [the pipe] back to the ground tone" from the octave a narrow scale
+    # speaks: the fundamental's regime, which the harmonic balance solves
+    "gamba": dict(d_c=0.0892, halve=18, mouth=0.25, cutup=0.25, flue=0.015, pressure=870.0, end="open",
+                  offset=1.0, morph=True),         # (reached from the principal: morph())
     # Tierce: open metal at a flute's (the Rohrflöte's) wider scale, cut-up 1/3
     "tierce": dict(d_c=0.0676 * 2 ** (12 / 16.0), halve=16, mouth=0.25, cutup=0.33, flue=0.015,
                    pressure=870.0, end="open", offset=1.0),
@@ -156,6 +164,14 @@ def geometry(stop, f0):
             # the windway (the jet's growth goes as W/h; the cut-up alone
             # lowered, the treble jet loses its gain and the pipe falls silent)
             h = W * ref["h"] / ref["W"]
+        # ...and wherever the stop's own ratio would make the jet's transit
+        # over the cut-up longer than JET_PHASE_MAX of the period (a high-cut
+        # Bourdon's bass, where the fundamental can no longer start), the
+        # voicer cuts it to that, the flue with it
+        wcap = JET_PHASE_MAX * JET_CP * math.sqrt(2 * s["pressure"] / RHO) / (2 * math.pi * f0)
+        if W > wcap:
+            h = h * wcap / W
+            W = wcap
     return dict(a=a, B=B, W=W, h=h, p=s["pressure"], end=s["end"], s=s)
 
 
@@ -414,9 +430,10 @@ def onset(stop, f0, vel=100, secs=0.6, nh=16, npts=256, seed_rel=1e-3, steady_so
     the mode nearest m w, w_n / 2Q_n -- while the foot fills through the
     pallet (Uj and the jet's delay following it). The jet, the lip and the
     loss are the steady solver's, evaluated over one period from the
-    harmonics of the moment. It starts from the jet's turbulence (seed_rel
-    of the steady swing, phases at random), so the harmonics race: an
-    upper one may lead (the chiff) before the fundamental takes the jet.
+    harmonics of the moment. It starts from the jet switching on, a step of
+    flow (seed_rel of the steady swing, falling as 1/m, phases at random), so
+    the harmonics race: an upper one may lead (the chiff) before the
+    fundamental takes the jet.
     Returns (t, radiated amplitude per harmonic [n_t, nh], played Hz)."""
     g = geometry(stop, f0)
     if steady_sol is None:
@@ -444,17 +461,30 @@ def onset(stop, f0, vel=100, secs=0.6, nh=16, npts=256, seed_rel=1e-3, steady_so
     fm = m * fr
     Zm = PI.radiation(2 * math.pi * fm, am) + 1j * 2 * math.pi * fm * RHO * LIP_THICK_M / Sm
     Y = 1.0 / (PI.input_impedance(fm, secs_, end) + Zm)
+    # EACH HARMONIC CARRIES ITS NEAREST MODE as a complex pole s1 (residue r1)
+    # in a frame rotating at m w -- the mode's detuning from the harmonic kept
+    # (a stopped pipe's 3rd and 5th modes are not at 3x and 5x) -- and the rest
+    # of the admittance (every other mode, the conjugate pole, the
+    # radiation's) answering at once: steady, Q_m = Y(m w) dp_m exactly, the
+    # harmonic balance's state
     md = md0
     mf = np.array([x[0] for x in md])
-    lam = np.array([2 * math.pi * md[int(np.argmin(abs(mf - f)))][0] / (2 * md[int(np.argmin(abs(mf - f)))][1])
-                    if len(md) else 2 * math.pi * f / 10.0 for f in fm])
-    # past the pipe's last mode the radiation answers at once: its rate as a Q of ~2
-    lam = np.where(fm > (mf.max() * 1.05 if len(mf) else 0), 2 * math.pi * fm / 4.0, lam)
+    nn = [int(np.argmin(abs(mf - f))) for f in fm]
+    wn = np.array([2 * math.pi * md[k][0] for k in nn])
+    qn = np.array([md[k][1] for k in nn])
+    An = np.array([md[k][2] for k in nn])
+    s1 = -wn / (2 * qn) + 1j * wn * np.sqrt(np.maximum(1 - 1 / (4 * qn ** 2), 1e-9))
+    r1 = An * s1 / (s1 - np.conj(s1))
+    Yrest = Y - r1 / (1j * 2 * math.pi * fm - s1)
+    arot = s1 - 1j * 2 * math.pi * fm                 # the pole in the harmonic's frame
+    lam = wn / (2 * qn)
     er = end_ratio(secs_, end, fm)
     pal = PALLET_GENTLE_S * (PALLET_SHARP_S / PALLET_GENTLE_S) ** ((max(1, min(127, vel)) - 1) / 126.0)
     rise = pal + FOOT_RISE_S
     rng = np.random.default_rng(1)
-    Q = seed_rel * np.abs(Qss).max() * np.exp(2j * np.pi * rng.random(nh))
+    # the start: the jet switching on is a STEP of flow, whose spectrum falls as
+    # 1/m -- the low harmonics get the head start the turbulence alone would not
+    Q = seed_rel * np.abs(Qss).max() / m * np.exp(2j * np.pi * rng.random(nh))
     # the drive is explicit: a step must not move a harmonic by more than its loop
     # gain (x10-20) can undo -- lam dt well under 1/G
     dt = dt or min(0.1 / lam.max(), 2e-4)
@@ -485,17 +515,43 @@ def onset(stop, f0, vel=100, secs=0.6, nh=16, npts=256, seed_rel=1e-3, steady_so
         qin = B * b * uj * (1 + np.tanh((synth(eh) - y0) / b))
         return 1j * m * w * kdrv * harm(qin)
 
+    Z = Q.copy()            # the resonant parts (the seed in them)
     for i in range(n):
         t = tt[i]
         # the vortex loss IMPLICITLY, as the resistance it presents to the flow's
-        # swing (its describing function, 8/3pi kv |q|max): stiff where the mouth
-        # is small, it would overshoot taken explicitly
+        # swing (its describing function, 8/3pi kv |q|max) -- stiff where the
+        # mouth is small; the jet's drive explicit
         qmax = np.abs(synth(Q)).max()
         rv = 8.0 / (3.0 * math.pi) * kv * qmax
-        target = Y * drive(Q, t) / (1.0 + Y * rv)
-        Q = target + (Q - target) * np.exp(-lam * dt)
+        dj = drive(Q, t)
+        den = 1.0 + Yrest * rv
+        a = arot - r1 * rv / den
+        fz = r1 * dj / den
+        ea = np.exp(a * dt)
+        Z = Z * ea + fz * (ea - 1.0) / a
+        Q = (Z + Yrest * dj) / den
         out[i] = np.abs(1j * m * w * Q) * np.sqrt(1 + np.abs(er) ** 2)
     return tt, out, fr
+
+
+def mode_times(stop, f0, harmonics=(1, 2, 3, 4, 5), tol=0.06):
+    """Each harmonic's own build time from the pipe alone, in the frequency
+    domain: the time constant 2Q/w of the mode it falls on (a stopped pipe's
+    even harmonics fall on none, within tol, and are left out). The first
+    is the fundamental's Q."""
+    g = geometry(stop, f0)
+    L, md = pipe_modes(g, f0)
+    out = {}
+    for m in harmonics:
+        k = min(md, key=lambda x: abs(x[0] - m * f0)) if md else None
+        if k and abs(k[0] / (m * f0) - 1) < tol:
+            # the Q on a fine grid about the peak (the survey's is coarse)
+            bw = k[0] / max(k[1], 1.0)
+            f = np.linspace(k[0] - 4 * bw, k[0] + 4 * bw, 2001)
+            fine = PI.modes(f, loop_admittance(g, L, f)[0], nmax=3)
+            q = min(fine, key=lambda x: abs(x[0] - k[0]))[1] if fine else k[1]
+            out[m] = (q, 2 * q / (2 * math.pi * k[0]))
+    return out
 
 
 def speech_fit(tt, env, f0, nfit=4):
@@ -521,7 +577,25 @@ def speech_fit(tt, env, f0, nfit=4):
     return dict(rises=rises, cycles=full1 * f0, exp=ex, overshoot_db=20 * np.log10(peak))
 
 
-def sweep(stop, f_lo, f_hi, f_start=233.1, step=2 ** (1 / 12.0), **kw):
+def morph(stop_to, f0, stop_from="principal", steps=12):
+    """CONTINUATION IN THE CONSTRUCTION: a stop that will not solve from a
+    cold start (a narrow string pulled to its octave) is reached from the
+    principal's solution at f0, its dimensions moved to the stop's a step at a
+    time, each solve started from the last. Returns the solution vector."""
+    a, b = STOPS[stop_from], STOPS[stop_to]
+    x = None
+    for k in range(steps + 1):
+        t = k / steps
+        mid = dict(b)
+        for key in ("d_c", "mouth", "cutup", "flue", "pressure", "offset", "halve"):
+            if key in a and key in b:
+                mid[key] = a[key] * (b[key] / a[key]) ** t if key == "d_c" else a[key] + (b[key] - a[key]) * t
+        r = steady(mid, f0, guess=x)
+        x = r[3]["sol"].x
+    return x
+
+
+def sweep(stop, f_lo, f_hi, f_start=233.1, step=2 ** (1 / 12.0), guess0=None, **kw):
     """steady() over a compass by CONTINUATION: solved first at f_start (where
     a cold start converges), then a semitone at a time outward, each solve
     started from its neighbour's harmonics (scaled by the mouth's area) --
@@ -529,7 +603,7 @@ def sweep(stop, f_lo, f_hi, f_start=233.1, step=2 ** (1 / 12.0), **kw):
     out = {}
 
     def run(direction):
-        f, guess, prev = f_start, None, None
+        f, guess, prev = f_start, (guess0.copy() if guess0 is not None else None), f_start
         while (f >= f_lo * 0.999) if direction < 0 else (f <= f_hi * 1.001):
             if guess is not None:
                 g0, g1 = geometry(stop, prev), geometry(stop, f)

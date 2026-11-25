@@ -38,21 +38,47 @@ SPEECH_FLOOR_S = 0.004          # the pallet and the foot's first fill
 SPEECH_KEYS = 6                 # written keys C2..C7 the speech is measured at (each rank at its own pitch)
 LEVEL_KEYS = (48, 60, 72)
 
-# class -> (fluepipe_sim.STOPS key, the rank's name on GM 19, writes speech?)
+# class -> (fluepipe_sim.STOPS key, the rank's name on GM 19, writes speech?,
+# its level: "hold" = where the console has it (set by ear), "sim" = the
+# simulated pipe's radiated level against the simulated principal 8's, both
+# on the same wind -- for the ranks whose level was a recording's balance)
 CLASSES = {
-    "FlueOrganProperties": ("principal", "principal 8", True),
-    "PrincipalOctave4Properties": ("octave", "octave 4", False),
-    "PrincipalOctave2Properties": ("superoctave", "super octave 2", False),
-    "OrganQuintProperties": ("quint", "quint 2-2/3", True),
-    "OrganPrincipal16Properties": ("principal16", "principal 16", True),
-    "OrganQuint513Properties": ("quint513", "quint 5-1/3", True),
+    "FlueOrganProperties": ("principal", "principal 8", True, "hold"),
+    "PrincipalOctave4Properties": ("octave", "octave 4", False, "hold"),
+    "PrincipalOctave2Properties": ("superoctave", "super octave 2", False, "hold"),
+    "OrganQuintProperties": ("quint", "quint 2-2/3", True, "hold"),
+    "OrganPrincipal16Properties": ("principal16", "principal 16", True, "hold"),
+    "OrganQuint513Properties": ("quint513", "quint 5-1/3", True, "hold"),
+    "OrganGedaktProperties": ("gedakt", "flute 8", "modes", "hold"),
+    "OrganBourdonProperties": ("bourdon16", "bourdon 16", "modes", "hold"),
+    "OrganKoppelfluteProperties": ("rohrflute", "koppelflute 4", "modes", "sim"),
+    "OrganWaldfluteProperties": ("waldflute", "waldflute 2", "modes", "sim"),
+    "OrganNazardProperties": ("rohrflute", "nazard 2-2/3", "modes", "sim"),
+    "OrganTierceProperties": ("tierce", "tierce 1-3/5", "modes", "sim"),
+    "OrganSubbassProperties": ("subbass16", "subbass 16", "modes", "sim"),
+    "OrganGambaProperties": ("gamba", "gamba 8", "modes", "sim"),
+    "OrganCelesteProperties": ("gamba", "celeste 8", "modes", "sim"),
 }
+
+
+def _sweep(F, stop, lo, hi, start):
+    """fluepipe_sim.sweep, a stop marked morph reached from the principal's
+    solution first (a narrow string will not solve from a cold start)."""
+    g0 = F.morph(stop, start) if F.STOPS[stop].get("morph") else None
+    return F.sweep(stop, lo, hi, f_start=start, guess0=g0)
+# SPEECH BY THE MODES ("modes"): the full onset (fluepipe_sim.onset) holds for
+# the open principals but lets a stopped pipe's upper modes win its start; so
+# a flute's speech is the PRINCIPAL'S (as written, Ben's approved voice) scaled
+# by the pipes' own time constants -- a saturating resonator builds in periods
+# as its fundamental mode's Q (2Q/w), its upper harmonics as their modes'
+# (fluepipe_sim.mode_times: linear acoustics, from the flute's own geometry)
 
 
 def _key(F, stop):
     s = F.STOPS[stop]
     consts = (F.JET_CP, F.JET_MU, F.JET_SPREAD, F.JET_EXP_MAX, F.ETA_SAT, F.ALPHA_VC, F.FOOT_RISE_S,
-              F.PALLET_GENTLE_S, F.PALLET_SHARP_S, F.LIP_THICK_M, F.VOICE_REF_HZ, F.MIN_Q)
+              F.PALLET_GENTLE_S, F.PALLET_SHARP_S, F.LIP_THICK_M, F.VOICE_REF_HZ, F.MIN_Q,
+              getattr(F, "JET_PHASE_MAX", None))
     return json.dumps([stop, sorted(s.items()), consts])
 
 
@@ -61,7 +87,7 @@ def simulate(name, cache):
     simulator's constants are unchanged."""
     import fluepipe_sim as F
     import tonelib as T
-    stop, rank, _ = CLASSES[name]
+    stop, rank = CLASSES[name][:2]
     k = _key(F, stop) + name
     if k in cache:
         return cache[k]
@@ -71,11 +97,19 @@ def simulate(name, cache):
     keys_hz = [261.63 * ratio * 2 ** ((k - 60) / 12.0) for k in np.linspace(36, 96, SPEECH_KEYS)]
     lo, hi = min(anchors + keys_hz) * 0.97, max(anchors + keys_hz) * 1.03
     start = min(anchors, key=lambda a: abs(math.log(a / 250.0)))
-    tab = F.sweep(stop, lo, hi, f_start=start)
+    tab = _sweep(F, stop, lo, hi, start)
     top = max(tab)
     # anchors past the highest sounding pipe take its tone (the renderer holds the last anchor's anyway)
     pts = [[a, [round(10 ** (d / 20.0), 5) for d in F.at(tab, min(a, top))[1]]] for a in anchors]
     cyc, exps = [], []
+    if CLASSES[name][2] == "modes":
+        cyc, exps = _modes_speech(stop, [f for f in keys_hz if f <= top * 1.01])
+        out = dict(points=pts, cycles=float(np.median(cyc)), exp=float(np.median(exps)),
+                   cycles_all=[float(c) for c in cyc], exp_all=[float(e) for e in exps])
+        cache[k] = out
+        with open(CACHE, "w") as f:
+            json.dump(cache, f)
+        return out
     for f0 in [f for f in keys_hz if f <= top * 1.01]:
         st = F.at(tab, f0)
         tt, env, fr = F.onset(stop, f0, steady_sol=st, secs=max(0.5, 60.0 / f0))
@@ -89,6 +123,57 @@ def simulate(name, cache):
     with open(CACHE, "w") as f:
         json.dump(cache, f)
     return out
+
+
+def _tau_exp(mt):
+    """How much faster the upper harmonics build than the fundamental, as the
+    exponent of rise ~ m^-exp, from their modes' time constants."""
+    ms = sorted(m for m in mt if m <= 5)
+    if len(ms) < 2:
+        return 0.0
+    x = np.log(ms)
+    y = np.log([mt[m][1] / mt[1][1] for m in ms])
+    return float(-np.polyfit(x, y, 1)[0])
+
+
+def _modes_speech(stop, keys_hz):
+    """Per key: (speech cycles, harmonic exponent) of a flute, the principal's
+    as written scaled by the two pipes' mode time constants at the same pitch."""
+    import fluepipe_sim as F
+    import tonelib as T
+    P = T.FlueOrganProperties
+    cyc, exps = [], []
+    for f0 in keys_hz:
+        mp, mf = F.mode_times("principal", f0), F.mode_times(stop, f0)
+        if 1 not in mp or 1 not in mf:
+            print("    %s %.1f Hz: no fundamental mode found (skipped)" % (stop, f0))
+            continue
+        cyc.append(P.speech_cycles * mf[1][0] / mp[1][0])
+        ep = _tau_exp(mp)
+        exps.append(P.speech_harmonic_exp * (_tau_exp(mf) / ep if ep > 0 else 1.0))
+        print("    %s %.1f Hz: Q1 %.1f against the principal's %.1f -> %.1f cycles, exp %.2f"
+              % (stop, f0, mf[1][0], mp[1][0], cyc[-1], exps[-1]), flush=True)
+    return cyc, exps
+
+
+def sim_level(name, cache):
+    """The simulated pipe's radiated level (dB, the simulator's own units --
+    alike for every stop on the same wind), mean power over LEVEL_KEYS at the
+    rank's own pitch."""
+    import fluepipe_sim as F
+    import tonelib as T
+    stop, rank = CLASSES[name][:2]
+    k = "L|" + _key(F, stop) + rank
+    if k in cache:
+        return cache[k]
+    ratio = next(r[1] for r in T.FlueOrganProperties.stop_ranks if r[0] == rank)
+    fs = [261.63 * ratio * 2 ** ((key - 60) / 12.0) for key in LEVEL_KEYS]
+    tab = _sweep(F, stop, min(fs) * 0.97, max(fs) * 1.03, min(fs, key=lambda f: abs(math.log(f / 250.0))))
+    pw = [10 ** (F.at(tab, f)[2] / 10.0) for f in fs]
+    cache[k] = float(10 * math.log10(np.mean(pw)))
+    with open(CACHE, "w") as f:
+        json.dump(cache, f)
+    return cache[k]
 
 
 def render_level(rank):
@@ -148,15 +233,17 @@ def write_class(src, name, res, gain_expr):
     j = src.find("\nclass ", i + 1)
     j = len(src) if j < 0 else j
     body = src[i:j]
-    stop, rank, speech = CLASSES[name]
+    stop, rank, speech = CLASSES[name][:3]
     marker = ("    # SIMULATED (examples/organ_bake.py; fluepipe_sim.STOPS[%r], Audsley's\n"
               "    # construction): the radiated harmonics at the rank's own pitches\n" % stop)
     body = re.sub(r"(?:    # SIMULATED \(examples/organ_bake\.py[^\n]*\n(?:    #[^\n]*\n)*)?    mode_gains_points = \(\n.*?\n    \)\n",
                   lambda _m: marker + _fmt_points(res["points"]) + "\n", body, count=1, flags=re.S)
     if speech:
-        sp = ("    # ITS SPEECH, SIMULATED (examples/organ_bake.py: fluepipe_sim.onset over\n"
-              "    # the compass, %s cycles): periods of its own pitch, how far its\n"
-              "    # upper harmonics lead (rise ~ m^-exp), the pallet's floor\n"
+        how = ("the principal's scaled by\n    # its modes' time constants (fluepipe_sim.mode_times)" if speech == "modes"
+               else "fluepipe_sim.onset over\n    # the compass")
+        sp = ("    # ITS SPEECH, SIMULATED (examples/organ_bake.py: " + how + ", %s cycles): periods of\n"
+              "    # its own pitch, how far its upper harmonics lead (rise ~ m^-exp), the\n"
+              "    # pallet's floor\n"
               "    speech_cycles = %.2f\n    speech_harmonic_exp = %.3f\n    attack_time = %.3f\n"
               % ("/".join("%.0f" % c for c in res["cycles_all"]), res["cycles"], res["exp"], SPEECH_FLOOR_S))
         pat = r"(?:    # ITS SPEECH[^\n]*\n(?:    #[^\n]*\n)*)?    speech_cycles = [^\n]*\n    speech_harmonic_exp = [^\n]*\n(?:    attack_time = [^\n]*\n)?"
@@ -165,7 +252,9 @@ def write_class(src, name, res, gain_expr):
         else:
             body = body.replace("    mode_gains_low = None\n", "    mode_gains_low = None\n" + sp, 1)
     if gain_expr:
-        line = "    initial_gain = %s     # (organ_bake: the console's level re-held)\n" % gain_expr
+        why = ("the simulated pipe's level against the principal's" if CLASSES[name][3] == "sim"
+               else "the console's level re-held")
+        line = "    initial_gain = %s     # (organ_bake: %s)\n" % (gain_expr, why)
         if re.search(r"\n    initial_gain = [^\n]*\n", body):
             body = re.sub(r"\n    initial_gain = [^\n]*\n", lambda _m: "\n" + line, body, count=1)
         else:
@@ -186,6 +275,14 @@ def main(argv):
     import native as N
     import tonelib as T
     old = {n: render_level(CLASSES[n][1]) for n in want}
+    target = dict(old)
+    if any(CLASSES[n][3] == "sim" for n in want):
+        p8 = render_level("principal 8")
+        sp8 = sim_level("FlueOrganProperties", cache)
+        for n in want:
+            if CLASSES[n][3] == "sim":
+                target[n] = p8 + sim_level(n, cache) - sp8
+                print("  %s: level by the physics %.2f dB (was %.2f, a recording's balance)" % (n, target[n], old[n]))
     for n in want:
         cls = getattr(T, n)
         pts = tuple((a, tuple(g)) for a, g in res[n]["points"])
@@ -201,10 +298,10 @@ def main(argv):
         cls = getattr(T, n)
         N.forget()
         new = render_level(CLASSES[n][1])
-        g = cls.initial_gain * 10 ** ((old[n] - new) / 20.0)
+        g = cls.initial_gain * 10 ** ((target[n] - new) / 20.0)
         cls.initial_gain = g
         gains[n] = "%.10g" % g
-        print("  %s: level %.2f -> %.2f dB, initial_gain -> %s" % (n, new, old[n], gains[n]), flush=True)
+        print("  %s: level %.2f -> %.2f dB, initial_gain -> %s" % (n, new, target[n], gains[n]), flush=True)
     p = os.path.join(ROOT, "tonelib.py")
     src = open(p).read()
     for n in want:
