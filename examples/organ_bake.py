@@ -8,6 +8,10 @@ against a recording.
     python3 examples/organ_bake.py --simulate [CLASS ...]   solve, cache, print
     python3 examples/organ_bake.py --write [CLASS ...]      ...and write tonelib
 
+THE FIRST STEP OF THE ORGAN'S BUILD (examples/organ_build.py: bake, wind,
+levels, regulate). It writes each class's tables bare (fundamental 1): rerun
+it and the levels and the regulation must be rerun after it.
+
 What it writes into each class, the attributes the class already had:
   mode_gains_points   the radiated harmonics h1-h32 (amplitude re h1) at the
                       class's own anchor pitches (its rank's sounding pitch),
@@ -451,6 +455,13 @@ def main(argv):
         cls.initial_gain = g
         gains[n] = "%.10g" % g
         print("  %s: level %.2f -> %.2f dB, initial_gain -> %s" % (n, new, target[n], gains[n]), flush=True)
+    # ...and the bare tables kept for the levels' step (organ_levels.base_points)
+    bp = os.path.join(HERE, "organ_bare_tables.json")
+    bare = json.load(open(bp)) if os.path.exists(bp) else {}
+    for n in want:
+        bare[n] = [[a, list(g)] for a, g in res[n]["points"]]
+    with open(bp, "w") as f:
+        json.dump(bare, f, indent=0)
     p = os.path.join(ROOT, "tonelib.py")
     src = open(p).read()
     for n in want:
