@@ -58,6 +58,16 @@ CLASSES = {
     "OrganSubbassProperties": ("subbass16", "subbass 16", "modes", "sim"),
     "OrganGambaProperties": ("gamba", "gamba 8", "modes", "sim"),
     "OrganCelesteProperties": ("gamba", "celeste 8", "modes", "sim"),
+    # THE REEDS (examples/reedpipe_sim.py: the beating tongue against its
+    # resonator's modes, in time; tone and speech both from it)
+    "OrganTrumpetProperties": ("reed:trumpet", "trumpet 8", "reed", "hold"),
+    "OrganClarionProperties": ("reed:clarion", "reed 4", "reed", "hold"),
+    "OrganCromorneProperties": ("reed:cromorne", "reed 8", "reed", "hold"),
+    "OrganBassonProperties": ("reed:basson", "reed 16", "reed", "hold"),
+    "OrganTrompetteProperties": ("reed:trompette", "trompette 8", "reed", "sim"),
+    "OrganOboeProperties": ("reed:oboe", "oboe 8", "reed", "sim"),
+    "OrganContrabassoonProperties": ("reed:contrabassoon", "contrabassoon 32", "reed", "sim"),
+    "OrganVoxHumanaProperties": ("reed:voxhumana", "vox humana 8", "reed", "sim"),
 }
 
 
@@ -75,6 +85,11 @@ def _sweep(F, stop, lo, hi, start):
 
 
 def _key(F, stop):
+    if stop.startswith("reed:"):
+        import reedpipe_sim as R
+        consts = (R.ALPHA, R.TONGUE_L_CC, R.TONGUE_HALVE, R.WIDTH_RATIO, R.TONGUE_TUNE, R.Q_TONGUE, R.BEAT,
+                  R.CONTACT, R.SR, F.PALLET_GENTLE_S, F.PALLET_SHARP_S, F.FOOT_RISE_S)
+        return json.dumps([stop, sorted(R.STOPS[stop[5:]].items()), consts])
     s = F.STOPS[stop]
     consts = (F.JET_CP, F.JET_MU, F.JET_SPREAD, F.JET_EXP_MAX, F.ETA_SAT, F.ALPHA_VC, F.FOOT_RISE_S,
               F.PALLET_GENTLE_S, F.PALLET_SHARP_S, F.LIP_THICK_M, F.VOICE_REF_HZ, F.MIN_Q,
@@ -94,6 +109,12 @@ def simulate(name, cache):
     cls = getattr(T, name)
     anchors = [a for a, _ in cls.mode_gains_points]
     ratio = next(r[1] for r in T.FlueOrganProperties.stop_ranks if r[0] == rank)
+    if stop.startswith("reed:"):
+        out = _reed(stop[5:], anchors, ratio)
+        cache[k] = out
+        with open(CACHE, "w") as f:
+            json.dump(cache, f)
+        return out
     keys_hz = [261.63 * ratio * 2 ** ((k - 60) / 12.0) for k in np.linspace(36, 96, SPEECH_KEYS)]
     lo, hi = min(anchors + keys_hz) * 0.97, max(anchors + keys_hz) * 1.03
     start = min(anchors, key=lambda a: abs(math.log(a / 250.0)))
@@ -123,6 +144,42 @@ def simulate(name, cache):
     with open(CACHE, "w") as f:
         json.dump(cache, f)
     return out
+
+
+def _reed(stop, anchors, ratio):
+    """A reed class's tables at its anchors and its speech over written
+    C2-C7 at its own pitch, from reedpipe_sim's time-domain tongue."""
+    import fluepipe_sim as F
+    import reedpipe_sim as R
+    pts = []
+    for a in anchors:
+        # past the highest pitch that speaks, that pipe's tone (as a flue's top)
+        f = a
+        fp, db, lvl, info = R.tuned_tone(stop, f, secs=0.8)
+        while lvl < -100 and f > 60:
+            f /= 2 ** (1 / 12.0)
+            fp, db, lvl, info = R.tuned_tone(stop, f, secs=0.8)
+        a_play = f
+        pts.append([a, [round(10 ** (d / 20.0), 5) for d in db]])
+        print("    reed %s %.1f Hz (sounded at %.1f): plays %+.0f c, closed %.0f%%, h2-h5 %s" % (
+            stop, a, a_play, 1200 * math.log2(fp / a_play), 100 * info["closed"],
+            " ".join("%.0f" % d for d in db[1:5])), flush=True)
+    cyc, exps = [], []
+    for f0 in [261.63 * ratio * 2 ** ((k - 60) / 12.0) for k in np.linspace(36, 96, SPEECH_KEYS)]:
+        if f0 > 4200:
+            continue
+        r = R.tuned_tone(stop, f0, secs=0.6)
+        if r[2] < -100:
+            continue
+        tt, env, fp = R.envelopes(r[3]["stop"], f0, secs=max(0.4, 40.0 / f0))
+        sf = F.speech_fit(tt, env, fp, nfit=3)
+        if not (np.isfinite(sf["cycles"]) and sf["cycles"] > 0):
+            continue
+        cyc.append((sf["rises"][0] / 0.608 - SPEECH_FLOOR_S) * fp)
+        exps.append(sf["exp"])
+        print("    reed %s %.1f Hz: %.1f cycles, exp %.2f" % (stop, f0, cyc[-1], exps[-1]), flush=True)
+    return dict(points=pts, cycles=float(np.median(cyc)), exp=float(np.median(exps)),
+                cycles_all=[float(c) for c in cyc], exp_all=[float(e) for e in exps])
 
 
 def _tau_exp(mt):
@@ -168,6 +225,13 @@ def sim_level(name, cache):
         return cache[k]
     ratio = next(r[1] for r in T.FlueOrganProperties.stop_ranks if r[0] == rank)
     fs = [261.63 * ratio * 2 ** ((key - 60) / 12.0) for key in LEVEL_KEYS]
+    if stop.startswith("reed:"):
+        import reedpipe_sim as R
+        pw = [10 ** (R.tuned_tone(stop[5:], f, secs=0.8)[2] / 10.0) for f in fs]
+        cache[k] = float(10 * math.log10(np.mean(pw)))
+        with open(CACHE, "w") as f:
+            json.dump(cache, f)
+        return cache[k]
     tab = _sweep(F, stop, min(fs) * 0.97, max(fs) * 1.03, min(fs, key=lambda f: abs(math.log(f / 250.0))))
     pw = [10 ** (F.at(tab, f)[2] / 10.0) for f in fs]
     cache[k] = float(10 * math.log10(np.mean(pw)))
@@ -234,12 +298,14 @@ def write_class(src, name, res, gain_expr):
     j = len(src) if j < 0 else j
     body = src[i:j]
     stop, rank, speech = CLASSES[name][:3]
-    marker = ("    # SIMULATED (examples/organ_bake.py; fluepipe_sim.STOPS[%r], Audsley's\n"
-              "    # construction): the radiated harmonics at the rank's own pitches\n" % stop)
+    where = ("reedpipe_sim.STOPS[%r]" % stop[5:]) if stop.startswith("reed:") else ("fluepipe_sim.STOPS[%r]" % stop)
+    marker = ("    # SIMULATED (examples/organ_bake.py; %s, Audsley's\n"
+              "    # construction): the radiated harmonics at the rank's own pitches\n" % where)
     body = re.sub(r"(?:    # SIMULATED \(examples/organ_bake\.py[^\n]*\n(?:    #[^\n]*\n)*)?    mode_gains_points = \(\n.*?\n    \)\n",
                   lambda _m: marker + _fmt_points(res["points"]) + "\n", body, count=1, flags=re.S)
     if speech:
         how = ("the principal's scaled by\n    # its modes' time constants (fluepipe_sim.mode_times)" if speech == "modes"
+               else "the tongue's attack in\n    # reedpipe_sim" if speech == "reed"
                else "fluepipe_sim.onset over\n    # the compass")
         sp = ("    # ITS SPEECH, SIMULATED (examples/organ_bake.py: " + how + ", %s cycles): periods of\n"
               "    # its own pitch, how far its upper harmonics lead (rise ~ m^-exp), the\n"

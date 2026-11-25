@@ -10802,131 +10802,142 @@ class OrganBourdonProperties(OrganGedaktProperties):
 
 
 class OrganCromorneProperties(ReedOrganProperties):
-    """The reed 8: Pitea's Positiv Cromorne 8 -- a half-length cylinder, odd
-    harmonics strong and the evens there under them."""
+    """The reed 8: a Cromorne -- a beating tongue on a small half-length
+    cylinder ("like the Clarinet", Audsley after Seidel), its odd harmonics
+    strong and the evens under them -- simulated (examples/reedpipe_sim.py)."""
+    # SIMULATED (examples/organ_bake.py; reedpipe_sim.STOPS['cromorne'], Audsley's
+    # construction): the radiated harmonics at the rank's own pitches
     mode_gains_points = (
-        (82.4, (1.00000, 0.96005, 2.35545, 0.88137, 0.91192, 1.60361, 0.33569, 3.34922, 0.78773,
-                0.81993, 1.02279, 0.37718, 0.89393, 0.40186, 0.37173, 0.72347, 0.26238, 0.10859,
-                0.13803, 0.18997, 0.08271, 0.06244, 0.07435, 0.05658, 0.11780, 0.03836, 0.04749,
-                0.09724, 0.07730, 0.03024, 0.02088, 0.03751)),
-        (233.1, (1.00000, 0.40528, 2.73857, 0.50505, 1.00922, 0.66132, 0.70560, 1.05838, 0.62288,
-                 0.61093, 0.30734, 0.26796, 0.16428, 0.20415, 0.08760, 0.09054, 0.06860, 0.06218,
-                 0.07375, 0.05660, 0.03647, 0.04366, 0.02408, 0.03262, 0.01073, 0.00785, 0.02221,
-                 0.01941, 0.01173, 0.01001, 0.00702, 0.00427)),
-        (1046.5, (1.00000, 0.14447, 0.23694, 0.14610, 0.08080, 0.05889, 0.01029, 0.01953, 0.00341,
-                  0.00381, 0.00228, 0.00617, 0.01517, 0.00252, 0.00281, 0.00058, 0.00091, 0.00057,
-                  0.00016, 0.00065, 0.00052, 0.00020, 0.00149, 0.00002, 0.00035, 0.00035, 0.00035,
-                  0.00035, 0.00035, 0.00035, 0.00035, 0.00035)),
+        (82.4, (1.00000, 0.96488, 0.69459, 0.68889, 0.44795, 0.33749, 0.51549, 0.59875, 0.63953,
+                  0.45315, 0.11904, 0.09974, 0.24557, 0.11001, 0.03584, 0.04054, 0.14261, 0.01313,
+                  0.02187, 0.01036, 0.11058, 0.05270, 0.02832, 0.03884, 0.11526, 0.08962, 0.05787,
+                  0.00814, 0.04381, 0.07568, 0.02783, 0.00603)),
+        (233.1, (1.00000, 0.18596, 0.45487, 0.13316, 0.06981, 0.02959, 0.08790, 0.05808, 0.03485,
+                  0.02133, 0.04276, 0.03482, 0.02947, 0.01888, 0.02566, 0.02053, 0.02625, 0.01564,
+                  0.01399, 0.01026, 0.02066, 0.01077, 0.00636, 0.00623, 0.01529, 0.00678, 0.00267,
+                  0.00569, 0.01172, 0.00432, 0.00115, 0.00553)),
+        (1046.5, (1.00000, 0.01776, 0.09865, 0.00941, 0.03761, 0.00250, 0.00718, 0.00362, 0.00825,
+                  0.00179, 0.00087, 0.00216, 0.00398, 0.00165, 0.00029, 0.00123, 0.00205, 0.00174,
+                  0.00051, 0.00087, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000,
+                  0.00000, 0.00000, 0.00000, 0.00000, 0.00000)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
     max_harmonic = 32
-    # LEVEL: where the console has it, set by ear (held through its
-    # measured series; the series is replaced when this rank is simulated)
-    initial_gain = 0.0001967750377 * 10 ** (44.140 / 20.0)
-    # ITS SPEECH, fitted on its Pitea stop's attack C3-C6 (pitea_stops.py
-    # --fit=speech; the courses' rms 3.70 -> 3.03 dB): periods of its own pitch,
-    # how far its upper harmonics lead, the valve's floor -- no overshoot
-    speech_cycles = 12.0
-    speech_harmonic_exp = 0.0
-    attack_time = 0.016
+    # LEVEL: where the console has it, set by ear (organ_bake re-holds it)
+    initial_gain = 0.0727807108     # (organ_bake: the console's level re-held)
+    # ITS SPEECH, SIMULATED (examples/organ_bake.py: the tongue's attack in
+    # reedpipe_sim, 12/4/6/11/23 cycles): periods of
+    # its own pitch, how far its upper harmonics lead (rise ~ m^-exp), the
+    # pallet's floor
+    speech_cycles = 11.29
+    speech_harmonic_exp = -0.117
+    attack_time = 0.004
     odd_only = False
     bellows_push_gain = 0.0
-    # its release, as the principal's: no lean, the principal's spread (43
-    # pipes of the Cromorne, Clarion, Trumpet and Basson: 0.52 -> 0.32 octaves)
+    # its release spread (still the Piteå-measured one: the release is
+    # replaced from the simulated pipe in a later step, licences.md)
     release_band_mu = 0.0
     release_band_sigma = 1.0
 
 
 class OrganBassonProperties(OrganCromorneProperties):
-    """The reed 16: the extended set's Basson 16."""
+    """The reed 16: a Fagotto, a very small-scale inverted cone (Willis's CC
+    top 2 in), simulated."""
+    # SIMULATED (examples/organ_bake.py; reedpipe_sim.STOPS['basson'], Audsley's
+    # construction): the radiated harmonics at the rank's own pitches
     mode_gains_points = (
-        (41.2, (1.00000, 1.98831, 2.01947, 2.91987, 1.43767, 2.39116, 3.78631, 2.98500, 0.93168,
-                0.92568, 0.65155, 0.96656, 0.47315, 0.66797, 0.29428, 0.19782, 0.18754, 0.09107,
-                0.34156, 0.27011, 0.11720, 0.06916, 0.08045, 0.08750, 0.08813, 0.03340, 0.04397,
-                0.04170, 0.05440, 0.07980, 0.08468, 0.04421)),
-        (116.5, (1.00000, 1.03628, 1.00629, 0.96319, 1.37598, 0.64909, 0.72471, 0.43346, 0.25110,
-                 0.11308, 0.05130, 0.07370, 0.05851, 0.06049, 0.06314, 0.04244, 0.03156, 0.01291,
-                 0.01567, 0.02358, 0.02565, 0.02142, 0.02953, 0.02218, 0.01179, 0.02096, 0.02955,
-                 0.01576, 0.01378, 0.01065, 0.01982, 0.01237)),
-        (457.3, (1.00000, 0.81693, 1.32137, 1.23943, 0.27574, 0.28763, 0.17586, 0.13778, 0.06700,
-                 0.05424, 0.03102, 0.02152, 0.02179, 0.01898, 0.01339, 0.00961, 0.01026, 0.01223,
-                 0.01294, 0.00180, 0.00342, 0.00335, 0.00117, 0.00175, 0.00058, 0.00068, 0.00026,
-                 0.00042, 0.00049, 0.00089, 0.00020, 0.00008)),
+        (41.2, (1.00000, 0.55992, 0.45417, 1.11178, 1.02979, 0.63024, 0.24501, 0.16413, 0.12050,
+                  0.12673, 0.31506, 0.45442, 0.34160, 0.20010, 0.11489, 0.13616, 0.20653, 0.12206,
+                  0.07650, 0.07272, 0.11830, 0.03005, 0.01985, 0.07059, 0.10870, 0.04478, 0.06080,
+                  0.08942, 0.04295, 0.03626, 0.02614, 0.03419)),
+        (116.5, (1.00000, 0.87970, 0.52511, 1.03889, 0.88125, 0.28996, 0.23011, 0.50777, 0.27616,
+                  0.18479, 0.21732, 0.23933, 0.22843, 0.13631, 0.11265, 0.06742, 0.16459, 0.06879,
+                  0.01534, 0.05823, 0.11604, 0.01499, 0.04909, 0.08101, 0.09421, 0.05461, 0.06130,
+                  0.06627, 0.04657, 0.04808, 0.02855, 0.01549)),
+        (457.3, (1.00000, 0.57156, 0.31704, 0.48931, 0.11729, 0.05304, 0.07392, 0.06604, 0.03535,
+                  0.02589, 0.10085, 0.04191, 0.02802, 0.03301, 0.06071, 0.01574, 0.01637, 0.04196,
+                  0.03344, 0.00227, 0.01709, 0.03567, 0.02296, 0.00697, 0.01793, 0.02335, 0.01185,
+                  0.00793, 0.01513, 0.01449, 0.00325, 0.00255)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
     max_harmonic = 32
-    # LEVEL: where the console has it, set by ear (held through its
-    # measured series; the series is replaced when this rank is simulated)
-    initial_gain = 0.0001967750377 * 10 ** (42.090 / 20.0)
-    # ITS SPEECH, fitted on its Pitea stop's attack C3-C6 (pitea_stops.py
-    # --fit=speech; the courses' rms 4.00 -> 4.00 dB): periods of its own pitch,
-    # how far its upper harmonics lead, the valve's floor -- no overshoot
-    speech_cycles = 12.0
-    speech_harmonic_exp = 0.0
-    attack_time = 0.016
+    # LEVEL: where the console has it, set by ear (organ_bake re-holds it)
+    initial_gain = 0.04157161322     # (organ_bake: the console's level re-held)
+    # ITS SPEECH, SIMULATED (examples/organ_bake.py: the tongue's attack in
+    # reedpipe_sim, -0/2/2/1 cycles): periods of
+    # its own pitch, how far its upper harmonics lead (rise ~ m^-exp), the
+    # pallet's floor
+    speech_cycles = 1.62
+    speech_harmonic_exp = -0.549
+    attack_time = 0.004
 
 
 class OrganClarionProperties(OrganCromorneProperties):
-    """The reed 4: Pitea's Svallverk Clarion 4, a trumpet's conical resonator."""
+    """The reed 4: a Clarion, Trumpet form at a smaller scale (Audsley),
+    simulated."""
+    # SIMULATED (examples/organ_bake.py; reedpipe_sim.STOPS['clarion'], Audsley's
+    # construction): the radiated harmonics at the rank's own pitches
     mode_gains_points = (
-        (164.8, (1.00000, 0.46789, 0.36270, 0.46484, 0.31583, 0.65204, 0.96597, 0.60783, 0.26180,
-                 0.14070, 0.08495, 0.16056, 0.04714, 0.09775, 0.03941, 0.04544, 0.01914, 0.02280,
-                 0.02099, 0.01227, 0.01627, 0.00947, 0.01128, 0.00695, 0.01071, 0.01431, 0.00458,
-                 0.00482, 0.00488, 0.00482, 0.00678, 0.00572)),
-        (466.2, (1.00000, 1.09333, 2.09904, 1.67136, 0.66479, 0.81616, 0.35655, 0.12675, 0.05061,
-                 0.02054, 0.04088, 0.02994, 0.01543, 0.02690, 0.01064, 0.00794, 0.03800, 0.00773,
-                 0.02459, 0.01433, 0.00503, 0.00503, 0.00398, 0.00314, 0.00392, 0.00147, 0.00548,
-                 0.00460, 0.00369, 0.00113, 0.00109, 0.00541)),
-        (2093.0, (1.00000, 0.15899, 0.08891, 0.01575, 0.00473, 0.01207, 0.00422, 0.00225, 0.00081,
-                  0.00328, 0.00583, 0.00301, 0.00319, 0.00319, 0.00319, 0.00319, 0.00319, 0.00319,
-                  0.00319, 0.00319, 0.00319, 0.00319, 0.00319, 0.00319, 0.00319, 0.00319, 0.00319,
-                  0.00319, 0.00319, 0.00319, 0.00319, 0.00319)),
+        (164.8, (1.00000, 0.84393, 0.30090, 0.23241, 0.64042, 0.55936, 0.21320, 0.14628, 0.08679,
+                  0.13238, 0.19386, 0.02828, 0.03680, 0.04614, 0.06307, 0.02049, 0.05151, 0.06027,
+                  0.03241, 0.04075, 0.07167, 0.03958, 0.00692, 0.02488, 0.04656, 0.01910, 0.01324,
+                  0.02511, 0.02166, 0.00074, 0.00801, 0.01905)),
+        (466.2, (1.00000, 0.42933, 0.14033, 0.25622, 0.12407, 0.09397, 0.04231, 0.08011, 0.04757,
+                  0.03724, 0.03936, 0.02971, 0.01717, 0.02042, 0.03330, 0.01833, 0.00515, 0.00860,
+                  0.02279, 0.01231, 0.00374, 0.01058, 0.01163, 0.00685, 0.00369, 0.01278, 0.00690,
+                  0.00259, 0.00305, 0.00925, 0.00189, 0.00032)),
+        (2093.0, (1.00000, 0.11887, 0.02908, 0.02649, 0.02309, 0.01995, 0.00289, 0.00906, 0.01031,
+                  0.01097, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000,
+                  0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000,
+                  0.00000, 0.00000, 0.00000, 0.00000, 0.00000)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
     max_harmonic = 32
-    # LEVEL: where the console has it, set by ear (held through its
-    # measured series; the series is replaced when this rank is simulated)
-    initial_gain = 0.0001967750377 * 10 ** (49.540 / 20.0)
-    # ITS SPEECH, fitted on its Pitea stop's attack C3-C6 (pitea_stops.py
-    # --fit=speech; the courses' rms 3.58 -> 2.37 dB): periods of its own pitch,
-    # how far its upper harmonics lead, the valve's floor -- no overshoot
-    speech_cycles = 18.0
-    speech_harmonic_exp = 0.0
-    attack_time = 0.08
+    # LEVEL: where the console has it, set by ear (organ_bake re-holds it)
+    initial_gain = 0.07950650292     # (organ_bake: the console's level re-held)
+    # ITS SPEECH, SIMULATED (examples/organ_bake.py: the tongue's attack in
+    # reedpipe_sim, 0/3/4/4/5/11 cycles): periods of
+    # its own pitch, how far its upper harmonics lead (rise ~ m^-exp), the
+    # pallet's floor
+    speech_cycles = 4.21
+    speech_harmonic_exp = -0.659
+    attack_time = 0.004
 
 
 class OrganTrumpetProperties(OrganCromorneProperties):
-    """The trumpet 8: Pitea's Huvudverk Trumpet 8. It was the orchestral
-    trumpet's spectrum on this pipe; now the organ trumpet's own."""
+    """The trumpet 8: an inverted cone "nearly that of an open labial pipe" on
+    an open shallot (Audsley), its tongue beating -- simulated."""
+    # SIMULATED (examples/organ_bake.py; reedpipe_sim.STOPS['trumpet'], Audsley's
+    # construction): the radiated harmonics at the rank's own pitches
     mode_gains_points = (
-        (82.4, (1.00000, 0.65860, 1.34161, 0.46132, 0.60764, 0.68614, 0.83538, 0.86784, 0.49457,
-                0.39719, 0.26518, 0.18652, 0.12385, 0.28241, 0.19400, 0.21162, 0.14679, 0.09917,
-                0.05934, 0.05762, 0.04414, 0.01856, 0.01606, 0.02311, 0.04565, 0.05397, 0.05668,
-                0.02234, 0.03797, 0.04262, 0.03663, 0.02180)),
-        (233.1, (1.00000, 0.51566, 0.59676, 0.34512, 0.81701, 0.82615, 1.33235, 0.43506, 0.25684,
-                 0.08518, 0.13689, 0.04524, 0.10110, 0.04591, 0.06214, 0.03418, 0.02849, 0.02677,
-                 0.03316, 0.01867, 0.02487, 0.01029, 0.01474, 0.00714, 0.00822, 0.00820, 0.00706,
-                 0.00639, 0.00826, 0.00519, 0.00432, 0.00417)),
-        (1046.5, (1.00000, 0.96657, 0.57111, 0.32386, 0.15432, 0.04872, 0.01029, 0.00275, 0.00491,
-                  0.00352, 0.00106, 0.00150, 0.00136, 0.00049, 0.00060, 0.00022, 0.00018, 0.00012,
-                  0.00054, 0.00023, 0.00017, 0.00015, 0.00007, 0.00054, 0.00054, 0.00054, 0.00054,
-                  0.00054, 0.00054, 0.00054, 0.00054, 0.00054)),
+        (82.4, (1.00000, 0.91890, 0.35214, 0.14204, 0.49991, 0.48147, 0.26153, 0.21442, 0.10997,
+                  0.10740, 0.23979, 0.10787, 0.08868, 0.08888, 0.05504, 0.04636, 0.11002, 0.05334,
+                  0.01542, 0.02039, 0.04703, 0.03109, 0.02144, 0.03906, 0.03362, 0.01158, 0.04152,
+                  0.04291, 0.01386, 0.00436, 0.02362, 0.01882)),
+        (233.1, (1.00000, 0.39421, 0.07973, 0.12637, 0.15996, 0.17314, 0.09170, 0.04487, 0.00828,
+                  0.01256, 0.04358, 0.03197, 0.00913, 0.01860, 0.02937, 0.00929, 0.00795, 0.01256,
+                  0.01393, 0.00502, 0.01219, 0.01415, 0.00925, 0.00206, 0.01217, 0.01160, 0.00569,
+                  0.00273, 0.00754, 0.00385, 0.00039, 0.00394)),
+        (1046.5, (1.00000, 0.15036, 0.03840, 0.02462, 0.02009, 0.00997, 0.01133, 0.01393, 0.01086,
+                  0.00578, 0.00375, 0.00741, 0.00629, 0.00419, 0.00096, 0.00493, 0.00515, 0.00376,
+                  0.00073, 0.00277, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000,
+                  0.00000, 0.00000, 0.00000, 0.00000, 0.00000)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
     max_harmonic = 32
-    # LEVEL: where the console has it, set by ear (held through its
-    # measured series; the series is replaced when this rank is simulated)
-    initial_gain = 0.0001967750377 * 10 ** (51.420 / 20.0)
-    # ITS SPEECH, fitted on its Pitea stop's attack C3-C6 (pitea_stops.py
-    # --fit=speech; the courses' rms 4.43 -> 4.25 dB): periods of its own pitch,
-    # how far its upper harmonics lead, the valve's floor -- no overshoot
-    speech_cycles = 18.0
-    speech_harmonic_exp = 0.0
-    attack_time = 0.03
+    # LEVEL: where the console has it, set by ear (organ_bake re-holds it)
+    initial_gain = 0.1126060118     # (organ_bake: the console's level re-held)
+    # ITS SPEECH, SIMULATED (examples/organ_bake.py: the tongue's attack in
+    # reedpipe_sim, 1/4/6/8/12 cycles): periods of
+    # its own pitch, how far its upper harmonics lead (rise ~ m^-exp), the
+    # pallet's floor
+    speech_cycles = 5.67
+    speech_harmonic_exp = -0.850
+    attack_time = 0.004
 
 
 class OrganQuintProperties(FlueOrganProperties):
@@ -11203,23 +11214,34 @@ class OrganSubbassProperties(OrganBourdonProperties):
 
 
 class OrganContrabassoonProperties(OrganBassonProperties):
-    """contrabassoon 32: Pitea's pedal Kontrabasun 32, the reed an octave under
-    the 16' (its pipes C2-F4 of the key's 8': the pedal's own compass)."""
+    """contrabassoon 32: the Contrafagotto, the Fagotto's form an octave under
+    the 16' (at the Contra-Trombone's ~0.88 length), simulated."""
+    # SIMULATED (examples/organ_bake.py; reedpipe_sim.STOPS['contrabassoon'], Audsley's
+    # construction): the radiated harmonics at the rank's own pitches
     mode_gains_points = (
-        (20.6, (1.00000, 9.56042, 2.74933, 3.46900, 7.09219, 3.54635, 7.95631, 2.48553, 12.12862, 7.07753, 11.33064, 5.29933, 5.19664, 4.09022, 3.06033, 3.79741, 2.47256, 10.79251, 3.00903, 4.94197, 4.60446, 3.06815, 4.73683, 1.65186, 1.03859, 1.17723, 1.17259, 0.63084, 0.34042, 0.31453, 0.47225, 0.17789)),
-        (51.9, (1.00000, 10.93260, 6.54034, 15.83809, 10.48818, 7.98286, 8.38057, 10.69512, 14.09567, 6.48076, 8.57777, 4.17658, 3.72727, 2.13235, 2.35907, 1.70580, 2.04100, 1.10047, 1.32281, 0.68186, 0.73446, 1.07704, 0.72966, 0.24347, 0.83391, 0.94264, 0.29389, 0.46045, 0.26546, 0.37976, 0.16665, 0.28053)),
+        (20.6, (1.00000, 2.40215, 0.88330, 0.72839, 1.50258, 0.58762, 0.14151, 0.97244, 1.45075,
+                  1.31004, 0.92643, 0.91250, 0.49344, 0.55207, 0.45829, 0.37024, 0.41861, 0.61968,
+                  0.32180, 0.30758, 0.39278, 0.45758, 0.25682, 0.21032, 0.29045, 0.30456, 0.17630,
+                  0.18326, 0.14043, 0.10812, 0.37784, 0.38472)),
+        (51.9, (1.00000, 1.04384, 0.87660, 1.83079, 1.80596, 0.86968, 0.48307, 0.45074, 0.31892,
+                  0.38036, 0.46657, 0.71133, 0.47222, 0.30673, 0.29709, 0.20733, 0.27206, 0.18766,
+                  0.09154, 0.12723, 0.20096, 0.16387, 0.16170, 0.15074, 0.08715, 0.07246, 0.14028,
+                  0.04891, 0.04676, 0.05302, 0.04649, 0.06158)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
     max_harmonic = 32
     bore_corner_hz = 0.0
-    # LEVEL: Pitea's own balance -- +5.7 dB re its Principal 8 on the same
-    # keys, as GrandOrgue plays them (pitea_newranks.py) -- held against ours
-    initial_gain = 0.00780187
-    # ITS SPEECH, fitted on its Pitea stop's attack (pitea_stops.py --fit=speech)
-    speech_cycles = 8.0
-    speech_harmonic_exp = 0.0
-    attack_time = 0.016
+    # LEVEL BY THE PHYSICS: the simulated pipe's radiated level against the
+    # simulated principal 8's on the same wind (organ_bake.sim_level)
+    initial_gain = 0.02092678134     # (organ_bake: the simulated pipe's level against the principal's)
+    # ITS SPEECH, SIMULATED (examples/organ_bake.py: the tongue's attack in
+    # reedpipe_sim, -0/2/2 cycles): periods of
+    # its own pitch, how far its upper harmonics lead (rise ~ m^-exp), the
+    # pallet's floor
+    speech_cycles = 2.26
+    speech_harmonic_exp = -0.302
+    attack_time = 0.004
     rank_speech = True
 
 
@@ -11295,23 +11317,38 @@ class OrganCelesteProperties(OrganGambaProperties):
 
 
 class OrganOboeProperties(OrganCromorneProperties):
-    """oboe 8: Pitea's swell Oboe 8, the conical solo reed."""
+    """oboe 8: the conical solo reed, a slender cone on a closed shallot
+    (its bell and shading left out as yet), simulated."""
+    # SIMULATED (examples/organ_bake.py; reedpipe_sim.STOPS['oboe'], Audsley's
+    # construction): the radiated harmonics at the rank's own pitches
     mode_gains_points = (
-        (82.4, (1.00000, 2.45236, 7.30909, 5.29941, 7.23038, 8.59170, 4.34197, 4.16833, 0.97487, 1.14382, 0.33691, 0.62765, 1.20390, 1.22862, 0.53591, 0.84752, 0.58906, 0.39868, 0.19632, 0.17192, 0.46714, 0.43013, 0.32231, 0.30639, 0.12498, 0.12067, 0.13405, 0.35879, 0.10531, 0.14037, 0.07918, 0.06559)),
-        (233.1, (1.00000, 1.84674, 2.34852, 0.84339, 0.85286, 0.48471, 0.16906, 0.07639, 0.15060, 0.03462, 0.03972, 0.04473, 0.00821, 0.01938, 0.00731, 0.01044, 0.02253, 0.00601, 0.00661, 0.00751, 0.00784, 0.00357, 0.00684, 0.00402, 0.00359, 0.00582, 0.00122, 0.00146, 0.00087, 0.00223, 0.00252, 0.00138)),
-        (1046.5, (1.00000, 0.76868, 0.29559, 0.13191, 0.04463, 0.01106, 0.02510, 0.07333, 0.07739, 0.01952, 0.04447, 0.02330, 0.03881, 0.05920, 0.00164, 0.00324, 0.00353, 0.00303, 0.00510, 0.00210, 0.00140, 0.00082, 0.00022, 0.00479, 0.00080, 0.00080, 0.00080, 0.00080, 0.00080, 0.00080, 0.00080, 0.00080)),
+        (82.4, (1.00000, 0.76613, 0.33124, 0.25808, 0.74284, 0.35560, 0.45987, 0.48205, 0.44596,
+                  0.63678, 0.24593, 0.10110, 0.04791, 0.20603, 0.21183, 0.12708, 0.15472, 0.15052,
+                  0.09085, 0.16221, 0.09157, 0.03832, 0.03251, 0.07908, 0.04483, 0.03383, 0.06184,
+                  0.08418, 0.03988, 0.02892, 0.02667, 0.01941)),
+        (233.1, (1.00000, 0.72321, 0.26106, 0.45541, 0.51087, 0.25065, 0.33782, 0.27641, 0.22298,
+                  0.25970, 0.10354, 0.06367, 0.01927, 0.07630, 0.04148, 0.01594, 0.03353, 0.07122,
+                  0.01980, 0.03180, 0.04481, 0.04474, 0.01821, 0.03822, 0.03812, 0.02647, 0.01421,
+                  0.03217, 0.02032, 0.00742, 0.00954, 0.02174)),
+        (1046.5, (1.00000, 0.34626, 0.12357, 0.13840, 0.00348, 0.04525, 0.03917, 0.04295, 0.00630,
+                  0.00961, 0.02535, 0.02589, 0.00511, 0.00259, 0.02172, 0.01359, 0.00594, 0.00299,
+                  0.01489, 0.00839, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000,
+                  0.00000, 0.00000, 0.00000, 0.00000, 0.00000)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
     max_harmonic = 32
     bore_corner_hz = 0.0
-    # LEVEL: still Piteå's own balance (pitea_newranks.py) -- replaced when
-    # this rank is simulated (the pipe organ off Piteå, licences.md)
-    initial_gain = 0.0140562
-    # ITS SPEECH, fitted on its Pitea stop's attack (pitea_stops.py --fit=speech)
-    speech_cycles = 24.0
-    speech_harmonic_exp = 0.0
-    attack_time = 0.03
+    # LEVEL BY THE PHYSICS: the simulated pipe's radiated level against the
+    # simulated principal 8's on the same wind (organ_bake.sim_level)
+    initial_gain = 0.02944649903     # (organ_bake: the simulated pipe's level against the principal's)
+    # ITS SPEECH, SIMULATED (examples/organ_bake.py: the tongue's attack in
+    # reedpipe_sim, 2/2/3/5 cycles): periods of
+    # its own pitch, how far its upper harmonics lead (rise ~ m^-exp), the
+    # pallet's floor
+    speech_cycles = 2.49
+    speech_harmonic_exp = -0.503
+    attack_time = 0.004
     rank_speech = True
 
 
@@ -11338,24 +11375,38 @@ class OrganVoxHumanaProperties(OrganCromorneProperties):
 
 
 class OrganTrompetteProperties(OrganTrumpetProperties):
-    """trompette 8: Pitea's swell Trompette harmonique 8, the French chorus
-    reed beside the Huvudverk's Trumpet."""
+    """trompette 8: the Trompette harmonique, the French chorus reed beside the
+    Trumpet -- its cone double length from tenor C (Audsley), simulated."""
+    # SIMULATED (examples/organ_bake.py; reedpipe_sim.STOPS['trompette'], Audsley's
+    # construction): the radiated harmonics at the rank's own pitches
     mode_gains_points = (
-        (82.4, (1.00000, 0.62728, 1.10923, 0.83976, 0.94780, 1.12612, 1.18762, 2.42268, 1.57267, 1.05398, 0.85527, 0.77782, 0.53982, 0.71635, 0.83657, 0.68499, 0.35035, 0.43506, 0.28335, 0.25964, 0.12077, 0.12995, 0.05161, 0.04077, 0.04573, 0.03750, 0.03843, 0.03331, 0.04047, 0.04665, 0.03685, 0.05086)),
-        (233.1, (1.00000, 0.94072, 0.76121, 0.88651, 0.88626, 0.69608, 1.09569, 0.72140, 0.59657, 0.62238, 0.41841, 0.37909, 0.20577, 0.07548, 0.11457, 0.05705, 0.04864, 0.03155, 0.03678, 0.01641, 0.01523, 0.01465, 0.01907, 0.01039, 0.01102, 0.00633, 0.00665, 0.00885, 0.00306, 0.00433, 0.00437, 0.00419)),
-        (1046.5, (1.00000, 0.95244, 0.29462, 0.33808, 0.16544, 0.05732, 0.02820, 0.00497, 0.00951, 0.00545, 0.00438, 0.00150, 0.00088, 0.00145, 0.00028, 0.00048, 0.00063, 0.00136, 0.00122, 0.01140, 0.00073, 0.00030, 0.00095, 0.00079, 0.00132, 0.00132, 0.00132, 0.00132, 0.00132, 0.00132, 0.00132, 0.00132)),
+        (82.4, (1.00000, 0.91890, 0.35214, 0.14204, 0.49991, 0.48147, 0.26153, 0.21442, 0.10997,
+                  0.10740, 0.23979, 0.10787, 0.08868, 0.08888, 0.05504, 0.04636, 0.11002, 0.05334,
+                  0.01542, 0.02039, 0.04703, 0.03109, 0.02144, 0.03906, 0.03362, 0.01158, 0.04152,
+                  0.04291, 0.01386, 0.00436, 0.02362, 0.01882)),
+        (233.1, (1.00000, 0.68725, 0.40205, 0.54096, 0.15067, 0.07123, 0.12275, 0.08406, 0.07909,
+                  0.06960, 0.05020, 0.06084, 0.03438, 0.01984, 0.02733, 0.02936, 0.00853, 0.01731,
+                  0.04107, 0.01308, 0.00355, 0.02197, 0.02406, 0.01065, 0.00914, 0.01680, 0.01534,
+                  0.00371, 0.00443, 0.01317, 0.01068, 0.00163)),
+        (1046.5, (1.00000, 0.14774, 0.05721, 0.09461, 0.04644, 0.00777, 0.01483, 0.02399, 0.01680,
+                  0.01301, 0.00339, 0.01257, 0.01284, 0.00492, 0.00022, 0.00570, 0.00799, 0.00635,
+                  0.00112, 0.00415, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000, 0.00000,
+                  0.00000, 0.00000, 0.00000, 0.00000, 0.00000)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
     max_harmonic = 32
     bore_corner_hz = 0.0
-    # LEVEL: still Piteå's own balance (pitea_newranks.py) -- replaced when
-    # this rank is simulated (the pipe organ off Piteå, licences.md)
-    initial_gain = 0.0418949
-    # ITS SPEECH, fitted on its Pitea stop's attack (pitea_stops.py --fit=speech)
-    speech_cycles = 24.0
-    speech_harmonic_exp = 0.0
-    attack_time = 0.05
+    # LEVEL BY THE PHYSICS: the simulated pipe's radiated level against the
+    # simulated principal 8's on the same wind (organ_bake.sim_level)
+    initial_gain = 0.05183857021     # (organ_bake: the simulated pipe's level against the principal's)
+    # ITS SPEECH, SIMULATED (examples/organ_bake.py: the tongue's attack in
+    # reedpipe_sim, 4/4/5/6/12 cycles): periods of
+    # its own pitch, how far its upper harmonics lead (rise ~ m^-exp), the
+    # pallet's floor
+    speech_cycles = 4.81
+    speech_harmonic_exp = -0.757
+    attack_time = 0.004
     rank_speech = True
 
 
