@@ -3189,17 +3189,19 @@ def _prep_chest_wind(Grows, ch_progs, grow_of, nblk, notes, rankev_of, ccs=None,
             _ab = (float(_wc.wind_pitch_exp), float(_wc.wind_level_exp))
             _d = T.rank_division(pc, r)
             _key = _ab if _ndiv == 1 else (_d,) + _ab
-            wrow_key[(ch, r[0])] = _key
-            if _key not in _WROWS[ch]:
+            _boxed = _sbx is not None and T.swell_division(pc, r)
+            wrow_key[(ch, r[0])] = _key + (0,) if _boxed else _key
+            if not _boxed and _key not in _WROWS[ch]:
                 _WROWS[ch][_key] = _WND.pitch_level(_ps[_d], *_ab)
-                if _sbx is not None and T.swell_division(pc, r):
-                    # THE SWELL'S BOX (tonelib.organ_box_level): its level rides
-                    # this chest's rows, the pedal's opening each block (its swell
-                    # row, float32 as the native's), each edge its block's
-                    _bl = np.array([T.organ_box_level(pc, T.organ_box_open(float(_sbx[min(e, nblk - 1)])))
-                                    for e in range(nblk + 1)])
-                    _rr, _lv = _WROWS[ch][_key]
-                    _WROWS[ch][_key] = (_rr, _lv * _bl)
+            elif _boxed and _key + (0,) not in _WROWS[ch]:
+                # THE SWELL'S BOX (tonelib.organ_box_gain): a row an octave band,
+                # in order, each this chest's times the box's gain at its centre,
+                # the pedal's opening each block (its swell row, float32 as the
+                # native's), each edge its block's
+                _rr, _lv = _WND.pitch_level(_ps[_d], *_ab)
+                _op = [T.organ_box_open(float(_sbx[min(e, nblk - 1)])) for e in range(nblk + 1)]
+                for _k, _fc in enumerate(pc.swellbox_band_hz):
+                    _WROWS[ch][_key + (_k,)] = (_rr, _lv * np.array([T.organ_box_gain(pc, _fc, _o) for _o in _op]))
         if _VERBOSE_WIND:
             for _d, _p in enumerate(_ps):
                 print("  wind ch%d chest %d: pressure %.4f..%.4f, peak draw %.1f units%s"
@@ -3495,17 +3497,22 @@ def _prep_breath_rows(BCrows, BRrows, _BREATH, brow_of, nblk):
     return (_BLrows, bbrow_of)
 
 
+_WIND_ROWS_CH = {}           # channel -> its wind rows, every one, in order (_prep_wind_rows)
+
+
 def _prep_wind_rows(BCrows, BRrows, _BLrows, _WROWS, nblk, wrow_key):
     """THE WIND'S ROWS: a bend row per (channel, organ family), its phase the
     running sum of the chest's ratio. Returns wrow_of."""
     # the wind's rows (above): a bend row per (channel, family), its phase the
     # running sum of its ratio exactly as bend_blocks makes it, and its level
     wrow_of = {}
+    _WIND_ROWS_CH.clear()
     for _c, _fams in _WROWS.items():
         for _ab, (_r, _lv) in _fams.items():
             _r = _r.astype(np.float32)          # the ratio the kernel reads, summed as it is
             _cc = np.concatenate(([0.0], np.cumsum((_r.astype(np.float64) - 1.0) * BLK)))[:nblk]
             _i = len(BRrows); BRrows.append(_r); BCrows.append(_cc)
+            _WIND_ROWS_CH.setdefault(_c, []).append(_i)     # (every row: a band's too, in order)
             _BLrows[_i] = _lv.astype(np.float32)
             for (_c2, _k), _ab2 in wrow_key.items():
                 if _c2 == _c and _ab2 == _ab:
@@ -3883,9 +3890,9 @@ def _prep_wind_combos(BCrows, BRrows, _BLrows, _MEEND_AT, _MPE_AT, _PN_AT, bbrow
     # came on by default (live's Clip File test). (base row, wind row) -> row.
     wcombo = {}
     if wrow_of:
-        _wch = {}
-        for (_c, _k), _w in wrow_of.items():
-            _wch.setdefault(_c, set()).add(_w)
+        # (every wind row, in order: a Swell band's product row is its family's
+        # first band's plus the band, as the note's partials read it)
+        _wch = {_c: list(_rs) for _c, _rs in _WIND_ROWS_CH.items()}
         _bases = {}
         for _c, _r in brow_of.items():
             _bases.setdefault(_c, set()).add(_r)
@@ -3928,7 +3935,7 @@ def _prep_matrix_tremolo(BCrows, BRrows, _BLrows, _CMXEV, _LROW, bbrow_of, brow_
             continue
         _cur = onepole_edges([(_t, _v / _pk) for _t, _v in _tv], nblk, 0.0)
         _map = {}
-        _wpar = [_v for (_wc, _wk), _v in wrow_of.items() if _wc == _c]      # a pipe organ's wind rows
+        _wpar = list(_WIND_ROWS_CH.get(_c, ()))      # a pipe organ's wind rows (a Swell band's too)
         for _par in set([brow_of.get(_c), _LROW.get(_c), -1] + list(bbrow_of.get(_c, ())) + _wpar):
             if _par is None:
                 continue
@@ -7180,8 +7187,9 @@ def _organ_rows_check(song, rankev_of, Grows, Srows, sh, wrow_of, BRrows, BCrows
         bad.append('swells')
     if tuple(float(x) for x in sh) != tuple(shc):
         bad.append('law %r vs %r' % (tuple(sh), tuple(shc)))
-    if nw != len(set(wrow_of.values())):
-        bad.append('wind rows %d vs %d' % (len(set(wrow_of.values())), nw))
+    _nwp = sum(len(_v) for _v in _WIND_ROWS_CH.values())
+    if nw != _nwp:
+        bad.append('wind rows %d vs %d' % (_nwp, nw))
     elif nw:
         BR = np.ones((nw, nblk), np.float32); BC = np.zeros((nw, nblk)); BL = np.ones((nw, nblk + 1), np.float32)
         d.nv_song_organ_wind(song.p, nblk, BLK, SR, G.ctypes.data, BR.ctypes.data, BC.ctypes.data, BL.ctypes.data)
@@ -7609,6 +7617,7 @@ def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TB
         if nt.organ and (nt.ch, key) in wrow_of:
             _w = wrow_of[(nt.ch, key)]
             em.bend_row = wcombo.get((_bnote, _w), _w) if _bnote >= 0 else _w
+        _wbase = em.bend_row         # (a Swell rank's first band's row: _sbw)
         # a siren's row of holes turns with its own disc (_SIREN_AT)
         if _sir is not None and len(_sir[0]) > 1:
             em.bend_row = _sir[0][1] if key in getattr(props, 'siren_upper', ()) else _sir[0][0]
@@ -7857,10 +7866,12 @@ def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TB
             # more stops speak on the key
             _gv = getattr(nt, 'groove', (1.0,))
             _gx = _gv[T.rank_division(nt.pc, key) if len(_gv) > 1 else 0]
-            # ...AND THE SWELL'S BOX at its onset, on the enclosed ranks: its colour
-            _sbo = getattr(nt, 'sbox', None)
-            if _sbo is not None and not T.swell_division(nt.pc, key):
-                _sbo = None
+            # ...AND THE SWELL'S BOX, on the enclosed ranks: each partial on its
+            # octave band's row, its colour corrected at the onset from the
+            # band's centre to its own frequency
+            _sbw = (nt.organ and (nt.ch, key) in wrow_of and getattr(nt.pc, 'swell_divisions', None)
+                    and T.swell_division(nt.pc, key))
+            _sbo = getattr(nt, 'sbox', None) if _sbw else None
             _gxl = 1.0
             if _gx != 1.0:
                 _gwc = T.rank_wind_class(nt.pc, (key, ratio, gain) + tuple(rest))
@@ -7934,8 +7945,11 @@ def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TB
                     gM *= _gxl
                 if _hx is not None:              # (its tone at the wind: the stop's answer)
                     gM *= float(T.harmonium_pressure_gain(_sc, m, _hp))
-                if _sbo is not None:             # (the Swell's box's colour)
-                    gM *= float(T.organ_box_tone(nt.pc, hf, _sbo))
+                if _sbw:                         # (the Swell's box: its band's row, its colour)
+                    _bk = T.organ_box_band(nt.pc, hf)
+                    em.bend_row = _wbase + _bk
+                    if _sbo is not None:
+                        gM *= float(T.organ_box_gain(nt.pc, hf, _sbo) / T.organ_box_gain(nt.pc, nt.pc.swellbox_band_hz[_bk], _sbo))
                 if em.hbox is not None:          # (its box's colour and the Metaphone's felt)
                     gM *= float(T.harmonium_box_tone(_sc, hf, em.hbox[0], em.hbox[1]))
                 gL = gM*props.hrtf_gain(hf, nt.li); gR = gM*props.hrtf_gain(hf, nt.ri)

@@ -2705,10 +2705,10 @@ static int run(int argc, char **argv)
         for (size_t q = 0; q < mrows.size(); q++)
             add(mrows[q].ch, mbase + (long long)q);
         for (auto &kv : bases) {
-            int ws[64];
-            const int nwr = nv_song_wind_rows_of(song, kv.first, ws, 64);
+            int ws[256];
+            const int nwr = nv_song_wind_rows_of(song, kv.first, ws, 256);
             for (long long b : kv.second)
-                for (int k = 0; k < nwr && k < 64; k++) {
+                for (int k = 0; k < nwr && k < 256; k++) {
                     nv_song_wind_combo(song, b, ws[k], wcbase + (long long)wcrows.size());
                     wcrows.push_back(WCombo{b, ws[k]});
                 }

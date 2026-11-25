@@ -448,6 +448,7 @@ struct Song {
         std::vector<std::vector<std::pair<double, double>>> rank_ev;
         std::vector<std::pair<double, double>> swell_ev;
         std::vector<int> wrow;
+        std::vector<int> wband;     // (a Swell rank's rows: one an octave band from wrow, organ_box_band)
         std::vector<float> box;     // (the Swell's pedal travel a block: its box's, the kernel's row left open)
         double box_sr = 0.0;
         int box_blk = 0;
@@ -476,6 +477,7 @@ struct Song {
         int nr = spec->n_rank;
         o.rank_ev.assign(nr, {});
         o.wrow.assign(nr, -1);
+        o.wband.assign(nr, 0);
         // the recalls: the channel's notes by onset, a tone of this family whose default differs
         std::vector<int> idx;
         for (size_t i = 0; i < notes.size(); i++)
@@ -685,17 +687,22 @@ struct Song {
             for (int ri = 0; ri < sp->n_rank; ri++) {
                 if (sp->rank[ri].n_ratio == 0)
                     continue;
-                std::tuple<int, double, double> ab(sp->n_div > 1 ? sp->rank_div[ri] : 0, sp->fam_a[ri], sp->fam_b[ri]);
+                const int dv = sp->n_div > 1 ? sp->rank_div[ri] : 0;
+                const bool boxed = sp->sbox_div >= 0 && dv == sp->sbox_div;
+                // (a Swell family: a row an octave band, in order -- keyed apart from an open one's)
+                std::tuple<int, double, double> ab(boxed ? -1 - dv : dv, sp->fam_a[ri], sp->fam_b[ri]);
                 int f = -1;
                 for (size_t q = 0; q < fams.size(); q++)
                     if (fams[q] == ab)
                         f = (int)q;
                 if (f < 0) {
                     fams.push_back(ab);
-                    frow.push_back(r++);
+                    frow.push_back(r);
+                    r += boxed ? 9 : 1;
                     f = (int)fams.size() - 1;
                 }
                 o.wrow[ri] = frow[f];
+                o.wband[ri] = boxed ? 9 : 0;
             }
         }
         return r - row0;
@@ -711,9 +718,12 @@ struct Song {
         std::vector<int> out;
         for (const Organ &o : organs)
             if (o.ch == ch)
-                for (int w : o.wrow)
+                for (size_t ri = 0; ri < o.wrow.size(); ri++) {
+                    int w = o.wrow[ri];
                     if (w >= 0 && std::find(out.begin(), out.end(), w) == out.end())
-                        out.push_back(w);
+                        for (int k = 0; k < (o.wband[ri] ? o.wband[ri] : 1); k++)
+                            out.push_back(w + k);
+                }
         return out;
     }
 
@@ -2822,14 +2832,30 @@ void nv_song_organ_wind(void *s, long nblk, int blk, double sr, const float *G, 
                 L[b] = (float)pow(p[(size_t)b * 9], ab.second);
             }
             L[nblk] = (float)pow(p[(size_t)(nblk - 1) * 9 + 8], ab.second);
-            if (sp->sbox_div >= 0 && dv == sp->sbox_div && !o.box.empty()) {
-                // THE SWELL'S BOX (organ_box_level): each edge its block's opening
-                for (long e = 0; e <= nblk; e++) {
-                    double lv = pow(e < nblk ? p[(size_t)e * 9] : p[(size_t)(nblk - 1) * 9 + 8], ab.second);
-                    L[e] = (float)(lv * nv_obox_level(sp, nv_obox_open((double)o.box[std::min(e, nblk - 1)])));
-                }
-            }
             row++;
+            if (o.wband[ri] && !o.box.empty()) {
+                // THE SWELL'S BOX (organ_box_gain): a row an octave band, the
+                // first's ratio and phase, each edge its block's opening at the
+                // band's centre
+                std::vector<double> op((size_t)nblk + 1);
+                for (long e = 0; e <= nblk; e++)
+                    op[(size_t)e] = nv_obox_open((double)o.box[std::min(e, nblk - 1)]);
+                std::vector<float> L0(L, L + nblk + 1);
+                for (int k = 0; k < o.wband[ri]; k++) {
+                    float *Rk = BR + (long)(row - 1 + k) * nblk;
+                    double *Ck = BC + (long)(row - 1 + k) * nblk;
+                    float *Lk = BL + (long)(row - 1 + k) * (nblk + 1);
+                    if (k) {
+                        std::copy(R, R + nblk, Rk);
+                        std::copy(Cc, Cc + nblk, Ck);
+                    }
+                    for (long e = 0; e <= nblk; e++) {
+                        double lv = pow(e < nblk ? p[(size_t)e * 9] : p[(size_t)(nblk - 1) * 9 + 8], ab.second);
+                        Lk[e] = (float)(lv * nv_obox_gain(sp, sp->sb_fc[k], op[(size_t)e]));
+                    }
+                }
+                row += o.wband[ri] - 1;
+            }
         }
     }
 }

@@ -11713,7 +11713,10 @@ FlueOrganProperties.swellbox_alpha_hz = 2000.0
 FlueOrganProperties.swellbox_gap_m2 = 0.03
 FlueOrganProperties.swellbox_shutter_m2 = 6.0
 FlueOrganProperties.swellbox_wall_kg_m2 = 20.0
-FlueOrganProperties.swellbox_level_hz = 250.0
+# ...its colour moving on a held note: the Swell's rows a family per OCTAVE BAND
+# (62.5 Hz .. 16 kHz), each partial on its band's (organ_box_band)
+FlueOrganProperties.swellbox_band_hz = tuple(62.5 * 2.0 ** k for k in range(9))
+FlueOrganProperties.swellbox_band_edges = tuple(62.5 * 2.0 ** (k + 0.5) for k in range(8))
 FlueOrganProperties.swell_floor = 1.0
 FlueOrganProperties.swell_hf_max = 0.0
 # the panel's third row (Alt+digit): the flutes and mutations, then the pedal;
@@ -26691,19 +26694,22 @@ def organ_box_open(s):
     return 1.0 - _cos(0.5 * _pi * s)
 
 
-def organ_box_level(cls, o):
-    """A Swell rank's level, shutters open by o, re open: at swellbox_level_hz."""
+def organ_box_gain(cls, f, o):
+    """A Swell partial's gain at f Hz, the shutters open by o, re open."""
     if o >= 1.0:
         return 1.0
-    f = cls.swellbox_level_hz
     return (organ_box_t(cls, o, f) / organ_box_t(cls, 1.0, f)) ** 0.5
 
 
-def organ_box_tone(cls, f, o):
-    """A Swell partial at f Hz at note-on: the box's colour beyond its level."""
-    if o >= 1.0:
-        return 1.0
-    return (organ_box_t(cls, o, f) / organ_box_t(cls, 1.0, f)) ** 0.5 / organ_box_level(cls, o)
+def organ_box_band(cls, f):
+    """The octave band (0..8) whose row a Swell partial at f Hz rides: the box's
+    colour moves on a held note (organ_box_gain at the band's centre), and the
+    note-on corrects for the partial's distance from that centre."""
+    k = 0
+    for e in cls.swellbox_band_edges:
+        if f >= e:
+            k += 1
+    return k
 
 
 def swell_division(cls, rank):

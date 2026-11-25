@@ -131,8 +131,9 @@ COLS_I4 = ("gr", "cr", "br", "pl", "fx", "mk", "lsr")
 # path's azimuth is az. A Leslie row is -1 here: live swings those itself
 CONE_COLS = (("lsr", np.int32, -1), ("lfl", np.float32, 1.0), ("lsh", np.float32, 0.0))
 # THE ORGAN'S WIND, live: how many bend rows the slab keeps for it, one per
-# (part, family of pipe) -- a flue and a reed answer the chest differently.
-WIND_ROWS = 32
+# (part, family of pipe) -- a flue and a reed answer the chest differently --
+# and a Swell family's one an octave band (its box's colour moving: nine each).
+WIND_ROWS = 128
 # THE SIRENS' ROWS (siren.py): after the wind's, a pool -- one row a sounding
 # siren note, two for the double siren's discs -- each rewritten every
 # callback by Live._siren_block from the note's own rotor
@@ -12490,14 +12491,19 @@ class Live:
             self._groove_stamp(part, rank, _gx)
         _wpc = part.patch.wind_pc
         if _wpc is not None and getattr(_wpc, "swell_divisions", None) and T.swell_division(_wpc, rank):
-            # THE SWELL'S BOX at its onset (organ_box_tone): each slot by its frequency
+            # THE SWELL'S BOX at its onset: each slot's colour from its band's
+            # centre (its row's, below) to its own frequency
             _st = self.wind_st.get(part.pid)
             _o = T.organ_box_open(_st["box_s"] if _st and "box_s" in _st else self._sbox_target(part))
             _sl = self.slab.last_slots
             if _o < 1.0 and _sl is not None and len(_sl):
                 _om = self.slab.a["om"][np.fromiter(_sl, np.int64, len(_sl))].astype(np.float64)
-                self.slab.channel_gain(_sl, np.array([T.organ_box_tone(_wpc, float(w) * (self.rate / (2.0 * math.pi)), _o)
-                                                      for w in _om], np.float32))
+                _g = []
+                for w in _om:
+                    _f = float(w) * (self.rate / (2.0 * math.pi))
+                    _g.append(T.organ_box_gain(_wpc, _f, _o)
+                              / T.organ_box_gain(_wpc, _wpc.swellbox_band_hz[T.organ_box_band(_wpc, _f)], _o))
+                self.slab.channel_gain(_sl, np.array(_g, np.float32))
         if part.patch.wind_pc is not None and getattr(part.patch.wind_pc, 'pallet_gentle_s', None):
             self._touch_stamp(part, note, rank, self.hvel.get((ch, note), 100))
         # THE WHEEL'S TREMOLO on a note struck with the wheel already up, as
@@ -12507,7 +12513,14 @@ class Live:
             self.slab.tremolo_arm(self.slab.last_slots, _td, part.patch.tremolo_stereo)
         if part.patch.wind_pc is not None:
             _wr = self._wind_row(part, rank)
-            if _wr > 0:
+            _bands = self.wind_st.get(part.pid, {}).get("bands", {}).get(rank)
+            if _bands is not None and self.slab.last_slots is not None and len(self.slab.last_slots):
+                # (a Swell rank's slots each on its octave band's row: organ_box_band)
+                _ix = np.asarray(self.slab.last_slots, np.int64)
+                _k = 2.0 * math.pi
+                self.slab.a["br"][_ix] = [_bands[T.organ_box_band(part.patch.wind_pc, float(w) * (self.rate / _k))]
+                                          for w in self.slab.a["om"][_ix].astype(np.float64)]
+            elif _wr > 0:
                 self.slab.a["br"][np.asarray(self.slab.last_slots, np.int64)] = _wr
         _sst = self.siren_st.get((part.pid, ch, note))
         if _sst is not None and _sst["rows"]:
@@ -12603,17 +12616,26 @@ class Live:
                 wc = T.rank_wind_class(pc, r)
                 _dv = T.rank_division(pc, r) if _nd > 1 else 0
                 ab = (_dv, float(wc.wind_pitch_exp), float(wc.wind_level_exp))
-                if ab not in st["rows"]:
+                # (a Swell rank: a row an octave band, organ_box_band -- all nine or none)
+                keys = ([ab + (_k,) for _k in range(len(pc.swellbox_band_hz))]
+                        if "box_s" in st and T.swell_division(pc, r) else [ab])
+                for kk in keys:
+                    if kk in st["rows"]:
+                        continue
                     if self.wind_free:                  # a row an old chest gave back
                         row = self.wind_free.popleft()
                     elif self.wind_next > WIND_ROWS:
-                        continue
+                        break
                     else:
                         row = self.wind_next
                         self.wind_next += 1
-                    st["rows"][ab] = row
+                    st["rows"][kk] = row
                     st["acc"][row] = 0.0
-                st["rank_row"][r[0]] = st["rows"][ab]
+                if any(kk not in st["rows"] for kk in keys):
+                    continue
+                if len(keys) > 1:
+                    st.setdefault("bands", {})[r[0]] = [st["rows"][kk] for kk in keys]
+                st["rank_row"][r[0]] = st["rows"][keys[0]]
                 st["ratios"][r[0]] = (list(r[1]) if isinstance(r[1], (list, tuple)) else [r[1]])
                 st["laws"][r[0]] = _WND.draw_law(wc)        # its own pipes' draw
                 st["divs"][r[0]] = _dv
@@ -12922,22 +12944,23 @@ class Live:
                   for _d in range(_nd)]
             _bx = None
             if "box_s" in st:
-                # THE SWELL'S BOX (tonelib.organ_box_level): the pedal through the
-                # fader's one pole, its level at the block's two edges
+                # THE SWELL'S BOX (tonelib.organ_box_gain): the pedal through the
+                # fader's one pole, its opening at the block's two edges
                 _tg = self._sbox_target(part)
                 _s0 = st["box_s"]
                 _s1 = _tg + (_s0 - _tg) * math.exp(-frames / (B.TAU * float(self.rate)))
                 st["box_s"] = _s1
-                _bx = (pc.swell_divisions[0], T.organ_box_level(pc, T.organ_box_open(_s0)),
-                       T.organ_box_level(pc, T.organ_box_open(_s1)))
-            for (dv, a, b), row in st["rows"].items():
+                _bx = (T.organ_box_open(_s0), T.organ_box_open(_s1))
+            for key, row in st["rows"].items():
+                dv, a, b = key[:3]
                 p = ps[dv]
                 r, lv = _WND.pitch_level(p[None, :], a, b)
                 sl.BR[row, 0] = r[0]
                 sl.BC[row, 0] = st["acc"][row]
-                if _bx is not None and dv == _bx[0]:
-                    sl.BL[row, 0] = lv[0] * _bx[1]
-                    sl.BL[row, 1] = lv[1] * _bx[2]
+                if len(key) > 3:                # (a Swell band's: the box's gain at its centre)
+                    _fc = pc.swellbox_band_hz[key[3]]
+                    sl.BL[row, 0] = lv[0] * T.organ_box_gain(pc, _fc, _bx[0])
+                    sl.BL[row, 1] = lv[1] * T.organ_box_gain(pc, _fc, _bx[1])
                 else:
                     sl.BL[row, 0] = lv[0]
                     sl.BL[row, 1] = lv[1]

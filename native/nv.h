@@ -642,7 +642,8 @@ typedef struct OrganSpec {
     double v_ra;
     // THE SWELL'S BOX (tonelib.organ_box_t): the division it encloses (-1 none), its constants
     int sbox_div;
-    double sb_surf, sb_alpha, sb_alpha_hz, sb_gap, sb_shutter, sb_wall, sb_level_hz;
+    double sb_surf, sb_alpha, sb_alpha_hz, sb_gap, sb_shutter, sb_wall;
+    double sb_fc[9], sb_edge[8];    // (its octave bands' centres and edges: organ_box_band)
     double touch_cyc[NV_MAX_RANK], touch_att[NV_MAX_RANK];   // (live's: each rank's wind class's speech)
     /* A REED ORGAN'S EFFECT STOPS (the harmonium's): its Expression,
        Percussion and Tremolo stops' ranks (-1 none), the Expression's tilt,
@@ -890,18 +891,19 @@ static inline double nv_obox_open(double s)
     s = s < 0.0 ? 0.0 : s;
     return 1.0 - cos(0.5 * M_PI * s);
 }
-static inline double nv_obox_level(const OrganSpec *og, double o)
+static inline double nv_obox_gain(const OrganSpec *og, double f, double o)
 {
     if (o >= 1.0)
         return 1.0;
-    double f = og->sb_level_hz;
     return pow(nv_obox_t(og, o, f) / nv_obox_t(og, 1.0, f), 0.5);
 }
-static inline double nv_obox_tone(const OrganSpec *og, double f, double o)
+static inline int nv_obox_band(const OrganSpec *og, double f)
 {
-    if (o >= 1.0)
-        return 1.0;
-    return pow(nv_obox_t(og, o, f) / nv_obox_t(og, 1.0, f), 0.5) / nv_obox_level(og, o);
+    int k = 0;
+    for (int q = 0; q < 8; q++)
+        if (f >= og->sb_edge[q])
+            k++;
+    return k;
 }
 static inline double nv_hbox_tone(const OrganSpec *og, const OrganPipe *q, double f, double o, int meta)
 {

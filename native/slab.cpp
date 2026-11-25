@@ -48,6 +48,10 @@
 #include "rubfill.h"            // (the room's part of a held moment)               // the controller matrix (ctrlmatrix)
 #include "nvenv.h"
 
+// THE ORGAN'S WIND, live (live.WIND_ROWS): bend rows a chest may take -- a
+// Swell family's nine, an octave band each -- the sirens' 32 after them
+static const int NV_LIVE_WIND_ROWS = 128;
+
 extern "C" int nv_tcache_slur_fade(void *h, int program, int note, double *out);
 extern "C" const NoteClass *nv_tcache_note_class(void *h, int program, int note);
 extern "C" int nv_tcache_glide(void *h, int program, int src, int tgt, int cc5, double *out, double moog_tau);
@@ -3165,7 +3169,7 @@ struct Part {
     std::map<std::tuple<int, int>, std::vector<int>> scan_row;
     std::deque<int> siren_free = [] {
         std::deque<int> d;
-        for (int r = 33; r < 65; r++)       // (WIND_ROWS + 1 ...)
+        for (int r = NV_LIVE_WIND_ROWS + 1; r < NV_LIVE_WIND_ROWS + 33; r++)       // (WIND_ROWS + 1 ...)
             d.push_back(r);
         return d;
     }();
@@ -4463,6 +4467,8 @@ struct Part {
         bool was_on = false;
         std::vector<std::pair<std::pair<double, double>, int>> rows;
         std::vector<int> row_div;             // (each row's division: a chest a division, tonelib.divisions)
+        std::vector<int> row_band;            // (a Swell row's octave band, -1 none: organ_box_band)
+        std::map<int, std::vector<int>> bands;    // (a Swell rank's rows, a band each)
         struct WChest {
             void *g = nullptr;
             double w1 = 0, w2 = 0, s1 = 0, s2 = 0, d1 = 0, r1 = 0, te = 0, tph = 0;
@@ -4485,7 +4491,7 @@ struct Part {
     // no slot rides them, then free again, at rest
     std::vector<int> wind_spent;
     std::deque<int> wind_free;
-    static const int WIND_ROWS = 32;
+    static const int WIND_ROWS = NV_LIVE_WIND_ROWS;
     static const long long RANK0 = 1000;        // a rank's slots: layer RANK0 + its stop name's id (rank_layer)
     static const long long SCAN0 = 2000;        // ...its scanner's copy (("scan", rank))
     static const long long SCANSIDE0 = 3000;    // ...and tier B's copies (("scanside", rank))
@@ -8673,6 +8679,7 @@ struct Part {
                     }
                     st.rows.push_back(std::make_pair(key, row));
                     st.row_div.push_back(0);
+                    st.row_band.push_back(-1);
                     st.acc[row] = 0.0;
                 }
                 st.rank_row[r] = row;
@@ -8698,24 +8705,38 @@ struct Part {
                     continue;
                 std::pair<double, double> ab(og->fam_a[r], og->fam_b[r]);
                 const int dv = nd > 1 ? og->rank_div[r] : 0;
-                int row = 0;
-                for (size_t q = 0; q < st.rows.size(); q++)
-                    if (st.rows[q].first == ab && st.row_div[q] == dv)
-                        row = st.rows[q].second;
-                if (!row) {
-                    if (!wind_free.empty()) {           // a row an old chest gave back
-                        row = wind_free.front();
-                        wind_free.pop_front();
-                    } else if (wind_next > WIND_ROWS) {
-                        continue;
-                    } else {
-                        row = wind_next++;
+                // (a Swell rank: a row an octave band, organ_box_band -- all nine or none)
+                const int nb = st.has_box && dv == og->sbox_div ? 9 : 0;
+                std::vector<int> got;
+                bool short_ = false;
+                for (int k = 0; k < (nb ? nb : 1); k++) {
+                    const int bk = nb ? k : -1;
+                    int row = 0;
+                    for (size_t q = 0; q < st.rows.size(); q++)
+                        if (st.rows[q].first == ab && st.row_div[q] == dv && st.row_band[q] == bk)
+                            row = st.rows[q].second;
+                    if (!row) {
+                        if (!wind_free.empty()) {           // a row an old chest gave back
+                            row = wind_free.front();
+                            wind_free.pop_front();
+                        } else if (wind_next > WIND_ROWS) {
+                            short_ = true;
+                            break;
+                        } else {
+                            row = wind_next++;
+                        }
+                        st.rows.push_back(std::make_pair(ab, row));
+                        st.row_div.push_back(dv);
+                        st.row_band.push_back(bk);
+                        st.acc[row] = 0.0;
                     }
-                    st.rows.push_back(std::make_pair(ab, row));
-                    st.row_div.push_back(dv);
-                    st.acc[row] = 0.0;
+                    got.push_back(row);
                 }
-                st.rank_row[r] = row;
+                if (short_)
+                    continue;
+                if (nb)
+                    st.bands[r] = got;
+                st.rank_row[r] = got[0];
             }
             it = wind_st.find(pid);
         }
@@ -8825,15 +8846,18 @@ struct Part {
             }
         }
         if (og->sbox_div >= 0 && (og->n_div > 1 ? og->rank_div[ri] : 0) == og->sbox_div) {
-            // ...and the Swell's box at its onset (organ_box_tone): each slot by its frequency
+            // ...and the Swell's box at its onset: each slot's colour from its
+            // band's centre (its row's) to its own frequency
             auto wi = wind_st.find(pid);
             double o = nv_obox_open(wi != wind_st.end() && wi->second.has_box ? wi->second.box_s
                                                                                : sbox_target(patches[cur].channel));
             if (o < 1.0 && !S.last_slots.empty()) {
                 const std::vector<long> sl = S.last_slots;
                 std::vector<float> g(sl.size());
-                for (size_t q = 0; q < sl.size(); q++)
-                    g[q] = (float)nv_obox_tone(og, S.f8[F8_om][sl[q]] * (rate / (2.0 * M_PI)), o);
+                for (size_t q = 0; q < sl.size(); q++) {
+                    const double f = S.f8[F8_om][sl[q]] * (rate / (2.0 * M_PI));
+                    g[q] = (float)(nv_obox_gain(og, f, o) / nv_obox_gain(og, og->sb_fc[nv_obox_band(og, f)], o));
+                }
                 S.channel_gain_each(sl, g);
             }
         }
@@ -8862,9 +8886,16 @@ struct Part {
             S.tremolo_arm(S.last_slots, td->second, og->wtrem_stereo);
         if (og->wind || og->hwind) {
             int wr = wind_row(ri);
-            if (wr > 0)
+            auto wi = wind_st.find(pid);
+            auto bi = wi != wind_st.end() ? wi->second.bands.find(ri) : std::map<int, std::vector<int>>::iterator();
+            if (wi != wind_st.end() && bi != wi->second.bands.end()) {
+                // (a Swell rank's slots each on its octave band's row: organ_box_band)
+                for (long s : S.last_slots)
+                    S.i4[I4_br][s] = bi->second[nv_obox_band(og, S.f8[F8_om][s] * (rate / (2.0 * M_PI)))];
+            } else if (wr > 0) {
                 for (long s : S.last_slots)
                     S.i4[I4_br][s] = wr;
+            }
         }
         {
             auto si = siren_find(SKey(pid, ch, note));      // each row of holes turns with its own disc
@@ -9271,17 +9302,15 @@ struct Part {
                 demd[nd > 1 ? og->rank_div[ri] : 0] += pysum(d, rk.n_ratio);
             }
             bool on_all = og->trem_rank >= 0 && patches[pi].drawn[og->trem_rank];
-            // THE SWELL'S BOX (organ_box_level): the pedal through the fader's
-            // one pole, its level at the block's two edges
-            bool bx = false;
-            double bl0 = 1.0, bl1 = 1.0;
+            // THE SWELL'S BOX (organ_box_gain): the pedal through the fader's
+            // one pole, its opening at the block's two edges
+            double bo0 = 1.0, bo1 = 1.0;
             if (st.has_box) {
                 double tg = sbox_target(st.chn), s0 = st.box_s;
                 double s1 = tg + (s0 - tg) * exp(-(double)frames / (0.015 * (double)rate));
                 st.box_s = s1;
-                bx = true;
-                bl0 = nv_obox_level(og, nv_obox_open(s0));
-                bl1 = nv_obox_level(og, nv_obox_open(s1));
+                bo0 = nv_obox_open(s0);
+                bo1 = nv_obox_open(s1);
             }
             for (int dv = 0; dv < nd; dv++) {
             WindSt::WChest &c = st.cs[dv];
@@ -9371,9 +9400,10 @@ struct Part {
                     sum = sum + pow(p[j], a);
                 BRt[row] = (float)(sum / 8.0);
                 BCt[row] = st.acc[row];
-                if (bx && dv == og->sbox_div) {
-                    BLt[2 * row] = (float)(pow(p[0], b) * bl0);
-                    BLt[2 * row + 1] = (float)(pow(p[8], b) * bl1);
+                if (st.row_band[q] >= 0) {      // (a Swell band's: the box's gain at its centre)
+                    const double fc = og->sb_fc[st.row_band[q]];
+                    BLt[2 * row] = (float)(pow(p[0], b) * nv_obox_gain(og, fc, bo0));
+                    BLt[2 * row + 1] = (float)(pow(p[8], b) * nv_obox_gain(og, fc, bo1));
                 } else {
                     BLt[2 * row] = (float)pow(p[0], b);
                     BLt[2 * row + 1] = (float)pow(p[8], b);
@@ -12965,8 +12995,9 @@ struct Part {
     // apart through synth_voice_xdec (synth_partials' _xdec_rows), and the
     // rows on a damper track after them through synth_voice_damp (sd)
     std::vector<float> G = std::vector<float>(1, 1.0f), Sx = std::vector<float>(1, 1.0f);
-    std::vector<float> BRt = std::vector<float>(65, 1.0f), BLt = std::vector<float>(130, 1.0f);
-    std::vector<double> BCt = std::vector<double>(65, 0.0);
+    std::vector<float> BRt = std::vector<float>(NV_LIVE_WIND_ROWS + 33, 1.0f),
+                       BLt = std::vector<float>(2 * (NV_LIVE_WIND_ROWS + 33), 1.0f);
+    std::vector<double> BCt = std::vector<double>(NV_LIVE_WIND_ROWS + 33, 0.0);
     // (the Moog's tables: the slab's -- live.Slab's FT, KN and the mod rows)
     std::vector<float> &FT = S.FT, &KN = S.KN;
     std::vector<int32_t> &MPI = S.MPI, &MKI = S.MKI;

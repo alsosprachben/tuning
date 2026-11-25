@@ -3217,7 +3217,7 @@ class OrganSpec(ctypes.Structure):
                    ('tvalve', I), ('v_w', C), ('v_zeta', C), ('v_gain', C), ('v_q0', C), ('v_tau', C), ('v_vent', C),
                    ('has_vra', I), ('v_ra', C),
                    ('sbox_div', I), ('sb_surf', C), ('sb_alpha', C), ('sb_alpha_hz', C), ('sb_gap', C),
-                   ('sb_shutter', C), ('sb_wall', C), ('sb_level_hz', C),
+                   ('sb_shutter', C), ('sb_wall', C), ('sb_fc', C * 9), ('sb_edge', C * 8),
                    ('touch_cyc', C * NV_MAX_RANK), ('touch_att', C * NV_MAX_RANK), ('expr_rank', I), ('perc_rank', I), ('htrem_rank', I),
                    ('perc_attack_s', C), ('afm', C), ('pipe_radius', I), ('wheel_trem', C),
                    ('wtrem_hz', C), ('htrem_depth', C), ('htrem_hz', C), ('wtrem_stereo', I),
@@ -3499,9 +3499,11 @@ def organ(cls):
     _sd = getattr(p, 'swell_divisions', None)              # (the Swell's box: tonelib.organ_box_t)
     o.sbox_div = int(_sd[0]) if _sd else -1
     if _sd:
-        (o.sb_surf, o.sb_alpha, o.sb_alpha_hz, o.sb_gap, o.sb_shutter, o.sb_wall, o.sb_level_hz) = (
+        (o.sb_surf, o.sb_alpha, o.sb_alpha_hz, o.sb_gap, o.sb_shutter, o.sb_wall) = (
             p.swellbox_surface_m2, p.swellbox_alpha, p.swellbox_alpha_hz, p.swellbox_gap_m2,
-            p.swellbox_shutter_m2, p.swellbox_wall_kg_m2, p.swellbox_level_hz)
+            p.swellbox_shutter_m2, p.swellbox_wall_kg_m2)
+        o.sb_fc[:] = list(p.swellbox_band_hz)
+        o.sb_edge[:] = list(p.swellbox_band_edges)
     o.swell_law[:] = [float(p.swell_floor), float(p.swell_gain_power), float(p.swell_hf_max),
                       float(p.swell_hf_ref_hz)]
     o.family = _FAMILIES.setdefault(BR.organ_family(cls), len(_FAMILIES))
