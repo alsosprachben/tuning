@@ -8401,29 +8401,31 @@ class FlueOrganProperties(OrganProperties):
     # reed's 1.4 is not an error to be corrected, it is the other half of the
     # distinction.
     tonal_dampening = 2.2
-    # ...MEASURED (sources.md "Pipe organ": the Pitea organ's HV Principal 8,
-    # pipe by pipe; examples/pitea_fit.py): a principal is ROUND -- h2 and h3
-    # 5-8 dB under the fundamental in the bass, where this law had them 11-17
-    # -- and its top falls ever faster, -4.15 (log2 n)^2 dB (h8 -37, h16 -67,
-    # where this had -32 and -43), 12-27 dB too bright from 2 to 8 kHz. No
-    # power law with a corner does both (pitea_fit.py --fit=tone: 10 dB rms at
-    # best), and up the keyboard the treble's h2 sits 10 dB lower again -- so
-    # the series is MEASURED TABLES at three anchor pitches, the median pipe's
-    # ladder to h32 of the keys to B2, C3-B4 and from C5, blended between
-    # (pitea_fit.py --fit=tables: within 0.4 dB rms in each register)
+    # ...SIMULATED FROM THE PIPE (2026-11-24, off the Piteå recordings: the
+    # harmonium's way): Audsley's Major Principal -- CC 6.16 in on 1:2.66,
+    # mouth 1/4 of the circumference, cut-up 1/4 of the diameter, 3.5 in of
+    # wind -- through examples/fluepipe_sim.py (the jet driving the pipe's
+    # resonances, solved by harmonic balance over the compass) and
+    # examples/organ_bake.py. A principal comes out ROUND (h2 3-8 dB under the
+    # fundamental), brighter in the bass than the treble, as Audsley says it
+    # is; tables at three anchor pitches, blended between. Ben's voicing "A"
+    # (fluepipe_sim.ETA_SAT 3, the lip offset 1 x the flue): "Very slight
+    # differences in tone, but generally the same."
+    # SIMULATED (examples/organ_bake.py; fluepipe_sim.STOPS['principal'], Audsley's
+    # construction): the radiated harmonics at the rank's own pitches
     mode_gains_points = (
-        (58.3, (1.00000, 0.60428, 0.43414, 0.16270, 0.06117, 0.04470, 0.02607, 0.01421, 0.00627,
-                  0.01034, 0.00626, 0.00698, 0.00301, 0.00157, 0.00155, 0.00049, 0.00040, 0.00022,
-                  0.00011, 0.00018, 0.00011, 0.00019, 0.00055, 0.00048, 0.00017, 0.00041, 0.00016,
-                  0.00019, 0.00029, 0.00016, 0.00013, 0.00023)),
-        (233.1, (1.00000, 0.36067, 0.15752, 0.05844, 0.02144, 0.01760, 0.00953, 0.00780, 0.00570,
-                  0.00474, 0.00289, 0.00269, 0.00059, 0.00100, 0.00016, 0.00034, 0.00013, 0.00016,
-                  0.00013, 0.00008, 0.00019, 0.00013, 0.00008, 0.00009, 0.00006, 0.00005, 0.00006,
-                  0.00005, 0.00003, 0.00008, 0.00004, 0.00004)),
-        (1046.5, (1.00000, 0.18939, 0.07052, 0.02231, 0.01499, 0.01015, 0.00554, 0.00634, 0.00352,
-                  0.00197, 0.00131, 0.00023, 0.00161, 0.00099, 0.00094, 0.00084, 0.00088, 0.00055,
-                  0.00020, 0.00230, 0.00025, 0.00052, 0.00049, 0.00035, 0.00014, 0.00014, 0.00014,
-                  0.00014, 0.00014, 0.00014, 0.00014, 0.00014)),
+        (58.3, (1.00000, 0.72660, 0.39801, 0.23712, 0.12953, 0.07014, 0.04706, 0.03127, 0.02063,
+                  0.01194, 0.00610, 0.00291, 0.00146, 0.00118, 0.00113, 0.00084, 0.00052, 0.00033,
+                  0.00031, 0.00030, 0.00025, 0.00015, 0.00007, 0.00017, 0.00023, 0.00025, 0.00020,
+                  0.00012, 0.00003, 0.00006, 0.00011, 0.00017)),
+        (233.1, (1.00000, 0.47445, 0.14191, 0.07820, 0.04839, 0.02503, 0.01208, 0.00556, 0.00261,
+                  0.00193, 0.00143, 0.00087, 0.00027, 0.00032, 0.00012, 0.00024, 0.00021, 0.00025,
+                  0.00009, 0.00011, 0.00012, 0.00014, 0.00005, 0.00007, 0.00013, 0.00012, 0.00006,
+                  0.00003, 0.00009, 0.00008, 0.00005, 0.00001)),
+        (1046.5, (1.00000, 0.41596, 0.06995, 0.05074, 0.03402, 0.02114, 0.01399, 0.00781, 0.00376,
+                  0.00251, 0.00155, 0.00061, 0.00023, 0.00008, 0.00024, 0.00020, 0.00026, 0.00009,
+                  0.00008, 0.00010, 0.00017, 0.00006, 0.00005, 0.00007, 0.00011, 0.00004, 0.00004,
+                  0.00005, 0.00008, 0.00003, 0.00002, 0.00004)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
@@ -8436,7 +8438,7 @@ class FlueOrganProperties(OrganProperties):
     # x498.5: the comb's absolute scale, which the power law carried and the
     # measured tables (mode_gains, relative to the fundamental) do not -- a
     # constant at every pitch; GM 19 had fallen 54 dB without it
-    initial_gain = 0.0001294572617 * 498.50 * 10 ** (-0.278 / 20.0)   # ...held through the speech fit
+    initial_gain = 0.06032118872     # (organ_bake: the console's level re-held)
     # Flue pipes have pitched partials, so like the bare blown pipe they must
     # track whatever tuning renders them or their octaves beat. Under the hybrid
     # (Steinway-B) tuning -- the temperament for dense Baroque counterpoint --
@@ -8465,20 +8467,20 @@ class FlueOrganProperties(OrganProperties):
     # ~70 ms, middle C in ~25 ms, the top in ~12 ms.
     chiff_min_valve_time = 0.004
     chiff_max_valve_time = 0.008
-    # A PIPE SPEAKS, AND OVERSHOOTS (Ben: "a little attack swell with breath").
-    # MEASURED on the Pitea organ's HV Principal 8, every other pipe
-    # (examples/pitea_speech.py): its UPPER harmonics speak first -- at middle
-    # C h2-h4 are up while the fundamental is still 21 dB down -- and overshoot
-    # their steady level, +7 dB at ~65 ms over the middle keys, +1 to +3 in the
-    # bass and treble; the fundamental reaching -3 dB at 130 ms in the bass, 65
-    # in the middle, 10 at the top. Every harmonic had come in at once, in 4
-    # periods. Fitted (Nelder-Mead on the registers' medians): the speech 23.8
-    # periods, harmonic m in m^-0.77 of it, and the overshoot a band around h3
-    # (the push, every note: a pipe speaks, a bellows is not involved),
-    # strongest over the middle keys. The speech is the release's ramp too:
-    # ~370 ms at 65 Hz, 24 ms at 1 kHz -- a long pipe rings down slowly
-    speech_cycles = 23.76
-    speech_harmonic_exp = 0.766
+    # A PIPE SPEAKS (Ben: "a little attack swell with breath"): SIMULATED
+    # (2026-11-24, fluepipe_sim.onset: each harmonic building at the rate the
+    # pipe answers it while the foot fills) -- its UPPER harmonics speak first
+    # and the fundamental builds over some tens of periods, slower still in
+    # the bass than a constant count (51-53 at C2-C3, ~27 the compass's
+    # median; the renderer has one count a stop). The simulated pipe shows no
+    # overshoot over the middle keys (a few dB on h3-h4 in the bass only), so
+    # the push is off. The speech is the release's ramp too.
+    # ITS SPEECH, SIMULATED (examples/organ_bake.py: fluepipe_sim.onset over
+    # the compass, 51/53/30/25/16/9 cycles): periods of its own pitch, how far its
+    # upper harmonics lead (rise ~ m^-exp), the pallet's floor
+    speech_cycles = 27.28
+    speech_harmonic_exp = 1.251
+    attack_time = 0.004
     # ...each rank by its OWN pipe: a 4' over a key speaks as the 4' does, and
     # a rank whose class says rank_speech (the Gedakt) speaks as that class
     rank_speech_own_pitch = True
@@ -8498,7 +8500,7 @@ class FlueOrganProperties(OrganProperties):
     release_band_sigma = 1.0
     bellows_push_every_note = True
     bellows_push_band = (3.0, 0.6)
-    bellows_push_gain = 2.801
+    bellows_push_gain = 0.0      # (organ_bake: the simulated pipe shows no overshoot mid-compass)
     bellows_push_rise_s = 0.1054
     bellows_push_dbs = 42.11
     bellows_push_settle_db = -20.0
@@ -8554,47 +8556,53 @@ class FlueOrganProperties(OrganProperties):
 
 
 class PrincipalOctave4Properties(FlueOrganProperties):
-    """The church organ's OCTAVE 4': a principal, voiced as its own rank -- the
-    Pitea organ's HV Oktava 4 is brighter over the middle keys than its
-    Principal 8 at the same sounding pitch, so not the 8' scaled up. Its
-    series measured as the 8''s is (examples/pitea_fit.py --fit=tables)."""
+    """The church organ's OCTAVE 4': a principal on its own, smaller scale --
+    Audsley's Major Octave (CC 3.48 in on 1:2.66), simulated as the 8' is
+    (examples/organ_bake.py)."""
+    # SIMULATED (examples/organ_bake.py; fluepipe_sim.STOPS['octave'], Audsley's
+    # construction): the radiated harmonics at the rank's own pitches
     mode_gains_points = (
-        (164.8, (1.00000, 0.25069, 0.16055, 0.03147, 0.02093, 0.00757, 0.00908, 0.00983, 0.00848,
-                 0.00419, 0.00380, 0.00357, 0.00053, 0.00101, 0.00032, 0.00016, 0.00014, 0.00015,
-                 0.00010, 0.00009, 0.00010, 0.00013, 0.00016, 0.00013, 0.00011, 0.00011, 0.00011,
-                 0.00013, 0.00012, 0.00013, 0.00008, 0.00007)),
-        (466.2, (1.00000, 0.70565, 0.23812, 0.09536, 0.05609, 0.02763, 0.01190, 0.00691, 0.00457,
-                 0.00177, 0.00072, 0.00048, 0.00115, 0.00044, 0.00041, 0.00039, 0.00029, 0.00032,
-                 0.00031, 0.00026, 0.00015, 0.00025, 0.00010, 0.00010, 0.00012, 0.00009, 0.00011,
-                 0.00012, 0.00009, 0.00009, 0.00009, 0.00020)),
-        (2093.0, (1.00000, 0.15101, 0.07767, 0.01373, 0.00735, 0.00340, 0.00287, 0.00241, 0.00104,
-                  0.00075, 0.00027, 0.00094, 0.00041, 0.00041, 0.00041, 0.00041, 0.00041, 0.00041,
-                  0.00041, 0.00041, 0.00041, 0.00041, 0.00041, 0.00041, 0.00041, 0.00041, 0.00041,
-                  0.00041, 0.00041, 0.00041, 0.00041, 0.00041)),
+        (164.8, (1.00000, 0.58064, 0.25534, 0.12890, 0.06762, 0.03881, 0.02534, 0.01345, 0.00613,
+                  0.00272, 0.00162, 0.00134, 0.00104, 0.00066, 0.00030, 0.00036, 0.00023, 0.00013,
+                  0.00015, 0.00031, 0.00024, 0.00019, 0.00007, 0.00009, 0.00011, 0.00014, 0.00008,
+                  0.00002, 0.00007, 0.00012, 0.00009, 0.00006)),
+        (466.2, (1.00000, 0.49604, 0.15200, 0.07516, 0.04216, 0.02346, 0.01375, 0.00730, 0.00297,
+                  0.00200, 0.00176, 0.00107, 0.00031, 0.00033, 0.00027, 0.00018, 0.00017, 0.00027,
+                  0.00016, 0.00007, 0.00010, 0.00022, 0.00014, 0.00008, 0.00003, 0.00012, 0.00008,
+                  0.00006, 0.00001, 0.00006, 0.00005, 0.00006)),
+        (2093.0, (1.00000, 0.37579, 0.04620, 0.05172, 0.03757, 0.01809, 0.01781, 0.00852, 0.00306,
+                  0.00168, 0.00119, 0.00089, 0.00047, 0.00024, 0.00006, 0.00012, 0.00009, 0.00019,
+                  0.00007, 0.00005, 0.00004, 0.00012, 0.00005, 0.00003, 0.00003, 0.00007, 0.00005,
+                  0.00003, 0.00002, 0.00004, 0.00005, 0.00003)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
+    initial_gain = 0.06066071627     # (organ_bake: the console's level re-held)
 
 
 class PrincipalOctave2Properties(FlueOrganProperties):
-    """The SUPER OCTAVE 2': the HV Oktava 2, its own tables likewise -- and in
-    the treble near-pure (h2 33 dB down), the small pipe's."""
+    """The SUPER OCTAVE 2': Audsley's Super-Octave (CC 1.91 in, the slower
+    1:2.3), simulated likewise. Above ~3.5 kHz the jet model's smallest pipes
+    stop speaking; the top anchor holds the highest one that does."""
+    # SIMULATED (examples/organ_bake.py; fluepipe_sim.STOPS['superoctave'], Audsley's
+    # construction): the radiated harmonics at the rank's own pitches
     mode_gains_points = (
-        (329.6, (1.00000, 0.06490, 0.07149, 0.02803, 0.00978, 0.00550, 0.00851, 0.00464, 0.00276,
-                 0.00236, 0.00112, 0.00085, 0.00041, 0.00027, 0.00016, 0.00008, 0.00024, 0.00007,
-                 0.00007, 0.00007, 0.00004, 0.00004, 0.00004, 0.00005, 0.00005, 0.00003, 0.00003,
-                 0.00004, 0.00003, 0.00004, 0.00004, 0.00007)),
-        (932.3, (1.00000, 0.51460, 0.12151, 0.03504, 0.03117, 0.03121, 0.00618, 0.01104, 0.00254,
-                 0.00073, 0.00078, 0.00062, 0.00025, 0.00032, 0.00030, 0.00052, 0.00021, 0.00095,
-                 0.00035, 0.00019, 0.00020, 0.00020, 0.00024, 0.00035, 0.00007, 0.00007, 0.00007,
-                 0.00007, 0.00007, 0.00007, 0.00007, 0.00007)),
-        (4186.0, (1.00000, 0.01201, 0.03137, 0.00392, 0.00936, 0.00028, 0.00167, 0.00167, 0.00167,
-                  0.00167, 0.00167, 0.00167, 0.00167, 0.00167, 0.00167, 0.00167, 0.00167, 0.00167,
-                  0.00167, 0.00167, 0.00167, 0.00167, 0.00167, 0.00167, 0.00167, 0.00167, 0.00167,
-                  0.00167, 0.00167, 0.00167, 0.00167, 0.00167)),
+        (329.6, (1.00000, 0.56800, 0.23164, 0.11279, 0.05891, 0.03272, 0.02027, 0.01101, 0.00511,
+                  0.00236, 0.00156, 0.00130, 0.00090, 0.00054, 0.00038, 0.00039, 0.00022, 0.00012,
+                  0.00016, 0.00026, 0.00017, 0.00010, 0.00005, 0.00015, 0.00013, 0.00011, 0.00004,
+                  0.00005, 0.00008, 0.00012, 0.00007, 0.00003)),
+        (932.3, (1.00000, 0.57138, 0.15709, 0.06102, 0.04471, 0.02973, 0.02180, 0.01556, 0.00942,
+                  0.00443, 0.00224, 0.00162, 0.00110, 0.00061, 0.00040, 0.00024, 0.00012, 0.00013,
+                  0.00019, 0.00026, 0.00016, 0.00007, 0.00004, 0.00014, 0.00011, 0.00009, 0.00003,
+                  0.00005, 0.00007, 0.00009, 0.00005, 0.00002)),
+        (4186.0, (1.00000, 0.12993, 0.01929, 0.04917, 0.01140, 0.00461, 0.00360, 0.00037, 0.00076,
+                  0.00028, 0.00013, 0.00009, 0.00008, 0.00004, 0.00010, 0.00003, 0.00002, 0.00001,
+                  0.00006, 0.00001, 0.00002, 0.00001, 0.00002, 0.00002, 0.00002, 0.00001, 0.00001,
+                  0.00001, 0.00002, 0.00001, 0.00000, 0.00001)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
+    initial_gain = 0.05881505585     # (organ_bake: the console's level re-held)
 
 
 # each measured rank its own pipe's series
@@ -10915,34 +10923,36 @@ class OrganTrumpetProperties(OrganCromorneProperties):
 
 
 class OrganQuintProperties(FlueOrganProperties):
-    """The quint 2 2/3: Pitea's Positiv Kvinta 2 2/3, a principal-scaled pipe
-    with its own series."""
+    """The quint 2 2/3: Audsley's Octave Quint (CC 2.41 in on 1:2.66, smaller
+    than the unison's, voiced softer), simulated as the principals are."""
+    # SIMULATED (examples/organ_bake.py; fluepipe_sim.STOPS['quint'], Audsley's
+    # construction): the radiated harmonics at the rank's own pitches
     mode_gains_points = (
-        (247.2, (1.00000, 0.07578, 0.06382, 0.03151, 0.00920, 0.01353, 0.00255, 0.00431, 0.00127,
-                 0.00120, 0.00043, 0.00014, 0.00022, 0.00035, 0.00016, 0.00007, 0.00006, 0.00004,
-                 0.00006, 0.00006, 0.00004, 0.00005, 0.00005, 0.00004, 0.00006, 0.00005, 0.00005,
-                 0.00005, 0.00006, 0.00005, 0.00013, 0.00004)),
-        (699.2, (1.00000, 0.23676, 0.06528, 0.02392, 0.01427, 0.01467, 0.00548, 0.00228, 0.00125,
-                 0.00049, 0.00026, 0.00044, 0.00037, 0.00017, 0.00043, 0.00045, 0.00061, 0.00059,
-                 0.00059, 0.00025, 0.00026, 0.00022, 0.00017, 0.00019, 0.00014, 0.00018, 0.00017,
-                 0.00017, 0.00014, 0.00014, 0.00006, 0.00019)),
-        (3139.5, (1.00000, 0.03817, 0.04166, 0.00517, 0.00120, 0.00069, 0.00039, 0.00018, 0.00052,
-                  0.00052, 0.00052, 0.00052, 0.00052, 0.00052, 0.00052, 0.00052, 0.00052, 0.00052,
-                  0.00052, 0.00052, 0.00052, 0.00052, 0.00052, 0.00052, 0.00052, 0.00052, 0.00052,
-                  0.00052, 0.00052, 0.00052, 0.00052, 0.00052)),
+        (247.2, (1.00000, 0.56295, 0.23234, 0.11626, 0.06349, 0.03515, 0.02184, 0.01125, 0.00482,
+                  0.00216, 0.00161, 0.00131, 0.00086, 0.00055, 0.00033, 0.00033, 0.00014, 0.00014,
+                  0.00020, 0.00031, 0.00018, 0.00009, 0.00006, 0.00015, 0.00011, 0.00008, 0.00002,
+                  0.00007, 0.00011, 0.00010, 0.00006, 0.00001)),
+        (699.2, (1.00000, 0.55131, 0.18740, 0.08150, 0.04390, 0.02671, 0.01823, 0.01119, 0.00565,
+                  0.00303, 0.00218, 0.00170, 0.00103, 0.00039, 0.00028, 0.00021, 0.00016, 0.00015,
+                  0.00027, 0.00021, 0.00014, 0.00005, 0.00011, 0.00013, 0.00012, 0.00005, 0.00004,
+                  0.00010, 0.00012, 0.00008, 0.00002, 0.00002)),
+        (3139.5, (1.00000, 0.30301, 0.02825, 0.04868, 0.03498, 0.00831, 0.01197, 0.00556, 0.00150,
+                  0.00148, 0.00102, 0.00019, 0.00018, 0.00032, 0.00009, 0.00011, 0.00004, 0.00008,
+                  0.00002, 0.00006, 0.00001, 0.00004, 0.00001, 0.00005, 0.00001, 0.00002, 0.00002,
+                  0.00004, 0.00002, 0.00001, 0.00001, 0.00001)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
     max_harmonic = 32
     # HELD at the console's level (-47.44 dB, pitea_stops.level) through
     # the measured series, which carries no comb's scale: +0.300 dB
-    initial_gain = 0.0625016639 * 10 ** (0.300 / 20.0)
-    # ITS SPEECH, fitted on its Pitea stop's attack C3-C6 (pitea_stops.py
-    # --fit=speech; the courses' rms 5.20 -> 4.98 dB): periods of its own pitch,
-    # how far its upper harmonics lead, the valve's floor -- no overshoot
-    speech_cycles = 23.76
-    speech_harmonic_exp = 0.0
-    attack_time = 0.03
+    initial_gain = 0.05899030693     # (organ_bake: the console's level re-held)
+    # ITS SPEECH, SIMULATED (examples/organ_bake.py: fluepipe_sim.onset over
+    # the compass, 73/29/26/15/7/-2 cycles): periods of its own pitch, how far its
+    # upper harmonics lead (rise ~ m^-exp), the pallet's floor
+    speech_cycles = 20.64
+    speech_harmonic_exp = 1.450
+    attack_time = 0.004
     rank_speech = True
 
 
@@ -11245,49 +11255,67 @@ class OrganTrompetteProperties(OrganTrumpetProperties):
 
 
 class OrganPrincipal16Properties(FlueOrganProperties):
-    """principal 16: an open principal an octave down -- measured on the pipes
-    that sound its pitch (examples/pitea_stops.py BORROWED): the Principal 8's
-    from C3, the pedal Oktava 8's (open, down to C1) under it. Pitea has no
-    open 16' on a manual; a pipe is a pipe at its own pitch."""
+    """principal 16: Audsley's manual Double Principal -- its C (8' pipe) at the
+    unison's 6.16 in, on 1:2.66 -- simulated as the 8' is, down to its own
+    16' CC."""
+    # SIMULATED (examples/organ_bake.py; fluepipe_sim.STOPS['principal16'], Audsley's
+    # construction): the radiated harmonics at the rank's own pitches
     mode_gains_points = (
-        (41.2, (1.00000, 1.16052, 0.45923, 0.12654, 0.07740, 0.03497, 0.02858, 0.02234, 0.00809, 0.01711, 0.00622, 0.00770, 0.00341, 0.00283, 0.00277, 0.00087, 0.00051, 0.00044, 0.00037, 0.00033, 0.00030, 0.00035, 0.00039, 0.00041, 0.00029, 0.00033, 0.00031, 0.00024, 0.00028, 0.00021, 0.00018, 0.00018)),
-        (116.5, (1.00000, 0.50132, 0.28316, 0.06792, 0.03512, 0.01750, 0.01115, 0.00899, 0.00406, 0.00517, 0.00336, 0.00389, 0.00093, 0.00077, 0.00023, 0.00014, 0.00010, 0.00013, 0.00007, 0.00005, 0.00006, 0.00007, 0.00011, 0.00018, 0.00008, 0.00006, 0.00010, 0.00006, 0.00003, 0.00007, 0.00005, 0.00005)),
-        (523.3, (1.00000, 0.26416, 0.14329, 0.04677, 0.01540, 0.01144, 0.01457, 0.00610, 0.01075, 0.00285, 0.00174, 0.00052, 0.00146, 0.00110, 0.00059, 0.00127, 0.00088, 0.00024, 0.00028, 0.00045, 0.00033, 0.00034, 0.00018, 0.00019, 0.00008, 0.00011, 0.00008, 0.00009, 0.00024, 0.00015, 0.00011, 0.00005)),
+        (41.2, (1.00000, 0.80349, 0.45742, 0.29546, 0.18262, 0.09839, 0.05957, 0.04194, 0.03070,
+                  0.01991, 0.01208, 0.00666, 0.00327, 0.00171, 0.00127, 0.00114, 0.00099, 0.00069,
+                  0.00041, 0.00025, 0.00029, 0.00028, 0.00026, 0.00016, 0.00006, 0.00011, 0.00020,
+                  0.00025, 0.00025, 0.00019, 0.00011, 0.00005)),
+        (116.5, (1.00000, 0.58873, 0.26727, 0.13597, 0.06973, 0.04085, 0.02734, 0.01480, 0.00700,
+                  0.00314, 0.00164, 0.00133, 0.00113, 0.00075, 0.00034, 0.00039, 0.00028, 0.00018,
+                  0.00010, 0.00026, 0.00024, 0.00023, 0.00011, 0.00006, 0.00010, 0.00016, 0.00011,
+                  0.00005, 0.00003, 0.00008, 0.00008, 0.00009)),
+        (523.3, (1.00000, 0.44381, 0.10426, 0.06026, 0.03486, 0.01975, 0.01080, 0.00545, 0.00288,
+                  0.00224, 0.00137, 0.00057, 0.00031, 0.00027, 0.00016, 0.00029, 0.00025, 0.00016,
+                  0.00004, 0.00019, 0.00015, 0.00010, 0.00002, 0.00013, 0.00009, 0.00006, 0.00001,
+                  0.00009, 0.00006, 0.00004, 0.00001, 0.00006)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
     max_harmonic = 32
     bore_corner_hz = 0.0
-    # LEVEL: HELD where the console had it, -1.4 dB re our principal 8 --
-    # borrowed pipes carry another rank's level (pitea_newranks.py --hold-level)
-    initial_gain = 0.060425
-    # ITS SPEECH, fitted on its Pitea stop's attack (pitea_stops.py --fit=speech)
-    speech_cycles = 23.76
-    speech_harmonic_exp = 0.766
-    attack_time = 0.008
+    # LEVEL: where the console had it by ear, -1.4 dB re our principal 8
+    initial_gain = 0.06032462932     # (organ_bake: the console's level re-held)
+    # ITS SPEECH, SIMULATED (examples/organ_bake.py: fluepipe_sim.onset over
+    # the compass, 78/51/53/30/25/16 cycles): periods of its own pitch, how far its
+    # upper harmonics lead (rise ~ m^-exp), the pallet's floor
+    speech_cycles = 40.29
+    speech_harmonic_exp = 1.251
+    attack_time = 0.004
     rank_speech = True
 
 
 class OrganQuint513Properties(FlueOrganProperties):
-    """quint 5-1/3: the principal quint an octave under the 2-2/3 -- measured
-    on the Kvinta 2 2/3's pipes an octave down, which sound its pitch, from C3.
-    Pitea has no 5 1/3 rank (its pedal mixture's quint is the plein-jeu's
-    2 2/3)."""
+    """quint 5-1/3: the principal quint an octave under the 2-2/3, at the
+    twelfth's smaller scale (Audsley OSR p.268), simulated likewise."""
+    # SIMULATED (examples/organ_bake.py; fluepipe_sim.STOPS['quint513'], Audsley's
+    # construction): the radiated harmonics at the rank's own pitches
     mode_gains_points = (
-        (349.6, (1.00000, 0.12036, 0.06570, 0.03123, 0.01195, 0.01403, 0.00345, 0.00350, 0.00131, 0.00070, 0.00037, 0.00023, 0.00027, 0.00028, 0.00023, 0.00013, 0.00016, 0.00017, 0.00023, 0.00016, 0.00011, 0.00012, 0.00008, 0.00010, 0.00011, 0.00011, 0.00009, 0.00008, 0.00009, 0.00008, 0.00012, 0.00008)),
-        (1569.8, (1.00000, 0.13594, 0.04976, 0.00874, 0.00620, 0.00907, 0.00324, 0.00209, 0.00146, 0.00065, 0.00030, 0.00054, 0.00086, 0.00015, 0.00050, 0.00202, 0.00012, 0.00012, 0.00012, 0.00012, 0.00012, 0.00012, 0.00012, 0.00012, 0.00012, 0.00012, 0.00012, 0.00012, 0.00012, 0.00012, 0.00012, 0.00012)),
+        (349.6, (1.00000, 0.55057, 0.21331, 0.10377, 0.05578, 0.03060, 0.01847, 0.00983, 0.00431,
+                  0.00204, 0.00160, 0.00128, 0.00077, 0.00052, 0.00042, 0.00036, 0.00014, 0.00014,
+                  0.00019, 0.00023, 0.00011, 0.00006, 0.00010, 0.00020, 0.00013, 0.00006, 0.00002,
+                  0.00009, 0.00008, 0.00008, 0.00003, 0.00002)),
+        (1569.8, (1.00000, 0.53239, 0.11299, 0.05151, 0.04383, 0.02639, 0.01969, 0.01472, 0.00794,
+                  0.00295, 0.00170, 0.00131, 0.00084, 0.00056, 0.00023, 0.00015, 0.00006, 0.00016,
+                  0.00015, 0.00017, 0.00008, 0.00005, 0.00008, 0.00011, 0.00008, 0.00003, 0.00004,
+                  0.00007, 0.00008, 0.00004, 0.00001, 0.00001)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
     max_harmonic = 32
     bore_corner_hz = 0.0
-    # LEVEL: HELD where the console had it, -9.5 dB re our principal 8 --
-    # borrowed pipes carry another rank's level (pitea_newranks.py --hold-level)
-    initial_gain = 0.0651913
-    # ITS SPEECH, fitted on its Pitea stop's attack (pitea_stops.py --fit=speech)
-    speech_cycles = 23.76
-    speech_harmonic_exp = 0.766
-    attack_time = 0.008
+    # LEVEL: where the console had it by ear, -9.5 dB re our principal 8
+    initial_gain = 0.05863900491     # (organ_bake: the console's level re-held)
+    # ITS SPEECH, SIMULATED (examples/organ_bake.py: fluepipe_sim.onset over
+    # the compass, 57/73/29/26/15/7 cycles): periods of its own pitch, how far its
+    # upper harmonics lead (rise ~ m^-exp), the pallet's floor
+    speech_cycles = 27.60
+    speech_harmonic_exp = 1.450
+    attack_time = 0.004
     rank_speech = True
 
 
