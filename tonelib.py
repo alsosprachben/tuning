@@ -4087,8 +4087,15 @@ class InharmonicStringProperties(PluckedStringProperties):
 
     inharmonicity_coefficient_func = lambda self, x, a, b, c, d, e: a + b * x + c * x * x + (d / x) + (e / (x * x))
 
+    # THE LAW IS THE KEYBOARD'S: fitted over A0-C8, its d/x and e/x^2 terms
+    # carry it negative under ~16 Hz, and a note played below the keyboard
+    # (rigormrt.mid's bass) had sqrt(1 + B m^2) go complex. Under A0 the
+    # lowest string's B holds (native/voice.c law_B, the same).
+    inharmonicity_floor_hz = 27.5
+
     def inharmonicity_coefficient_for_frequency(self, frequency):
-        return self.inharmonicity_coefficient_func(float(frequency), self.a, self.b, self.c, self.d, self.e)
+        return self.inharmonicity_coefficient_func(max(float(frequency), self.inharmonicity_floor_hz),
+                                                   self.a, self.b, self.c, self.d, self.e)
 
 
 class HammeredDulcimerProperties(FormantBody, InharmonicStringProperties):
@@ -5033,6 +5040,10 @@ class GrandPianoProperties(InharmonicStringProperties):
             n = self.max_harmonic or 64
             if self.max_partial_hz:
                 n = max(n, int(self.max_partial_hz / f0))
+            # (no more than the engine's table, VoiceSnap.hm_g[400]: only a
+            # note under the keyboard has more -- 727 at 13.7 Hz -- and its
+            # partials past the 400th, over 5 kHz, go unsounded)
+            n = min(n, 400)
             got = list(_H.gains(f0, vel, n, self.strike_point, mass, K, p,
                                                  self.hammer_speed_lo, self.hammer_speed_hi,
                                                  string=self._string_scale(),

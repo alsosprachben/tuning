@@ -2097,7 +2097,9 @@ static double law_B(const VoiceInit *c, double x)
 {
     if (c->b_law == 1)
         return x < c->break_hz ? c->wound_k * pow(x, c->wound_p) : c->plain_k * pow(x, c->plain_p);
-    double B = c->ia + c->ib * x + c->ic * x * x + (c->id / x) + (c->ie / (x * x));
+    /* (under A0 the lowest string's B: InharmonicStringProperties.inharmonicity_floor_hz) */
+    const double xl = x < 27.5 ? 27.5 : x;
+    double B = c->ia + c->ib * xl + c->ic * xl * xl + (c->id / xl) + (c->ie / (xl * xl));
     if (c->b_law == 2) {
         double f = pymax(x, 1e-6);
         double long_ = pymin(c->scale_constant_hz_m / f, c->reference_string_max_m);

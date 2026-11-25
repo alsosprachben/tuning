@@ -2972,6 +2972,9 @@ def init_supported(cls):
 def _b_law(cls):
     """Which inharmonicity_coefficient_for_frequency cls has (VoiceInit.b_law), or None."""
     own = _owner(cls, 'inharmonicity_coefficient_for_frequency')
+    if own in ('InharmonicStringProperties', 'ElectricGrandProperties') and \
+            getattr(cls, 'inharmonicity_floor_hz', 27.5) != 27.5:
+        return None                 # (law_B holds the polynomial at A0's 27.5 Hz only)
     return {'InharmonicStringProperties': 0, 'UprightPianoProperties': 1, 'ElectricGrandProperties': 2}.get(own)
 
 
