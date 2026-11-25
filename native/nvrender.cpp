@@ -268,6 +268,7 @@ void *nv_leslie_new(int nch, const long long *chans, const int *nreq, const doub
 void nv_leslie_free(void *h);
 void nv_leslie_mics(int nch, const int *nmic, const double *mic);
 int nv_leslie_row(void *h, double *r, double *cp, float *lob, int *on);
+extern "C" int nv_clav_gain(int set, double nf, double *g);
 long nv_amp_segment(const double *const *live, long nl, double a, double b, double drive, double ref, double imb,
                     double sr, double **out, long *src_i);
 void nv_stream_refuse(const char *why);
@@ -430,6 +431,7 @@ struct StreamRegDesc {
     void *ctx;
     void (*rows)(void *ctx, int rank, const double *rows, const long long *phase, const long long *seq, long n);
     void (*horizon)(void *ctx, double h);
+    void (*sym)(void *ctx, const double *rows, const long long *key3, long n);    // (register.cpp's RegSinkDesc)
 };
 // A STREAM's CHORUS DEVICE (a kind 2 entry): its record, its own voices, its
 // share's steps (none: G[5]; samp: in samples, else seconds) and the passes its
@@ -460,10 +462,29 @@ struct StreamScan {
     std::map<long long, std::vector<double>> nons;      // (each channel's onsets: a chorus device's loudest)
     std::map<long long, double> noffs;      // (...and its last release: an amplifier's products end by it)
     std::set<long long> regch;              // (the register's channels: a scanner's refusal)
+    // AN AMPLIFIER's ROWS, ENOUGH OF EACH FOR ITS SEGMENTS (onset, release,
+    // frequency, phase, amplitude): where its products begin, and whether a
+    // segment makes any -- a chorus device's loudest share counts their onsets
+    std::set<long long> ampch;
+    std::map<long long, std::vector<double>> arows;
+    std::map<long long, double> rdmax;      // (each channel's largest image delay: a scanner group's reach)
     void rec(const double *x, long n)
     {
         for (long r = 0; r < n; r++) {
             const long long m_ = (long long)x[NCOLS * r + cM];
+            {
+                auto rd_ = rdmax.find(m_);
+                const double d_ = x[NCOLS * r + 45];
+                if (rd_ == rdmax.end())
+                    rdmax[m_] = d_;
+                else if (d_ > rd_->second)
+                    rd_->second = d_;
+            }
+            if (!ampch.empty() && x[NCOLS * r + 10] > 0.5 && ampch.count(m_)) {
+                const double *y = x + NCOLS * r;
+                std::vector<double> &a_ = arows[m_];
+                a_.insert(a_.end(), {y[12], y[13], y[0], y[1], y[5]});
+            }
             auto nf_ = noffs.find(m_);
             if (nf_ == noffs.end())
                 noffs[m_] = x[NCOLS * r + 13];
@@ -532,6 +553,18 @@ struct StreamScan {
         c.rows += n;
     }
     static void reg_horizon(void *, double) {}
+    // ...and the sympathetic strings' (cast already): rows of the table like the notes'
+    static void sym_rows(void *c_, const double *at, const long long *, long n)
+    {
+        StreamScan &c = *(StreamScan *)c_;
+        if (n <= 0)
+            return;
+        for (long r = 0; r < n; r++)
+            c.heard.insert((long long)at[NCOLS * r + c.cM]);
+        c.rec(at, n);
+        c.rl = std::max(c.rl, nv_ring_last(at, n, c.floor_, c.sr));
+        c.rows += n;
+    }
 };
 
 static long long tremolo_expand(double **rowsp, long long *Pp, void **dm, const std::map<int, std::vector<double>> &chans,
@@ -2720,7 +2753,7 @@ static int run(int argc, char **argv)
     nv_gsd_place_reset();                       // (blockrender's _GSD_PLACE: the render's)
     StreamScan scan;
     StreamSinkDesc scan_d{&scan, &StreamScan::note};
-    StreamRegDesc scan_r{&scan, &StreamScan::reg_rows, &StreamScan::reg_horizon};
+    StreamRegDesc scan_r{&scan, &StreamScan::reg_rows, &StreamScan::reg_horizon, &StreamScan::sym_rows};
     if (g_stream) {                             // PASS A: the scan
         nv_stream_reset();
         scan.gsd = nv_gsd_new(K.data(), song, E.kind.data(), SR);
@@ -2729,6 +2762,12 @@ static int run(int argc, char **argv)
         scan.floor_ = E.k[K_RING_FLOOR];
         scan.sr = SR;
         scan.cM = col("mch");
+        for (int k = 0, na = (int)nv_song_amp(song, -1, nullptr, nullptr); k < na; k++) {
+            long long c;
+            int rotor;
+            if (nv_song_amp(song, k, &c, &rotor) > 0.0)
+                scan.ampch.insert(c);
+        }
         nv_play_set_sink(&scan_d);
         nv_play_set_reg_sink(&scan_r);
     }
@@ -2819,8 +2858,7 @@ static int run(int argc, char **argv)
             nv_amp_expand(&rows, &P, dm, (int)ach.size(), ach.data(), adr.data(), aref.data(), aimb.data(), SR);
     }
     // THE CLAVINET's TONE ROCKERS (_prep_clav_rockers): after the valve, before the tremolos
-    if (g_stream && nv_song_clavs(song, nullptr, nullptr, 0))
-        nv_stream_refuse("a clavinet's rockers");
+    // (a stream's: row by row as each enters Pass::add)
     nv_clav_pass(song, rows, P);
     // THE ORGANS' TREMOLOS (_prep_tremolo, after the render's length is
     // known): a Tremolo stop's on the notes struck with it drawn, then the
@@ -2924,10 +2962,6 @@ static int run(int argc, char **argv)
         if (g_stream && which == 1) {
             for (auto &kv : chans)
                 s_tch[kv.first] = kv.second;
-            if (!tcfg_m.empty())
-                nv_stream_refuse("a controller matrix's tremolo");
-            if (!s_ht.empty() && !s_tch.empty())
-                nv_stream_refuse("a tremolo stop's notes beside a channel's tremolo");
         }
         tremolo_expand(&rows, &P, dm, chans, which == 0 ? &mask : nullptr, SR);
     }
@@ -2936,8 +2970,6 @@ static int run(int argc, char **argv)
     std::vector<ScanCh> s_scn;              // (a stream's: row by row in Pass::add, held by note)
     if (g_stream)
         for (size_t q = 0; q < sch.size(); q++) {
-            if (std::find(s_ach.begin(), s_ach.end(), sch[q]) != s_ach.end() || scan.regch.count(sch[q]))
-                nv_stream_refuse("a scanner on a register's or an amplifier's channel");
             s_scn.push_back(ScanCh{sch[q], srow[q], sdep[q], scho[q]});
         }
     if (!sch.empty())
@@ -3207,8 +3239,69 @@ static int run(int argc, char **argv)
                         for (size_t i = 0; i < D.ts.size(); i++)
                             if (D.ts[i] > u0 && D.ts[i] <= u1)
                                 top = std::max(top, D.vs[std::min(i, D.vs.size() - 1)]);
-                        if (top > mx || (top > 0.0 && !any))
-                            nv_stream_refuse("a chorus device's share rising on an amplifier's channel");
+                        if (top > mx || (top > 0.0 && !any)) {
+                            // THE PRODUCTS' ONSETS (nv_amp_expand's segments, walked here from the
+                            // scan's rows): a segment that makes products adds its start's share
+                            const size_t qa = std::find(s_ach.begin(), s_ach.end(), cch[q]) - s_ach.begin();
+                            const std::vector<double> &ar = scan.arows[cch[q]];
+                            const size_t na_ = ar.size() / 5;
+                            if (s_adr[qa] > 0.0 && na_ >= 2) {
+                                std::vector<double> edges;
+                                for (size_t i = 0; i < na_; i++) {
+                                    edges.push_back(ar[5 * i]);
+                                    edges.push_back(ar[5 * i + 1]);
+                                }
+                                std::sort(edges.begin(), edges.end());
+                                edges.erase(std::unique(edges.begin(), edges.end()), edges.end());
+                                std::vector<std::pair<double, size_t>> cand;     // (share, segment) above the rows'
+                                for (size_t g = 0; g + 1 < edges.size(); g++) {
+                                    const double a = edges[g], b = edges[g + 1];
+                                    if (b - a < SR * 0.01)
+                                        continue;
+                                    const double sh = D.share_at((double)(long long)a, SR);
+                                    if (sh > mx || (sh > 0.0 && !any))
+                                        cand.push_back({sh, g});
+                                }
+                                std::stable_sort(cand.begin(), cand.end(),
+                                                 [](const std::pair<double, size_t> &u, const std::pair<double, size_t> &v) {
+                                                     return u.first > v.first;
+                                                 });
+                                for (const auto &cd : cand) {
+                                    const double a = edges[cd.second], b = edges[cd.second + 1];
+                                    std::vector<double> lr;             // (the live rows, those columns set)
+                                    for (size_t i = 0; i < na_; i++)
+                                        if (ar[5 * i] <= a + 1e-6 && ar[5 * i + 1] >= b - 1e-6) {
+                                            const size_t o_ = lr.size();
+                                            lr.resize(o_ + NCOLS, 0.0);
+                                            lr[o_ + 0] = ar[5 * i + 2];
+                                            lr[o_ + 1] = ar[5 * i + 3];
+                                            lr[o_ + 5] = ar[5 * i + 4];
+                                        }
+                                    const size_t nl = lr.size() / NCOLS;
+                                    if (nl < 2)
+                                        continue;
+                                    std::vector<const double *> lp(nl);
+                                    for (size_t i = 0; i < nl; i++)
+                                        lp[i] = lr.data() + NCOLS * i;
+                                    double ref = s_aref[qa];
+                                    if (!s_ass[qa].empty()) {
+                                        long i = (long)(std::upper_bound(s_ass[qa].begin(), s_ass[qa].end(), a)
+                                                        - s_ass[qa].begin()) - 1;
+                                        ref = s_asb[qa] * s_asl[qa][i > 0 ? i : 0];
+                                    }
+                                    double *got = nullptr;
+                                    long si = 0;
+                                    const long ng = nv_amp_segment(lp.data(), (long)nl, a, b, s_adr[qa], ref, s_aimb[qa],
+                                                                   SR, &got, &si);
+                                    free(got);
+                                    if (ng > 0) {           // (the loudest that makes any: the rest are under it)
+                                        mx = std::max(mx, cd.first);
+                                        any = any || cd.first > 0.0;
+                                        break;
+                                    }
+                                }
+                            }
+                        }
                     }
                     if (rows_ && any) {
                         const int ntap = !D.TV.empty() ? (int)(D.TV.size() / 8) : (int)D.G[6];
@@ -4329,6 +4422,10 @@ static int run(int argc, char **argv)
                 continue;
             buses.push_back(BusDef{m, k->efx_bus, k->bus_p, k->bus_p[10], k->bus_p[11], false, {}});
         }
+        if (g_stream)                       // (a stream's processors: efxbus's kinds 1-7)
+            for (const BusDef &bd : buses)
+                if (bd.kind < 1 || bd.kind > 7)
+                    nv_stream_refuse("an insertion effect's bus of a kind the stream has no processor for");
         if (!buses.empty()) {
             const int cMb = col("mch");
             busrow.assign(P > 0 ? P : 1, 0);
@@ -4774,6 +4871,7 @@ static int run(int argc, char **argv)
             std::vector<std::vector<std::pair<long long, long long>>> rkey;    // (their (phase, seq))
             long long hz = LLONG_MAX;               // (the register's horizon)
             std::map<long long, const NoteClass *> cab;     // (the cabinets' channels: nv_cabinet_pass's)
+            std::map<long long, int> clav;                  // (the clavinets' rockers: nv_clav_pass's)
             void *les = nullptr;                    // (the rotors: nv_leslie_row)
             const std::map<long long, std::vector<double>> *eq = nullptr;     // (the insertion EQs' channels)
             // THE HALF-PEDAL's TRACKS (onto_tracks, as each banded note lands): the
@@ -4793,6 +4891,8 @@ static int run(int argc, char **argv)
             Store tremst;                           // (the tremolos' sidebands, after the products)
             const std::vector<std::array<double, 4>> *ht = nullptr;
             const std::map<long long, std::vector<double>> *tch = nullptr, *twave = nullptr;
+            const std::map<long long, std::map<long long, long long>> *tbr = nullptr;  // (the matrix's: its rows' map)
+            int cbr = -1;                           // (EMIT_COLS' br)
             std::vector<long long> nprod;           // (each amplifier channel's products so far: their keys)
             // THE AMPLIFIERS' (streamrender._amplifier): each channel's rows as the
             // table orders them, its edge walked to, its next start; its products' store
@@ -4942,11 +5042,51 @@ static int run(int argc, char **argv)
             const std::vector<ScanCh> *scn = nullptr;
             void *scanh = nullptr;
             Store scanst;                           // (the scanner's copies: after the tremolos')
-            void scan_flush(double lim)             // (each group whose onset less delay is before lim)
+            // WHERE A SCANNER GROUP CAN STILL GROW (its key, onset less image delay, below
+            // this is whole): an amplifier's products to come begin at its channel's walked
+            // edge (or its rows' first edge, unwalked), the register's at its horizon --
+            // each less the channel's largest image delay; else nothing (the next onset's)
+            const std::set<long long> *regch = nullptr;
+            const std::map<long long, double> *rdmax = nullptr;
+            double group_bound(long long ch) const
+            {
+                double b = INFINITY;
+                for (size_t q = 0; ach && q < ach->size(); q++)
+                    if ((*ach)[q] == ch && (*adr)[q] > 0.0) {
+                        const AmpCh &c = amp[q];
+                        if (!c.key.empty()) {
+                            double e = c.edge;
+                            if (!c.walked)
+                                for (size_t r = 0; r < c.key.size(); r++)
+                                    e = r == 0 ? c.d[NCOLS * r + 12] : std::min(e, c.d[NCOLS * r + 12]);
+                            b = std::min(b, e);
+                        }
+                    }
+                if (regch && regch->count(ch))
+                    b = std::min(b, hraw);
+                if (std::isinf(b) || !rdmax)
+                    return b;
+                auto it = rdmax->find(ch);
+                return b - (it != rdmax->end() ? std::max(0.0, it->second) : 0.0);
+            }
+            long long pend_min() const              // (the held rows' first onset: the render waits for it)
+            {
+                double m = INFINITY;
+                for (const Pend &p_ : pend)
+                    m = std::min(m, p_.x[12]);
+                return std::isinf(m) ? LLONG_MAX : (long long)floor(m);
+            }
+            void scan_flush(double lim)             // (each group whose onset less delay is before lim, and whole)
             {
                 std::vector<Pend> go, keep;
-                for (Pend &p_ : pend)
-                    (p_.x[12] - p_.x[45] < lim ? go : keep).push_back(std::move(p_));
+                std::map<long long, double> bnd;
+                for (Pend &p_ : pend) {
+                    const long long ch_ = (long long)p_.x[6];
+                    auto bi = bnd.find(ch_);
+                    const double gb = bi != bnd.end() ? bi->second : (bnd[ch_] = group_bound(ch_));
+                    const double key_ = p_.x[12] - p_.x[45];
+                    (key_ < lim && key_ < gb ? go : keep).push_back(std::move(p_));
+                }
                 pend.swap(keep);
                 if (go.empty())
                     return;
@@ -4974,49 +5114,75 @@ static int run(int argc, char **argv)
                 }
             }
             void add(Store &t, const double *row, bool cast, std::array<long long, 14> k = {}, bool copy = false,
-                     int dkv = -1, float dgv = 0.0f, bool notrem = false, bool noscan = false)
+                     int dkv = -1, float dgv = 0.0f, bool notrem = false, bool noscan = false, bool sideband = false)
             {
                 double xb[NCOLS];
                 memcpy(xb, row, sizeof xb);
                 if (cast)
                     stream_cast(xb, kind);
                 double *x = xb;
+                // THE CLAVINET's ROCKERS (after the amplifier, before the tremolos: a row
+                // entering, not a tremolo's sideband, a scanner's or a chorus's copy)
+                if (!notrem && !copy && !sideband && !clav.empty()) {
+                    auto cv = clav.find((long long)x[6]);
+                    double g;
+                    if (cv != clav.end() && nv_clav_gain(cv->second, x[11], &g)) {
+                        x[3] *= g;
+                        x[4] *= g;
+                        x[5] *= g;
+                    }
+                }
                 // THE TREMOLOS (after the amplifier, before the chorus: nv_tremolo_expand's
-                // two passes): a stop's note rows, else the channel's; the sidebands their own
-                // rows after the table's -- through the chorus and on, not the tremolo again
+                // two passes, in their order): FIRST a Tremolo stop's on its notes' rows --
+                // its sidebands rows of their own, which the channel's tremolo then takes
+                // as it takes every row on its channel; THEN the channel's (the wheel's, a
+                // voice's, the controller matrix's, an insertion effect's), its sidebands
+                // riding the matrix's rows where it maps them -- through the chorus and on,
+                // not a tremolo again
                 if (!notrem && !copy && (ht || tch)) {
-                    const double *c = nullptr;
-                    double c4[4];
                     const long long chk = (long long)(int)x[6];
-                    long long base = 0;
                     if (ht && !ht->empty() && k[0] == 0)
                         for (const auto &h : *ht)
                             if ((double)k[1] >= h[0] && (double)k[1] < h[1]) {
-                                c4[0] = h[2]; c4[1] = h[3]; c4[2] = 0.0; c4[3] = 0.0;
-                                c = c4;
-                                base = 1LL << 40;
+                                const double c4[4] = {h[2], h[3], 0.0, 0.0};
+                                double tb[2 * NCOLS];
+                                const int nm = nv_tremolo_row(x, c4, chk, nullptr, 0, SR, tb);
+                                for (int m = 0; m < nm; m++)
+                                    add(tremst, tb + (size_t)NCOLS * m, false,
+                                        {2, (1LL << 40) + k[0], k[1], k[2], k[3], (long long)m}, false, dkv,
+                                        dgv, false, false, true);
                                 break;
                             }
-                    if (!c && tch) {
+                    if (tch) {
                         auto it = tch->find(chk);
                         if (it != tch->end()) {
-                            c = it->second.data();
-                            base = 1LL << 41;
+                            const std::vector<double> *H = nullptr;
+                            if (twave) {
+                                auto w = twave->find(chk);
+                                if (w != twave->end())
+                                    H = &w->second;
+                            }
+                            const int nh = H ? (int)(H->size() / 3) : 0;
+                            std::vector<double> tb((size_t)NCOLS * (H ? 2 * nh : 2));
+                            const int nm = nv_tremolo_row(x, it->second.data(), chk, H ? H->data() : nullptr, nh, SR,
+                                                          tb.data());
+                            const std::map<long long, long long> *bm = nullptr;
+                            if (tbr) {
+                                auto b = tbr->find(chk);
+                                if (b != tbr->end())
+                                    bm = &b->second;
+                            }
+                            for (int m = 0; m < nm; m++) {
+                                double *e = tb.data() + (size_t)NCOLS * m;
+                                if (bm) {
+                                    auto r = bm->find((long long)e[cbr]);
+                                    if (r != bm->end())
+                                        e[cbr] = (double)r->second;
+                                }
+                                add(tremst, e, false, {2, (1LL << 41) + k[0], k[1], k[2], k[3], k[4], k[5], (long long)m},
+                                    false, dkv, dgv, true);
+                            }
                         }
-                    }
-                    if (c) {
-                        const std::vector<double> *H = nullptr;
-                        if (twave) {
-                            auto w = twave->find(chk);
-                            if (w != twave->end())
-                                H = &w->second;
-                        }
-                        const int nh = H ? (int)(H->size() / 3) : 0;
-                        std::vector<double> tb((size_t)NCOLS * (H ? 2 * nh : 2));
-                        const int nm = nv_tremolo_row(x, c, chk, H ? H->data() : nullptr, nh, SR, tb.data());
-                        for (int m = 0; m < nm; m++)
-                            add(tremst, tb.data() + (size_t)NCOLS * m, false,
-                                {2, base + k[0], k[1], k[2], k[3], (long long)m}, false, dkv, dgv, true);
                     }
                 }
                 if (!noscan && !copy && scn)        // (THE SCANNER: its channel's rows held)
@@ -5217,10 +5383,14 @@ static int run(int argc, char **argv)
                     free(g);
                 }
                 long long T = std::isnan(next_on) ? p.N : std::min(p.N, (long long)(next_on * p.SR));
-                p.scan_flush(std::isnan(next_on) ? INFINITY : (double)T);     // (the scanner's groups closed)
-                if (p.ach && !p.ach->empty())       // (_amp_horizon: the next onset, the register's; at the end, all)
+                const double lim = std::isnan(next_on) ? INFINITY : (double)T;
+                p.scan_flush(lim);                  // (the scanner's groups closed)
+                if (p.ach && !p.ach->empty()) {     // (_amp_horizon: the next onset, the register's; at the end, all)
                     p.amp_advance(std::isnan(next_on) ? INFINITY : std::min((double)T, p.hraw));
-                p.render_to(std::min(std::min(T, p.hz), p.amp_next()));
+                    if (!p.pend.empty())
+                        p.scan_flush(lim);          // (...and those the products closed)
+                }
+                p.render_to(std::min(std::min(std::min(T, p.hz), p.amp_next()), p.pend_min()));
             }
             static void reg_rows(void *c_, int rank, const double *at, const long long *ph, const long long *sq, long n)
             {
@@ -5233,6 +5403,18 @@ static int run(int argc, char **argv)
                     p.amp_take(at + NCOLS * r, {1, (long long)rank, ph[r], sq[r]});
                     p.add(p.reg[rank], at + NCOLS * r, false, {1, (long long)rank, ph[r], sq[r], 0, 0, 0, 0});
                     p.rkey[rank].push_back(std::make_pair(ph[r], sq[r]));
+                }
+            }
+            // THE SYMPATHETIC STRINGS' rows (a strike answered: register.cpp's RegSink), the
+            // table's after every note's (sympathetic.expand's place), keyed in its order;
+            // the amplifier's like any row on its channel, no damper's track (prepare's r >= nnote)
+            static void sym_rows(void *c_, const double *at, const long long *key3, long n)
+            {
+                Pass &p = *(Pass *)c_;
+                for (long r = 0; r < n; r++) {
+                    const long long k1 = (1LL << 50) + key3[3 * r], k2 = key3[3 * r + 1], k3 = key3[3 * r + 2];
+                    p.amp_take(at + NCOLS * r, {0, k1, k2, k3});
+                    p.add(p.st, at + NCOLS * r, false, {0, k1, k2, k3, 0, 0, 0, 0});
                 }
             }
             static void reg_horizon(void *c_, double h)
@@ -5260,6 +5442,12 @@ static int run(int argc, char **argv)
                 nv_song_cabs(song, cch.data(), cks.data(), nc);
             for (int q = 0; q < nc; q++)
                 ps.cab[cch[q]] = cks[q];
+            const int nk = nv_song_clavs(song, nullptr, nullptr, 0);     // (a parallel type's virtual channels too)
+            std::vector<long long> kch(nk > 0 ? nk : 1);
+            std::vector<int> kset(nk > 0 ? nk : 1);
+            nv_song_clavs(song, kch.data(), kset.data(), nk);
+            for (int q = 0; q < nk; q++)
+                ps.clav[kch[q]] = kset[q];
         }
         ps.kind = E.kind.data();
         ps.ach = &s_ach;                    // (the amplifiers' settings, pass A's)
@@ -5293,9 +5481,13 @@ static int run(int argc, char **argv)
         ps.ht = s_ht.empty() ? nullptr : &s_ht;
         ps.tch = s_tch.empty() ? nullptr : &s_tch;
         ps.twave = &s_twave;
+        ps.tbr = tmap.empty() ? nullptr : &tmap;
+        ps.cbr = col("br");
         if (!s_scn.empty()) {
             ps.scn = &s_scn;
             ps.scanh = nv_scan_new(E.scan.data());
+            ps.regch = &scan.regch;
+            ps.rdmax = &scan.rdmax;
         }
         ps.SR = SR;
         ps.N = N;
@@ -5305,7 +5497,70 @@ static int run(int argc, char **argv)
         // state, this pass's own (the mix's, the send's)
         // (the mix's set, and the send's when it renders: Python's one pass, both
         // from the same rows -- streamrender._render's procs[ch][0] and [1])
+        // A VOICE's OWN GATE, STREAMED (bus_process's kind 7, window by window from
+        // the start: the running peak, the body's and the gate's poles carried, each
+        // sample at its place in the whole -- the same sums, in the same order)
+        struct GateSt {
+            long long m = 0;                // (the next sample's place)
+            double acc = -INFINITY, z7 = 0.0, z8 = 0.0, z9 = 0.0, z10 = 0.0;
+            void run(const BusDef &bd, long long N_, const float *x0, const float *x1, long n, float *y0, float *y1)
+            {
+                const double *p = bd.p;
+                const long long hold = (long long)p[0];
+                const double c = p[1];
+                auto tgt_at = [&](long long i) {
+                    for (const auto &kk : bd.keys) {
+                        if (!(kk.first < N_ && kk.second + hold > 0))
+                            continue;
+                        long long a0 = kk.first > 0 ? kk.first : 0;
+                        long long a1 = std::min(N_, kk.second + hold);
+                        a1 = a1 > 0 ? a1 : 0;
+                        if (i >= a0 && i < a1)
+                            return 1.0;
+                    }
+                    return p[6];
+                };
+                auto pole = [](double a, double &zz, double in) {
+                    const double yv = zz + (1.0 - a) * in;
+                    zz = in * 0.0 - yv * -a;
+                    return yv;
+                };
+                for (long j = 0; j < n; j++, m++) {
+                    const double L = (double)x0[j], R = (double)x1[j];
+                    const double fa = fabs(L), fb = fabs(R);
+                    const double x = fb > fa ? fb : fa;
+                    const double md = (double)m;
+                    const double lv = 20.0 * log10(x > 1e-12 ? x : 1e-12);
+                    const double t = lv + md * c;
+                    acc = (m == 0 || t > acc) ? t : acc;
+                    const double r = acc - md * c, fl = p[11] - (md + 1.0) * c;
+                    const double ref = fl > r ? fl : r;
+                    double g = 1.0;
+                    if (p[2] != 0.0) {
+                        if (m == 0) {
+                            z7 = p[7] * x;
+                            z8 = p[8] * x;
+                        }
+                        const double e0 = pole(p[7], z7, x), e1 = pole(p[8], z8, x);
+                        const double env = e1 > e0 ? e1 : e0;
+                        double over = 20.0 * log10(env > 1e-12 ? env : 1e-12) - (ref + p[3]);
+                        over = over > 0.0 ? over : 0.0;
+                        g = pow(10.0, -over * (1.0 - 1.0 / p[4]) / 20.0) * p[5];
+                    }
+                    const double tg = tgt_at(m);
+                    if (m == 0) {
+                        z9 = p[9] * tg;
+                        z10 = p[10] * tg;
+                    }
+                    const double o0 = pole(p[9], z9, tg), o1 = pole(p[10], z10, tg);
+                    const double gg = g * (o1 > o0 ? o1 : o0);
+                    y0[j] = (float)(L * gg);
+                    y1[j] = (float)(R * gg);
+                }
+            }
+        };
         struct BusSet {
+            std::vector<GateSt> gate;
             std::vector<void *> bush;
             std::vector<std::vector<float>> busL, busR;
             std::vector<std::vector<double>> revL, revR, revX;
@@ -5331,6 +5586,7 @@ static int run(int argc, char **argv)
                 fwrite("data", 1, 4, b.wf); u32(data);
             }
             b.bush.assign(buses.size(), nullptr);
+            b.gate.assign(buses.size(), GateSt{});
             for (size_t q = 0; q < buses.size(); q++)
                 b.bush[q] = nv_livebus_raw_new(buses[q].kind, buses[q].p, SR);
             // ...each bus's part (stage 1 writes it, stage 2 mixes it), held from
@@ -5446,7 +5702,15 @@ static int run(int argc, char **argv)
                             xL[i] = b.busL[q][b.wm - b.busO + i] * gf;
                             xR[i] = b.busR[q][b.wm - b.busO + i] * gf;
                         }
-                        nv_livebus_raw(b.bush[q], xL.data(), xR.data(), wn2, yL.data(), yR.data());
+                        if (buses[q].kind == 7)
+                            b.gate[q].run(buses[q], (long long)N, xL.data(), xR.data(), wn2, yL.data(), yR.data());
+                        else if (b.bush[q])
+                            nv_livebus_raw(b.bush[q], xL.data(), xR.data(), wn2, yL.data(), yR.data());
+                        else {
+                            fprintf(stderr, "nvrender: --stream: no processor for bus kind %d\n", buses[q].kind);
+                            std::fill(yL.begin(), yL.end(), 0.0f);
+                            std::fill(yR.begin(), yR.end(), 0.0f);
+                        }
                     }
                     const float dry = (float)buses[q].dry, wet = (float)buses[q].wet;
                     for (long i = 0; i < wn2; i++) {
@@ -5891,13 +6155,19 @@ static int run(int argc, char **argv)
             }
         };
         StreamSinkDesc pd{&ps, &Pass::note};
-        StreamRegDesc prd{&ps, &Pass::reg_rows, &Pass::reg_horizon};
+        StreamRegDesc prd{&ps, &Pass::reg_rows, &Pass::reg_horizon, &Pass::sym_rows};
         nv_play_set_sink(&pd);
         nv_play_set_reg_sink(&prd);
         long long got = nv_play_replay(song, K.data(), &t, rows_ ? br.data() : nullptr, rows_ ? 1024 : 0, &rs, qacc,
                                        &az, E.kind.data(), BLK);
         nv_play_set_sink(nullptr);
         nv_play_set_reg_sink(nullptr);
+        if (!ps.pend.empty()) {             // (a scanner's groups the end closes: the last products', the register's)
+            ps.hraw = INFINITY;
+            if (ps.ach && !ps.ach->empty())
+                ps.amp_advance(INFINITY);
+            ps.scan_flush(INFINITY);
+        }
         ps.render_to(N);                    // (a song with no notes: its silence)
         for (int q = 0; q < nset; q++) {
             if (bset[q].done != N) {

@@ -1125,11 +1125,23 @@ static double cab_gain(const NoteClass *k, double hz)
 // THE CLAVINET's TONE ROCKERS (_prep_clav_rockers, tonelib.clav_tone_gain):
 // every row on the channel through the rocker's filter at its frequency --
 // CLAV_TONE's (corner, order, high-pass), darkest to brightest
+// (one row's: the rocker set's gain at nf, false where the set passes all -- a stream's too)
+extern "C" int nv_clav_gain(int set, double nf, double *g)
+{
+    static const double tone[5][3] = {{1200.0, 2.0, 0.0}, {3000.0, 2.0, 0.0}, {0.0, 0.0, 0.0},
+                                      {400.0, 2.0, 1.0}, {900.0, 2.0, 1.0}};
+    const double *t = tone[((set % 5) + 5) % 5];
+    if (t[0] <= 0.0)
+        return 0;
+    double y = nf / t[0];
+    double x = t[1] == 2.0 ? y * y : pow(y, t[1]);  // (numpy's x ** 2.0 is its square)
+    *g = t[2] != 0.0 ? x / (1.0 + x) : 1.0 / (1.0 + x);
+    return 1;
+}
+
 extern "C" void nv_clav_pass(void *song, double *rows, long long P)
 {
     enum { cAL = 3, cAR = 4, cAM = 5, cMCH = 6, cNF = 11 };     // (EMIT_COLS)
-    static const double tone[5][3] = {{1200.0, 2.0, 0.0}, {3000.0, 2.0, 0.0}, {0.0, 0.0, 0.0},
-                                      {400.0, 2.0, 1.0}, {900.0, 2.0, 1.0}};
     int nc = nv_song_clavs(song, nullptr, nullptr, 0);
     if (!nc)
         return;
@@ -1144,12 +1156,9 @@ extern "C" void nv_clav_pass(void *song, double *rows, long long P)
         auto it = clav.find((long long)row[cMCH]);
         if (it == clav.end())
             continue;
-        const double *t = tone[((it->second % 5) + 5) % 5];
-        if (t[0] <= 0.0)
+        double g;
+        if (!nv_clav_gain(it->second, row[cNF], &g))
             continue;
-        double y = row[cNF] / t[0];
-        double x = t[1] == 2.0 ? y * y : pow(y, t[1]);  // (numpy's x ** 2.0 is its square)
-        double g = t[2] != 0.0 ? x / (1.0 + x) : 1.0 / (1.0 + x);
         row[cAL] *= g;
         row[cAR] *= g;
         row[cAM] *= g;
