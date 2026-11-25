@@ -6412,7 +6412,7 @@ class RhodesProperties(ElectricPianoProperties):
     tremolo_depth = 0.60
     tremolo_stereo = True
 
-    # THE PICKUP AS THE PAPER BUILDS IT (Pfeifle & Muenster, DAFx-17, 5.4).
+    # THE PICKUP AS THE PAPER BUILDS IT (Pfeifle, DAFx-17, 5.4).
     # The tine's tip is a POINT moving over the magnet's face, and the field
     # there is a magnetic charge sheet on the face's real profile -- B_z =
     # integral of sigma dz / |r|^3 over it (their eq. 7) -- a FRUSTUM: a flat
@@ -6593,8 +6593,8 @@ class WurlitzerProperties(ElectricPianoProperties):
 
     # THE REED SWINGS THROUGH A SLOT. "The charged plate has cutouts at the
     # position of the reed for each note of the instrument. The reeds are
-    # designed to vibrate freely between the symmetric cutouts" (Pfeifle &
-    # Muenster, DAFx-17; their capacitance is a field simulation through that
+    # designed to vibrate freely between the symmetric cutouts" (Pfeifle,
+    # DAFx-17; his capacitance is a field simulation through that
     # geometry). So the capacitance peaks with the reed in the plate's plane
     # and falls away either side -- a symmetric bump, (1 + u^2)^-q, u the
     # reed's height off the plane in units of the slot's width, q the

@@ -7,8 +7,9 @@ hear its pressure. Three things move it:
         Filtered noise, slow (under a hertz): a regulator's ripple, 0.3% RMS
         -- 0.2 cents on a flue -- a named size, for the ear. The partials'
         own uncorrelated wobble is the jet's turbulence, which the skirts make
-        (phase 2); pressure moves every partial together. (Abel, Ahnert and
-        Bergweiler's 3.75% RMS at a pipe foot includes the foot's own
+        (phase 2); pressure moves every partial together. (Abel, Bergweiler
+        and Gerhard-Multhaupt's 3.75% RMS at a pipe foot, JASA 119 2006,
+        includes the foot's own
         turbulence, which is not the chest's.)
 
   s(t)  THE SAG. Every speaking pipe draws wind, and a bellows is a mass on

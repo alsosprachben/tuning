@@ -5,8 +5,9 @@ each partial, for the voice to carry (GM 36, 37).
 
 THE MODEL (Issanchou, Bilbao, Le Carrou, Touze, Doare, "A modal-based
 approach to the nonlinear vibration of strings against a unilateral
-obstacle", JSV 2017; "Nonlinear guitar string dynamics: the slap", JASA
-2018): the string as its modes -- each at its stretched frequency, damped
+obstacle", JSV 393 2017; Issanchou, Acary, Perignon, Touze, Le Carrou,
+"Nonsmooth contact dynamics for the numerical simulation of collisions in
+musical string instruments", JASA 143(5) 2018): the string as its modes -- each at its stretched frequency, damped
 at its own rate, both from ElectricBassProperties' physics (the same string
 the voice plays) -- and each fret a point obstacle under it, pushing back
 with a Hertzian force K d^1.5 while the string is below the fret's top.

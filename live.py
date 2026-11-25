@@ -22051,7 +22051,7 @@ def _selftest(only=""):
           "  (C4 v64, h5 at %.0f dB re h1 against the Rhodes' %.0f)"
           % (_lad(w64, 5)[-1], _lad(r64, 5)[-1]))
     # THE PLATE IS A SLOT. The reed swings between symmetric cutouts in the
-    # charged plate (Pfeifle & Muenster, DAFx-17), so the curve is a square-
+    # charged plate (Pfeifle, DAFx-17), so the curve is a square-
     # edged bump, not a one-sided 1/d -- and a symmetric field centred on the
     # reed loses its fundamental, as the Rhodes' does.
     class _WC(_T.WurlitzerProperties):

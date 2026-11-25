@@ -252,7 +252,7 @@ def _useful_millot(prof, L, W, t, rest_curl):
     return sides + front
 
 
-# THE PERCUSSION'S HAMMER (Mustel, glossary p. 154; Martin de Provins, p. 41:
+# THE PERCUSSION'S HAMMER (Mustel, glossary p. 154, and p. 41 on Martin de Provins's of 1841:
 # "un petit marteau garni de feutre ... vient frapper la lame ... la fait
 # partir : le vent n'a plus qu'a maintenir la lame en vibration"): a felt
 # hammer, its momentum given by the key through an escapement, strikes the

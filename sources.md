@@ -5546,7 +5546,8 @@ wg; a theatre organ ±100 mm about 250 mm), waveforms from sinusoidal to
 asymmetric, and no rate. The default here is a gentle one, ±10% at 5.6 Hz,
 sinusoidal, building in over a quarter second, for the ear to set.
 
-**The wander's bound.** Abel, Ahnert and Bergweiler measured 160 Pa with
+**The wander's bound.** Abel, Bergweiler and Gerhard-Multhaupt ("Synchronization of organ pipes",
+JASA 119, 2006) measured 160 Pa with
 6 Pa RMS at a pipe foot (3.75%), which includes the foot's own turbulence.
 Pitea bounds what the chest can share: a C4 principal wanders 0.47 cents in
 all, its partials' level wobbles uncorrelated (above), so a shared pressure

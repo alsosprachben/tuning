@@ -12,8 +12,8 @@ input: a second-order low-pass whose peak is the pickup's "resonance".
     1/Q = 1/Q_load + 1/Q_coil,   Q_load = R sqrt(C/L),  Q_coil = sqrt(L/C)/Rs
     R = volume pot || tone pot (to ground through its capacitor: a short at
         the resonance, the knob full up) || the input
-PUBLISHED VALUES (Zollner, Physik der Elektrogitarre, ch. 5; Lemme, The
-Secrets of Electric Guitar Pickups): a vintage-wound Strat coil 2.4 H, 5.8 k,
+PUBLISHED VALUES (Zollner, Physik der Elektrogitarre, ch. 5; Lemme, "The
+Secrets of Electric Guitar Pickups", web article): a vintage-wound Strat coil 2.4 H, 5.8 k,
 ~110 pF; 250 k volume and tone pots; a 1 M instrument input; a 3 m cable at
 ~100 pF/m. The coil's eddy-current loss (it lowers Q further) not modelled.
 
