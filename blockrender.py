@@ -3162,7 +3162,9 @@ def _prep_chest_wind(Grows, ch_progs, grow_of, nblk, notes, rankev_of, ccs=None,
                 continue
             for r in _ranks:
                 _rat = r[1] if isinstance(r[1], (list, tuple)) else [r[1]]
-                _w = sum(_WND.pipe_draw(_f * q) for q in _rat)
+                # each rank its own pipes' draw (wind.draw_law: the simulated pipe's)
+                _law = _WND.draw_law(T.rank_wind_class(pc, r))
+                _w = sum(_WND.rank_draw(_law, _f * q) for q in _rat)
                 _dem[_b0:_b1] += _w * Grows[grow_of[(_wk, r[0])]][_b0:_b1]
         _wd = _WND.Wind(pc, BLK / SR, seed=ch, scale=_wsc, wander_scale=(1.0 if _wsc else 0.0))
         _p = _wd.blocks(_dem[:nblk], _trem)

@@ -2673,7 +2673,7 @@ void nv_song_organ_wind(void *s, long nblk, int blk, double sr, const float *G, 
                     continue;
                 double d[8];
                 for (int q = 0; q < rk.n_ratio; q++)
-                    d[q] = pow(std::max(f * rk.ratio[q], 8.0) / sp->unit_hz, sp->draw_exp);
+                    d[q] = sp->draw_u[ri] * pow(std::max(f * rk.ratio[q], 8.0) / sp->unit_hz, sp->draw_e[ri]);
                 double w = pysum(d, rk.n_ratio);
                 const float *g = G + (long)(o.g0 + ri) * nblk;
                 float wf = (float)w;        // (numpy: a Python float times a float32 row is float32)

@@ -635,6 +635,39 @@ def at(table, f0):
     return table[k]
 
 
+PRESSURES = (0.75, 0.875, 1.0, 1.125, 1.25)     # x the voiced pressure: the chest's sag and tremulant span
+
+
+def pressure_response(stop, f0, table=None):
+    """HOW THE PIPE ANSWERS ITS WIND (the harmonium's pressure tables, for the
+    pipe organ): the steady tone solved at PRESSURES x the voiced pressure,
+    each from the voiced solution (continuation), and fitted as powers about
+    the voiced point -- pitch ~ p^a, radiated amplitude ~ p^b -- the forms the
+    chest's rows already take (wind.pitch_level). And the pipe's DRAW: the
+    windway's flow, flue height x mouth width x the jet's speed (the flow a
+    flue spends whether it speaks or not), m^3/s at the voiced pressure.
+    Returns dict(a, b, draw, points)."""
+    g = geometry(stop, f0)
+    p0 = g["p"]
+    base = at(table, f0) if table else steady(stop, f0)
+    pts = []
+    for k in PRESSURES:
+        if k == 1.0:
+            r = base
+        else:
+            x = base[3]["sol"].x.copy()
+            x[:-1] *= k ** 0.5                       # the flow scales as the jet's speed
+            r = steady(stop, f0, pressure=p0 * k, guess=x)
+        if sounding(r) and r[3]["cost"] < 1e-6:
+            pts.append((k, r[0], r[2]))                 # (x pressure, played Hz, level dB of power)
+    ks = np.log([q[0] for q in pts])
+    a = float(np.polyfit(ks, np.log([q[1] for q in pts]), 1)[0]) if len(pts) > 2 else 0.0
+    # amplitude ~ power^1/2: ln A = level dB x ln10 / 20
+    b = float(np.polyfit(ks, [q[2] * math.log(10) / 20 for q in pts], 1)[0]) if len(pts) > 2 else 1.0
+    draw = g["B"] * g["h"] * math.sqrt(2 * p0 / RHO)
+    return dict(a=a, b=b, draw=draw, points=pts)
+
+
 def ladder(dm, de, f0, sr=48000, nh=32):
     """Power at each harmonic of the steady second half, mouth and end
     summed as powers, dB re h1; and the played pitch (from the mouth flow)."""

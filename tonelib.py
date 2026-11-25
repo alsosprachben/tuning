@@ -8424,6 +8424,13 @@ class FlueOrganProperties(OrganProperties):
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
+    # ITS WIND, SIMULATED (examples/organ_bake.py --wind: the pipe at 0.75-1.25 x
+    # its voiced pressure): pitch ~ p^a, level ~ p^b about the voiced point, and
+    # its draw (the windway's flow) in units of the principal 8's middle C, ~ (f/261.6)^e
+    wind_pitch_exp = 0.01588
+    wind_level_exp = 0.5167
+    wind_draw_units = 1
+    wind_draw_exp = -1.5588
 
     # Balance-normalised to the rest of the instrument set (K-weighted, equal
     # velocity). Safe for the existing repertoire because every render ends in
@@ -8570,6 +8577,13 @@ class PrincipalOctave4Properties(FlueOrganProperties):
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
+    # ITS WIND, SIMULATED (examples/organ_bake.py --wind: the pipe at 0.75-1.25 x
+    # its voiced pressure): pitch ~ p^a, level ~ p^b about the voiced point, and
+    # its draw (the windway's flow) in units of the principal 8's middle C, ~ (f/261.6)^e
+    wind_pitch_exp = 0.01766
+    wind_level_exp = 0.4990
+    wind_draw_units = 0.884243
+    wind_draw_exp = -1.6471
     initial_gain = 0.06066071627     # (organ_bake: the console's level re-held)
 
 
@@ -8595,6 +8609,13 @@ class PrincipalOctave2Properties(FlueOrganProperties):
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
+    # ITS WIND, SIMULATED (examples/organ_bake.py --wind: the pipe at 0.75-1.25 x
+    # its voiced pressure): pitch ~ p^a, level ~ p^b about the voiced point, and
+    # its draw (the windway's flow) in units of the principal 8's middle C, ~ (f/261.6)^e
+    wind_pitch_exp = 0.02300
+    wind_level_exp = 0.4700
+    wind_draw_units = 0.768332
+    wind_draw_exp = -1.6000
     initial_gain = 0.05881505585     # (organ_bake: the console's level re-held)
 
 
@@ -10724,6 +10745,13 @@ class OrganGedaktProperties(StoppedPipeProperties):
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
+    # ITS WIND, SIMULATED (examples/organ_bake.py --wind: the pipe at 0.75-1.25 x
+    # its voiced pressure): pitch ~ p^a, level ~ p^b about the voiced point, and
+    # its draw (the windway's flow) in units of the principal 8's middle C, ~ (f/261.6)^e
+    wind_pitch_exp = 0.01983
+    wind_level_exp = 0.3632
+    wind_draw_units = 0.437033
+    wind_draw_exp = -1.6250
     max_harmonic = 32
     # LEVEL: where the console has it, set by ear (organ_bake re-holds it)
     initial_gain = 0.07388274183     # (organ_bake: the console's level re-held)
@@ -10767,6 +10795,13 @@ class OrganBourdonProperties(OrganGedaktProperties):
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
+    # ITS WIND, SIMULATED (examples/organ_bake.py --wind: the pipe at 0.75-1.25 x
+    # its voiced pressure): pitch ~ p^a, level ~ p^b about the voiced point, and
+    # its draw (the windway's flow) in units of the principal 8's middle C, ~ (f/261.6)^e
+    wind_pitch_exp = 0.01508
+    wind_level_exp = 0.3283
+    wind_draw_units = 0.287072
+    wind_draw_exp = -1.5500
     max_harmonic = 32
     # LEVEL: where the console has it, set by ear (organ_bake re-holds it)
     initial_gain = 0.05642918985     # (organ_bake: the console's level re-held)
@@ -10801,6 +10836,13 @@ class OrganCromorneProperties(ReedOrganProperties):
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
+    # ITS WIND, SIMULATED (examples/organ_bake.py --wind: the pipe at 0.75-1.25 x
+    # its voiced pressure): pitch ~ p^a, level ~ p^b about the voiced point, and
+    # its draw (the slot's flow) in units of the principal 8's middle C, ~ (f/261.6)^e
+    wind_pitch_exp = -0.00000
+    wind_level_exp = 1.0642
+    wind_draw_units = 0.024179
+    wind_draw_exp = -1.9917
     max_harmonic = 32
     # LEVEL: where the console has it, set by ear (organ_bake re-holds it)
     initial_gain = 0.0727807108     # (organ_bake: the console's level re-held)
@@ -10839,6 +10881,13 @@ class OrganBassonProperties(OrganCromorneProperties):
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
+    # ITS WIND, SIMULATED (examples/organ_bake.py --wind: the pipe at 0.75-1.25 x
+    # its voiced pressure): pitch ~ p^a, level ~ p^b about the voiced point, and
+    # its draw (the slot's flow) in units of the principal 8's middle C, ~ (f/261.6)^e
+    wind_pitch_exp = 0.00018
+    wind_level_exp = 1.1497
+    wind_draw_units = 0.0106173
+    wind_draw_exp = -1.3477
     max_harmonic = 32
     # LEVEL: where the console has it, set by ear (organ_bake re-holds it)
     initial_gain = 0.04157161322     # (organ_bake: the console's level re-held)
@@ -10872,6 +10921,13 @@ class OrganClarionProperties(OrganCromorneProperties):
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
+    # ITS WIND, SIMULATED (examples/organ_bake.py --wind: the pipe at 0.75-1.25 x
+    # its voiced pressure): pitch ~ p^a, level ~ p^b about the voiced point, and
+    # its draw (the slot's flow) in units of the principal 8's middle C, ~ (f/261.6)^e
+    wind_pitch_exp = 0.00073
+    wind_level_exp = 1.1990
+    wind_draw_units = 0.0137825
+    wind_draw_exp = -1.7161
     max_harmonic = 32
     # LEVEL: where the console has it, set by ear (organ_bake re-holds it)
     initial_gain = 0.07950650292     # (organ_bake: the console's level re-held)
@@ -10905,6 +10961,13 @@ class OrganTrumpetProperties(OrganCromorneProperties):
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
+    # ITS WIND, SIMULATED (examples/organ_bake.py --wind: the pipe at 0.75-1.25 x
+    # its voiced pressure): pitch ~ p^a, level ~ p^b about the voiced point, and
+    # its draw (the slot's flow) in units of the principal 8's middle C, ~ (f/261.6)^e
+    wind_pitch_exp = -0.00019
+    wind_level_exp = 1.4640
+    wind_draw_units = 0.0155918
+    wind_draw_exp = -1.5656
     max_harmonic = 32
     # LEVEL: where the console has it, set by ear (organ_bake re-holds it)
     initial_gain = 0.1126060118     # (organ_bake: the console's level re-held)
@@ -10938,6 +11001,13 @@ class OrganQuintProperties(FlueOrganProperties):
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
+    # ITS WIND, SIMULATED (examples/organ_bake.py --wind: the pipe at 0.75-1.25 x
+    # its voiced pressure): pitch ~ p^a, level ~ p^b about the voiced point, and
+    # its draw (the windway's flow) in units of the principal 8's middle C, ~ (f/261.6)^e
+    wind_pitch_exp = 0.01814
+    wind_level_exp = 0.4798
+    wind_draw_units = 0.778926
+    wind_draw_exp = -1.6815
     max_harmonic = 32
     # LEVEL: where the console has it, set by ear (organ_bake re-holds it)
     initial_gain = 0.05899030693     # (organ_bake: the console's level re-held)
@@ -11030,6 +11100,13 @@ class OrganKoppelfluteProperties(OrganGedaktProperties):
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
+    # ITS WIND, SIMULATED (examples/organ_bake.py --wind: the pipe at 0.75-1.25 x
+    # its voiced pressure): pitch ~ p^a, level ~ p^b about the voiced point, and
+    # its draw (the windway's flow) in units of the principal 8's middle C, ~ (f/261.6)^e
+    wind_pitch_exp = 0.02321
+    wind_level_exp = 0.3875
+    wind_draw_units = 0.492394
+    wind_draw_exp = -1.7000
     max_harmonic = 32
     bore_corner_hz = 0.0
     # LEVEL BY THE PHYSICS: the simulated pipe's radiated level against the
@@ -11066,6 +11143,13 @@ class OrganWaldfluteProperties(OrganGedaktProperties):
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
+    # ITS WIND, SIMULATED (examples/organ_bake.py --wind: the pipe at 0.75-1.25 x
+    # its voiced pressure): pitch ~ p^a, level ~ p^b about the voiced point, and
+    # its draw (the windway's flow) in units of the principal 8's middle C, ~ (f/261.6)^e
+    wind_pitch_exp = 0.01856
+    wind_level_exp = 0.4974
+    wind_draw_units = 0.576591
+    wind_draw_exp = -1.6667
     max_harmonic = 32
     bore_corner_hz = 0.0
     # LEVEL BY THE PHYSICS: the simulated pipe's radiated level against the
@@ -11103,6 +11187,13 @@ class OrganNazardProperties(OrganGedaktProperties):
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
+    # ITS WIND, SIMULATED (examples/organ_bake.py --wind: the pipe at 0.75-1.25 x
+    # its voiced pressure): pitch ~ p^a, level ~ p^b about the voiced point, and
+    # its draw (the windway's flow) in units of the principal 8's middle C, ~ (f/261.6)^e
+    wind_pitch_exp = 0.02538
+    wind_level_exp = 0.3934
+    wind_draw_units = 0.508475
+    wind_draw_exp = -1.7292
     max_harmonic = 32
     bore_corner_hz = 0.0
     # LEVEL BY THE PHYSICS: the simulated pipe's radiated level against the
@@ -11139,6 +11230,13 @@ class OrganTierceProperties(OrganGedaktProperties):
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
+    # ITS WIND, SIMULATED (examples/organ_bake.py --wind: the pipe at 0.75-1.25 x
+    # its voiced pressure): pitch ~ p^a, level ~ p^b about the voiced point, and
+    # its draw (the windway's flow) in units of the principal 8's middle C, ~ (f/261.6)^e
+    wind_pitch_exp = 0.01582
+    wind_level_exp = 0.4803
+    wind_draw_units = 0.527738
+    wind_draw_exp = -1.7500
     max_harmonic = 32
     bore_corner_hz = 0.0
     # LEVEL BY THE PHYSICS: the simulated pipe's radiated level against the
@@ -11171,6 +11269,13 @@ class OrganSubbassProperties(OrganBourdonProperties):
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
+    # ITS WIND, SIMULATED (examples/organ_bake.py --wind: the pipe at 0.75-1.25 x
+    # its voiced pressure): pitch ~ p^a, level ~ p^b about the voiced point, and
+    # its draw (the windway's flow) in units of the principal 8's middle C, ~ (f/261.6)^e
+    wind_pitch_exp = 0.02284
+    wind_level_exp = 0.5178
+    wind_draw_units = 0.566023
+    wind_draw_exp = -1.6812
     max_harmonic = 32
     bore_corner_hz = 0.0
     # LEVEL BY THE PHYSICS: the simulated pipe's radiated level against the
@@ -11203,6 +11308,13 @@ class OrganContrabassoonProperties(OrganBassonProperties):
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
+    # ITS WIND, SIMULATED (examples/organ_bake.py --wind: the pipe at 0.75-1.25 x
+    # its voiced pressure): pitch ~ p^a, level ~ p^b about the voiced point, and
+    # its draw (the slot's flow) in units of the principal 8's middle C, ~ (f/261.6)^e
+    wind_pitch_exp = 0.00018
+    wind_level_exp = 1.1205
+    wind_draw_units = 0.00915459
+    wind_draw_exp = -1.6055
     max_harmonic = 32
     bore_corner_hz = 0.0
     # LEVEL BY THE PHYSICS: the simulated pipe's radiated level against the
@@ -11240,6 +11352,13 @@ class OrganGambaProperties(FlueOrganProperties):
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
+    # ITS WIND, SIMULATED (examples/organ_bake.py --wind: the pipe at 0.75-1.25 x
+    # its voiced pressure): pitch ~ p^a, level ~ p^b about the voiced point, and
+    # its draw (the windway's flow) in units of the principal 8's middle C, ~ (f/261.6)^e
+    wind_pitch_exp = 0.00786
+    wind_level_exp = 0.5822
+    wind_draw_units = 0.356317
+    wind_draw_exp = -1.5000
     max_harmonic = 32
     bore_corner_hz = 0.0
     # LEVEL BY THE PHYSICS: the simulated pipe's radiated level against the
@@ -11274,6 +11393,13 @@ class OrganCelesteProperties(OrganGambaProperties):
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
+    # ITS WIND, SIMULATED (examples/organ_bake.py --wind: the pipe at 0.75-1.25 x
+    # its voiced pressure): pitch ~ p^a, level ~ p^b about the voiced point, and
+    # its draw (the windway's flow) in units of the principal 8's middle C, ~ (f/261.6)^e
+    wind_pitch_exp = 0.00789
+    wind_level_exp = 0.5820
+    wind_draw_units = 0.356229
+    wind_draw_exp = -1.5011
     max_harmonic = 32
     bore_corner_hz = 0.0
     # LEVEL BY THE PHYSICS: the simulated pipe's radiated level against the
@@ -11310,6 +11436,13 @@ class OrganOboeProperties(OrganCromorneProperties):
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
+    # ITS WIND, SIMULATED (examples/organ_bake.py --wind: the pipe at 0.75-1.25 x
+    # its voiced pressure): pitch ~ p^a, level ~ p^b about the voiced point, and
+    # its draw (the slot's flow) in units of the principal 8's middle C, ~ (f/261.6)^e
+    wind_pitch_exp = 0.00721
+    wind_level_exp = 1.2342
+    wind_draw_units = 0.0104769
+    wind_draw_exp = -1.4789
     max_harmonic = 32
     bore_corner_hz = 0.0
     # LEVEL BY THE PHYSICS: the simulated pipe's radiated level against the
@@ -11351,6 +11484,13 @@ class OrganVoxHumanaProperties(OrganCromorneProperties):
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
+    # ITS WIND, SIMULATED (examples/organ_bake.py --wind: the pipe at 0.75-1.25 x
+    # its voiced pressure): pitch ~ p^a, level ~ p^b about the voiced point, and
+    # its draw (the slot's flow) in units of the principal 8's middle C, ~ (f/261.6)^e
+    wind_pitch_exp = 0.00005
+    wind_level_exp = 1.1496
+    wind_draw_units = 0.803232
+    wind_draw_exp = -0.8996
     max_harmonic = 32
     bore_corner_hz = 0.0
     # LEVEL BY EAR: Ben's -20 dB re the principal 8 (2026-11-24; his Wurlitzer
@@ -11388,6 +11528,13 @@ class OrganTrompetteProperties(OrganTrumpetProperties):
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
+    # ITS WIND, SIMULATED (examples/organ_bake.py --wind: the pipe at 0.75-1.25 x
+    # its voiced pressure): pitch ~ p^a, level ~ p^b about the voiced point, and
+    # its draw (the slot's flow) in units of the principal 8's middle C, ~ (f/261.6)^e
+    wind_pitch_exp = -0.00037
+    wind_level_exp = 1.3321
+    wind_draw_units = 0.0168808
+    wind_draw_exp = -1.5931
     max_harmonic = 32
     bore_corner_hz = 0.0
     # LEVEL BY THE PHYSICS: the simulated pipe's radiated level against the
@@ -11425,6 +11572,13 @@ class OrganPrincipal16Properties(FlueOrganProperties):
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
+    # ITS WIND, SIMULATED (examples/organ_bake.py --wind: the pipe at 0.75-1.25 x
+    # its voiced pressure): pitch ~ p^a, level ~ p^b about the voiced point, and
+    # its draw (the windway's flow) in units of the principal 8's middle C, ~ (f/261.6)^e
+    wind_pitch_exp = 0.01154
+    wind_level_exp = 0.4574
+    wind_draw_units = 1.04161
+    wind_draw_exp = -1.4706
     max_harmonic = 32
     bore_corner_hz = 0.0
     # LEVEL: where the console had it by ear, -1.4 dB re our principal 8
@@ -11455,6 +11609,13 @@ class OrganQuint513Properties(FlueOrganProperties):
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
+    # ITS WIND, SIMULATED (examples/organ_bake.py --wind: the pipe at 0.75-1.25 x
+    # its voiced pressure): pitch ~ p^a, level ~ p^b about the voiced point, and
+    # its draw (the windway's flow) in units of the principal 8's middle C, ~ (f/261.6)^e
+    wind_pitch_exp = 0.01431
+    wind_level_exp = 0.4798
+    wind_draw_units = 0.726569
+    wind_draw_exp = -1.6104
     max_harmonic = 32
     bore_corner_hz = 0.0
     # LEVEL: where the console had it by ear, -9.5 dB re our principal 8

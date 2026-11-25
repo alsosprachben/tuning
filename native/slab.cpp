@@ -9138,7 +9138,7 @@ struct Part {
                 double f = 440.0 * pow(2.0, (std::get<2>(kv.first) + tp - 69) / 12.0);
                 double d[8];
                 for (int q = 0; q < rk.n_ratio; q++)
-                    d[q] = pow(std::max(f * rk.ratio[q], 8.0) / og->unit_hz, og->draw_exp);
+                    d[q] = og->draw_u[ri] * pow(std::max(f * rk.ratio[q], 8.0) / og->unit_hz, og->draw_e[ri]);
                 dem += pysum(d, rk.n_ratio);
             }
             bool on = og->trem_rank >= 0 && patches[pi].drawn[og->trem_rank];

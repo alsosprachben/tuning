@@ -94,7 +94,12 @@ STOPS = {
 def tongue(f0, scale=1.0, tune=None):
     """(length, width, thickness, mass per area) of the tongue at note f0;
     scale lengthens it (a tongue tuned to the same note then thicker as the
-    square, heavier: the stop more the tongue's than the resonator's)."""
+    square, heavier: the stop more the tongue's than the resonator's).
+    (A thin strip with the wire setting a shorter vibrating length, and the
+    slits along its sides, was tried 2026-11-24: its gap doubled but its draw
+    rose only 1.6x -- the valve's draw is set by the tongue shut ~30% of each
+    cycle and the resonator's pressure pushing back while it is open, not by
+    the gap -- and the cromorne fell off its pitch; the voiced tongue kept.)"""
     semis = 12 * math.log2(f0 / 65.406)
     L = TONGUE_L_CC * 0.5 ** (semis / TONGUE_HALVE) * scale
     ft = f0 * (TONGUE_TUNE if tune is None else tune)
@@ -440,3 +445,29 @@ def tuned_tone(stop, f0, secs=0.8, rounds=4):
         tune *= f0 / r[0]
     r[3]["stop"] = s
     return r
+
+
+PRESSURES = (0.75, 0.875, 1.0, 1.125, 1.25)     # x the voiced pressure (as the flues')
+
+
+def pressure_response(stop, f0):
+    """How the reed answers its wind (as fluepipe_sim.pressure_response): the
+    tongue simulated at PRESSURES x the voiced pressure, its pitch ~ p^a and
+    radiated amplitude ~ p^b fitted about the voiced point; its DRAW the mean
+    flow through the slot at the voiced pressure (m^3/s). A tongue tuned to
+    its note (tune_tongue) keeps the voiced tuning at every pressure, as a
+    wire does."""
+    s = dict(STOPS[stop]) if isinstance(stop, str) else dict(stop)
+    base = tuned_tone(s, f0)
+    s = dict(base[3]["stop"])
+    p0 = s["pressure"]
+    pts = []
+    draw = float(np.mean(base[3]["U"][len(base[3]["U"]) // 2:]))
+    for k in PRESSURES:
+        r = base if k == 1.0 else tone(dict(s, pressure=p0 * k), f0)
+        if r[2] > -100:
+            pts.append((k, r[0], r[2]))
+    ks = np.log([q[0] for q in pts])
+    a = float(np.polyfit(ks, np.log([q[1] for q in pts]), 1)[0]) if len(pts) > 2 else 0.0
+    b = float(np.polyfit(ks, [q[2] * math.log(10) / 20 for q in pts], 1)[0]) if len(pts) > 2 else 1.0
+    return dict(a=a, b=b, draw=draw, points=pts)

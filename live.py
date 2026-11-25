@@ -12519,7 +12519,7 @@ class Live:
             _wsc = B.wind_scale_for(pc)
             st = dict(wind=_WND.Wind(pc, B.BLK / float(self.rate), seed=part.pid,
                                      scale=_wsc, wander_scale=(1.0 if _wsc else 0.0)),
-                      rows={}, rank_row={}, acc={}, ratios={})
+                      rows={}, rank_row={}, acc={}, ratios={}, laws={})
             for r in part.patch.stop_ranks:
                 if r[1] is None:
                     continue
@@ -12537,6 +12537,7 @@ class Live:
                     st["acc"][row] = 0.0
                 st["rank_row"][r[0]] = st["rows"][ab]
                 st["ratios"][r[0]] = (list(r[1]) if isinstance(r[1], (list, tuple)) else [r[1]])
+                st["laws"][r[0]] = _WND.draw_law(wc)        # its own pipes' draw
             self.wind_st[part.pid] = st
         return st["rank_row"].get(rank, 0)
 
@@ -12833,7 +12834,8 @@ class Live:
             for k in sl.live:
                 if k[0] == part.pid and len(k) == 4 and k[3] in ratios:
                     f = 440.0 * 2.0 ** ((k[2] + part.transpose - 69) / 12.0)
-                    dem += sum(_WND.pipe_draw(f * q) for q in ratios[k[3]])
+                    law = st["laws"][k[3]]
+                    dem += sum(_WND.rank_draw(law, f * q) for q in ratios[k[3]])
             trem = 1.0 if "tremulant" in part.drawn else 0.0
             p = st["wind"].blocks((dem,), (trem,))[0]
             for (a, b), row in st["rows"].items():
@@ -23937,7 +23939,7 @@ def wind_selftest(check=None):
 
         def units(n):
             fn = 440.0 * 2 ** ((n - 69) / 12.0)
-            return sum(_WND.pipe_draw(fn * q) for rr in rk
+            return sum(_WND.rank_draw(_WND.draw_law(T.rank_wind_class(pc, rr)), fn * q) for rr in rk
                        for q in (rr[1] if isinstance(rr[1], (list, tuple)) else [rr[1]]))
         cents = 1200 * np.log2(np.asarray(rows))
         wd = _WND.Wind(pc, fr / float(rate), scale=1.0)

@@ -328,9 +328,92 @@ def write_class(src, name, res, gain_expr):
     return src[:i] + body + src[j:]
 
 
+WIND_KEYS = (36, 48, 60, 72, 84)       # written keys the wind response is read at (each rank at its pitch)
+
+
+def wind_response(name, cache):
+    """A class's answer to its wind, from its simulated pipe: the medians over
+    the compass of its pitch and level exponents (fluepipe_sim / reedpipe_sim
+    .pressure_response), and its draw as a power law of frequency, m^3/s."""
+    import fluepipe_sim as F
+    import tonelib as T
+    stop, rank = CLASSES[name][:2]
+    k = "W|" + _key(F, stop) + rank + json.dumps(F.PRESSURES)
+    if k in cache:
+        return cache[k]
+    ratio = next(r[1] for r in T.FlueOrganProperties.stop_ranks if r[0] == rank)
+    fs = [261.63 * ratio * 2 ** ((key - 60) / 12.0) for key in WIND_KEYS]
+    out = []
+    if stop.startswith("reed:"):
+        import reedpipe_sim as R
+        for f in fs:
+            if f > 4200:
+                continue
+            r = R.pressure_response(stop[5:], f)
+            if len(r["points"]) > 2:
+                out.append((f, r))
+    else:
+        tab = _sweep(F, stop, min(fs) * 0.97, max(fs) * 1.03, min(fs, key=lambda f: abs(math.log(f / 250.0))))
+        top = max(tab)
+        for f in fs:
+            if f > top * 1.01:
+                continue
+            r = F.pressure_response(stop, f, table=tab)
+            if len(r["points"]) > 2:
+                out.append((f, r))
+    a = float(np.median([r["a"] for _, r in out]))
+    b = float(np.median([r["b"] for _, r in out]))
+    lf = np.log([f / 261.6 for f, _ in out])
+    ld = np.log([r["draw"] for _, r in out])
+    e, l0 = np.polyfit(lf, ld, 1)
+    res = dict(a=a, b=b, draw_at_unit=float(math.exp(l0)), draw_exp=float(e),
+               keys=[[f, r["a"], r["b"], r["draw"]] for f, r in out])
+    print("  %s: pitch exp %.4f, level exp %.2f, draw %.3g m^3/s at 261.6 Hz, exp %.2f" % (
+        name, a, b, res["draw_at_unit"], e), flush=True)
+    cache[k] = res
+    with open(CACHE, "w") as f:
+        json.dump(cache, f)
+    return res
+
+
+def write_wind(src, name, res, unit):
+    """Splice a class's wind response in: its pitch and level exponents and
+    its draw law in units of the principal 8's middle C."""
+    i = src.index("\nclass %s(" % name) + 1
+    j = src.find("\nclass ", i + 1)
+    j = len(src) if j < 0 else j
+    body = src[i:j]
+    body = re.sub(r"(?:    # ITS WIND, SIMULATED[^\n]*\n(?:    #[^\n]*\n)*)?(?:    wind_pitch_exp = [^\n]*\n)?"
+                  r"(?:    wind_level_exp = [^\n]*\n)?(?:    wind_draw_units = [^\n]*\n)?(?:    wind_draw_exp = [^\n]*\n)?",
+                  "", body)
+    block = ("    # ITS WIND, SIMULATED (examples/organ_bake.py --wind: the pipe at 0.75-1.25 x\n"
+             "    # its voiced pressure): pitch ~ p^a, level ~ p^b about the voiced point, and\n"
+             "    # its draw (%s) in units of the principal 8's middle C, ~ (f/261.6)^e\n"
+             "    wind_pitch_exp = %.5f\n    wind_level_exp = %.4f\n"
+             "    wind_draw_units = %.6g\n    wind_draw_exp = %.4f\n"
+             % ("the slot's flow" if CLASSES[name][0].startswith("reed:") else "the windway's flow",
+                res["a"], res["b"], res["draw_at_unit"] / unit, res["draw_exp"]))
+    if "    mode_gains_low = None\n" in body:
+        body = body.replace("    mode_gains_low = None\n", "    mode_gains_low = None\n" + block, 1)
+    else:
+        raise ValueError("no anchor in " + name)
+    return src[:i] + body + src[j:]
+
+
 def main(argv):
     want = [a for a in argv[1:] if not a.startswith("--")] or list(CLASSES)
     cache = json.load(open(CACHE)) if os.path.exists(CACHE) else {}
+    if "--wind" in argv:
+        res = {n: wind_response(n, cache) for n in want}
+        unit = wind_response("FlueOrganProperties", cache)["draw_at_unit"]
+        if "--write" in argv:
+            p = os.path.join(ROOT, "tonelib.py")
+            src = open(p).read()
+            for n in want:
+                src = write_wind(src, n, res[n], unit)
+            open(p, "w").write(src)
+            print("  tonelib.py written (wind)")
+        return 0
     res = {n: simulate(n, cache) for n in want}
     for n, r in res.items():
         print("  %s: %.1f cycles, exp %.2f; h2-h5 at %s Hz %s" % (

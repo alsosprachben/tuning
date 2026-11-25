@@ -62,6 +62,24 @@ def pipe_draw(f):
     return (max(f, 8.0) / UNIT_HZ) ** DRAW_EXP
 
 
+def draw_law(cls):
+    """A rank's own draw law (units at UNIT_HZ, exponent): the pipe organ's
+    stops carry their simulated pipes' (wind_draw_units, wind_draw_exp:
+    organ_bake --wind, the windway's or the slot's flow in units of the
+    simulated principal 8's at middle C); else the generic law, 1 and
+    DRAW_EXP. The native engines read the same pair per rank."""
+    u = getattr(cls, 'wind_draw_units', None)
+    if u is None:
+        return 1.0, DRAW_EXP
+    return float(u), float(cls.wind_draw_exp)
+
+
+def rank_draw(law, f):
+    """The wind a pipe of a rank with draw LAW sounding f Hz draws, in units
+    (u * (f / UNIT_HZ)**e: with the generic law exactly pipe_draw)."""
+    return law[0] * (max(f, 8.0) / UNIT_HZ) ** law[1]
+
+
 class Wind:
     """One chest's pressure, block by block.
 

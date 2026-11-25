@@ -621,6 +621,9 @@ typedef struct OrganSpec {
     double wsc, trem_class_depth, wander_rms, wa, wgain, ra, reg_restore, sag_max, sag_per_unit, c1, c2, g;
     double trem_hz, trem_depth, tdecay, unit_hz, draw_exp, blk_s;
     double fam_a[NV_MAX_RANK], fam_b[NV_MAX_RANK];
+    // each rank's own draw law (wind.draw_law): units at unit_hz and exponent --
+    // the simulated pipe's, or the generic 1, draw_exp
+    double draw_u[NV_MAX_RANK], draw_e[NV_MAX_RANK];
     /* A REED ORGAN'S EFFECT STOPS (the harmonium's): its Expression,
        Percussion and Tremolo stops' ranks (-1 none), the Expression's tilt,
        the hammer's attack and the attack's share of the note (attack_fraction_max) */
