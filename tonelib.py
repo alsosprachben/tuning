@@ -12242,6 +12242,40 @@ FlueOrganProperties.swellbox_band_hz = tuple(62.5 * 2.0 ** k for k in range(9))
 FlueOrganProperties.swellbox_band_edges = tuple(62.5 * 2.0 ** (k + 0.5) for k in range(8))
 FlueOrganProperties.swell_floor = 1.0
 FlueOrganProperties.swell_hf_max = 0.0
+# THE CASE (Ben 2026-11-25: "there may be a cabinet effect"; organ_case_gain):
+# a pipe speaks a few tenths of a metre from the chest's top, the case's back
+# and its nearer side, rigid planes whose images add to its own power below
+# c/4d -- Waterhouse (JASA 30, 1958): W/W0 = 1 + sum of sin(kr)/(kr) over the
+# images, each plane's taken by its reflectance at its size ((ka)^2 / (1 +
+# (ka)^2): a panel small against the wavelength does not reflect), averaged
+# over the pipes' spread on the chest (one spot's ripple is a pipe's, not a
+# rank's). A division a case: (the mouth over the chest, to the back, to the
+# side -- each (min, max) m across its pipes -- and the chest's, back's and
+# side's sizes m). Typical cases, named for the ear; the Swell's is its box
+# open, the Pedal's its towers against the wall. +4..6 dB from ~32 to 130 Hz,
+# gone by ~400.
+FlueOrganProperties.case_spread = (
+    ((0.12, 0.30), (0.25, 1.00), (0.30, 1.40), (1.5, 3.0, 2.0)),     # Hauptwerk
+    ((0.10, 0.22), (0.15, 0.55), (0.20, 0.90), (1.0, 1.8, 1.2)),     # Positiv
+    ((0.12, 0.30), (0.20, 0.80), (0.25, 1.00), (1.2, 2.4, 1.5)),     # Swell (its box)
+    ((0.20, 0.45), (0.20, 0.70), (0.30, 1.80), (1.5, 4.0, 2.5)),     # Pedal
+)
+# (dB times this: 1 the case as it is; the exaggerated listen's more)
+FlueOrganProperties.case_scale = 1.0
+# ...AND ITS PROJECTION (organ_case_q; Ben: "the high pitch reflection bias"):
+# a case is open at the front only. Small against the wavelength it radiates
+# all round (its power lift above, nothing more); large, what would leave by
+# its back, sides and top leaves by its front: toward the listener the direct
+# sound gains Q, the hall's feed keeping the case's power (the room's Q per
+# band, room.json). Q = 1 + (Q_hf - 1) (ka)^2 / (1 + (ka)^2), a the front
+# opening's half-width. A division: (Q_hf, a m) -- a case's open front ~ a
+# quarter-space beam, named for the ear; the Swell's box opens forward too
+FlueOrganProperties.case_projection = (
+    (3.0, 1.2),      # Hauptwerk
+    (3.0, 0.8),      # Positiv
+    (3.0, 1.0),      # Swell (its shutters)
+    (2.0, 1.5),      # Pedal (towers against the wall: half-space)
+)
 # the panel's third row (Alt+digit): the flutes and mutations, then the pedal;
 # its fourth (Alt+shift+digit): the strings, then the solo reeds
 FlueOrganProperties.stop_rows = FlueOrganProperties.stop_rows + [
@@ -27233,6 +27267,109 @@ def organ_box_band(cls, f):
         if f >= e:
             k += 1
     return k
+
+
+CASE_HZ0, CASE_N = 10.0, 156     # the case's table: 10 Hz up in semitones (to ~80 kHz)
+_CASE_SPOTS = 6                  # positions a distance across its (min, max)
+_CASE_DB = {}
+
+
+def _case_power(f, d, sizes):
+    """W/W0 for a source d = (to the chest, back, side) m from three rigid
+    planes of those sizes: its seven images (Waterhouse), each weighted by its
+    planes' reflectance."""
+    k = 2.0 * _pi * f / 343.2
+    refl = [(k * a) ** 2 / (1.0 + (k * a) ** 2) for a in sizes]
+    w = 1.0
+    for sel in ((1, 0, 0), (0, 1, 0), (0, 0, 1), (1, 1, 0), (1, 0, 1), (0, 1, 1), (1, 1, 1)):
+        r = 2.0 * _sqrt(sum(dd * dd for dd, s in zip(d, sel) if s))
+        wt = 1.0
+        for R, s in zip(refl, sel):
+            if s:
+                wt *= R
+        w += wt * _sin(k * r) / (k * r)
+    return w
+
+
+def organ_case_db(cls):
+    """Each division's case gain (dB, case_scale applied) at CASE_HZ0 x 2^(i/12),
+    i < CASE_N: the power averaged over the pipes' spread. A tuple a division;
+    None with no case."""
+    spec = getattr(cls, 'case_spread', None)
+    if not spec:
+        return None
+    key = (spec, float(getattr(cls, 'case_scale', 1.0)))
+    got = _CASE_DB.get(key)
+    if got is None:
+        n = _CASE_SPOTS
+        rows = []
+        for (h0, h1), (b0, b1), (s0, s1), sizes in spec:
+            spots = [(h0 + (h1 - h0) * (i + 0.5) / n, b0 + (b1 - b0) * (j + 0.5) / n,
+                      s0 + (s1 - s0) * (l + 0.5) / n) for i in range(n) for j in range(n) for l in range(n)]
+            row = []
+            for q in range(CASE_N):
+                f = CASE_HZ0 * 2.0 ** (q / 12.0)
+                w = sum(_case_power(f, d, sizes) for d in spots) / len(spots)
+                row.append(key[1] * 10.0 * _log(w) / _log(10.0))
+            rows.append(tuple(row))
+        got = _CASE_DB[key] = tuple(rows)
+    return got
+
+
+def organ_case_q_db(cls):
+    """Each division's case projection, 10 log10 Q at CASE_HZ0 x 2^(i/12), i <
+    CASE_N (organ_case_q); None with none."""
+    spec = getattr(cls, 'case_projection', None)
+    if not spec:
+        return None
+    key = ('q', spec)
+    got = _CASE_DB.get(key)
+    if got is None:
+        rows = []
+        for q_hf, a in spec:
+            row = []
+            for i in range(CASE_N):
+                f = CASE_HZ0 * 2.0 ** (i / 12.0)
+                ka2 = (2.0 * _pi * f / 343.2 * a) ** 2
+                row.append(10.0 * _log(1.0 + (q_hf - 1.0) * ka2 / (1.0 + ka2)) / _log(10.0))
+            rows.append(tuple(row))
+        got = _CASE_DB[key] = tuple(rows)
+    return got
+
+
+def _case_read(tab, division, f):
+    row = tab[division if division < len(tab) else 0]
+    x = 12.0 * _log((f if f > CASE_HZ0 else CASE_HZ0) / CASE_HZ0) / _log(2.0)
+    i = int(x)
+    if i >= CASE_N - 1:
+        return row[CASE_N - 1]
+    return row[i] + (x - i) * (row[i + 1] - row[i])
+
+
+def organ_case_q(cls, division, f):
+    """The case's projection at f Hz on a division: the direct sound's
+    directivity Q (1 none) -- its amplitude goes as sqrt(Q), the hall's feed as
+    its power (native/nv.h nv_ocase_q, the same)."""
+    tab = organ_case_q_db(cls)
+    if tab is None:
+        return 1.0
+    return 10.0 ** (_case_read(tab, division, f) / 10.0)
+
+
+def organ_case_gain(cls, division, f):
+    """A partial's gain at f Hz from its division's case: the table read
+    linearly in dB along semitones (native/nv.h nv_ocase_gain, the same)."""
+    tab = organ_case_db(cls)
+    if tab is None:
+        return 1.0
+    row = tab[division if division < len(tab) else 0]
+    x = 12.0 * _log((f if f > CASE_HZ0 else CASE_HZ0) / CASE_HZ0) / _log(2.0)
+    i = int(x)
+    if i >= CASE_N - 1:
+        db = row[CASE_N - 1]
+    else:
+        db = row[i] + (x - i) * (row[i + 1] - row[i])
+    return 10.0 ** (db / 20.0)
 
 
 def swell_division(cls, rank):

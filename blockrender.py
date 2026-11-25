@@ -5135,6 +5135,10 @@ class _Emitter(object):
     lists (_TB, _GL, _VB...) -- handed over as the same objects where
     _prepare binds them (examples/refactor/prep_emitter.py, prep_cells.py)."""
 
+    # (an organ case's projection on the partial being emitted: its direct
+    # sound's Q over the hall's, tonelib.organ_case_q; 1 everywhere else)
+    case_q = 1.0
+
     def _reverse_partial(self, om, ampL, ampR, ampM, nomf, non, fa, ch, logr, logrA, aft, sus, cv, cc,
                          crl, sj, csc, gr, cr, ph0):
         """One partial of the forward note, emitted TIME-REVERSED: what a tape
@@ -5395,6 +5399,7 @@ class _Emitter(object):
                 q = self.props.directivity_factor(self.ROOM_BANDS[bi], px, pz, self.radius)
             except Exception:
                 q = 1.0
+            q *= self.case_q            # (an organ case's projection: its direct sound's, not the hall's)
             e = _am0 * _am0             # the power it feeds the room, before the air
             self._QACC[bi][0] += e
             self._QACC[bi][1] += e / max(q, 1e-6)
@@ -7871,6 +7876,8 @@ def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TB
             # band's centre to its own frequency
             _sbw = (nt.organ and (nt.ch, key) in wrow_of and getattr(nt.pc, 'swell_divisions', None)
                     and T.swell_division(nt.pc, key))
+            # ...AND ITS DIVISION'S CASE (tonelib.organ_case_gain): the planes about its mouths
+            _cdv = T.rank_division(nt.pc, key) if nt.organ and getattr(nt.pc, 'case_spread', None) else None
             _sbo = getattr(nt, 'sbox', None) if _sbw else None
             _gxl = 1.0
             if _gx != 1.0:
@@ -7950,6 +7957,10 @@ def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TB
                     em.bend_row = _wbase + _bk
                     if _sbo is not None:
                         gM *= float(T.organ_box_gain(nt.pc, hf, _sbo) / T.organ_box_gain(nt.pc, nt.pc.swellbox_band_hz[_bk], _sbo))
+                if _cdv is not None:             # (its case's planes, and its open front's projection)
+                    gM *= T.organ_case_gain(nt.pc, _cdv, hf)
+                    em.case_q = T.organ_case_q(nt.pc, _cdv, hf)
+                    gM *= math.sqrt(em.case_q)
                 if em.hbox is not None:          # (its box's colour and the Metaphone's felt)
                     gM *= float(T.harmonium_box_tone(_sc, hf, em.hbox[0], em.hbox[1]))
                 gL = gM*props.hrtf_gain(hf, nt.li); gR = gM*props.hrtf_gain(hf, nt.ri)
@@ -8016,6 +8027,7 @@ def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TB
                 emit_partial(2*math.pi*hf/SR, gL, gR, gM, hf, non_m, nt.noff, pfade, prel, chiff_r,
                              logr, logrA, aftL, rp.sustain_level, cvp, cc_r, nt.crl, nt.sjit, nt.csc,
                              gr, cr, ph0=mph)
+                em.case_q = 1.0                  # (the case's projection is this partial's alone)
                 # THE WIND'S SKIRT on this partial (see WIND): a noise band
                 # at its frequency, its envelope and damper, no chiff of its
                 # own, no room images (the tail still hears it)

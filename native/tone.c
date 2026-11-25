@@ -465,6 +465,8 @@ static int emit_fwd(const VoiceSnap *v, const ToneIn *t, Rows *R, double *qacc, 
         /* (no radius of its own: the class's directivity_radius, room[1]) */
         double q = t->has_radius ? directivity_factor(v, t->room_bands[bi], px, pz, t->radius)
                    : v->room[1] > 0.0 ? directivity_factor(v, t->room_bands[bi], px, pz, v->room[1]) : 1.0;
+        if (t->case_q > 0.0)                    /* (an organ case's projection: the direct sound's) */
+            q *= t->case_q;
         double e = am0 * am0;
         qacc[2 * bi] += e;
         qacc[2 * bi + 1] += e / (q > 1e-6 ? q : 1e-6);

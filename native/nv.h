@@ -644,6 +644,12 @@ typedef struct OrganSpec {
     int sbox_div;
     double sb_surf, sb_alpha, sb_alpha_hz, sb_gap, sb_shutter, sb_wall;
     double sb_fc[9], sb_edge[8];    // (its octave bands' centres and edges: organ_box_band)
+    // THE CASE (tonelib.organ_case_db): each division's gain, dB, at 10 Hz x 2^(i/12)
+    int has_case;
+    double case_db[4][156];
+    // ...and its projection (tonelib.organ_case_q_db): 10 log10 Q, the same grid
+    int has_caseq;
+    double caseq_db[4][156];
     double touch_cyc[NV_MAX_RANK], touch_att[NV_MAX_RANK];   // (live's: each rank's wind class's speech)
     /* A REED ORGAN'S EFFECT STOPS (the harmonium's): its Expression,
        Percussion and Tremolo stops' ranks (-1 none), the Expression's tilt,
@@ -897,6 +903,25 @@ static inline double nv_obox_gain(const OrganSpec *og, double f, double o)
         return 1.0;
     return pow(nv_obox_t(og, o, f) / nv_obox_t(og, 1.0, f), 0.5);
 }
+/* tonelib.organ_case_gain: a partial's gain at f from division dv's case,
+   its table read linearly in dB along semitones from 10 Hz */
+static inline double nv_ocase_gain(const OrganSpec *og, int dv, double f)
+{
+    const double *row = og->case_db[dv < 4 ? dv : 0];
+    double x = 12.0 * log((f > 10.0 ? f : 10.0) / 10.0) / log(2.0);
+    int i = (int)x;
+    double db = i >= 156 - 1 ? row[156 - 1] : row[i] + (x - i) * (row[i + 1] - row[i]);
+    return pow(10.0, db / 20.0);
+}
+/* tonelib.organ_case_q: the case's projection (Q) at f on division dv */
+static inline double nv_ocase_q(const OrganSpec *og, int dv, double f)
+{
+    const double *row = og->caseq_db[dv < 4 ? dv : 0];
+    double x = 12.0 * log((f > 10.0 ? f : 10.0) / 10.0) / log(2.0);
+    int i = (int)x;
+    double db = i >= 156 - 1 ? row[156 - 1] : row[i] + (x - i) * (row[i + 1] - row[i]);
+    return pow(10.0, db / 10.0);
+}
 static inline int nv_obox_band(const OrganSpec *og, double f)
 {
     int k = 0;
@@ -1049,6 +1074,7 @@ typedef struct {
     double fx_comp[3];
     double alias_br[32];    /* an aliasing sweep's rows by harmonic (NoteIn's), n_alias 0 none */
     int n_alias;
+    double case_q;          /* an organ case's projection on this partial (organ_case_q): 0 or 1 none */
 } ToneIn;
 
 /* A MOOG MESSENGER's panel as a note reads it (moog.py; native.moog_spec):

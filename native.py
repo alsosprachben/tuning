@@ -161,7 +161,7 @@ class ToneIn(ctypes.Structure):
                 + [('room_bands', C * 9), ('pjit', I), ('sps', C), ('dur', C), ('ssc', I)]
                 + [('rev', I), ('rev_n0', C), ('rev_arr', C), ('planes', C * 6), ('order', I), ('radius', C),
                    ('has_radius', I), ('pps_seed', ctypes.c_longlong), ('dist', C), ('cls', ctypes.c_longlong),
-                   ('hammer_on', C), ('gs_eq', C * 4), ('fx_comp', C * 3), ('alias_br', C * 32), ('n_alias', I)])
+                   ('hammer_on', C), ('gs_eq', C * 4), ('fx_comp', C * 3), ('alias_br', C * 32), ('n_alias', I), ('case_q', C)])
 
 
 class VoiceInit(ctypes.Structure):
@@ -3221,6 +3221,7 @@ class OrganSpec(ctypes.Structure):
                    ('has_vra', I), ('v_ra', C),
                    ('sbox_div', I), ('sb_surf', C), ('sb_alpha', C), ('sb_alpha_hz', C), ('sb_gap', C),
                    ('sb_shutter', C), ('sb_wall', C), ('sb_fc', C * 9), ('sb_edge', C * 8),
+                   ('has_case', I), ('case_db', (C * 156) * 4), ('has_caseq', I), ('caseq_db', (C * 156) * 4),
                    ('touch_cyc', C * NV_MAX_RANK), ('touch_att', C * NV_MAX_RANK), ('expr_rank', I), ('perc_rank', I), ('htrem_rank', I),
                    ('perc_attack_s', C), ('afm', C), ('pipe_radius', I), ('wheel_trem', C),
                    ('wtrem_hz', C), ('htrem_depth', C), ('htrem_hz', C), ('wtrem_stereo', I),
@@ -3507,6 +3508,20 @@ def organ(cls):
             p.swellbox_shutter_m2, p.swellbox_wall_kg_m2)
         o.sb_fc[:] = list(p.swellbox_band_hz)
         o.sb_edge[:] = list(p.swellbox_band_edges)
+    _ct = T.organ_case_db(type(p))                          # (its case: tonelib.organ_case_gain)
+    if _ct is not None:
+        if len(_ct) > 4 or T.CASE_N != 156 or T.CASE_HZ0 != 10.0:
+            return None
+        o.has_case = 1
+        for _d, _row in enumerate(_ct):
+            o.case_db[_d][:] = list(_row)
+    _cq = T.organ_case_q_db(type(p))                        # (its projection: tonelib.organ_case_q)
+    if _cq is not None:
+        if len(_cq) > 4:
+            return None
+        o.has_caseq = 1
+        for _d, _row in enumerate(_cq):
+            o.caseq_db[_d][:] = list(_row)
     o.swell_law[:] = [float(p.swell_floor), float(p.swell_gain_power), float(p.swell_hf_max),
                       float(p.swell_hf_ref_hz)]
     o.family = _FAMILIES.setdefault(BR.organ_family(cls), len(_FAMILIES))
