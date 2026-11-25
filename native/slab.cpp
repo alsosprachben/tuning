@@ -8767,6 +8767,18 @@ struct Part {
         const OrganSpec *og = patches[cur].organ;
         if (og->wccs[0] == 43)              // a harmonium's effect stops (_harmonium_stamp)
             harmonium_stamp(T, R, ch, note, ri, key, n0);
+        {
+            // ...and the key's groove (_groove_stamp): the rank's pipes answer it
+            auto gi = note_groove.find(std::make_pair(ch, note));
+            double gx = gi != note_groove.end() ? gi->second : 1.0;
+            if (gx != 1.0 && !S.last_slots.empty()) {
+                const std::vector<long> sl = S.last_slots;
+                double pa = pow(gx, og->fam_a[ri]);
+                for (long s : sl)
+                    S.f8[F8_om][s] *= pa;
+                S.channel_gain_each(sl, std::vector<float>(sl.size(), (float)pow(gx, og->fam_b[ri])));
+            }
+        }
         auto td = trem_depth.find(pid);     // the wheel's tremolo, the wheel already up
         if (td != trem_depth.end() && td->second > 0.0)
             S.tremolo_arm(S.last_slots, td->second, og->wtrem_stereo);
@@ -8807,10 +8819,37 @@ struct Part {
 
     // live._note_on's organ path: every rank drawn, in the stops' order (a
     // pipe organ has no touch: a key is open or shut)
+    // THE KEY'S GROOVE at its onset (tonelib.groove_pressure, line for line):
+    // the stops sounding, each its draw on this key, against the key's draw
+    // with every stop out; 1 / (1 + r^2). 1 where the organ has none
+    std::map<std::pair<int, int>, double> note_groove;
+    double groove_now(const OrganSpec *og, int note, const std::vector<char> &dr)
+    {
+        if (!og || !(og->groove_margin > 0.0))
+            return 1.0;
+        double f = 440.0 * pow(2.0, (note - 69) / 12.0);
+        std::vector<double> qd, qf;
+        for (int ri = 0; ri < og->n_rank; ri++) {
+            const OrganRank &rk = og->rank[ri];
+            if (!rk.n_ratio || !(note >= rk.lo && note <= rk.hi))
+                continue;
+            double d[8];
+            for (int q = 0; q < rk.n_ratio; q++)
+                d[q] = og->draw_u[ri] * pow(std::max(f * rk.ratio[q], 8.0) / og->unit_hz, og->draw_e[ri]);
+            double w = pysum(d, rk.n_ratio);
+            qf.push_back(w);
+            qd.push_back(w * (ri < (int)dr.size() && dr[ri] ? 1.0 : 0.0));
+        }
+        double rr = pysum(qd.data(), (int)qd.size()) / (og->groove_margin * pysum(qf.data(), (int)qf.size()));
+        return 1.0 / (1.0 + rr * rr);
+    }
+
     void organ_strike(const nv::live::Template &T, int ch, int note, int vel, long long n0, double tf = 1.0)
     {
         note_touch[std::make_pair(ch, note)] = tf;
         const std::vector<char> dr = coupled(patches[cur].organ, patches[cur].drawn, patches[cur].cpl);   // (what sounds)
+        // (a stop drawn while the key is held takes this one, as the file's note does)
+        note_groove[std::make_pair(ch, note)] = patches[cur].organ->wind ? groove_now(patches[cur].organ, note, dr) : 1.0;
         for (int ri = 0; ri < (int)dr.size(); ri++)
             if (dr[ri])
                 draw_rank(T, ch, note, ri, n0);

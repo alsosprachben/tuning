@@ -8492,6 +8492,12 @@ class FlueOrganProperties(OrganProperties):
     # 2 cents from a held note as it enters and gives it back as it lifts
     shared_wind = True
     wind_flex = 1.0
+    # ...AND THE KEY'S GROOVE (tonelib.groove_pressure): its pallet sized at
+    # this many times the key's full-organ draw -- the full organ on one key
+    # takes its groove to 86% of the chest's (a principal ~4 cents flat,
+    # 0.7 dB down), a single stop to ~99.9%. A builder's ratio, by Ben's ear
+    # (2026-11-24, of none / 2.5 / 1.5: "1.5 is starting to approach a tremolo")
+    groove_margin = 2.5
     # ...AND EACH PIPE RELEASES AS ITSELF (tonelib.release_band_scale): when the
     # pallet shuts, each harmonic rings down at its own mode's rate (2Q/w, the
     # pipe's impedance: fluepipe_sim.mode_times), so the upper bands go first
@@ -26588,6 +26594,37 @@ def mixture_ratios(props, key, ratio, f0):
         if f0 >= hz:
             got = rs
     return list(got), True
+
+
+def groove_pressure(cls, note, drawn_of):
+    """THE KEY'S GROOVE (a slider chest: every stop drawn on a key speaks from
+    one channel under it, filled through the key's pallet): the groove's
+    pressure as a share of the chest's when the key is down. The pallet
+    passes the chest's wind as an orifice and each pipe draws as the root of
+    its pressure, so in the steady state p_groove / p_chest = 1 / (1 + r^2),
+    r = the drawn stops' draw over the pallet's capacity -- the capacity
+    groove_margin x the key's draw with every stop drawn (a builder sizes the
+    pallet against the full organ). Each pipe on the key then answers that
+    pressure as its own (wind_pitch_exp, wind_level_exp): more stops, flatter
+    and softer together. drawn_of(rank name) is each rank's draw at the
+    onset (0-1). 1.0 where the class has no groove_margin (no groove)."""
+    m = getattr(cls, 'groove_margin', None)
+    if not m:
+        return 1.0
+    import wind as _W
+    f = 440.0 * 2.0 ** ((note - 69) / 12.0)
+    qd, qf = [], []
+    for r in cls.stop_ranks:
+        if r[1] is None:
+            continue
+        if len(r) > 6 and r[6] is not None and not (r[6][0] <= note <= r[6][1]):
+            continue
+        law = _W.draw_law(rank_wind_class(cls, r))
+        w = sum(_W.rank_draw(law, f * q) for q in (r[1] if isinstance(r[1], (list, tuple)) else [r[1]]))
+        qf.append(w)
+        qd.append(w * float(drawn_of(r[0])))
+    rr = sum(qd) / (float(m) * sum(qf))
+    return 1.0 / (1.0 + rr * rr)
 
 
 def rank_detune_cents(cls, rank, note):

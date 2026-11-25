@@ -324,6 +324,13 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
             }
             if (rk->detune[note] != 0.0)                /* the tuner left this rank a little out (rank_detune) */
                 eff *= pow(2.0, rk->detune[note] / 1200.0);
+            /* ...and its key's groove (groove_pressure): the rank answers the
+               groove's pressure as its pipe does (0 / 1: none) */
+            double gxl = 1.0;
+            if (n->organ_groove > 0.0 && n->organ_groove != 1.0) {
+                eff *= pow(n->organ_groove, og->fam_a[ri]);
+                gxl = pow(n->organ_groove, og->fam_b[ri]);
+            }
             PyRandom pr;                                /* each partial its own phase (partial_phase_spread) */
             if (og->phase_spread > 0.0)
                 pyr_seed(&pr, (long long)rint(n->on * 1e6) * 151 + note * 19 + n->ch);
@@ -366,6 +373,8 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
                     tr.has_radius = 0;
                 }
                 double gM = hv * rk->gain * nv_radiation_gain(host, hf, radius, og->pipe_radius);
+                if (gxl != 1.0)
+                    gM *= gxl;
                 if (!isnan(n->organ_hx))                /* the Expression stop (harmonium_pressure_gain) */
                     gM *= nv_hpressure_gain(scp, m, hpw);
                 if (og->hwind && (n->organ_box != 0.0 || n->organ_meta))   /* its box's colour, the Metaphone's felt */

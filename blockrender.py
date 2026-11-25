@@ -5091,7 +5091,7 @@ class _Note(object):
     __slots__ = ('ch', 'note', 'on', 'off', 'vel', 'v7', 'v11', 'pan', 'prog', 'key_off', 'drum',
                  'organ', 'pc', 'organ_key', 'freq', 'chan_vol', 'efx_gain', 'f0', 'non', 'noff',
                  'fade', 'rel', 'chiff', 'cv', 'cc', 'crl', 'csc', 'sjit', 'li', 'ri', 'row0',
-                 'song_index', 'drum_plain', 'sung')
+                 'song_index', 'drum_plain', 'sung', 'groove')
 
 
 class _Emitter(object):
@@ -7176,6 +7176,24 @@ SONG_STATS = [0, 0]     # notes whose channel questions were checked, that diffe
 READING_STATS = [0, 0]  # files whose check song is the engine's own reading; whose notes need passes it lacks
 
 
+def _note_groove(nt, rev):
+    """A note's key's groove at its onset (tonelib.groove_pressure): each
+    rank's draw state its last registration event at or before the onset (rev:
+    rank -> events), as the native note setup reads it. 1.0 with no groove."""
+    if not getattr(nt.pc, 'groove_margin', None):
+        return 1.0
+
+    def _drawn(k):
+        cur = 0.0
+        for _t, _v in rev.get(k, ()):
+            if _t <= nt.on:
+                cur = _v
+            else:
+                break
+        return cur
+    return T.groove_pressure(nt.pc, nt.note, _drawn)
+
+
 def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st, eff, nx, mcut, slurred,
                        slur_out, song=None, key_off=None, from_song=False, seat=0.0, held=0.0, organ=None,
                        press=0.0):
@@ -7234,6 +7252,7 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
         # each rank: its gate row, when it speaks, whether it speaks at all,
         # and whether it was pushed in before the key-up (_note_stops')
         rev, grs, cr, wrow, wcombo, bnote = organ
+        nt.groove = _note_groove(nt, rev)                   # (its key's groove, as _note_stops reads it)
         aj = getattr(P, 'attack_jitter', 0.0)
         br = em.bend_row if (em.bend_row >= 0 or em.fader_row < 0) else em.fader_row   # (n.br, set below)
         for i, (key, ratio, *_r) in enumerate(stops):
@@ -7270,6 +7289,7 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
         n.organ_box, n.organ_meta = (harmonium_note_box(em, nt, rev) if 'forte fixe B' in rev
                                      else (0.0, False))
         n.organ_perc = int(_pe is not None and T.stop_drawn_at(_pe, nt.on))
+    n.organ_groove = getattr(nt, 'groove', 1.0)         # (its key's groove at its onset)
     n.has_nx, n.nx = int(nx is not None), (nx if nx is not None else 0.0)
     n.mcut, n.slurred, n.slur_out = int(bool(mcut)), int(bool(slurred)), int(bool(slur_out))
     lo, hi = getattr(nt.pc, 'string_detune_range', (0.0, 0.0))
@@ -7498,6 +7518,10 @@ def _note_stops(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TBN, 
     """THE NOTE'S TONE: for each stop (an organ's ranks, or one for any other
     voice), its harmonics -- unison voices, section players, bloom, mode
     lock, chiff -- emitted. Returns gain, the last stop's."""
+    # THE KEY'S GROOVE at its onset (tonelib.groove_pressure): each rank's draw
+    # state its last registration event at or before the onset, as the native
+    # note setup reads it
+    nt.groove = _note_groove(nt, rankev_of.get(nt.organ_key, {})) if nt.organ else 1.0
     if NATIVE_TONE != 'off':
         got = _tone_native(em, props, nt, stops, onsets, seats, mls, _als, _hx, _hperc, _pjit, _sir, sjit_n, B)
         if got is not None and NATIVE_TONE == 'on':
@@ -7780,6 +7804,15 @@ def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TB
             _rdt = T.rank_detune_cents(props, key, nt.note)
             if _rdt:
                 eff_ratio *= 2.0 ** (_rdt / 1200.0)
+            # ...AND ITS KEY'S GROOVE (tonelib.groove_pressure): the rank answers
+            # the groove's pressure as its pipe does -- flatter and softer the
+            # more stops speak on the key
+            _gx = getattr(nt, 'groove', 1.0)
+            _gxl = 1.0
+            if _gx != 1.0:
+                _gwc = T.rank_wind_class(nt.pc, (key, ratio, gain) + tuple(rest))
+                eff_ratio *= _gx ** float(_gwc.wind_pitch_exp)
+                _gxl = _gx ** float(_gwc.wind_level_exp)
             _pps = getattr(props, 'partial_phase_spread', 0.0)
             _prng = random.Random(int(round(nt.on * 1e6)) * 151 + nt.note * 19 + nt.ch) if _pps > 0.0 else None
             _ushare = getattr(props, 'unison_shares_phase', False)
@@ -7844,6 +7877,8 @@ def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TB
                 em.radius = (props.pipe_radius(nt.f0*eff_ratio)
                               if nt.organ and hasattr(props, 'pipe_radius') else None)
                 gM = hv*gain*props.radiation_gain(hf, radius=em.radius)
+                if _gxl != 1.0:
+                    gM *= _gxl
                 if _hx is not None:              # (its tone at the wind: the stop's answer)
                     gM *= float(T.harmonium_pressure_gain(_sc, m, _hp))
                 if em.hbox is not None:          # (its box's colour and the Metaphone's felt)

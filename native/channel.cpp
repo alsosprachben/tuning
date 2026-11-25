@@ -2845,6 +2845,35 @@ int nv_song_organ_note(void *s, int i, int family, NoteIn *n)
         }
         n->rank_br[ri] = br;
     }
+    // THE KEY'S GROOVE at its onset (tonelib.groove_pressure, line for line):
+    // each rank's draw on this key, under its state at the onset, against the
+    // key's draw with every stop out; 1 / (1 + r^2)
+    n->organ_groove = 1.0;
+    if (o->spec->groove_margin > 0.0) {
+        const OrganSpec *gs = o->spec;
+        double f = 440.0 * pow(2.0, (e.note - 69) / 12.0);
+        std::vector<double> qd, qf;
+        for (int ri = 0; ri < gs->n_rank; ri++) {
+            const OrganRank &rk = gs->rank[ri];
+            if (!rk.n_ratio || !(e.note >= rk.lo && e.note <= rk.hi))
+                continue;
+            double d[8];
+            for (int q = 0; q < rk.n_ratio; q++)
+                d[q] = gs->draw_u[ri] * pow(std::max(f * rk.ratio[q], 8.0) / gs->unit_hz, gs->draw_e[ri]);
+            double w = pysum(d, rk.n_ratio);
+            double cur = 0.0;
+            for (auto &x : o->rank_ev[ri]) {
+                if (x.first <= on)
+                    cur = x.second;
+                else
+                    break;
+            }
+            qf.push_back(w);
+            qd.push_back(w * cur);
+        }
+        double rr = pysum(qd.data(), (int)qd.size()) / (gs->groove_margin * pysum(qf.data(), (int)qf.size()));
+        n->organ_groove = 1.0 / (1.0 + rr * rr);
+    }
     n->organ_cr = o->cr;
     // a reed organ's effect stops at its onset (stop_drawn_at): the
     // Expression's bellows (the note's CC11), the Percussion

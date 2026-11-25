@@ -624,6 +624,9 @@ typedef struct OrganSpec {
     // each rank's own draw law (wind.draw_law): units at unit_hz and exponent --
     // the simulated pipe's, or the generic 1, draw_exp
     double draw_u[NV_MAX_RANK], draw_e[NV_MAX_RANK];
+    // the key's groove (tonelib.groove_pressure): its pallet's capacity over
+    // the key's full-organ draw, 0 none
+    double groove_margin;
     /* A REED ORGAN'S EFFECT STOPS (the harmonium's): its Expression,
        Percussion and Tremolo stops' ranks (-1 none), the Expression's tilt,
        the hammer's attack and the attack's share of the note (attack_fraction_max) */
@@ -1619,6 +1622,9 @@ typedef struct {
     // lids' opening (0 shut) and the Metaphone drawn
     double organ_box;
     int organ_meta;
+    // ...and its key's groove at its onset (tonelib.groove_pressure): the
+    // groove's pressure over the chest's, 0 / 1 none
+    double organ_groove;
     // THE BREATH'S OWN ROW (bbr_set: the player's breath noise wobbling on
     // its own, bbrow_of's second); else the note's
     int bbr_set;

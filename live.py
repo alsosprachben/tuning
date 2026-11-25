@@ -4710,6 +4710,7 @@ class Live:
         self.prolong = {}            # (part, channel) -> the keys its Prolongement holds latched
         self.hvel = {}               # (channel, key) -> the velocity it was struck at (a harmonium's touch)
         self.note_touch = {}         # (part, channel, note) -> its velocity's level, if the part follows it
+        self.note_groove = {}        # (part, channel, note) -> its key's groove at its onset (groove_pressure)
         # MIDI 2.0. `midi2` is the bridge (ump.Midi1to2) when the keyboard's
         # MIDI 1.0 is being carried as MIDI 2.0; None means MIDI 1.0 straight in.
         self.midi2 = None
@@ -7187,6 +7188,13 @@ class Live:
             # by their hashes, which differ from process to process, and the
             # slots -- so the sum -- with them. nvlive stamps in this order.)
             _snd = self._coupled_ranks(part)    # (the drawn tabs through the coupler switches)
+            # THE KEY'S GROOVE at its onset (tonelib.groove_pressure): the stops
+            # speaking now; a stop drawn while the key is held takes this one,
+            # as the file's note does
+            _gpc = part.patch.wind_pc
+            self.note_groove[(part.pid, ch, note)] = (
+                T.groove_pressure(_gpc, note, lambda k: 1.0 if k in _snd else 0.0)
+                if _gpc is not None and getattr(_gpc, 'groove_margin', None) else 1.0)
             for rank in part.patch.rank_names:
                 if rank in _snd:
                     self._draw(part, tmpl, ch, note, rank, n0)
@@ -12404,6 +12412,21 @@ class Live:
                                        T.harmonium_tremolo_hz(part.patch, p, note >= T.HARMONIUM_SPLIT))
         self.slab.dirty = True
 
+    def _groove_stamp(self, part, rank, gx):
+        """The key's groove on the slots just stamped (tonelib.groove_pressure):
+        the rank's pipes answer the groove's pressure as theirs -- pitch x gx^a,
+        level x gx^b (its wind_pitch_exp, wind_level_exp) -- as the file's do."""
+        sl = self.slab.last_slots
+        if sl is None or not len(sl):
+            return
+        r = next(r for r in part.patch.stop_ranks if r[0] == rank)
+        wc = T.rank_wind_class(part.patch.wind_pc, r)
+        idx = np.fromiter(sl, np.int64, len(sl))
+        a = self.slab.a
+        a["om"][idx] = a["om"][idx] * gx ** float(wc.wind_pitch_exp)
+        self.slab.channel_gain(sl, np.full(len(sl), gx ** float(wc.wind_level_exp), np.float32))
+        self.slab.dirty = True
+
     def _draw(self, part, tmpl, ch, note, rank, n0):
         got = tmpl.get("ranks", {}).get(rank)
         if not got:
@@ -12427,6 +12450,9 @@ class Live:
             return
         if part.patch.stop_word_ccs[0] == 43:
             self._harmonium_stamp(part, tmpl, ch, note, rank, key, hrel)
+        _gx = self.note_groove.get((part.pid, ch, note), 1.0)
+        if _gx != 1.0:
+            self._groove_stamp(part, rank, _gx)
         # THE WHEEL'S TREMOLO on a note struck with the wheel already up, as
         # _note_on arms one (this path returns before it)
         _td = self.trem_depth.get(part.pid, 0.0)
