@@ -70,16 +70,6 @@
 "voices": "kit levels, release times, the Orchestra Hit, timpani and concert snare picks"
 },
 {
-"group": "Sample libraries and sound banks",
-"title": "TimGM6mb",
-"author": "Tim Brechbill (2004), David Bolton (2010)",
-"url": "https://metadata.ftp-master.debian.org/changelogs//main/t/timgm6mb-soundfont/unstable_copyright",
-"licence": "GPL 2",
-"licence_url": "https://www.gnu.org/licenses/old-licenses/gpl-2.0.html",
-"how": "levels and references",
-"voices": "release times, levels"
-},
-{
 "group": "Keyboards and bells",
 "title": "C_S Fender Rhodes Mark II",
 "author": "tim.kahn",
@@ -2386,12 +2376,11 @@
 },
 {
 "group": "Tunings",
-"title": "Sankey Bach keyboard MIDI corpus",
-"author": "John Sankey",
-"url": "http://www.jsbach.net/midi/sankey/",
-"licence": "John Sankey's terms",
-"licence_url": "http://www.johnsankey.ca/copyright.html",
+"title": "A consonance-based approach to the harpsichord tuning of Domenico Scarlatti",
+"author": "John Sankey and William A. Sethares (J. Acoust. Soc. Am. 101(4), 2332-2337, 1997)",
+"url": "https://sethares.engr.wisc.edu/papers/scarlat.html",
+"licence": "published data",
 "how": "measured",
-"voices": "the Sankey tuning (Werckmeister III as he played it)"
+"voices": "the Sankey tuning: the paper's consonance-found Scarlatti tuning, its published cents"
 }
 ]
