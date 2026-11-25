@@ -40,39 +40,14 @@ sys.path[:0] = [ROOT, HERE]
 CACHE = os.path.join(ROOT, ".organ_bake_cache.json")
 SPEECH_FLOOR_S = 0.004          # the pallet and the foot's first fill
 SPEECH_KEYS = 6                 # written keys C2..C7 the speech is measured at (each rank at its own pitch)
-LEVEL_KEYS = (48, 60, 72)
-
-# class -> (fluepipe_sim.STOPS key, the rank's name on GM 19, writes speech?,
-# its level: "hold" = where the console has it (set by ear), "sim" = the
-# simulated pipe's radiated level against the simulated principal 8's, both
-# on the same wind -- for the ranks whose level was a recording's balance)
-CLASSES = {
-    "FlueOrganProperties": ("principal", "principal 8", True, "hold"),
-    "PrincipalOctave4Properties": ("octave", "octave 4", False, "hold"),
-    "PrincipalOctave2Properties": ("superoctave", "super octave 2", False, "hold"),
-    "OrganQuintProperties": ("quint", "quint 2-2/3", True, "hold"),
-    "OrganPrincipal16Properties": ("principal16", "principal 16", True, "hold"),
-    "OrganQuint513Properties": ("quint513", "quint 5-1/3", True, "hold"),
-    "OrganGedaktProperties": ("gedakt", "flute 8", "modes", "hold"),
-    "OrganBourdonProperties": ("bourdon16", "bourdon 16", "modes", "hold"),
-    "OrganKoppelfluteProperties": ("rohrflute", "koppelflute 4", "modes", "sim"),
-    "OrganWaldfluteProperties": ("waldflute", "waldflute 2", "modes", "sim"),
-    "OrganNazardProperties": ("rohrflute", "nazard 2-2/3", "modes", "sim"),
-    "OrganTierceProperties": ("tierce", "tierce 1-3/5", "modes", "sim"),
-    "OrganSubbassProperties": ("subbass16", "subbass 16", "modes", "sim"),
-    "OrganGambaProperties": ("gamba", "gamba 8", "modes", "sim"),
-    "OrganCelesteProperties": ("gamba", "celeste 8", "modes", "sim"),
-    # THE REEDS (examples/reedpipe_sim.py: the beating tongue against its
-    # resonator's modes, in time; tone and speech both from it)
-    "OrganTrumpetProperties": ("reed:trumpet", "trumpet 8", "reed", "hold"),
-    "OrganClarionProperties": ("reed:clarion", "reed 4", "reed", "hold"),
-    "OrganCromorneProperties": ("reed:cromorne", "reed 8", "reed", "hold"),
-    "OrganBassonProperties": ("reed:basson", "reed 16", "reed", "hold"),
-    "OrganTrompetteProperties": ("reed:trompette", "trompette 8", "reed", "sim"),
-    "OrganOboeProperties": ("reed:oboe", "oboe 8", "reed", "sim"),
-    "OrganContrabassoonProperties": ("reed:contrabassoon", "contrabassoon 32", "reed", "sim"),
-    "OrganVoxHumanaProperties": ("reed:voxhumana", "vox humana 8", "reed", "sim"),
-}
+# THE ORGAN BEING BUILT (examples/organ_specs.py): its stops, class ->
+# (fluepipe_sim.STOPS key, its rank, writes speech?, its level: "hold" = where
+# the console has it, set by ear; "sim" = the simulated pipe's against the
+# reference stop's on the same wind)
+import organ_specs as OS  # noqa: E402
+SPEC = OS.current()
+CLASSES = SPEC["classes"]
+LEVEL_KEYS = SPEC["level_keys"]
 
 
 def _sweep(F, stop, lo, hi, start):
@@ -112,7 +87,7 @@ def simulate(name, cache):
         return cache[k]
     cls = getattr(T, name)
     anchors = [a for a, _ in cls.mode_gains_points]
-    ratio = next(r[1] for r in T.FlueOrganProperties.stop_ranks if r[0] == rank)
+    ratio = next(r[1] for r in getattr(T, SPEC["host"]).stop_ranks if r[0] == rank)
     if stop.startswith("reed:"):
         out = _reed(stop[5:], anchors, ratio)
         cache[k] = out
@@ -202,10 +177,10 @@ def _modes_speech(stop, keys_hz):
     as written scaled by the two pipes' mode time constants at the same pitch."""
     import fluepipe_sim as F
     import tonelib as T
-    P = T.FlueOrganProperties
+    P = getattr(T, SPEC["reference_class"])
     cyc, exps = [], []
     for f0 in keys_hz:
-        mp, mf = F.mode_times("principal", f0), F.mode_times(stop, f0)
+        mp, mf = F.mode_times(CLASSES[SPEC["reference_class"]][0], f0), F.mode_times(stop, f0)
         if 1 not in mp or 1 not in mf:
             print("    %s %.1f Hz: no fundamental mode found (skipped)" % (stop, f0))
             continue
@@ -227,7 +202,7 @@ def sim_level(name, cache):
     k = "L|" + _key(F, stop) + rank
     if k in cache:
         return cache[k]
-    ratio = next(r[1] for r in T.FlueOrganProperties.stop_ranks if r[0] == rank)
+    ratio = next(r[1] for r in getattr(T, SPEC["host"]).stop_ranks if r[0] == rank)
     fs = [261.63 * ratio * 2 ** ((key - 60) / 12.0) for key in LEVEL_KEYS]
     if stop.startswith("reed:"):
         import reedpipe_sim as R
@@ -249,7 +224,7 @@ def render_level(rank):
     import mido
     import blockrender as B
     import tonelib as T
-    host = T.FlueOrganProperties
+    host = getattr(T, SPEC["host"])
     names = [r[0] for r in host.stop_ranks]
     keep = host.default_stops
     host.default_stops = 1 << names.index(rank)
@@ -259,7 +234,9 @@ def render_level(rank):
             m = mido.MidiFile(type=1, ticks_per_beat=480)
             t = mido.MidiTrack()
             m.tracks.append(t)
-            t.append(mido.Message("program_change", channel=0, program=19, time=0))
+            if SPEC.get("bank"):
+                t.append(mido.Message("control_change", channel=0, control=0, value=SPEC["bank"], time=0))
+            t.append(mido.Message("program_change", channel=0, program=SPEC["program"], time=0))
             t.append(mido.Message("note_on", channel=0, note=key, velocity=100, time=0))
             t.append(mido.Message("note_off", channel=0, note=key, velocity=0, time=2 * 960))
             L, R = B.render(m)[:2]
@@ -345,7 +322,7 @@ def wind_response(name, cache):
     k = "W|" + _key(F, stop) + rank + json.dumps(F.PRESSURES)
     if k in cache:
         return cache[k]
-    ratio = next(r[1] for r in T.FlueOrganProperties.stop_ranks if r[0] == rank)
+    ratio = next(r[1] for r in getattr(T, SPEC["host"]).stop_ranks if r[0] == rank)
     fs = [261.63 * ratio * 2 ** ((key - 60) / 12.0) for key in WIND_KEYS]
     out = []
     if stop.startswith("reed:"):
@@ -409,7 +386,7 @@ def main(argv):
     cache = json.load(open(CACHE)) if os.path.exists(CACHE) else {}
     if "--wind" in argv:
         res = {n: wind_response(n, cache) for n in want}
-        unit = wind_response("FlueOrganProperties", cache)["draw_at_unit"]
+        unit = wind_response(SPEC["reference_class"], cache)["draw_at_unit"]
         if "--write" in argv:
             p = os.path.join(ROOT, "tonelib.py")
             src = open(p).read()
@@ -430,8 +407,8 @@ def main(argv):
     old = {n: render_level(CLASSES[n][1]) for n in want}
     target = dict(old)
     if any(CLASSES[n][3] == "sim" for n in want):
-        p8 = render_level("principal 8")
-        sp8 = sim_level("FlueOrganProperties", cache)
+        p8 = render_level(SPEC["reference_rank"])
+        sp8 = sim_level(SPEC["reference_class"], cache)
         for n in want:
             if CLASSES[n][3] == "sim":
                 target[n] = p8 + sim_level(n, cache) - sp8
@@ -443,10 +420,10 @@ def main(argv):
         if CLASSES[n][2]:
             cls.speech_cycles, cls.speech_harmonic_exp = res[n]["cycles"], res[n]["exp"]
             cls.attack_time = SPEECH_FLOOR_S
-    if "FlueOrganProperties" in want:
-        T.FlueOrganProperties.bellows_push_gain = 0.0
+    if SPEC["host"] in want:
+        getattr(T, SPEC["host"]).bellows_push_gain = 0.0
     gains = {}
-    order = sorted(want, key=lambda n: n != "FlueOrganProperties")     # the host first: the rest inherit its gain
+    order = sorted(want, key=lambda n: n != SPEC["host"])     # the host first: the rest inherit its gain
     for n in order:
         cls = getattr(T, n)
         N.forget()
@@ -456,7 +433,7 @@ def main(argv):
         gains[n] = "%.10g" % g
         print("  %s: level %.2f -> %.2f dB, initial_gain -> %s" % (n, new, target[n], gains[n]), flush=True)
     # ...and the bare tables kept for the levels' step (organ_levels.base_points)
-    bp = os.path.join(HERE, "organ_bare_tables.json")
+    bp = os.path.join(HERE, SPEC["bare"])
     bare = json.load(open(bp)) if os.path.exists(bp) else {}
     for n in want:
         bare[n] = [[a, list(g)] for a, g in res[n]["points"]]
@@ -466,7 +443,7 @@ def main(argv):
     src = open(p).read()
     for n in want:
         src = write_class(src, n, res[n], gains[n])
-    if "FlueOrganProperties" in want:
+    if SPEC["host"] in want:
         src = re.sub(r"\n    bellows_push_gain = 2\.801\n", "\n    bellows_push_gain = 0.0      # (organ_bake: the simulated pipe shows no overshoot mid-compass)\n", src, count=1)
     open(p, "w").write(src)
     print("  tonelib.py written")

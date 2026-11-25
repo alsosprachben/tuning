@@ -35,15 +35,15 @@ sys.path[:0] = [ROOT, HERE]
 import organ_bake as OB  # noqa: E402
 import organ_levels as OL  # noqa: E402
 
-REG = os.path.join(HERE, "organ_regulation.json")
-REF_SPL = 72.0                         # dB SPL of the principal 8's middle C, steady
+REG = os.path.join(HERE, OB.SPEC["regulation"])
+REF_SPL = OB.SPEC["ref_spl"]           # dB SPL of the reference stop's middle C, steady (its voicing school)
 MANUAL_KEYS = tuple(range(36, 97, 4))  # written C2..C7
 PEDAL_KEYS = tuple(range(24, 61, 3))   # written C1..C4
-TREBLE_ASCENDANCY_DB = 0.0             # phons an octave up the compass (0: even, the voicer's plain aim)
+TREBLE_ASCENDANCY_DB = OB.SPEC["treble_ascendancy_db"]   # phons an octave up the compass (0: even)
 # WHAT A VOICER CAN DO: a pipe's windway and toe move it this far from as
 # built, no further (named, for the ear) -- the 16 Hz pipes of a 16' and the
 # 4-8 kHz top of a 2' stay as soft to the ear as they physically are
-REG_MAX_DB = 12.0
+REG_MAX_DB = OB.SPEC["reg_max_db"]
 
 # ISO 226:2003, Table 1
 _F = (20, 25, 31.5, 40, 50, 63, 80, 100, 125, 160, 200, 250, 315, 400, 500, 630, 800, 1000, 1250, 1600,
@@ -102,7 +102,7 @@ def render_note(rank, key):
     import mido
     import blockrender as B
     import tonelib as T
-    host = T.FlueOrganProperties
+    host = getattr(T, OB.SPEC["host"])
     names = [r[0] for r in host.stop_ranks]
     keep = host.default_stops
     host.default_stops = 1 << names.index(rank)
@@ -110,7 +110,9 @@ def render_note(rank, key):
         m = mido.MidiFile(type=1, ticks_per_beat=480)
         t = mido.MidiTrack()
         m.tracks.append(t)
-        t.append(mido.Message("program_change", channel=0, program=19, time=0))
+        if OB.SPEC.get("bank"):
+            t.append(mido.Message("control_change", channel=0, control=0, value=OB.SPEC["bank"], time=0))
+        t.append(mido.Message("program_change", channel=0, program=OB.SPEC["program"], time=0))
         t.append(mido.Message("note_on", channel=0, note=key, velocity=100, time=0))
         t.append(mido.Message("note_off", channel=0, note=key, velocity=0, time=2 * 960))
         L, R = B.render(m)[:2]
@@ -171,9 +173,9 @@ def main(argv):
     names = [a for a in argv[1:] if not a.startswith("--")] or [n for n in OB.CLASSES if n not in OL.HELD]
     reg = json.load(open(REG)) if os.path.exists(REG) else {}
     # free-standing: the case and its projection stand over the regulated rank
-    T.FlueOrganProperties.case_scale = 0.0
-    T.FlueOrganProperties.case_projection = None
-    ref = render_note("principal 8", 60)
+    getattr(T, OB.SPEC["host"]).case_scale = 0.0
+    getattr(T, OB.SPEC["host"]).case_projection = None
+    ref = render_note(OB.SPEC["reference_rank"], 60)
     offset = REF_SPL - 10 * math.log10(sum(10 ** (db / 10.0) for _, db in ref))
     for rnd in range(rounds):
         for n in names:

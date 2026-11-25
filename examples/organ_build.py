@@ -3,7 +3,9 @@
 script of its own, run in this order, each reading what the one before wrote
 (Ben 2026-11-25: "keep how we built this organ reproducible").
 
-    python3 examples/organ_build.py [--from=STEP] [--to=STEP] [--check]
+    python3 examples/organ_build.py [--organ=NAME] [--from=STEP] [--to=STEP] [--check]
+
+--organ: which organ (examples/organ_specs.py; default "baroque", GM 19's).
 
   bake      examples/organ_bake.py --write
             every stop simulated from its construction (fluepipe_sim: the jet
@@ -59,7 +61,8 @@ def run(first, last):
         if name == "regulate":
             # (the regulation is measured from the levelled tables without
             # it: its rounds start from none)
-            reg = os.path.join(HERE, "organ_regulation.json")
+            import organ_specs as OS
+            reg = os.path.join(HERE, OS.current()["regulation"])
             if os.path.exists(reg):
                 os.remove(reg)
             subprocess.run([sys.executable, os.path.join(HERE, "organ_levels.py"), "--write"], cwd=ROOT,
@@ -70,13 +73,17 @@ def run(first, last):
 
 def main(argv):
     opt = dict(a[2:].split("=", 1) for a in argv[1:] if a.startswith("--") and "=" in a)
+    os.environ["ORGAN_BUILD"] = opt.get("organ", os.environ.get("ORGAN_BUILD", "baroque"))
+    sys.path.insert(0, HERE)
+    import organ_specs as OS
+    spec = OS.current()
     first = opt.get("from", "levels" if "--check" in argv else "bake")
     last = opt.get("to", "regulate")
     if "--check" not in argv:
         run(first, last)
         return 0
     tl = os.path.join(ROOT, "tonelib.py")
-    reg = os.path.join(HERE, "organ_regulation.json")
+    reg = os.path.join(HERE, spec["regulation"])
     keep_tl, keep_reg = tl + ".build_check", reg + ".build_check"
     shutil.copyfile(tl, keep_tl)
     if os.path.exists(reg):

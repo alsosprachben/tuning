@@ -42,7 +42,7 @@ LOWEST_HZ = 16.0                            # under it the lowest simulated pipe
 
 def _ratio(rank):
     import tonelib as T
-    r = next(r[1] for r in T.FlueOrganProperties.stop_ranks if r[0] == rank)
+    r = next(r[1] for r in getattr(T, OB.SPEC["host"]).stop_ranks if r[0] == rank)
     return r
 
 
@@ -99,11 +99,11 @@ MAX_ANCHORS = 8                 # the native voice's tables (nv.h pts_hz[8])
 # WHERE A RANK'S LEVEL IS HELD: where its balance was set by ear -- the
 # manuals' C3-C5 (organ_bake.LEVEL_KEYS); the Pedal's own compass, C2-C3 (Ben:
 # held at C3-C5 its bottom rose +5..12 dB, "a large bias around the bottom of the 16'")
-PEDAL_LEVEL_KEYS = (36, 43, 48)
+PEDAL_LEVEL_KEYS = OB.SPEC["pedal_level_keys"]
 _BASE = {}
 
 
-BARE = os.path.join(HERE, "organ_bare_tables.json")
+BARE = os.path.join(HERE, OB.SPEC["bare"])
 
 
 def base_points(name):
@@ -118,11 +118,11 @@ def level_keys(name):
     """The written keys a rank's level is held at."""
     import tonelib as T
     rank = OB.CLASSES[name][1]
-    pc = T.FlueOrganProperties
+    pc = getattr(T, OB.SPEC["host"])
     ped = (getattr(pc, 'divisions', None) or ("",))
     d = T.rank_division(pc, rank)
-    return PEDAL_LEVEL_KEYS if d < len(ped) and ped[d] == "Pedal" else OB.LEVEL_KEYS
-HELD = ("OrganVoxHumanaProperties",)    # its level by ear (the sim's is not credible): its tables as they are
+    return PEDAL_LEVEL_KEYS if d < len(ped) and ped[d] == OB.SPEC["pedal_division"] else OB.LEVEL_KEYS
+HELD = tuple(OB.SPEC["held"])    # (stops whose level is by ear: their tables as they are)
 
 
 def _interp_db(lv, f):
@@ -187,7 +187,7 @@ def leveled_points(name, cache):
     return pts
 
 
-REG = os.path.join(HERE, "organ_regulation.json")
+REG = os.path.join(HERE, OB.SPEC["regulation"])
 
 
 def regulation():
