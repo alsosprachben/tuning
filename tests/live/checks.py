@@ -74,6 +74,9 @@ CHECKS = [
                                             "@pk_ibanez_inside.mid", "@cab_gt412.mid", "@cab_org16les.mid",
                                             "@msgr_mode.mid", "@setup_guitar_rig.mid", "@setup_organ_full.mid",
                                             "@setup_moog.mid", "4"], {}),
+    # the stream: nvrender --stream against its own whole render, every file in
+    # tests/live/midi (the stream_* ones the cases it once refused), each streamed
+    ("stream", "stream_check.py", [], {}),
     ("preset_midi", "preset_midi_check.py", [], {}),
     ("mpe_files", "nvrender_check.py", ["@mpe_zone.mid", "@mpe/a_plain.mid", "@mpe/b_bends.mid",
                                         "@mpe/c_mvol.mid", "@mpe/d_press.mid", "@mpe/e_mgrbend.mid",

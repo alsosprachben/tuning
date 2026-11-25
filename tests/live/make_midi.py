@@ -1254,11 +1254,156 @@ def biwa_compass():
     return mid
 
 
+# THE STREAM's CASES (examples/stream_check.py, tests/live/checks.py's "stream"):
+# a file each for what nvrender --stream once refused or broke on, each to be
+# streamed byte for byte as the whole render (2026-11-25)
+def _timed(ev):
+    """A one-track file from (seconds, message) events, 960 ticks a beat at 120 bpm."""
+    mid = mido.MidiFile(type=0, ticks_per_beat=960)
+    tr = mido.MidiTrack()
+    mid.tracks.append(tr)
+    now = 0
+    for at, msg in sorted(ev, key=lambda e: e[0]):
+        tk = int(round(at * 960))
+        tr.append(msg.copy(time=tk - now))
+        now = tk
+    return mid
+
+
+def _notes(ch, keys, t0, t1, v=100):
+    return [e for k in keys for e in ((t0, mido.Message('note_on', channel=ch, note=k, velocity=v)),
+                                      (t1, mido.Message('note_off', channel=ch, note=k, velocity=0)))]
+
+
+def _cc(ch, c, v, t):
+    return (t, mido.Message('control_change', channel=ch, control=c, value=v))
+
+
+def _pc(ch, p, t):
+    return (t, mido.Message('program_change', channel=ch, program=p))
+
+
+def _gsreset(t=0.0):
+    return (t, gs([0x40, 0x00, 0x7F], 0x00))
+
+
+def stream_chorus_amp(start, rise, prog=29, order=(47, 40, 52)):
+    """An overdriven guitar under a GS file's chorus that RISES (or falls) while a
+    chord is held, then the chord let go a note at a time: the valve's products
+    begin at those releases, where the chorus's share is past its onsets'."""
+    ev = [_gsreset(), _pc(0, prog, 0.25), _cc(0, 93, start, 0.25), _cc(0, 91, 40, 0.25)]
+    ev += [(0.25, mido.Message('note_on', channel=0, note=k, velocity=100)) for k in (40, 47, 52)]
+    ev.append(_cc(0, 93, rise, 0.75))
+    for i, k in enumerate(order):
+        ev.append((1.25 + 0.375 * i, mido.Message('note_off', channel=0, note=k, velocity=0)))
+    ev += _notes(0, (45, 52), 2.375, 2.875, 90) + [_cc(0, 93, 127, 2.625)]
+    return _timed(ev)
+
+
+def stream_clav_rockers():
+    """Three Clavinets, their tone rockers darkest, brightest and between (each
+    part's first CC70), a phrase each, one under a GS chorus."""
+    ev = [_gsreset()]
+    for ch, v in ((0, 0), (1, 127), (2, 90)):
+        ev += [_pc(ch, 7, 0.05), _cc(ch, 70, v, 0.05)]
+        for i, k in enumerate((48, 55, 60, 64, 67, 72, 79)):
+            ev += _notes(ch, (k + ch,), 0.2 + 0.7 * ch + 0.06 * i, 0.5 + 0.7 * ch + 0.06 * i, 70 + 5 * i)
+    ev.append(_cc(2, 93, 60, 0.05))
+    return _timed(ev)
+
+
+def stream_matrix_tremolo():
+    """GS's controller matrix sending the mod wheel to LFO1's TVA depth: a flute
+    swept up and down, a violin (40) at full with a bend and the
+    fader moving (the rows its sidebands ride) -- and a Rhodes's own tremolo beside."""
+    ev = [_gsreset(), _pc(0, 73, 0.05), (0.06, gs([0x40, 0x21, 0x06], 0x60)),
+          _pc(2, 40, 0.05), (0.06, gs([0x40, 0x23, 0x06], 0x7F)), _cc(2, 1, 127, 0.1),
+          _pc(1, 4, 0.05), _cc(1, 92, 100, 0.1)]
+    ev += _notes(0, (72, 76), 0.3, 2.6) + _notes(1, (48, 55), 0.4, 2.6) + _notes(2, (67, 74), 0.3, 2.2)
+    ev += [_cc(0, 1, v, 0.5 + 0.12 * i) for i, v in enumerate(list(range(0, 128, 16)) + list(range(127, -1, -24)))]
+    ev += [(1.0 + 0.1 * i, mido.Message('pitchwheel', channel=2, pitch=i * 800)) for i in range(6)]
+    ev += [_cc(2, 11, 127 - 10 * i, 0.8 + 0.1 * i) for i in range(8)]
+    return _timed(ev)
+
+
+def stream_tremolo_both():
+    """The harmonium's Tremolo stop drawn (CC44 16) with the wheel's tremolo (CC92)
+    on the same part, then put in; a Rhodes's tremolo on another part beside."""
+    ev = [_pc(0, 20, 0), _cc(0, 43, 8, 0.1), _cc(0, 44, 1 | 4 | 16, 0.1), _cc(0, 45, 0, 0.1), _cc(0, 92, 100, 0.1),
+          _pc(1, 4, 0), _cc(1, 92, 110, 0.1)]
+    ev += _notes(0, (48, 55, 72, 79), 0.3, 2.0) + [_cc(0, 44, 1 | 4, 2.2)] + _notes(0, (50, 62, 74), 2.4, 3.8)
+    ev += _notes(1, (60, 64, 67), 0.5, 2.6)
+    return _timed(ev)
+
+
+def stream_scanner_drive(prog=16):
+    """A tonewheel organ's scanner vibrato (CC81) through its valve (CC12):
+    chords overlapping, a run over a held chord."""
+    ev = [_pc(0, prog, 0), _cc(0, 81, 110, 0.05), _cc(0, 12, 100, 0.05), _cc(0, 91, 90, 0.05)]
+    ev += _notes(0, (48, 55, 60), 0.2, 1.6) + _notes(0, (64,), 0.6, 2.2) + _notes(0, (67, 72), 1.0, 1.3)
+    ev += _notes(0, (43, 50), 1.9, 3.0)
+    ev += [e for i in range(8) for e in _notes(0, (72 + (i % 3) * 2,), 3.1 + 0.25 * i, 3.3 + 0.25 * i)]
+    ev += _notes(0, (36, 48, 52), 3.0, 5.2)
+    return _timed(ev)
+
+
+def stream_sympathetic():
+    """Every kind of sympathetic strings, a part each: the sitar's responders, the
+    shamisen's contact, the steel pan's, GS's Mandolin by coincidence (bank 16) --
+    and a second sitar a little behind the first; a melody, a chord struck
+    together, a strum, repeated keys."""
+    def phrase(ch, dt=0.0):
+        ev = []
+        for i, k in enumerate((62, 64, 66, 69, 71, 69, 66)):
+            ev += _notes(ch, (k,), dt + 0.2 + 0.18 * i, dt + 0.36 + 0.18 * i, 90)
+        ev += _notes(ch, (50, 57, 62, 66), dt + 1.6, dt + 2.4)
+        ev += [e for i, k in enumerate((52, 59, 64, 67, 71)) for e in _notes(ch, (k,), dt + 2.6 + 0.012 * i, dt + 3.3, 95)]
+        ev += _notes(ch, (74,), dt + 3.4, dt + 3.5) + _notes(ch, (74,), dt + 3.5, dt + 3.6) + _notes(ch, (74,), dt + 3.6, dt + 4.0)
+        return ev
+    ev = [_gsreset(), _pc(0, 104, 0.05), _pc(1, 106, 0.05), _pc(2, 114, 0.05), _cc(3, 0, 16, 0.04), _pc(3, 25, 0.05),
+          _pc(4, 104, 0.05)]
+    for ch, dt in ((0, 0.0), (1, 4.2), (2, 8.4), (3, 12.6), (4, 0.07)):
+        ev += phrase(ch, dt)
+    return _timed(ev)
+
+
+def stream_gate():
+    """GS's Muted Dis.Gt (28, variation 1), its own keyed gate: short muted
+    stabs, then a held chord (the gate open, its hold and fall)."""
+    ev = [_gsreset(), _cc(0, 0, 1, 0.02), _pc(0, 28, 0.03)]
+    t = 0.2
+    for i in range(24):
+        k = (40, 43, 45, 47)[i % 4]
+        ev += _notes(0, (k, k + 7), t, t + 0.06 + 0.03 * (i % 3), 110 - 2 * i)
+        t += 0.11 + 0.05 * (i % 2)
+    ev += _notes(0, (40, 47, 52), t + 0.3, t + 2.5)
+    return _timed(ev)
+
+
+def stream_piano_pedal():
+    """A piano under the sustain pedal (the register's strings), the pedal let up
+    and down again."""
+    ev = [_cc(0, 64, 127, 0.1)]
+    for i, ch in enumerate(((36, 48, 55, 64), (41, 53, 60, 69), (43, 55, 62, 71), (36, 48, 55, 64, 72))):
+        ev += _notes(0, ch, 0.2 + 0.6 * i, 0.5 + 0.6 * i, 90)
+    ev += [_cc(0, 64, 0, 2.8), _cc(0, 64, 127, 3.0)] + _notes(0, (60, 67, 76), 3.1, 3.4) + [_cc(0, 64, 0, 4.5)]
+    return _timed(ev)
+
+
+STREAM_MAKERS = {"stream_chorus_rise": lambda: stream_chorus_amp(30, 110),
+                 "stream_chorus_fall": lambda: stream_chorus_amp(120, 20, order=(40, 52, 47)),
+                 "stream_clav_rockers": stream_clav_rockers, "stream_matrix_tremolo": stream_matrix_tremolo,
+                 "stream_tremolo_both": stream_tremolo_both, "stream_scanner_drive": stream_scanner_drive,
+                 "stream_scanner_drive_b3": lambda: stream_scanner_drive(18), "stream_sympathetic": stream_sympathetic,
+                 "stream_gate": stream_gate, "stream_piano_pedal": stream_piano_pedal}
+
+
 MAKERS = {"organ_divisions": organ_divisions, "gu_refits_tones": gu_refits_tones, "gu_refits_kits": gu_refits_kits, "taisho_course": taisho_course, "harmonium_grandjeu": harmonium_grandjeu, "harmonium_onset": harmonium_onset, "harmonium_prolong": harmonium_prolong, "harmonium_boxes": harmonium_boxes, "harmonium_wind": harmonium_wind, "harmonium_stops": harmonium_stops, "biwa_compass": biwa_compass, "rhodes_compass": rhodes_compass, "basses_all": basses_all, "eguitars_six": eguitars_six, "stab_chords": stab_chords, "harpsi_four": harpsi_four, "tonewheel_spinet": tonewheel_spinet, "gopichant_compass": gopichant_compass, "hawaiian_compass": hawaiian_compass, "guitar12_compass": guitar12_compass, "flugel_phrase": flugel_phrase, "mandolin_compass": mandolin_compass, "dulcimer_compass": dulcimer_compass, "feedback_held": feedback_held, "clav_compass": clav_compass,
           "couplers_upper": lambda: couplers(16, ((1.5, 0), (2.5, 1 | 4), (3.5, 2), (4.5, 2 | 4 | 8), (6.0, 1 | 2 | 8))),
           "couplers_lower": lambda: couplers(41, ((1.5, 4), (3.0, 1 | 4), (4.5, 0), (6.0, 4))), "spectra_rotor": lambda: spectra(10), "spectra_chorus": lambda: spectra(11),
           "spectra_sustain": lambda: spectra_sustain(10), "spectra_sustain_chorus": lambda: spectra_sustain(11), "dense_pedal": dense_pedal, "assign_mode": assign_mode, "mpe_organ": lambda: mpe_zone(19), "cmx_live": cmx_live, "userdrums": userdrums, "drumdelay": drumdelay, "moog_cmx": moog_cmx, "two_organs": two_organs, "rhythmpart": rhythmpart, "gsrx_2port": gsrx_2port, "drumnrpn": drumnrpn, "drumnrpn2": drumnrpn2, "gsvsense": gsvsense,
           "mpe_zone": mpe_zone}
+MAKERS.update(STREAM_MAKERS)
 
 
 def main(argv):
