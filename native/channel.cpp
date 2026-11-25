@@ -677,12 +677,12 @@ struct Song {
             trem = trem && sp->trem_class_depth > 0.0;
             if (!(sp->wsc != 0.0 || trem))
                 continue;
-            std::vector<std::pair<double, double>> fams;
+            std::vector<std::tuple<int, double, double>> fams;     // (division, a, b)
             std::vector<int> frow;
             for (int ri = 0; ri < sp->n_rank; ri++) {
                 if (sp->rank[ri].n_ratio == 0)
                     continue;
-                std::pair<double, double> ab(sp->fam_a[ri], sp->fam_b[ri]);
+                std::tuple<int, double, double> ab(sp->n_div > 1 ? sp->rank_div[ri] : 0, sp->fam_a[ri], sp->fam_b[ri]);
                 int f = -1;
                 for (size_t q = 0; q < fams.size(); q++)
                     if (fams[q] == ab)
@@ -2658,8 +2658,10 @@ void nv_song_organ_wind(void *s, long nblk, int blk, double sr, const float *G, 
             row = harmonium_wind(Sg, o, nblk, blk, sr, G, BR, BC, BL, row);
             continue;
         }
-        // the demand: every note of this organ's class on the channel, each rank under its gate
-        std::vector<double> dem(nblk + 1, 0.0);
+        // the demand: every note of this organ's class on the channel, each rank
+        // under its gate, on its own division's chest (tonelib.divisions)
+        const int nd = sp->n_div > 1 ? sp->n_div : 1;
+        std::vector<std::vector<double>> demd(nd, std::vector<double>(nblk + 1, 0.0));
         for (const auto &e : Sg->notes) {
             if (e.ch != o.ch || Sg->porg(e) != sp)
                 continue;
@@ -2677,25 +2679,29 @@ void nv_song_organ_wind(void *s, long nblk, int blk, double sr, const float *G, 
                 double w = pysum(d, rk.n_ratio);
                 const float *g = G + (long)(o.g0 + ri) * nblk;
                 float wf = (float)w;        // (numpy: a Python float times a float32 row is float32)
+                std::vector<double> &dem = demd[nd > 1 ? sp->rank_div[ri] : 0];
                 for (long b = b0; b < b1; b++)
                     dem[b] += (double)(wf * g[b]);
             }
         }
         // the Tremulant's draw, a step a block
-        std::vector<double> trem(nblk, 0.0);
+        std::vector<double> trem(nblk, 0.0), still(nblk, 0.0);
         if (sp->trem_rank >= 0)
             for (auto &e : o.rank_ev[sp->trem_rank])
                 for (long b = 0; b < nblk; b++)
                     if (((double)b + 0.5) * blk / sr >= e.first)
                         trem[b] = e.second;
-        // the pressure (Wind.blocks), SUB 8 points a block
+        // the pressure (Wind.blocks), SUB 8 points a block: a chest a division, the
+        // first keeping the channel's seed, the Tremulant only on its divisions
+        auto chest = [&](int dv, const std::vector<double> &dem, const std::vector<double> &trw) {
         std::vector<double> p((size_t)nblk * 9);
         std::vector<double> noise;
         if (sp->wander_rms > 0.0) {
             noise.resize(nblk);
-            nv_npy_normals(0x5EED + (unsigned long long)o.ch, nblk, noise.data());
+            nv_npy_normals(0x5EED + (unsigned long long)(o.ch + 7919LL * dv), nblk, noise.data());
         }
         double w1 = 0.0, w2 = 0.0, s1 = 0.0, s2 = 0.0, d1 = 0.0, r1 = 0.0, te = 0.0, tph = 0.0;
+        double vv = 0.0, vu = 0.0, vq = 0.0, vr = 0.0;
         bool was_on = false;
         auto dev = [&]() {
             double d = s1 - (sp->has_ra ? sp->reg_restore * r1 : 0.0);
@@ -2717,7 +2723,7 @@ void nv_song_organ_wind(void *s, long nblk, int blk, double sr, const float *G, 
                     r1 = sp->ra * r1 + (1.0 - sp->ra) * s1;
             }
             double sv1 = dev();
-            bool on = trem[b] >= 0.5;
+            bool on = trw[b] >= 0.5;
             if (on && !was_on && te < 1e-4)
                 tph = 0.0;
             was_on = on;
@@ -2727,12 +2733,43 @@ void nv_song_organ_wind(void *s, long nblk, int blk, double sr, const float *G, 
             if (!on && te < 1e-6)
                 te = 0.0;
             bool tr = e0 > 0.0 || te > 0.0;
+            double tq[9];
+            if (sp->tvalve) {                   // the Tremulant's valve, SUB steps (wind.Wind)
+                double dt = sp->blk_s / 8;
+                tq[0] = vq - (sp->has_vra ? sp->reg_restore * vr : 0.0);
+                for (int j = 1; j <= 8; j++) {
+                    if (on) {
+                        double w = sp->v_w;
+                        vu += dt * (w * w * (sp->v_gain * (vq + sp->v_q0) - vv) - 2.0 * sp->v_zeta * w * vu);
+                        vv += dt * vu;
+                        if (vv < 0.0) {
+                            vv = 0.0;
+                            vu = 0.0;
+                        } else if (vv > 1.0) {
+                            vv = 1.0;
+                            vu = 0.0;
+                        }
+                    } else {
+                        vv = 0.0;
+                        vu = 0.0;
+                    }
+                    vq += dt * (-vq / sp->v_tau - sp->v_vent * vv);
+                    if (sp->has_vra) {
+                        vr = sp->v_ra * vr + (1.0 - sp->v_ra) * vq;
+                        tq[j] = vq - sp->reg_restore * vr;
+                    } else {
+                        tq[j] = vq;
+                    }
+                }
+            }
             for (int j = 0; j <= 8; j++) {
                 double fr = j / 8.0;
                 double wv = (w0 + (w2 - w0) * fr) * (sp->wgain * sp->wander_rms);
                 double sv = s0 + (sv1 - s0) * fr;
                 double tv = 0.0;
-                if (tr) {
+                if (sp->tvalve) {
+                    tv = tq[j];
+                } else if (tr) {
                     double ev = e0 + (te - e0) * fr;
                     tv = sp->trem_depth * ev * sin(2.0 * M_PI * (tph + sp->trem_hz * sp->blk_s * fr));
                 }
@@ -2740,15 +2777,23 @@ void nv_song_organ_wind(void *s, long nblk, int blk, double sr, const float *G, 
             }
             tph = fmod(tph + sp->trem_hz * sp->blk_s, 1.0);
         }
-        // a row a family (pitch_level): the ratio, its phase, the level at the edges
-        std::vector<std::pair<double, double>> fams;
+        return p;
+        };
+        std::vector<std::vector<double>> pd;
+        for (int dv = 0; dv < nd; dv++)
+            pd.push_back(chest(dv, demd[dv], ((sp->trem_div_mask >> dv) & 1 || nd == 1) ? trem : still));
+        // a row a (division, family) (pitch_level): the ratio, its phase, the level at the edges
+        std::vector<std::tuple<int, double, double>> fams;
         for (int ri = 0; ri < sp->n_rank; ri++) {
             if (o.wrow[ri] < 0)
                 continue;
-            std::pair<double, double> ab(sp->fam_a[ri], sp->fam_b[ri]);
-            if (std::find(fams.begin(), fams.end(), ab) != fams.end())
+            const int dv = nd > 1 ? sp->rank_div[ri] : 0;
+            std::tuple<int, double, double> key(dv, sp->fam_a[ri], sp->fam_b[ri]);
+            if (std::find(fams.begin(), fams.end(), key) != fams.end())
                 continue;
-            fams.push_back(ab);
+            fams.push_back(key);
+            const std::vector<double> &p = pd[dv];
+            std::pair<double, double> ab(sp->fam_a[ri], sp->fam_b[ri]);
             float *R = BR + (long)row * nblk;
             double *Cc = BC + (long)row * nblk;
             float *L = BL + (long)row * (nblk + 1);
@@ -2848,31 +2893,37 @@ int nv_song_organ_note(void *s, int i, int family, NoteIn *n)
     // THE KEY'S GROOVE at its onset (tonelib.groove_pressure, line for line):
     // each rank's draw on this key, under its state at the onset, against the
     // key's draw with every stop out; 1 / (1 + r^2)
-    n->organ_groove = 1.0;
+    for (int dv = 0; dv < 4; dv++)
+        n->organ_groove[dv] = 1.0;
     if (o->spec->groove_margin > 0.0) {
         const OrganSpec *gs = o->spec;
+        const int nd = gs->n_div > 1 ? gs->n_div : 1;
         double f = 440.0 * pow(2.0, (e.note - 69) / 12.0);
-        std::vector<double> qd, qf;
-        for (int ri = 0; ri < gs->n_rank; ri++) {
-            const OrganRank &rk = gs->rank[ri];
-            if (!rk.n_ratio || !(e.note >= rk.lo && e.note <= rk.hi))
-                continue;
-            double d[8];
-            for (int q = 0; q < rk.n_ratio; q++)
-                d[q] = gs->draw_u[ri] * pow(std::max(f * rk.ratio[q], 8.0) / gs->unit_hz, gs->draw_e[ri]);
-            double w = pysum(d, rk.n_ratio);
-            double cur = 0.0;
-            for (auto &x : o->rank_ev[ri]) {
-                if (x.first <= on)
-                    cur = x.second;
-                else
-                    break;
+        for (int dv = 0; dv < nd && dv < 4; dv++) {
+            std::vector<double> qd, qf;
+            for (int ri = 0; ri < gs->n_rank; ri++) {
+                const OrganRank &rk = gs->rank[ri];
+                if (!rk.n_ratio || !(e.note >= rk.lo && e.note <= rk.hi))
+                    continue;
+                if (nd > 1 && gs->rank_div[ri] != dv)
+                    continue;                   // (another chest's groove)
+                double d[8];
+                for (int q = 0; q < rk.n_ratio; q++)
+                    d[q] = gs->draw_u[ri] * pow(std::max(f * rk.ratio[q], 8.0) / gs->unit_hz, gs->draw_e[ri]);
+                double w = pysum(d, rk.n_ratio);
+                double cur = 0.0;
+                for (auto &x : o->rank_ev[ri]) {
+                    if (x.first <= on)
+                        cur = x.second;
+                    else
+                        break;
+                }
+                qf.push_back(w);
+                qd.push_back(w * cur);
             }
-            qf.push_back(w);
-            qd.push_back(w * cur);
+            double rr = pysum(qd.data(), (int)qd.size()) / (gs->groove_margin * pysum(qf.data(), (int)qf.size()));
+            n->organ_groove[dv] = 1.0 / (1.0 + rr * rr);
         }
-        double rr = pysum(qd.data(), (int)qd.size()) / (gs->groove_margin * pysum(qf.data(), (int)qf.size()));
-        n->organ_groove = 1.0 / (1.0 + rr * rr);
     }
     n->organ_cr = o->cr;
     // a reed organ's effect stops at its onset (stop_drawn_at): the

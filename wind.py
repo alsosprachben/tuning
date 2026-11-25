@@ -109,6 +109,27 @@ class Wind:
         self.trem_hz = float(getattr(props, 'tremulant_hz', 5.6))
         self.trem_depth = float(getattr(props, 'tremulant_depth', 0.10))
         self.trem_tau = float(getattr(props, 'tremulant_tau', 0.25))
+        # THE TREMULANT AS A VALVE (tremulant_valve: Pykett's beating valve on
+        # the trunk): a spring-loaded flap, a damped mass-spring the trunk's
+        # pressure pushes open past its setting, its travel stopped shut and
+        # full open; open, it vents (tremulant_vent, x the pressure a second)
+        # and the trunk refills toward the chest's (tremulant_refill_s). The
+        # stops make it a RELAXATION oscillation: a dip and a slower recovery,
+        # its rate and depth the valve's and the wind's, its vent lowering the
+        # mean a little as a real one's does. Stepped SUB times a block.
+        self.tvalve = bool(getattr(props, 'tremulant_valve', False))
+        self.v_w = 2.0 * math.pi * float(getattr(props, 'tremulant_valve_hz', 2.0))
+        self.v_zeta = float(getattr(props, 'tremulant_valve_zeta', 0.3))
+        self.v_gain = float(getattr(props, 'tremulant_valve_gain', 20.0))
+        self.v_q0 = float(getattr(props, 'tremulant_valve_q0', 0.10))
+        self.v_tau = float(getattr(props, 'tremulant_refill_s', 0.06))
+        self.v_vent = float(getattr(props, 'tremulant_vent', 20.0))
+        self.vv = self.vu = self.vq = 0.0
+        # ...its vent a draw on the chest like any other: the REGULATOR restores
+        # its mean as it does the sag's (wind_regulator_s, _restore), the
+        # swing left (vr, a sub-step's one-pole on the trunk's pressure)
+        self.vr = 0.0
+        self.v_ra = (math.exp(-self.blk_s / self.SUB / self.reg_s) if self.reg_s > 0.0 else None)
         self.rng = np.random.default_rng(0x5EED + int(seed))
         # the wander: white noise per block through two one-poles, its gain
         # normalised so that its RMS is wander_rms
@@ -181,7 +202,32 @@ class Wind:
             self.te = tgt + (self.te - tgt) * self.tdecay
             if not on and self.te < 1e-6:
                 self.te = 0.0
-            if e0 > 0.0 or self.te > 0.0:
+            if self.tvalve:
+                # the valve, SUB steps across the block (the first point is the
+                # last block's last)
+                dt = self.blk_s / self.SUB
+                tq = np.empty(self.SUB + 1)
+                tq[0] = self.vq - (self.reg_restore * self.vr if self.v_ra is not None else 0.0)
+                for j in range(1, self.SUB + 1):
+                    if on:
+                        w = self.v_w
+                        self.vu += dt * (w * w * (self.v_gain * (self.vq + self.v_q0) - self.vv)
+                                         - 2.0 * self.v_zeta * w * self.vu)
+                        self.vv += dt * self.vu
+                        if self.vv < 0.0:
+                            self.vv, self.vu = 0.0, 0.0
+                        elif self.vv > 1.0:
+                            self.vv, self.vu = 1.0, 0.0
+                    else:
+                        self.vv, self.vu = 0.0, 0.0
+                    self.vq += dt * (-self.vq / self.v_tau - self.v_vent * self.vv)
+                    if self.v_ra is not None:
+                        self.vr = self.v_ra * self.vr + (1.0 - self.v_ra) * self.vq
+                        tq[j] = self.vq - self.reg_restore * self.vr
+                    else:
+                        tq[j] = self.vq
+                tv = tq
+            elif e0 > 0.0 or self.te > 0.0:
                 ev = e0 + (self.te - e0) * frac
                 # (libm's sin, point by point: the native engine's too)
                 tv = self.trem_depth * ev * np.array(

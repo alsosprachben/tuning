@@ -7193,8 +7193,8 @@ class Live:
             # as the file's note does
             _gpc = part.patch.wind_pc
             self.note_groove[(part.pid, ch, note)] = (
-                T.groove_pressure(_gpc, note, lambda k: 1.0 if k in _snd else 0.0)
-                if _gpc is not None and getattr(_gpc, 'groove_margin', None) else 1.0)
+                T.groove_pressures(_gpc, note, lambda k: 1.0 if k in _snd else 0.0)
+                if _gpc is not None and getattr(_gpc, 'groove_margin', None) else (1.0,))
             for rank in part.patch.rank_names:
                 if rank in _snd:
                     self._draw(part, tmpl, ch, note, rank, n0)
@@ -12471,7 +12471,8 @@ class Live:
             return
         if part.patch.stop_word_ccs[0] == 43:
             self._harmonium_stamp(part, tmpl, ch, note, rank, key, hrel)
-        _gx = self.note_groove.get((part.pid, ch, note), 1.0)
+        _gv = self.note_groove.get((part.pid, ch, note), (1.0,))
+        _gx = _gv[T.rank_division(part.patch.wind_pc, rank) if len(_gv) > 1 else 0]
         if _gx != 1.0:
             self._groove_stamp(part, rank, _gx)
         if part.patch.wind_pc is not None and getattr(part.patch.wind_pc, 'pallet_gentle_s', None):
@@ -12566,14 +12567,17 @@ class Live:
             import wind as _WND
             pc = part.patch.wind_pc
             _wsc = B.wind_scale_for(pc)
-            st = dict(wind=_WND.Wind(pc, B.BLK / float(self.rate), seed=part.pid,
-                                     scale=_wsc, wander_scale=(1.0 if _wsc else 0.0)),
-                      rows={}, rank_row={}, acc={}, ratios={}, laws={})
+            # a chest a division (tonelib.divisions), the first keeping the part's seed
+            _nd = T.n_divisions(pc)
+            st = dict(winds=[_WND.Wind(pc, B.BLK / float(self.rate), seed=part.pid + 7919 * _d,
+                                       scale=_wsc, wander_scale=(1.0 if _wsc else 0.0)) for _d in range(_nd)],
+                      rows={}, rank_row={}, acc={}, ratios={}, laws={}, divs={})
             for r in part.patch.stop_ranks:
                 if r[1] is None:
                     continue
                 wc = T.rank_wind_class(pc, r)
-                ab = (float(wc.wind_pitch_exp), float(wc.wind_level_exp))
+                _dv = T.rank_division(pc, r) if _nd > 1 else 0
+                ab = (_dv, float(wc.wind_pitch_exp), float(wc.wind_level_exp))
                 if ab not in st["rows"]:
                     if self.wind_free:                  # a row an old chest gave back
                         row = self.wind_free.popleft()
@@ -12587,6 +12591,7 @@ class Live:
                 st["rank_row"][r[0]] = st["rows"][ab]
                 st["ratios"][r[0]] = (list(r[1]) if isinstance(r[1], (list, tuple)) else [r[1]])
                 st["laws"][r[0]] = _WND.draw_law(wc)        # its own pipes' draw
+                st["divs"][r[0]] = _dv
             self.wind_st[part.pid] = st
         return st["rank_row"].get(rank, 0)
 
@@ -12879,15 +12884,19 @@ class Live:
                 self._hwind_block(part, st, frames)
                 continue
             ratios = st["ratios"]
-            dem = 0.0
+            _nd = len(st["winds"])
+            demd = [0.0] * _nd                  # each rank on its own division's chest
             for k in sl.live:
                 if k[0] == part.pid and len(k) == 4 and k[3] in ratios:
                     f = 440.0 * 2.0 ** ((k[2] + part.transpose - 69) / 12.0)
                     law = st["laws"][k[3]]
-                    dem += sum(_WND.rank_draw(law, f * q) for q in ratios[k[3]])
+                    demd[st["divs"][k[3]]] += sum(_WND.rank_draw(law, f * q) for q in ratios[k[3]])
             trem = 1.0 if "tremulant" in part.drawn else 0.0
-            p = st["wind"].blocks((dem,), (trem,))[0]
-            for (a, b), row in st["rows"].items():
+            pc = part.patch.wind_pc
+            ps = [st["winds"][_d].blocks((demd[_d],), ((trem if (_nd == 1 or T.division_tremulant(pc, _d)) else 0.0),))[0]
+                  for _d in range(_nd)]
+            for (dv, a, b), row in st["rows"].items():
+                p = ps[dv]
                 r, lv = _WND.pitch_level(p[None, :], a, b)
                 sl.BR[row, 0] = r[0]
                 sl.BC[row, 0] = st["acc"][row]
@@ -23984,7 +23993,9 @@ def wind_selftest(check=None):
         t0 = time.perf_counter()
         run(lv, 1.5, rows)
         el = time.perf_counter() - t0
-        rk = [rr for i, rr in enumerate(pc.stop_ranks) if (plenum >> i) & 1 and rr[1] is not None]
+        # (the row read is the Hauptwerk's: only its chest's stops sag it, tonelib.divisions)
+        rk = [rr for i, rr in enumerate(pc.stop_ranks) if (plenum >> i) & 1 and rr[1] is not None
+              and T.rank_division(pc, rr) == 0]
 
         def units(n):
             fn = 440.0 * 2 ** ((n - 69) / 12.0)

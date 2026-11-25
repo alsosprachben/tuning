@@ -3151,7 +3151,9 @@ def _prep_chest_wind(Grows, ch_progs, grow_of, nblk, notes, rankev_of, ccs=None,
         _trem = np.zeros(nblk)
         for _t, tg in _tr:                      # the stop's draw, a step per block
             _trem[_bt >= _t] = tg
-        _dem = np.zeros(nblk + 1)
+        # A CHEST PER DIVISION (tonelib.divisions): each its own ranks' demand
+        _ndiv = T.n_divisions(pc)
+        _dem = np.zeros((_ndiv, nblk + 1))
         _ranks = [r for r in pc.stop_ranks if r[1] is not None]
         for _n in notes:
             if _n[0] != ch or property_class_for_program(_n[6]) is not pc:
@@ -3165,19 +3167,25 @@ def _prep_chest_wind(Grows, ch_progs, grow_of, nblk, notes, rankev_of, ccs=None,
                 # each rank its own pipes' draw (wind.draw_law: the simulated pipe's)
                 _law = _WND.draw_law(T.rank_wind_class(pc, r))
                 _w = sum(_WND.rank_draw(_law, _f * q) for q in _rat)
-                _dem[_b0:_b1] += _w * Grows[grow_of[(_wk, r[0])]][_b0:_b1]
-        _wd = _WND.Wind(pc, BLK / SR, seed=ch, scale=_wsc, wander_scale=(1.0 if _wsc else 0.0))
-        _p = _wd.blocks(_dem[:nblk], _trem)
+                _dem[T.rank_division(pc, r), _b0:_b1] += _w * Grows[grow_of[(_wk, r[0])]][_b0:_b1]
+        _ps = []
+        for _d in range(_ndiv):
+            # (the first chest keeps the channel's seed; the Tremulant only on its divisions)
+            _wd = _WND.Wind(pc, BLK / SR, seed=ch + 7919 * _d, scale=_wsc, wander_scale=(1.0 if _wsc else 0.0))
+            _ps.append(_wd.blocks(_dem[_d, :nblk], _trem if T.division_tremulant(pc, _d) else np.zeros(nblk)))
         _WROWS[ch] = {}
         for r in _ranks:
             _wc = T.rank_wind_class(pc, r)
             _ab = (float(_wc.wind_pitch_exp), float(_wc.wind_level_exp))
-            wrow_key[(ch, r[0])] = _ab
-            if _ab not in _WROWS[ch]:
-                _WROWS[ch][_ab] = _WND.pitch_level(_p, *_ab)
+            _d = T.rank_division(pc, r)
+            _key = _ab if _ndiv == 1 else (_d,) + _ab
+            wrow_key[(ch, r[0])] = _key
+            if _key not in _WROWS[ch]:
+                _WROWS[ch][_key] = _WND.pitch_level(_ps[_d], *_ab)
         if _VERBOSE_WIND:
-            print("  wind ch%d: pressure %.4f..%.4f, peak draw %.1f units%s"
-                  % (ch, _p.min(), _p.max(), _dem.max(), ", tremulant" if _trem_on else ""))
+            for _d, _p in enumerate(_ps):
+                print("  wind ch%d chest %d: pressure %.4f..%.4f, peak draw %.1f units%s"
+                      % (ch, _d, _p.min(), _p.max(), _dem[_d].max(), ", tremulant" if _trem_on else ""))
     return (_WROWS, wrow_key)
 
 
@@ -7179,9 +7187,10 @@ READING_STATS = [0, 0]  # files whose check song is the engine's own reading; wh
 def _note_groove(nt, rev):
     """A note's key's groove at its onset (tonelib.groove_pressure): each
     rank's draw state its last registration event at or before the onset (rev:
-    rank -> events), as the native note setup reads it. 1.0 with no groove."""
+    rank -> events), as the native note setup reads it: a tuple, one a
+    division's chest (tonelib.groove_pressures). (1.0,) with no groove."""
     if not getattr(nt.pc, 'groove_margin', None):
-        return 1.0
+        return (1.0,)
 
     def _drawn(k):
         cur = 0.0
@@ -7191,7 +7200,7 @@ def _note_groove(nt, rev):
             else:
                 break
         return cur
-    return T.groove_pressure(nt.pc, nt.note, _drawn)
+    return T.groove_pressures(nt.pc, nt.note, _drawn)
 
 
 def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st, eff, nx, mcut, slurred,
@@ -7289,7 +7298,9 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
         n.organ_box, n.organ_meta = (harmonium_note_box(em, nt, rev) if 'forte fixe B' in rev
                                      else (0.0, False))
         n.organ_perc = int(_pe is not None and T.stop_drawn_at(_pe, nt.on))
-    n.organ_groove = getattr(nt, 'groove', 1.0)         # (its key's groove at its onset)
+    _gv = getattr(nt, 'groove', (1.0,))                 # (its key's grooves at its onset, a chest each)
+    for _d in range(4):
+        n.organ_groove[_d] = _gv[_d] if _d < len(_gv) else 1.0
     n.has_nx, n.nx = int(nx is not None), (nx if nx is not None else 0.0)
     n.mcut, n.slurred, n.slur_out = int(bool(mcut)), int(bool(slurred)), int(bool(slur_out))
     lo, hi = getattr(nt.pc, 'string_detune_range', (0.0, 0.0))
@@ -7521,7 +7532,7 @@ def _note_stops(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TBN, 
     # THE KEY'S GROOVE at its onset (tonelib.groove_pressure): each rank's draw
     # state its last registration event at or before the onset, as the native
     # note setup reads it
-    nt.groove = _note_groove(nt, rankev_of.get(nt.organ_key, {})) if nt.organ else 1.0
+    nt.groove = _note_groove(nt, rankev_of.get(nt.organ_key, {})) if nt.organ else (1.0,)
     if NATIVE_TONE != 'off':
         got = _tone_native(em, props, nt, stops, onsets, seats, mls, _als, _hx, _hperc, _pjit, _sir, sjit_n, B)
         if got is not None and NATIVE_TONE == 'on':
@@ -7812,7 +7823,8 @@ def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TB
             # ...AND ITS KEY'S GROOVE (tonelib.groove_pressure): the rank answers
             # the groove's pressure as its pipe does -- flatter and softer the
             # more stops speak on the key
-            _gx = getattr(nt, 'groove', 1.0)
+            _gv = getattr(nt, 'groove', (1.0,))
+            _gx = _gv[T.rank_division(nt.pc, key) if len(_gv) > 1 else 0]
             _gxl = 1.0
             if _gx != 1.0:
                 _gwc = T.rank_wind_class(nt.pc, (key, ratio, gain) + tuple(rest))

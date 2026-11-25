@@ -70,7 +70,7 @@ CHECKS = [
     ("moog_cmx", "nvrender_check.py", ["@moog_cmx.mid"], {}),
     # a part's speaker and pickup (CC83, CC85: after the program change that
     # puts them back), a channel's Messenger mode (CC86), presets' setup measures
-    ("choices_files", "nvrender_check.py", ["@pk_reset.mid", "@pk_strat_bridge.mid", "@pk_clav_anti.mid", "@clav_compass.mid", "@feedback_held.mid", "@dulcimer_compass.mid", "@flugel_phrase.mid", "@mandolin_compass.mid", "@guitar12_compass.mid", "@hawaiian_compass.mid", "@gopichant_compass.mid", "@tonewheel_spinet.mid", "@harpsi_four.mid", "@eguitars_six.mid", "@basses_all.mid", "@rhodes_compass.mid", "@biwa_compass.mid", "@harmonium_stops.mid", "@harmonium_wind.mid", "@harmonium_boxes.mid", "@harmonium_prolong.mid", "@harmonium_onset.mid", "@harmonium_grandjeu.mid", "@taisho_course.mid", "@gu_refits_tones.mid", "@gu_refits_kits.mid",
+    ("choices_files", "nvrender_check.py", ["@pk_reset.mid", "@pk_strat_bridge.mid", "@pk_clav_anti.mid", "@clav_compass.mid", "@feedback_held.mid", "@dulcimer_compass.mid", "@flugel_phrase.mid", "@mandolin_compass.mid", "@guitar12_compass.mid", "@hawaiian_compass.mid", "@gopichant_compass.mid", "@tonewheel_spinet.mid", "@harpsi_four.mid", "@eguitars_six.mid", "@basses_all.mid", "@rhodes_compass.mid", "@biwa_compass.mid", "@harmonium_stops.mid", "@harmonium_wind.mid", "@harmonium_boxes.mid", "@harmonium_prolong.mid", "@harmonium_onset.mid", "@harmonium_grandjeu.mid", "@taisho_course.mid", "@gu_refits_tones.mid", "@gu_refits_kits.mid", "@organ_divisions.mid",
                                             "@pk_ibanez_inside.mid", "@cab_gt412.mid", "@cab_org16les.mid",
                                             "@msgr_mode.mid", "@setup_guitar_rig.mid", "@setup_organ_full.mid",
                                             "@setup_moog.mid", "4"], {}),
@@ -114,6 +114,7 @@ CHECKS = [
     ("harmonium_grandjeu_live", "nvlive_check.py", ["@harmonium_grandjeu.mid", "13", "--programs"], {}),
     ("taisho_live", "nvlive_check.py", ["@taisho_course.mid", "7", "--programs"], {}),
     ("gu_tones_live", "nvlive_check.py", ["@gu_refits_tones.mid", "6", "--programs"], {}),
+    ("organ_divisions_live", "nvlive_check.py", ["@organ_divisions.mid", "11", "--programs"], {}),
     ("gu_kits_live", "nvlive_check.py", ["@gu_refits_kits.mid", "8", "--drums", "--program=56", "--programs"], {}),
     # the gopichand: its scoop (a log-pitch tension bend) and short skin-loaded ring
     ("gopichant_live", "nvlive_check.py", ["@gopichant_compass.mid", "12", "--programs"], {}),

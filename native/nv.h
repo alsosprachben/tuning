@@ -631,6 +631,15 @@ typedef struct OrganSpec {
     // 1 and 127, s; 0 none
     double touch_gentle, touch_sharp;
     int touch_file_vel;     // (a file's touch: its velocity is its mix)
+    // the divisions (tonelib.divisions): how many chests, each rank's, and the
+    // chests the Tremulant shakes (a bit a division)
+    int n_div, rank_div[NV_MAX_RANK], trem_div_mask;
+    // the Tremulant as a valve (wind.Wind tremulant_valve): its spring's rate,
+    // damping, the pressure's push and setting, the trunk's refill, the vent
+    int tvalve;
+    double v_w, v_zeta, v_gain, v_q0, v_tau, v_vent;
+    int has_vra;            // (the regulator restoring its mean, a sub-step's coefficient)
+    double v_ra;
     double touch_cyc[NV_MAX_RANK], touch_att[NV_MAX_RANK];   // (live's: each rank's wind class's speech)
     /* A REED ORGAN'S EFFECT STOPS (the harmonium's): its Expression,
        Percussion and Tremolo stops' ranks (-1 none), the Expression's tilt,
@@ -1629,7 +1638,7 @@ typedef struct {
     int organ_meta;
     // ...and its key's groove at its onset (tonelib.groove_pressure): the
     // groove's pressure over the chest's, 0 / 1 none
-    double organ_groove;
+    double organ_groove[4];     // (one a division's chest: tonelib.groove_pressures)
     // THE BREATH'S OWN ROW (bbr_set: the player's breath noise wobbling on
     // its own, bbrow_of's second); else the note's
     int bbr_set;

@@ -8509,6 +8509,17 @@ class FlueOrganProperties(OrganProperties):
     # the arranger's level), so a rendered file plays every key at this one
     # touch, moderately firm; live, the player's own velocity is the touch
     pallet_file_vel = 100
+    # ...AND THE TREMULANT A VALVE (wind.Wind: Pykett's beating valve on the
+    # trunk, a relaxation oscillation -- quick dip, slower recovery), beating
+    # ~5.6 times a second with a 23% swing of the pressure: Ben's "medium" (of
+    # 14 / 23 / 35%, 2026-11-24), its mean restored by the regulator
+    tremulant_valve = True
+    tremulant_valve_hz = 1.5
+    tremulant_valve_zeta = 0.3
+    tremulant_valve_gain = 20.0
+    tremulant_valve_q0 = 0.15
+    tremulant_refill_s = 0.06
+    tremulant_vent = 40.0
     # ...AND EACH PIPE RELEASES AS ITSELF (tonelib.release_band_scale): when the
     # pallet shuts, each harmonic rings down at its own mode's rate (2Q/w, the
     # pipe's impedance: fluepipe_sim.mode_times), so the upper bands go first
@@ -11673,6 +11684,19 @@ FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [
     ("trompette 8",      1.0,  0.50, OrganTrompetteProperties),            # bit 24
 ]
 FlueOrganProperties.stop_word_ccs = (11, 43, 44, 45)
+# THE DIVISIONS (Ben, 2026-11-24: four, a North-German layout): each stands on
+# its own chest -- its own wind (wind.Wind: sag, regulator, wander), its own
+# grooves -- the Tremulant on the Swell and Positiv only, the Swell in its box
+FlueOrganProperties.divisions = ("Hauptwerk", "Positiv", "Swell", "Pedal")
+FlueOrganProperties.rank_divisions = {
+    "principal 8": 0, "octave 4": 0, "super octave 2": 0, "quint 2-2/3": 0, "principal 16": 0,
+    "quint 5-1/3": 0, "mixture III": 0, "trumpet 8": 0,
+    "flute 8": 1, "koppelflute 4": 1, "nazard 2-2/3": 1, "tierce 1-3/5": 1, "waldflute 2": 1, "reed 8": 1,
+    "gamba 8": 2, "celeste 8": 2, "oboe 8": 2, "vox humana 8": 2, "trompette 8": 2, "reed 4": 2,
+    "subbass 16": 3, "bourdon 16": 3, "reed 16": 3, "contrabassoon 32": 3,
+}
+FlueOrganProperties.tremulant_divisions = (1, 2)
+FlueOrganProperties.swell_divisions = (2,)
 # the panel's third row (Alt+digit): the flutes and mutations, then the pedal;
 # its fourth (Alt+shift+digit): the strings, then the solo reeds
 FlueOrganProperties.stop_rows = FlueOrganProperties.stop_rows + [
@@ -26607,6 +26631,25 @@ def mixture_ratios(props, key, ratio, f0):
     return list(got), True
 
 
+def rank_division(cls, rank):
+    """The division (chest) a rank stands on: its index in cls.divisions by
+    rank_divisions, 0 where the class has none (one chest)."""
+    name = rank[0] if isinstance(rank, (tuple, list)) else rank
+    return int((getattr(cls, 'rank_divisions', None) or {}).get(name, 0))
+
+
+def n_divisions(cls):
+    """How many chests the class stands on (1 with no divisions)."""
+    return len(getattr(cls, 'divisions', None) or ()) or 1
+
+
+def division_tremulant(cls, d):
+    """Whether the Tremulant shakes division d's chest (every chest where
+    the class names no tremulant_divisions)."""
+    td = getattr(cls, 'tremulant_divisions', None)
+    return td is None or d in td
+
+
 def pallet_time(cls, vel):
     """THE PALLET'S OPENING on a tracker action (s): the key pulls the pallet
     open, quick for a sharp touch and slow for a gentle one -- log between
@@ -26633,7 +26676,13 @@ def touch_speech_scale(host, sc, f, vel):
     return (p + c) / (a + c)
 
 
-def groove_pressure(cls, note, drawn_of):
+def groove_pressures(cls, note, drawn_of):
+    """groove_pressure for each division's chest: a tuple, one a division (a
+    key's groove lies under one chest, robbed by that chest's stops only)."""
+    return tuple(groove_pressure(cls, note, drawn_of, d) for d in range(n_divisions(cls)))
+
+
+def groove_pressure(cls, note, drawn_of, division=0):
     """THE KEY'S GROOVE (a slider chest: every stop drawn on a key speaks from
     one channel under it, filled through the key's pallet): the groove's
     pressure as a share of the chest's when the key is down. The pallet
@@ -26650,12 +26699,15 @@ def groove_pressure(cls, note, drawn_of):
         return 1.0
     import wind as _W
     f = 440.0 * 2.0 ** ((note - 69) / 12.0)
+    nd = n_divisions(cls)
     qd, qf = [], []
     for r in cls.stop_ranks:
         if r[1] is None:
             continue
         if len(r) > 6 and r[6] is not None and not (r[6][0] <= note <= r[6][1]):
             continue
+        if nd > 1 and rank_division(cls, r) != division:
+            continue                            # (another chest's groove)
         law = _W.draw_law(rank_wind_class(cls, r))
         w = sum(_W.rank_draw(law, f * q) for q in (r[1] if isinstance(r[1], (list, tuple)) else [r[1]]))
         qf.append(w)

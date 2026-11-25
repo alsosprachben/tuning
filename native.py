@@ -343,7 +343,7 @@ class NoteIn(ctypes.Structure):
                    ('seat', C), ('held', C), ('rnd_draws', C * 4), ('stroke_tilt', C), ('stroke_mouth', C),
                    ('stroke_morph', C), ('snd_at', C), ('snd_rt', C), ('rank_gr', C * NV_MAX_RANK), ('rank_sp', C * NV_MAX_RANK),
                    ('rank_skip', I * NV_MAX_RANK), ('rank_rel1', I * NV_MAX_RANK), ('organ_cr', C), ('rank_br', C * NV_MAX_RANK),
-                   ('carry_radius', C), ('organ_hx', C), ('organ_perc', I), ('organ_box', C), ('organ_meta', I), ('organ_groove', C),
+                   ('carry_radius', C), ('organ_hx', C), ('organ_perc', I), ('organ_box', C), ('organ_meta', I), ('organ_groove', C * 4),
                    ('bbr_set', I), ('bbr', C),
                    ('rank_drawn_off', I * NV_MAX_RANK), ('snd_moog', I), ('snd_d', C * 8),
                    ('sung_hz', C), ('part', I), ('dist', C), ('gliss_lv', C),
@@ -3213,7 +3213,9 @@ class OrganSpec(ctypes.Structure):
                                     'sag_max', 'sag_per_unit', 'c1', 'c2', 'g', 'trem_hz', 'trem_depth', 'tdecay',
                                     'unit_hz', 'draw_exp', 'blk_s')]
                 + [('fam_a', C * NV_MAX_RANK), ('fam_b', C * NV_MAX_RANK),
-                   ('draw_u', C * NV_MAX_RANK), ('draw_e', C * NV_MAX_RANK), ('groove_margin', C), ('touch_gentle', C), ('touch_sharp', C), ('touch_file_vel', I),
+                   ('draw_u', C * NV_MAX_RANK), ('draw_e', C * NV_MAX_RANK), ('groove_margin', C), ('touch_gentle', C), ('touch_sharp', C), ('touch_file_vel', I), ('n_div', I), ('rank_div', I * NV_MAX_RANK), ('trem_div_mask', I),
+                   ('tvalve', I), ('v_w', C), ('v_zeta', C), ('v_gain', C), ('v_q0', C), ('v_tau', C), ('v_vent', C),
+                   ('has_vra', I), ('v_ra', C),
                    ('touch_cyc', C * NV_MAX_RANK), ('touch_att', C * NV_MAX_RANK), ('expr_rank', I), ('perc_rank', I), ('htrem_rank', I),
                    ('perc_attack_s', C), ('afm', C), ('pipe_radius', I), ('wheel_trem', C),
                    ('wtrem_hz', C), ('htrem_depth', C), ('htrem_hz', C), ('wtrem_stereo', I),
@@ -3607,6 +3609,9 @@ def organ(cls):
         o.reg_restore, o.sag_max, o.sag_per_unit = wd.reg_restore, wd.sag_max, wd.sag_per_unit
         o.c1, o.c2, o.g = wd.c1, wd.c2, wd.g
         o.trem_hz, o.trem_depth, o.tdecay = wd.trem_hz, wd.trem_depth, wd.tdecay
+        o.tvalve = int(wd.tvalve)
+        o.v_w, o.v_zeta, o.v_gain, o.v_q0, o.v_tau, o.v_vent = wd.v_w, wd.v_zeta, wd.v_gain, wd.v_q0, wd.v_tau, wd.v_vent
+        o.has_vra, o.v_ra = int(wd.v_ra is not None), wd.v_ra or 0.0
         o.unit_hz, o.draw_exp, o.blk_s = WND.UNIT_HZ, WND.DRAW_EXP, wd.blk_s
         if wd.SUB != 8:
             return None
@@ -3623,6 +3628,10 @@ def organ(cls):
         o.touch_gentle = float(getattr(cls, 'pallet_gentle_s', None) or 0.0)
         o.touch_sharp = float(getattr(cls, 'pallet_sharp_s', None) or 0.0)
         o.touch_file_vel = int(getattr(cls, 'pallet_file_vel', 100) or 100)
+        o.n_div = T.n_divisions(cls)
+        o.trem_div_mask = sum(1 << d for d in range(o.n_div) if T.division_tremulant(cls, d))
+        for i, r in enumerate(ranks):
+            o.rank_div[i] = T.rank_division(cls, r)
     _ORGAN[cls] = o
     return o
 

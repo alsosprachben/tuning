@@ -863,6 +863,53 @@ def _timed(ev):
     return mid
 
 
+def organ_divisions():
+    """GM 19's four divisions (tonelib.divisions), each on its own chest: a
+    held Positiv flute under a Hauptwerk plenum entering and lifting; the
+    Tremulant (Swell and Positiv: the valve) drawn under the strings and
+    flutes beside a steady principal, then released; the full organ in chords
+    (every groove robbed); the swell pedal (CC7) closing and opening."""
+    def word(bits):
+        w = 0
+        for b in bits:
+            w |= 1 << b
+        return [(11, w & 127), (43, (w >> 7) & 127), (44, (w >> 14) & 127), (45, (w >> 21) & 127)]
+    ev = [(0.0, mido.Message('program_change', channel=0, program=19))]
+    for c, v in word((6, 0, 1, 2, 7)):
+        ev.append((0.0, mido.Message('control_change', channel=0, control=c, value=v)))
+    ev += [(0.2, mido.Message('note_on', channel=0, note=75, velocity=96)),
+           (2.6, mido.Message('note_off', channel=0, note=75, velocity=0))]
+    for k in (36, 48, 55, 60, 64):
+        ev += [(0.8, mido.Message('note_on', channel=0, note=k, velocity=96)),
+               (2.0, mido.Message('note_off', channel=0, note=k, velocity=0))]
+    for c, v in word((0, 6, 14, 20, 21, 13)):
+        ev.append((2.8, mido.Message('control_change', channel=0, control=c, value=v)))
+    for k in (55, 60, 64, 67):
+        ev += [(3.0, mido.Message('note_on', channel=0, note=k, velocity=80)),
+               (5.2, mido.Message('note_off', channel=0, note=k, velocity=0))]
+    for c, v in word((0, 6, 14, 20, 21)):
+        ev.append((4.4, mido.Message('control_change', channel=0, control=c, value=v)))
+    for c, v in word([b for b in range(25) if b != 13]):
+        ev.append((5.4, mido.Message('control_change', channel=0, control=c, value=v)))
+    for i, ch in enumerate(((36, 48, 55, 60, 64, 67), (41, 53, 60, 65, 69, 72))):
+        for k in ch:
+            ev += [(5.6 + 1.3 * i, mido.Message('note_on', channel=0, note=k, velocity=110)),
+                   (6.7 + 1.3 * i, mido.Message('note_off', channel=0, note=k, velocity=0))]
+    for t, v in ((8.3, 127), (8.8, 60), (9.3, 20), (9.8, 90), (10.3, 127)):
+        ev.append((t, mido.Message('control_change', channel=0, control=7, value=v)))
+    for k in (55, 62, 67):
+        ev += [(8.2, mido.Message('note_on', channel=0, note=k, velocity=96)),
+               (10.6, mido.Message('note_off', channel=0, note=k, velocity=0))]
+    mid, tr = one_track()
+    now = 0
+    for at, msg in sorted(ev, key=lambda e: e[0]):
+        tk = int(round(at * 960))
+        msg.time = tk - now
+        now = tk
+        tr.append(msg)
+    return mid
+
+
 def gu_refits_tones():
     """Two of the six voices once fitted to GeneralUser GS's samples,
     refitted 2026-11-24 (licences.md L12), on one channel: GS 124.1 Telephone
@@ -1203,7 +1250,7 @@ def biwa_compass():
     return mid
 
 
-MAKERS = {"gu_refits_tones": gu_refits_tones, "gu_refits_kits": gu_refits_kits, "taisho_course": taisho_course, "harmonium_grandjeu": harmonium_grandjeu, "harmonium_onset": harmonium_onset, "harmonium_prolong": harmonium_prolong, "harmonium_boxes": harmonium_boxes, "harmonium_wind": harmonium_wind, "harmonium_stops": harmonium_stops, "biwa_compass": biwa_compass, "rhodes_compass": rhodes_compass, "basses_all": basses_all, "eguitars_six": eguitars_six, "stab_chords": stab_chords, "harpsi_four": harpsi_four, "tonewheel_spinet": tonewheel_spinet, "gopichant_compass": gopichant_compass, "hawaiian_compass": hawaiian_compass, "guitar12_compass": guitar12_compass, "flugel_phrase": flugel_phrase, "mandolin_compass": mandolin_compass, "dulcimer_compass": dulcimer_compass, "feedback_held": feedback_held, "clav_compass": clav_compass,
+MAKERS = {"organ_divisions": organ_divisions, "gu_refits_tones": gu_refits_tones, "gu_refits_kits": gu_refits_kits, "taisho_course": taisho_course, "harmonium_grandjeu": harmonium_grandjeu, "harmonium_onset": harmonium_onset, "harmonium_prolong": harmonium_prolong, "harmonium_boxes": harmonium_boxes, "harmonium_wind": harmonium_wind, "harmonium_stops": harmonium_stops, "biwa_compass": biwa_compass, "rhodes_compass": rhodes_compass, "basses_all": basses_all, "eguitars_six": eguitars_six, "stab_chords": stab_chords, "harpsi_four": harpsi_four, "tonewheel_spinet": tonewheel_spinet, "gopichant_compass": gopichant_compass, "hawaiian_compass": hawaiian_compass, "guitar12_compass": guitar12_compass, "flugel_phrase": flugel_phrase, "mandolin_compass": mandolin_compass, "dulcimer_compass": dulcimer_compass, "feedback_held": feedback_held, "clav_compass": clav_compass,
           "couplers_upper": lambda: couplers(16, ((1.5, 0), (2.5, 1 | 4), (3.5, 2), (4.5, 2 | 4 | 8), (6.0, 1 | 2 | 8))),
           "couplers_lower": lambda: couplers(41, ((1.5, 4), (3.0, 1 | 4), (4.5, 0), (6.0, 4))), "spectra_rotor": lambda: spectra(10), "spectra_chorus": lambda: spectra(11),
           "spectra_sustain": lambda: spectra_sustain(10), "spectra_sustain_chorus": lambda: spectra_sustain(11), "dense_pedal": dense_pedal, "assign_mode": assign_mode, "mpe_organ": lambda: mpe_zone(19), "cmx_live": cmx_live, "userdrums": userdrums, "drumdelay": drumdelay, "moog_cmx": moog_cmx, "two_organs": two_organs, "rhythmpart": rhythmpart, "gsrx_2port": gsrx_2port, "drumnrpn": drumnrpn, "drumnrpn2": drumnrpn2, "gsvsense": gsvsense,

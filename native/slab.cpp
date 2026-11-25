@@ -4461,6 +4461,14 @@ struct Part {
         double w1 = 0, w2 = 0, s1 = 0, s2 = 0, d1 = 0, r1 = 0, te = 0, tph = 0;
         bool was_on = false;
         std::vector<std::pair<std::pair<double, double>, int>> rows;
+        std::vector<int> row_div;             // (each row's division: a chest a division, tonelib.divisions)
+        struct WChest {
+            void *g = nullptr;
+            double w1 = 0, w2 = 0, s1 = 0, s2 = 0, d1 = 0, r1 = 0, te = 0, tph = 0;
+            double vv = 0, vu = 0, vq = 0, vr = 0;    // (the Tremulant's valve)
+            bool was_on = false;
+        };
+        std::vector<WChest> cs;               // (the pipe organ's chests, a division each)
         std::map<int, double> acc;
         int rank_row[NV_MAX_RANK] = {0};      // (each rank's: as many as an organ has, nv.h)
         NvHWind hw;                           // (a harmonium's chest: wind.HarmoniumWind)
@@ -7468,6 +7476,9 @@ struct Part {
                     wind_spent.push_back(x.second);
                 if (ws->second.g)
                     nv_npy_free(ws->second.g);
+                for (auto &c : ws->second.cs)
+                    if (c.g)
+                        nv_npy_free(c.g);
                 wind_st.erase(ws);
                 wind_order.erase(std::remove(wind_order.begin(), wind_order.end(), ppid), wind_order.end());
             }
@@ -8639,6 +8650,7 @@ struct Part {
                         row = wind_next++;
                     }
                     st.rows.push_back(std::make_pair(key, row));
+                    st.row_div.push_back(0);
                     st.acc[row] = 0.0;
                 }
                 st.rank_row[r] = row;
@@ -8649,15 +8661,20 @@ struct Part {
             WindSt &st = wind_st[pid];
             wind_order.push_back(pid);
             st.og = og;
-            st.g = nv_npy_new(0x5EED + (unsigned long long)pid);
+            // a chest a division (tonelib.divisions), the first keeping the part's seed
+            const int nd = og->n_div > 1 ? og->n_div : 1;
+            st.cs.resize(nd);
+            for (int dv = 0; dv < nd; dv++)
+                st.cs[dv].g = nv_npy_new(0x5EED + (unsigned long long)(pid + 7919LL * dv));
             for (int r = 0; r < og->n_rank; r++) {
                 if (!og->rank[r].n_ratio)
                     continue;
                 std::pair<double, double> ab(og->fam_a[r], og->fam_b[r]);
+                const int dv = nd > 1 ? og->rank_div[r] : 0;
                 int row = 0;
-                for (auto &x : st.rows)
-                    if (x.first == ab)
-                        row = x.second;
+                for (size_t q = 0; q < st.rows.size(); q++)
+                    if (st.rows[q].first == ab && st.row_div[q] == dv)
+                        row = st.rows[q].second;
                 if (!row) {
                     if (!wind_free.empty()) {           // a row an old chest gave back
                         row = wind_free.front();
@@ -8668,6 +8685,7 @@ struct Part {
                         row = wind_next++;
                     }
                     st.rows.push_back(std::make_pair(ab, row));
+                    st.row_div.push_back(dv);
                     st.acc[row] = 0.0;
                 }
                 st.rank_row[r] = row;
@@ -8770,7 +8788,7 @@ struct Part {
         {
             // ...and the key's groove (_groove_stamp): the rank's pipes answer it
             auto gi = note_groove.find(std::make_pair(ch, note));
-            double gx = gi != note_groove.end() ? gi->second : 1.0;
+            double gx = gi != note_groove.end() ? gi->second[og->n_div > 1 ? og->rank_div[ri] : 0] : 1.0;
             if (gx != 1.0 && !S.last_slots.empty()) {
                 const std::vector<long> sl = S.last_slots;
                 double pa = pow(gx, og->fam_a[ri]);
@@ -8842,17 +8860,20 @@ struct Part {
     // THE KEY'S GROOVE at its onset (tonelib.groove_pressure, line for line):
     // the stops sounding, each its draw on this key, against the key's draw
     // with every stop out; 1 / (1 + r^2). 1 where the organ has none
-    std::map<std::pair<int, int>, double> note_groove;
-    double groove_now(const OrganSpec *og, int note, const std::vector<char> &dr)
+    std::map<std::pair<int, int>, std::array<double, 4>> note_groove;
+    double groove_now(const OrganSpec *og, int note, const std::vector<char> &dr, int dv)
     {
         if (!og || !(og->groove_margin > 0.0))
             return 1.0;
+        const int nd = og->n_div > 1 ? og->n_div : 1;
         double f = 440.0 * pow(2.0, (note - 69) / 12.0);
         std::vector<double> qd, qf;
         for (int ri = 0; ri < og->n_rank; ri++) {
             const OrganRank &rk = og->rank[ri];
             if (!rk.n_ratio || !(note >= rk.lo && note <= rk.hi))
                 continue;
+            if (nd > 1 && og->rank_div[ri] != dv)
+                continue;                       // (another chest's groove)
             double d[8];
             for (int q = 0; q < rk.n_ratio; q++)
                 d[q] = og->draw_u[ri] * pow(std::max(f * rk.ratio[q], 8.0) / og->unit_hz, og->draw_e[ri]);
@@ -8869,7 +8890,14 @@ struct Part {
         note_touch[std::make_pair(ch, note)] = tf;
         const std::vector<char> dr = coupled(patches[cur].organ, patches[cur].drawn, patches[cur].cpl);   // (what sounds)
         // (a stop drawn while the key is held takes this one, as the file's note does)
-        note_groove[std::make_pair(ch, note)] = patches[cur].organ->wind ? groove_now(patches[cur].organ, note, dr) : 1.0;
+        {
+            std::array<double, 4> gv{1.0, 1.0, 1.0, 1.0};
+            const OrganSpec *ogg = patches[cur].organ;
+            if (ogg->wind)
+                for (int dv = 0; dv < (ogg->n_div > 1 ? ogg->n_div : 1) && dv < 4; dv++)
+                    gv[dv] = groove_now(ogg, note, dr, dv);
+            note_groove[std::make_pair(ch, note)] = gv;
+        }
         for (int ri = 0; ri < (int)dr.size(); ri++)
             if (dr[ri])
                 draw_rank(T, ch, note, ri, n0);
@@ -9183,7 +9211,9 @@ struct Part {
                 hwind_block(patches[pi], st, frames);
                 continue;
             }
-            double dem = 0.0;
+            // the demand, each rank on its own division's chest
+            const int nd = (int)st.cs.size();
+            double demd[8] = {0.0};
             for (auto &kv : S.live) {
                 if (std::get<0>(kv.first) != patches[pi].pid)
                     continue;
@@ -9198,52 +9228,90 @@ struct Part {
                 double d[8];
                 for (int q = 0; q < rk.n_ratio; q++)
                     d[q] = og->draw_u[ri] * pow(std::max(f * rk.ratio[q], 8.0) / og->unit_hz, og->draw_e[ri]);
-                dem += pysum(d, rk.n_ratio);
+                demd[nd > 1 ? og->rank_div[ri] : 0] += pysum(d, rk.n_ratio);
             }
-            bool on = og->trem_rank >= 0 && patches[pi].drawn[og->trem_rank];
+            bool on_all = og->trem_rank >= 0 && patches[pi].drawn[og->trem_rank];
+            for (int dv = 0; dv < nd; dv++) {
+            WindSt::WChest &c = st.cs[dv];
+            double dem = demd[dv];
+            bool on = on_all && (nd == 1 || ((og->trem_div_mask >> dv) & 1));
             // the pressure, SUB 8 points across this block
-            double w0 = st.w2;
+            double w0 = c.w2;
             if (og->wander_rms > 0.0) {
-                double z = nv_npy_next(st.g);
-                st.w1 = og->wa * st.w1 + (1.0 - og->wa) * z;
-                st.w2 = og->wa * st.w2 + (1.0 - og->wa) * st.w1;
+                double z = nv_npy_next(c.g);
+                c.w1 = og->wa * c.w1 + (1.0 - og->wa) * z;
+                c.w2 = og->wa * c.w2 + (1.0 - og->wa) * c.w1;
             }
             auto dev = [&]() {
-                double d = st.s1 - (og->has_ra ? og->reg_restore * st.r1 : 0.0);
+                double d = c.s1 - (og->has_ra ? og->reg_restore * c.r1 : 0.0);
                 return og->sag_max > 0.0 ? og->sag_max * tanh(d / og->sag_max) : d;
             };
             double s0 = dev();
             if (og->sag_per_unit > 0.0) {
-                double sn = og->c1 * st.s1 + og->c2 * st.s2 + og->g * st.d1;
-                st.s2 = st.s1;
-                st.s1 = sn;
-                st.d1 = dem * og->sag_per_unit;
+                double sn = og->c1 * c.s1 + og->c2 * c.s2 + og->g * c.d1;
+                c.s2 = c.s1;
+                c.s1 = sn;
+                c.d1 = dem * og->sag_per_unit;
                 if (og->has_ra)
-                    st.r1 = og->ra * st.r1 + (1.0 - og->ra) * st.s1;
+                    c.r1 = og->ra * c.r1 + (1.0 - og->ra) * c.s1;
             }
             double sv1 = dev();
-            if (on && !st.was_on && st.te < 1e-4)
-                st.tph = 0.0;
-            st.was_on = on;
-            double tgt = on ? 1.0 : 0.0, e0 = st.te;
-            st.te = tgt + (st.te - tgt) * og->tdecay;
-            if (!on && st.te < 1e-6)
-                st.te = 0.0;
-            bool tr = e0 > 0.0 || st.te > 0.0;
+            if (on && !c.was_on && c.te < 1e-4)
+                c.tph = 0.0;
+            c.was_on = on;
+            double tgt = on ? 1.0 : 0.0, e0 = c.te;
+            c.te = tgt + (c.te - tgt) * og->tdecay;
+            if (!on && c.te < 1e-6)
+                c.te = 0.0;
+            bool tr = e0 > 0.0 || c.te > 0.0;
             double p[9];
+            double tq[9];
+            if (og->tvalve) {                   // the Tremulant's valve, SUB steps (wind.Wind)
+                double dt = og->blk_s / 8;
+                tq[0] = c.vq - (og->has_vra ? og->reg_restore * c.vr : 0.0);
+                for (int j = 1; j <= 8; j++) {
+                    if (on) {
+                        double w = og->v_w;
+                        c.vu += dt * (w * w * (og->v_gain * (c.vq + og->v_q0) - c.vv) - 2.0 * og->v_zeta * w * c.vu);
+                        c.vv += dt * c.vu;
+                        if (c.vv < 0.0) {
+                            c.vv = 0.0;
+                            c.vu = 0.0;
+                        } else if (c.vv > 1.0) {
+                            c.vv = 1.0;
+                            c.vu = 0.0;
+                        }
+                    } else {
+                        c.vv = 0.0;
+                        c.vu = 0.0;
+                    }
+                    c.vq += dt * (-c.vq / og->v_tau - og->v_vent * c.vv);
+                    if (og->has_vra) {
+                        c.vr = og->v_ra * c.vr + (1.0 - og->v_ra) * c.vq;
+                        tq[j] = c.vq - og->reg_restore * c.vr;
+                    } else {
+                        tq[j] = c.vq;
+                    }
+                }
+            }
             for (int j = 0; j <= 8; j++) {
                 double fr = j / 8.0;
-                double wv = (w0 + (st.w2 - w0) * fr) * (og->wgain * og->wander_rms);
+                double wv = (w0 + (c.w2 - w0) * fr) * (og->wgain * og->wander_rms);
                 double sv = s0 + (sv1 - s0) * fr;
                 double tv = 0.0;
-                if (tr) {
-                    double ev = e0 + (st.te - e0) * fr;
-                    tv = og->trem_depth * ev * sin(2.0 * M_PI * (st.tph + og->trem_hz * og->blk_s * fr));
+                if (og->tvalve) {
+                    tv = tq[j];
+                } else if (tr) {
+                    double ev = e0 + (c.te - e0) * fr;
+                    tv = og->trem_depth * ev * sin(2.0 * M_PI * (c.tph + og->trem_hz * og->blk_s * fr));
                 }
                 p[j] = 1.0 + wv - sv + tv;
             }
-            st.tph = fmod(st.tph + og->trem_hz * og->blk_s, 1.0);
-            for (auto &x : st.rows) {
+            c.tph = fmod(c.tph + og->trem_hz * og->blk_s, 1.0);
+            for (size_t q = 0; q < st.rows.size(); q++) {
+                if (st.row_div[q] != dv)
+                    continue;
+                auto &x = st.rows[q];
                 double a = x.first.first, b = x.first.second;
                 int row = x.second;
                 double sum = pow(p[0], a);
@@ -9254,6 +9322,7 @@ struct Part {
                 BLt[2 * row] = (float)pow(p[0], b);
                 BLt[2 * row + 1] = (float)pow(p[8], b);
                 st.acc[row] += ((double)BRt[row] - 1.0) * frames;
+            }
             }
         }
     }

@@ -336,9 +336,10 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
             /* ...and its key's groove (groove_pressure): the rank answers the
                groove's pressure as its pipe does (0 / 1: none) */
             double gxl = 1.0;
-            if (n->organ_groove > 0.0 && n->organ_groove != 1.0) {
-                eff *= pow(n->organ_groove, og->fam_a[ri]);
-                gxl = pow(n->organ_groove, og->fam_b[ri]);
+            const double gx = n->organ_groove[og->n_div > 1 ? og->rank_div[ri] : 0];
+            if (gx > 0.0 && gx != 1.0) {
+                eff *= pow(gx, og->fam_a[ri]);
+                gxl = pow(gx, og->fam_b[ri]);
             }
             PyRandom pr;                                /* each partial its own phase (partial_phase_spread) */
             if (og->phase_spread > 0.0)
