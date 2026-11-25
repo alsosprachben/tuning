@@ -11224,45 +11224,73 @@ class OrganContrabassoonProperties(OrganBassonProperties):
 
 
 class OrganGambaProperties(FlueOrganProperties):
-    """gamba 8: Pitea's swell Gamba 8, the narrow string flue."""
+    """gamba 8: the narrow string flue -- Audsley's Viola da Gamba (CC 3.51 in
+    on 1:2.519, mouth 1/4, cut-up 1/4, a harmonic bridge holding it to its
+    ground tone), simulated (examples/organ_bake.py)."""
+    # SIMULATED (examples/organ_bake.py; fluepipe_sim.STOPS['gamba'], Audsley's
+    # construction): the radiated harmonics at the rank's own pitches
     mode_gains_points = (
-        (82.4, (1.00000, 1.24157, 0.27426, 0.50928, 0.40299, 0.11080, 0.04275, 0.08888, 0.10934, 0.04093, 0.01230, 0.02838, 0.01693, 0.00727, 0.00559, 0.00289, 0.00214, 0.00259, 0.00147, 0.00129, 0.00056, 0.00053, 0.00074, 0.00056, 0.00074, 0.00061, 0.00025, 0.00042, 0.00080, 0.00039, 0.00036, 0.00049)),
-        (233.1, (1.00000, 0.89728, 0.58301, 0.17502, 0.02695, 0.03191, 0.01414, 0.01684, 0.00526, 0.00386, 0.00271, 0.00174, 0.00064, 0.00184, 0.00079, 0.00033, 0.00032, 0.00031, 0.00019, 0.00022, 0.00021, 0.00019, 0.00023, 0.00033, 0.00025, 0.00023, 0.00023, 0.00028, 0.00016, 0.00028, 0.00032, 0.00021)),
-        (1046.5, (1.00000, 0.44093, 0.08783, 0.04779, 0.02202, 0.01576, 0.00833, 0.00538, 0.00527, 0.00329, 0.00145, 0.00069, 0.00016, 0.00019, 0.00013, 0.00003, 0.00006, 0.00004, 0.00007, 0.00004, 0.00012, 0.00016, 0.00009, 0.00005, 0.00005, 0.00005, 0.00005, 0.00005, 0.00005, 0.00005, 0.00005, 0.00005)),
+        (82.4, (1.00000, 1.54361, 1.56407, 1.32051, 1.04880, 0.84044, 0.68596, 0.55398, 0.43399,
+                  0.33115, 0.25062, 0.19191, 0.15042, 0.12053, 0.09799, 0.08037, 0.06611, 0.05442,
+                  0.04471, 0.03656, 0.02969, 0.02390, 0.01908, 0.01517, 0.01210, 0.00982, 0.00821,
+                  0.00709, 0.00626, 0.00552, 0.00467, 0.00360)),
+        (233.1, (1.00000, 1.16080, 0.86449, 0.59804, 0.43323, 0.30338, 0.19733, 0.12502, 0.08271,
+                  0.05871, 0.04348, 0.03264, 0.02453, 0.01812, 0.01303, 0.00901, 0.00595, 0.00392,
+                  0.00277, 0.00230, 0.00205, 0.00174, 0.00134, 0.00087, 0.00043, 0.00019, 0.00034,
+                  0.00045, 0.00049, 0.00043, 0.00032, 0.00019)),
+        (1046.5, (1.00000, 1.25810, 1.13035, 0.49032, 0.18484, 0.12078, 0.11499, 0.10501, 0.08303,
+                  0.06506, 0.05777, 0.05513, 0.04862, 0.03603, 0.02397, 0.01624, 0.01187, 0.00923,
+                  0.00735, 0.00595, 0.00488, 0.00401, 0.00320, 0.00244, 0.00183, 0.00131, 0.00092,
+                  0.00060, 0.00039, 0.00029, 0.00028, 0.00026)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
     max_harmonic = 32
     bore_corner_hz = 0.0
-    # LEVEL: still Piteå's own balance (pitea_newranks.py) -- replaced when
-    # this rank is simulated (the pipe organ off Piteå, licences.md)
-    initial_gain = 0.0122469
-    # ITS SPEECH, fitted on its Pitea stop's attack (pitea_stops.py --fit=speech)
-    speech_cycles = 23.76
-    speech_harmonic_exp = 0.766
-    attack_time = 0.008
+    # LEVEL BY THE PHYSICS: the simulated pipe's radiated level against the
+    # simulated principal 8's on the same wind (organ_bake.sim_level)
+    initial_gain = 0.02489686321     # (organ_bake: the simulated pipe's level against the principal's)
+    # ITS SPEECH, SIMULATED (examples/organ_bake.py: the principal's scaled by
+    # its modes' time constants (fluepipe_sim.mode_times), 29/33/36/40/43/45 cycles): periods of
+    # its own pitch, how far its upper harmonics lead (rise ~ m^-exp), the
+    # pallet's floor
+    speech_cycles = 37.90
+    speech_harmonic_exp = 1.065
+    attack_time = 0.004
     rank_speech = True
 
 
 class OrganCelesteProperties(OrganGambaProperties):
-    """celeste 8: Pitea's swell Voix céleste 8 -- the gamba's twin tuned sharp,
-    +17.9 cents at C4 measured against the swell's own Gamba, from C3 up as a
-    celeste is built; drawn WITH the gamba, it beats."""
+    """celeste 8: the Voix céleste, the gamba's twin tuned sharp (Audsley: "a
+    few beats sharp"; CELESTE_CENTS, 2 beats a second at middle C by Ben's
+    ear), from C3 up as a celeste is built; drawn WITH the gamba, it
+    beats. Its pipes simulated as the gamba's."""
+    # SIMULATED (examples/organ_bake.py; fluepipe_sim.STOPS['gamba'], Audsley's
+    # construction): the radiated harmonics at the rank's own pitches
     mode_gains_points = (
-        (235.5, (1.00000, 0.57452, 0.28241, 0.11720, 0.07562, 0.05610, 0.01843, 0.02636, 0.01761, 0.01125, 0.01173, 0.00397, 0.00227, 0.00095, 0.00041, 0.00108, 0.00011, 0.00025, 0.00006, 0.00013, 0.00007, 0.00011, 0.00011, 0.00011, 0.00006, 0.00006, 0.00006, 0.00007, 0.00009, 0.00008, 0.00010, 0.00006)),
-        (1057.4, (1.00000, 0.46547, 0.19279, 0.08214, 0.03165, 0.02278, 0.01684, 0.00520, 0.00895, 0.00328, 0.00174, 0.00084, 0.00058, 0.00102, 0.00024, 0.00001, 0.00006, 0.00006, 0.00009, 0.00003, 0.00005, 0.00004, 0.00006, 0.00006, 0.00003, 0.00003, 0.00003, 0.00003, 0.00003, 0.00003, 0.00003, 0.00003)),
+        (235.5, (1.00000, 1.15760, 0.86041, 0.59436, 0.42979, 0.30008, 0.19460, 0.12312, 0.08149,
+                  0.05788, 0.04288, 0.03218, 0.02416, 0.01782, 0.01278, 0.00881, 0.00580, 0.00382,
+                  0.00272, 0.00227, 0.00203, 0.00171, 0.00130, 0.00083, 0.00040, 0.00019, 0.00036,
+                  0.00046, 0.00048, 0.00042, 0.00031, 0.00018)),
+        (1057.4, (1.00000, 1.26582, 1.14491, 0.48695, 0.18154, 0.11967, 0.11601, 0.10684, 0.08418,
+                  0.06545, 0.05818, 0.05595, 0.04937, 0.03624, 0.02398, 0.01630, 0.01201, 0.00945,
+                  0.00755, 0.00611, 0.00498, 0.00408, 0.00325, 0.00249, 0.00187, 0.00135, 0.00096,
+                  0.00064, 0.00041, 0.00031, 0.00029, 0.00026)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
     max_harmonic = 32
     bore_corner_hz = 0.0
-    # LEVEL: still Piteå's own balance (pitea_newranks.py) -- replaced when
-    # this rank is simulated (the pipe organ off Piteå, licences.md)
-    initial_gain = 0.00979799
-    # ITS SPEECH, fitted on its Pitea stop's attack (pitea_stops.py --fit=speech)
-    speech_cycles = 23.76
-    speech_harmonic_exp = 0.766
-    attack_time = 0.008
+    # LEVEL BY THE PHYSICS: the simulated pipe's radiated level against the
+    # simulated principal 8's on the same wind (organ_bake.sim_level)
+    initial_gain = 0.02793051793     # (organ_bake: the simulated pipe's level against the principal's)
+    # ITS SPEECH, SIMULATED (examples/organ_bake.py: the principal's scaled by
+    # its modes' time constants (fluepipe_sim.mode_times), 29/33/36/40/43/45 cycles): periods of
+    # its own pitch, how far its upper harmonics lead (rise ~ m^-exp), the
+    # pallet's floor
+    speech_cycles = 37.89
+    speech_harmonic_exp = 1.066
+    attack_time = 0.004
     rank_speech = True
 
 
@@ -11405,7 +11433,9 @@ FlueOrganProperties.stop_ranks = [
     for r in FlueOrganProperties.stop_ranks]
 
 
-CELESTE_CENTS = 17.9
+# THE CELESTE'S DETUNE, by Ben's ear (2026-11-24, of 2, 3 and 5): 2 beats a
+# second against the gamba at middle C -- Audsley's "a few beats sharp"
+CELESTE_CENTS = 1200.0 * _log(1.0 + 2.0 / 261.63) / _log(2.0)      # 13.2
 FlueOrganProperties.stop_ranks = FlueOrganProperties.stop_ranks + [
     ("koppelflute 4",    2.0,  0.45, OrganKoppelfluteProperties),          # bit 14
     ("waldflute 2",      4.0,  0.40, OrganWaldfluteProperties),            # bit 15
