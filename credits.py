@@ -109,7 +109,7 @@ SOURCES = [{'id': 'iowa-mis',
   'licence': 'GPL 2',
   'licence_url': 'https://www.gnu.org/licenses/old-licenses/gpl-2.0.html',
   'how': 'levels and references',
-  'voices': 'release times, levels (the Orchestra Hit no longer: since 2026-11-23 fitted without it)',
+  'voices': 'release times, levels',
   'issue': 'L12',
   'evidence': 'Debian copyright '
               '(https://metadata.ftp-master.debian.org/changelogs//main/t/timgm6mb-soundfont/unstable_copyright, '
