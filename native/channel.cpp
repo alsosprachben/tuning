@@ -2644,6 +2644,17 @@ static int harmonium_wind(nv::Song *Sg, const nv::Song::Organ &o, long nblk, int
 void nv_song_harmonium_pre(void *s, long nblk, int blk, double sr, double tau)
 {
     nv::Song *Sg = (nv::Song *)s;
+    // ...AND THE SWELL'S BOX BEFORE THE NOTES (Python keeps the pedal's travel
+    // from registration_blocks, before any note: _note_sbox reads it at each
+    // onset): the swell row as nv_song_organ_rows makes it, kept for the box
+    for (auto &o : Sg->organs) {
+        if (o.spec->sbox_div < 0)
+            continue;
+        o.box.assign((size_t)nblk, 1.0f);
+        nv::Song::onepole(o.swell_ev, nblk, blk, sr, tau, o.box.data());
+        o.box_sr = sr;
+        o.box_blk = blk;
+    }
     std::set<long long> seen;
     std::vector<float> G;
     for (const auto &o : Sg->organs) {

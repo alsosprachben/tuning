@@ -2732,7 +2732,7 @@ static int run(int argc, char **argv)
         nv_play_set_sink(&scan_d);
         nv_play_set_reg_sink(&scan_r);
     }
-    // (a harmonium's wind before its notes: they read it at their onsets)
+    // (a harmonium's wind and the Swell's box before their notes: they read them at their onsets)
     nv_song_harmonium_pre(song, (long)(((long long)(total * SR) + (long long)SR) / (long long)BLK + 2), (int)BLK, SR,
                           E.k[K_TAU]);
     long long P = nv_prepare(song, K.data(), &t, rows_ ? br.data() : nullptr, rows_ ? 1024 : 0, &rs, &rows,

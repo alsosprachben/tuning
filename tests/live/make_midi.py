@@ -868,7 +868,8 @@ def organ_divisions():
     held Positiv flute under a Hauptwerk plenum entering and lifting; the
     Tremulant (Swell and Positiv: the valve) drawn under the strings and
     flutes beside a steady principal, then released; the full organ in chords
-    (every groove robbed); the swell pedal (CC7) closing and opening."""
+    (every groove robbed); the swell pedal (CC7) closing and opening, a key
+    struck while it is half shut."""
     def word(bits):
         w = 0
         for b in bits:
@@ -900,6 +901,9 @@ def organ_divisions():
     for k in (55, 62, 67):
         ev += [(8.2, mido.Message('note_on', channel=0, note=k, velocity=96)),
                (10.6, mido.Message('note_off', channel=0, note=k, velocity=0))]
+    # ...and a key struck under the half-shut box: its colour at the onset
+    ev += [(9.5, mido.Message('note_on', channel=0, note=74, velocity=96)),
+           (10.6, mido.Message('note_off', channel=0, note=74, velocity=0))]
     mid, tr = one_track()
     now = 0
     for at, msg in sorted(ev, key=lambda e: e[0]):
