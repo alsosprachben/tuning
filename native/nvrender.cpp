@@ -92,6 +92,11 @@ static void stop_point()
         throw Exit{-2};
 }
 
+// ITS PLACE IN THE SONG (nv_render_progress): the frames written and the length,
+// as each streamed window goes out, read from another thread (the Files card's)
+static std::atomic<long long> g_prog_done{0}, g_prog_len{0};
+static std::atomic<double> g_prog_sr{0.0};
+
 // ITS OUTPUT: written as before, its last line kept for the window (nv_render_last)
 static thread_local std::string t_last;
 static void keep_last(const char *b)
@@ -5666,7 +5671,11 @@ static int run(int argc, char **argv)
             }
             return std::make_pair(b.outL.data() + (s0 - b.outO), b.outR.data() + (s0 - b.outO));
         };
+        g_prog_sr.store(SR);
+        g_prog_len.store((long long)N);
         auto out_emit = [&](BusSet &b, long long s0, long long n_) {
+            if (&b == &bset[0])
+                g_prog_done.store(s0 + n_);
             std::vector<int32_t> buf(2 * n_);
             for (long long i = 0; i < n_; i++)
                 for (int c = 0; c < 2; c++) {
@@ -6437,6 +6446,8 @@ extern "C" int nv_render_main(int argc, char **argv)
     std::fill(g_po, g_po + NCOLS, 0);
     g_stream = g_stream_why_only = g_gpu = false;
     g_stop_req.store(false);
+    g_prog_done.store(0);
+    g_prog_len.store(0);
     t_last.clear();
     try {
         return run(argc, argv);
@@ -6447,5 +6458,13 @@ extern "C" int nv_render_main(int argc, char **argv)
 
 // a stop asked of the render running (another thread's): it returns -2 at its next window
 extern "C" void nv_render_stop(void) { nvrender::g_stop_req.store(true); }
+// where the render running is in the song, in seconds (its length 0: not known yet,
+// or not a streamed render)
+extern "C" void nv_render_progress(double *at_s, double *len_s)
+{
+    const double sr = nvrender::g_prog_sr.load();
+    *at_s = sr > 0.0 ? (double)nvrender::g_prog_done.load() / sr : 0.0;
+    *len_s = sr > 0.0 ? (double)nvrender::g_prog_len.load() / sr : 0.0;
+}
 // the last line it wrote (this thread's render: valid until its next)
 extern "C" const char *nv_render_last(void) { return nvrender::t_last.c_str(); }

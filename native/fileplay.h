@@ -42,6 +42,7 @@ const char *nv_midi_finding(void *p, int i);
 int nv_midi_muxed(void *p);
 int nv_roomtail_main(int argc, char **argv);    // (the room's tail, in this process: nvroomtail.cpp)
 int nv_render_main(int argc, char **argv);      // (the file renderer, in this process: nvrender.cpp)
+extern "C" void nv_render_progress(double *at_s, double *len_s);
 void nv_render_stop(void);
 const char *nv_render_last(void);
 void nv_env_set(const char *const *names, const char *const *values, int n);
@@ -610,6 +611,11 @@ struct Render {
         o.o["ask_why"] = sess::str(ask_why);
         const double e = (busy ? std::chrono::duration<double>(std::chrono::steady_clock::now().time_since_epoch()).count() : t1) - t0;
         o.o["secs"] = sess::integer(t0 > 0 ? (long long)e : 0);
+        double at = 0.0, len = 0.0;         // (the file renderer's place in the song, while it runs)
+        if (busy && inproc_on)
+            nv_render_progress(&at, &len);
+        o.o["at"] = sess::integer((long long)at);
+        o.o["len"] = sess::integer(len > 0.0 ? (long long)ceil(len) : 0);
         return o;
     }
     void say(const std::string &st)

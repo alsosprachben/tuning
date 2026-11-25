@@ -387,7 +387,12 @@ inline void draw_files(App &a)
         std::string st;
         if (rd) {
             const std::string msg = str(rd, "msg"), last = str(rd, "last");
-            st = rendering ? str(rd, "name") + ": " + str(rd, "stage") + "\xe2\x80\xa6 " + mmss(num(rd, "secs")) + (last.empty() ? "" : " \xc2\xb7 " + last)
+            // (the file renderer's place in the song: its percent, its time and the end)
+            const double at_ = num(rd, "at"), len_ = num(rd, "len");
+            const std::string where = len_ > 0 ? " \xc2\xb7 " + std::to_string((int)(100.0 * at_ / len_)) + "% \xc2\xb7 " +
+                                                 mmss(at_) + " / " + mmss(len_) : "";
+            st = rendering ? str(rd, "name") + ": " + str(rd, "stage") + "\xe2\x80\xa6 " + mmss(num(rd, "secs")) + where +
+                                 (last.empty() ? "" : " \xc2\xb7 " + last)
                  : !msg.empty() ? str(rd, "name") + ": " + msg + (msg == "rendered" ? " in " + mmss(num(rd, "secs")) : "") + "."
                  : !fx_ok ? FL_NO_EXPORT : "";
         }

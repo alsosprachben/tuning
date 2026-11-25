@@ -1925,7 +1925,7 @@ function drawFiles() {
   $('flHeard').disabled = !ok || rendering;
   $('flBest').disabled = !ok || rendering || !(f && f.file_export);
   $('flRStop').disabled = !rendering;
-  $('flRStage').textContent = !r ? '' : rendering ? `${r.name}: ${r.stage}… ${mmss(r.secs)}${r.last ? ' · ' + r.last : ''}` :
+  $('flRStage').textContent = !r ? '' : rendering ? `${r.name}: ${r.stage}… ${mmss(r.secs)}${r.len > 0 ? ` · ${Math.floor(100 * r.at / r.len)}% · ${mmss(r.at)} / ${mmss(r.len)}` : ''}${r.last ? ' · ' + r.last : ''}` :
     r.msg ? `${r.name}: ${r.msg}${r.msg === 'rendered' ? ' in ' + mmss(r.secs) : ''}.` : (f && !f.file_export ? 'Best quality needs nvlive started with --file-export.' : '');
   $('flAsk').innerHTML = r && !rendering && r.ask ? `<p class="pn-note">${r.ask === 'refused' ? 'Best quality cannot render it' : 'It cannot be streamed yet'}: ${esc(r.ask_why)}.` +
     (r.ask === 'whole' ? ' The whole render holds the entire song in memory, which a long song may not fit in.' : '') + '</p><div class="tn-row">' +
