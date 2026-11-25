@@ -11353,24 +11353,44 @@ class OrganOboeProperties(OrganCromorneProperties):
 
 
 class OrganVoxHumanaProperties(OrganCromorneProperties):
-    """vox humana 8: the Voix humaine 8 of the extended set's second organ (the
-    Grönlund has none), the short-resonator reed made for the tremulant."""
+    """vox humana 8: the short-resonator reed made for the tremulant -- a
+    cylinder "approximately one-fourth the length of open labial pipes"
+    (Audsley), cut to the note's second harmonic, its tongue held to the note
+    by its own flow drive (St Hilaire's, the harmonium's) and tuned by its
+    wire to sound it -- simulated (examples/reedpipe_sim.py). Its LEVEL is
+    by ear: the simulation's own (14 dB over the principal) is not credible
+    for a self-driven tongue."""
+    # SIMULATED (examples/organ_bake.py; reedpipe_sim.STOPS['voxhumana'], Audsley's
+    # construction): the radiated harmonics at the rank's own pitches
     mode_gains_points = (
-        (82.4, (1.00000, 5.31128, 8.72974, 2.11375, 5.28185, 1.80042, 2.34231, 3.75676, 3.00466, 11.55581, 3.85067, 8.83570, 5.09166, 5.05702, 13.52639, 2.95180, 10.59970, 1.29986, 3.07758, 3.72597, 2.78949, 1.76347, 1.77024, 3.22923, 1.90479, 1.88870, 2.78263, 1.76421, 1.81652, 1.09377, 0.52438, 0.62857)),
-        (233.1, (1.00000, 0.18214, 2.51424, 0.36896, 3.74441, 1.71998, 1.75494, 1.51425, 0.46799, 0.51808, 0.38355, 0.12927, 0.17516, 0.10505, 0.08402, 0.03143, 0.09197, 0.04380, 0.03204, 0.02065, 0.04128, 0.02943, 0.02125, 0.01581, 0.00808, 0.02581, 0.02149, 0.03961, 0.02253, 0.00922, 0.00314, 0.00277)),
-        (932.3, (1.00000, 0.98667, 2.73114, 2.48532, 2.02150, 0.38860, 0.20787, 0.36287, 0.16320, 0.08260, 0.03582, 0.04779, 0.04670, 0.02180, 0.02857, 0.13686, 0.00203, 0.00520, 0.00597, 0.00817, 0.08859, 0.04907, 0.22634, 0.04652, 0.00578, 0.00578, 0.00578, 0.00578, 0.00578, 0.00578, 0.00578, 0.00578)),
+        (82.4, (1.00000, 1.99742, 2.45263, 2.92246, 3.07393, 3.64847, 3.87133, 3.34237, 2.46653,
+                  1.95401, 1.76591, 1.20602, 0.28472, 0.45302, 1.21245, 1.46113, 1.17415, 1.62890,
+                  1.95722, 1.29558, 1.04374, 0.71596, 0.22374, 0.90771, 0.10404, 0.68007, 1.21089,
+                  1.01908, 0.76011, 0.93985, 0.87534, 0.42798)),
+        (233.1, (1.00000, 1.93170, 2.08217, 2.78464, 3.97744, 3.03153, 2.36758, 1.76754, 2.52318,
+                  1.77108, 1.16380, 1.06187, 1.64421, 1.25605, 1.20092, 0.74130, 1.61168, 0.95810,
+                  0.62955, 0.66013, 0.25529, 0.57835, 0.66796, 0.52602, 0.53907, 0.52990, 0.34714,
+                  0.13576, 0.34620, 0.22259, 0.24968, 0.36962)),
+        (932.3, (1.00000, 1.15826, 0.66924, 0.19986, 0.40035, 0.22794, 0.05295, 0.13143, 0.03618,
+                  0.11506, 0.10371, 0.03502, 0.05929, 0.05355, 0.02341, 0.02539, 0.02097, 0.01964,
+                  0.02173, 0.02024, 0.01156, 0.01034, 0.03086, 0.01263, 0.01054, 0.01589, 0.00997,
+                  0.00000, 0.00000, 0.00000, 0.00000, 0.00000)),
     )
     mode_gains = mode_gains_points[-1][1]      # (series_volume's switch; the treble's)
     mode_gains_low = None
     max_harmonic = 32
     bore_corner_hz = 0.0
-    # LEVEL: still Piteå's own balance (pitea_newranks.py) -- replaced when
-    # this rank is simulated (the pipe organ off Piteå, licences.md)
-    initial_gain = 0.00647702
-    # ITS SPEECH, fitted on its Pitea stop's attack (pitea_stops.py --fit=speech)
-    speech_cycles = 2.0
-    speech_harmonic_exp = 0.0
-    attack_time = 0.08
+    # LEVEL BY EAR: Ben's -20 dB re the principal 8 (2026-11-24; his Wurlitzer
+    # 4500's vox tab sits ~27 under its diapason). Brighter and more nasal than
+    # the old one (Ben); its resonator's tune_to and the tongue's roll are the knobs
+    initial_gain = 0.003164350341     # (20 dB under the principal 8: Ben's ear, of -10/-15/-20)
+    # ITS SPEECH, SIMULATED (examples/organ_bake.py: the tongue's attack in
+    # reedpipe_sim, 4/10/25/88 cycles): periods of
+    # its own pitch, how far its upper harmonics lead (rise ~ m^-exp), the
+    # pallet's floor
+    speech_cycles = 17.82
+    speech_harmonic_exp = 0.050
+    attack_time = 0.004
     rank_speech = True
 
 
