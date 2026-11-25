@@ -1072,13 +1072,19 @@ static int run(int argc, char **argv)
     const int mapk_base = (int)E.cmap.size();
     nv_song_mapk_base(mapk_base);
     E.cmap.insert(E.cmap.end(), E.mk_map.begin(), E.mk_map.end());
-    // each class's organ, its table here (the export's pointer was the exporter's)
-    for (size_t i = 0; i < E.classes.size(); i++)
-        ((NoteClass *)E.classes[i].data())->organ = E.cls_organ[i] >= 0 ? &E.organs[E.cls_organ[i]] : nullptr;
-    for (size_t i = 0; i < E.classes.size(); i++) {     // a struck layer's class (sl_idx)
+    // each class's organ, its table here (the export's pointer was the exporter's), and
+    // a struck layer's class (sl_idx) -- WRITTEN ONLY WHERE THEY CHANGE: the classes are
+    // a private map of the export, and a page written is the process's own from then on
+    // (a write to every class made ~7,000 pages, 184 MB of footprint, before a note)
+    for (size_t i = 0; i < E.classes.size(); i++) {
         NoteClass *nc = (NoteClass *)E.classes[i].data();
-        nc->sl = nc->sl_on && nc->sl_idx >= 0 && nc->sl_idx < (int)E.classes.size()
-                 ? (const NoteClass *)E.classes[nc->sl_idx].data() : nullptr;
+        const OrganSpec *og = E.cls_organ[i] >= 0 ? &E.organs[E.cls_organ[i]] : nullptr;
+        if (nc->organ != og)
+            nc->organ = og;
+        const NoteClass *sl = nc->sl_on && nc->sl_idx >= 0 && nc->sl_idx < (int)E.classes.size()
+                              ? (const NoteClass *)E.classes[nc->sl_idx].data() : nullptr;
+        if (nc->sl != sl)
+            nc->sl = sl;
     }
     // THE TUNER, if named: its table in place of the export's
     std::string tname, ra, rc, east = nv_env("TUNING_EASTERN") ? nv_env("TUNING_EASTERN") : "";
@@ -5433,6 +5439,12 @@ static int run(int argc, char **argv)
         const char *swin = nv_env("TUNING_STREAM_BATCH");
         const long W = (swin && atol(swin) > 0 ? atol(swin) : 8) * CH;
         long w0 = 0;
+        // (the scan's records the setup read -- every row's onset by channel, the
+        // amplifiers' rows -- let go before the render: a dense song's are 300 MB)
+        std::map<long long, std::vector<double>>().swap(scan.nons);
+        std::map<long long, double>().swap(scan.noffs);
+        std::map<long long, std::vector<double>>().swap(scan.arows);
+        std::vector<double>().swap(scan.buf);
         Pass ps;
         {
             int nc = nv_song_cabs(song, nullptr, nullptr, 0);

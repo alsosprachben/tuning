@@ -796,6 +796,9 @@ struct Channel {
                 std::vector<int> sis = groups[gb];
                 groups.erase(gb);
                 strikes_at(gb, sis);
+                for (int si : sis)          // (a strike read is done with: its rows let go -- a song keeps 60,000)
+                    Strike().drv.swap(strikes[si].drv), std::vector<int>().swap(strikes[si].plucked),
+                        std::vector<long>().swap(strikes[si].choir);
             }
         }
         decide_bridges(Tn);
