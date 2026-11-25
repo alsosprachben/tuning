@@ -2382,5 +2382,737 @@
 "licence": "published data",
 "how": "measured",
 "voices": "the Sankey tuning: the paper's consonance-found Scarlatti tuning, its published cents"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "The Art of Organ-Building (2 vols.)",
+"author": "George Ashdown Audsley (Dodd, Mead, 1905)",
+"licence": "cited",
+"voices": "every pipe organ stop's construction: scales, mouths and cut-ups, wind, reed tongues and resonators, where ranks break back"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "The Organ of the Twentieth Century",
+"author": "George Ashdown Audsley (1919)",
+"licence": "cited",
+"voices": "the Mixture III's composition and its breaks"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "Organ-Stops and Their Artistic Registration",
+"author": "George Ashdown Audsley (1921)",
+"licence": "cited",
+"voices": "the quint's scale"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "Organ Registration in Theory and Practice",
+"author": "E. Harold Geer (1957)",
+"licence": "cited",
+"voices": "the stops' names and the organ's registrations"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "Sound production by organ flue pipes",
+"author": "N. H. Fletcher (J. Acoust. Soc. Am. 60, 1976)",
+"licence": "cited",
+"voices": "the flue pipe's jet drive"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "Papers on the jet drive of flue instruments",
+"author": "M.-P. Verge, B. Fabre, A. Hirschberg et al. (J. Acoust. Soc. Am. 95 and 101, 1994-1997)",
+"licence": "cited",
+"voices": "the flue pipe's jet drive and its dipole at the mouth"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "Regime change and oscillation thresholds in recorder-like instruments",
+"author": "R. Auvray, B. Fabre, P.-Y. Lagrée (J. Acoust. Soc. Am. 131, 2012)",
+"licence": "cited",
+"voices": "the flue pipe's jet in time"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "The plane jet",
+"author": "W. G. Bickley (Phil. Mag. 23, 1937)",
+"licence": "cited",
+"voices": "the jet's profile at the lip"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "Acoustical wave propagation in cylindrical ducts",
+"author": "D. H. Keefe (J. Acoust. Soc. Am. 75, 1984)",
+"licence": "cited",
+"voices": "the pipes' wall losses"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "On the radiation of sound from an unflanged circular pipe",
+"author": "H. Levine, J. Schwinger (Phys. Rev. 73, 1948)",
+"licence": "cited",
+"voices": "the sound leaving a pipe's open end"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "Acoustic radiation from a circular pipe with an infinite flange",
+"author": "A. N. Norris, I. C. Sheng (J. Sound Vib. 135, 1989)",
+"licence": "cited",
+"voices": "a pipe's end correction"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "The Physics of Musical Instruments",
+"author": "N. H. Fletcher, T. D. Rossing (Springer, 1998)",
+"licence": "cited",
+"voices": "the reed pipe: the tongue, its slot, its resonator"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "Autonomous vibration of simple pressure-controlled valves in gas flows",
+"author": "N. H. Fletcher (J. Acoust. Soc. Am. 93, 1993)",
+"licence": "cited",
+"voices": "the beating reed as an inward-striking valve"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "Output of a sound source in a reverberation chamber and other reflecting environments",
+"author": "R. V. Waterhouse (J. Acoust. Soc. Am. 30, 1958)",
+"licence": "cited",
+"voices": "the organ case's lift of the bass"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "ISO 226:2003, Acoustics: normal equal-loudness-level contours",
+"author": "ISO (2003)",
+"licence": "cited",
+"voices": "the voicer's regulation: each rank even to the ear"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "Psychoacoustics: Facts and Models",
+"author": "E. Zwicker, H. Fastl (Springer)",
+"licence": "cited",
+"voices": "loudness summed in sones, for the regulation"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "Tremulant Simulation in Digital Organs, and other articles",
+"author": "Colin Pykett (web)",
+"url": "http://www.colinpykett.org.uk/digitaltrems.htm",
+"licence": "cited",
+"voices": "a pipe's pitch against its wind, the tremulant as a beating valve"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "(their measurement of the wind at a pipe's foot)",
+"author": "Abel, Ahnert, Bergweiler",
+"licence": "cited",
+"voices": "how far the organ's wind may wander"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "(the organ's wind trunks)",
+"author": "Carlsson (2002)",
+"licence": "cited",
+"voices": "the shared wind's sag and ringing"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "(a wind-system patent)",
+"author": "Rodgers",
+"licence": "cited",
+"voices": "the shared wind's ringing"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "L'Orgue-Expressif ou Harmonium",
+"author": "Mustel (Paris, 1903)",
+"licence": "cited",
+"voices": "the whole harmonium: its reeds and stops, wind and Expression, boxes, Prolongement, Percussion, Celeste"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "(on the harmonium)",
+"author": "Martin de Provins",
+"licence": "cited",
+"voices": "the harmonium's Percussion hammer"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "Harmonium",
+"author": "Encyclopaedia Britannica, 11th edition (1911)",
+"licence": "cited",
+"voices": "the harmonium's halves and its tremolo"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "A proposal for a minimal model of free reeds",
+"author": "L. Millot, C. Baumann (Acta Acustica u. Acustica 93, 2007)",
+"licence": "cited",
+"voices": "the free reed of the harmonium and the vox humana"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "Aerodynamic excitation of the harmonium reed",
+"author": "A. O. St Hilaire, T. A. Wilson, G. S. Beavers (J. Fluid Mech. 49, 1971)",
+"licence": "cited",
+"voices": "the drive that holds a reed on its note: the harmonium, the vox humana"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "(the harmonium reed at finite amplitude)",
+"author": "A. O. St Hilaire (J. Fluid Mech. 67, 1975)",
+"licence": "cited",
+"voices": "the limit of the reed's drive"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "Oscillating reed valves: an experimental study",
+"author": "A. Z. Tarnopolsky, N. H. Fletcher, J. C. S. Lai (J. Acoust. Soc. Am. 108, 2000)",
+"licence": "cited",
+"voices": "the reed's vortex losses"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "(the blown-closed free reed of the accordion)",
+"author": "D. Ricot, R. Caussé, N. Misdariis (J. Acoust. Soc. Am. 117, 2005)",
+"licence": "cited",
+"voices": "the reed's jet"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "(measured free reeds)",
+"author": "Nussbaumer, Agarwal (ICA 2016)",
+"licence": "cited",
+"voices": "the reed tongue's damping"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "Clamped bar model for free reeds",
+"author": "Puranik, Scavone (Forum Acusticum 2023)",
+"licence": "cited",
+"voices": "the harmonium reed's damping, its chamber, its bending"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "Acoustics of free-reed instruments",
+"author": "J. P. Cottingham (Physics Today 64(3), 2011)",
+"licence": "cited",
+"voices": "the reed's checks: pitch against wind"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "(reed organ measurements)",
+"author": "J. P. Cottingham et al. (ASA meetings, 1995-1997); Cottingham, Wolff; Braasch, Cottingham (2023)",
+"licence": "cited",
+"voices": "the reed's checks: pitch, onset, the first cycles"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "A computational model of the Hammond organ vibrato/chorus using wave digital filters",
+"author": "K. J. Werner, W. R. Dunkel, F. G. Germain (DAFx-16)",
+"licence": "cited",
+"voices": "the tonewheel organ's scanner vibrato"
+},
+{
+"group": "References: Organs and harmoniums",
+"title": "US patent 3,070,660",
+"author": "Wurlitzer",
+"licence": "cited",
+"voices": "the Spectra-Tone's rotor"
+},
+{
+"group": "References: Pianos and keyboards",
+"title": "Design and tone in the mechanoacoustic piano, Parts I and III",
+"author": "H. A. Conklin (J. Acoust. Soc. Am. 99 and 100, 1996)",
+"licence": "cited",
+"voices": "the hammers' masses, the phantom partials"
+},
+{
+"group": "References: Pianos and keyboards",
+"title": "Numerical simulations of piano strings I",
+"author": "A. Chaigne, A. Askenfelt (J. Acoust. Soc. Am. 95, 1994)",
+"licence": "cited",
+"voices": "the felt's force, the strings' losses"
+},
+{
+"group": "References: Pianos and keyboards",
+"title": "Hysteretic model of the grand piano hammer felt",
+"author": "A. Stulov (J. Acoust. Soc. Am. 97, 1995)",
+"licence": "cited",
+"voices": "the felt's memory"
+},
+{
+"group": "References: Pianos and keyboards",
+"title": "Coupled piano strings",
+"author": "G. Weinreich (J. Acoust. Soc. Am. 62, 1977)",
+"licence": "cited",
+"voices": "the piano's two-stage decay"
+},
+{
+"group": "References: Pianos and keyboards",
+"title": "Generation of longitudinal vibrations in piano strings",
+"author": "B. Bank, L. Sujbert (J. Acoust. Soc. Am. 117, 2005)",
+"licence": "cited",
+"voices": "the phantom partials' strength"
+},
+{
+"group": "References: Pianos and keyboards",
+"title": "Analysis of the part-pedaling effect in the piano",
+"author": "H.-M. Lehtonen, A. Askenfelt, V. Välimäki (J. Acoust. Soc. Am. 126, 2009)",
+"licence": "cited",
+"voices": "the half pedal"
+},
+{
+"group": "References: Pianos and keyboards",
+"title": "Analysis and modeling of piano sustain-pedal effects",
+"author": "H.-M. Lehtonen, H. Penttinen, J. Rauhala, V. Välimäki (J. Acoust. Soc. Am. 122, 2007)",
+"licence": "cited",
+"voices": "the sustain pedal's halo"
+},
+{
+"group": "References: Pianos and keyboards",
+"title": "Simulation of piano sustain-pedal effect by parallel second-order filters",
+"author": "S. Zambon, H.-M. Lehtonen, B. Bank (DAFx-08)",
+"licence": "cited",
+"voices": "the free strings ringing in sympathy"
+},
+{
+"group": "References: Pianos and keyboards",
+"title": "US patent 7,521,626",
+"author": "Yamaha",
+"licence": "cited",
+"voices": "the dampers' order: the bass lifts later"
+},
+{
+"group": "References: Pianos and keyboards",
+"title": "(piano inharmonicity and stretch)",
+"author": "web page",
+"url": "http://daffy.uah.edu/piano/page4/page8/index.html",
+"licence": "cited",
+"voices": "the piano's stretch"
+},
+{
+"group": "References: Pianos and keyboards",
+"title": "Non-linear behaviour in sound production of the Rhodes piano",
+"author": "M. Muenster, F. Pfeifle (ISMA 2014)",
+"licence": "cited",
+"voices": "the Rhodes tine and its pickup"
+},
+{
+"group": "References: Pianos and keyboards",
+"title": "Tone production of the Wurlitzer and Rhodes e-pianos",
+"author": "F. Pfeifle, M. Muenster (DAGA 2017)",
+"licence": "cited",
+"voices": "the electric pianos' pickups"
+},
+{
+"group": "References: Pianos and keyboards",
+"title": "(a physical model of the Wurlitzer and Rhodes)",
+"author": "F. Pfeifle, M. Muenster (DAFx-17)",
+"licence": "cited",
+"voices": "the Rhodes pickup's field, the Wurlitzer reed in its plate"
+},
+{
+"group": "References: Pianos and keyboards",
+"title": "(master's thesis on the Rhodes)",
+"author": "G. Shear (UCSB, 2011)",
+"licence": "cited",
+"voices": "the Rhodes tine's decay"
+},
+{
+"group": "References: Pianos and keyboards",
+"title": "US patent 4,040,321",
+"author": "CBS (Rhodes)",
+"licence": "cited",
+"voices": "the Rhodes tine's swing"
+},
+{
+"group": "References: Pianos and keyboards",
+"title": "Rhodes service manual; Hammond service manuals",
+"author": "the makers",
+"licence": "cited",
+"voices": "the Rhodes tines and voicing gap; the tonewheel organ's percussion"
+},
+{
+"group": "References: Pianos and keyboards",
+"title": "The mechanics of vibrating strings",
+"author": "C. Valette (in Mechanics of Musical Instruments, Springer, 1995)",
+"licence": "cited",
+"voices": "the hammered dulcimer's air damping"
+},
+{
+"group": "References: Pianos and keyboards",
+"title": "How to Emulate the Super Saw",
+"author": "A. Szabo (2010)",
+"licence": "cited",
+"voices": "the super saw's detune"
+},
+{
+"group": "References: Strings, guitars and percussion",
+"title": "Papers on strings against an obstacle",
+"author": "C. Issanchou, S. Bilbao, J.-L. Le Carrou, C. Touzé, O. Doaré (J. Sound Vib. 2017; J. Acoust. Soc. Am. 143, 2018)",
+"licence": "cited",
+"voices": "the electric basses' and lap steel's string losses, slap and pop on the frets"
+},
+{
+"group": "References: Strings, guitars and percussion",
+"title": "Predicting the decay time of solid body electric guitar tones",
+"author": "A. Paté, J.-L. Le Carrou, B. Fabre (J. Acoust. Soc. Am. 135, 2014)",
+"licence": "cited",
+"voices": "the solid body's loss"
+},
+{
+"group": "References: Strings, guitars and percussion",
+"title": "Physik der Elektrogitarre",
+"author": "M. Zollner",
+"licence": "cited",
+"voices": "the pickups' coils and loads, the strings' losses at the bridge and neck"
+},
+{
+"group": "References: Strings, guitars and percussion",
+"title": "The Secrets of Electric Guitar Pickups",
+"author": "H. Lemme",
+"licence": "cited",
+"voices": "the pickups' coils and loads"
+},
+{
+"group": "References: Strings, guitars and percussion",
+"title": "(the electric guitar's neck)",
+"author": "Fleischer, Zwicker",
+"licence": "cited",
+"voices": "the neck's give under a fret"
+},
+{
+"group": "References: Strings, guitars and percussion",
+"title": "Dynamics of simple string subject to unilateral constraint",
+"author": "T. Taguti (Acoust. Sci. & Tech. 29, 2008)",
+"licence": "cited",
+"voices": "the biwa's sawari and its body"
+},
+{
+"group": "References: Strings, guitars and percussion",
+"title": "Acoustical analysis on the sawari tone of Chikuzen biwa",
+"author": "T. Taguti, K. Tohnai (Acoust. Sci. & Tech. 22, 2001)",
+"licence": "cited",
+"voices": "the biwa's silk strings"
+},
+{
+"group": "References: Strings, guitars and percussion",
+"title": "(the sitar's sympathetic strings)",
+"author": "Chiruthapudi (ISMIR 2022)",
+"licence": "cited",
+"voices": "the sitar's sympathetic strings through a meend"
+},
+{
+"group": "References: Strings, guitars and percussion",
+"title": "The sound of two hands clapping",
+"author": "B. H. Repp (J. Acoust. Soc. Am. 81, 1987)",
+"licence": "cited",
+"voices": "the claps' cupped hands"
+},
+{
+"group": "References: Strings, guitars and percussion",
+"title": "(the Highland bagpipe drone)",
+"author": "Paquier, Koehl, Moign (Acta Acustica 102, 2016)",
+"licence": "cited",
+"voices": "the bagpipe's drones"
+},
+{
+"group": "References: Voices",
+"title": "Control methods used in a study of the vowels",
+"author": "G. E. Peterson, H. L. Barney (J. Acoust. Soc. Am. 24, 1952)",
+"licence": "cited",
+"voices": "the vowels' formants"
+},
+{
+"group": "References: Voices",
+"title": "Vowel amplitude and phonemic stress in American English",
+"author": "I. Lehiste, G. E. Peterson (J. Acoust. Soc. Am. 31, 1959)",
+"licence": "cited",
+"voices": "the vowels' own loudness"
+},
+{
+"group": "References: Voices",
+"title": "Speech synthesis",
+"author": "J. L. Kelly, C. Lochbaum (4th ICA, 1962)",
+"licence": "cited",
+"voices": "the vocal tract as a tube"
+},
+{
+"group": "References: Voices",
+"title": "A parametric model of the vocal tract area function",
+"author": "B. H. Story (J. Acoust. Soc. Am. 117, 2005)",
+"licence": "cited",
+"voices": "the vocal tract's shapes"
+},
+{
+"group": "References: Voices",
+"title": "Choir acoustics",
+"author": "S. Ternström (TMH-QPSR 43, 2002)",
+"licence": "cited",
+"voices": "the choir's spread of pitch"
+},
+{
+"group": "References: Voices",
+"title": "Intonation analysis of a multi-channel choir recording",
+"author": "H. Jers, S. Ternström (TMH-QPSR 47, 2005)",
+"licence": "cited",
+"voices": "the choir's spread of pitch"
+},
+{
+"group": "References: Drum machines and effects",
+"title": "The TR-808 cymbal: a physically-informed, circuit-bendable, digital model",
+"author": "K. J. Werner, J. S. Abel, J. O. Smith (ICMC 2014)",
+"licence": "cited",
+"voices": "the 808's cymbal and metal voices"
+},
+{
+"group": "References: Drum machines and effects",
+"title": "(the TR-808 bass drum circuit)",
+"author": "K. J. Werner, J. S. Abel, J. O. Smith (DAFx-14)",
+"licence": "cited",
+"voices": "the 808's resonators"
+},
+{
+"group": "References: Drum machines and effects",
+"title": "(doctoral thesis on circuit modelling)",
+"author": "K. J. Werner (Stanford, 2016)",
+"licence": "cited",
+"voices": "the 808's circuits"
+},
+{
+"group": "References: Drum machines and effects",
+"title": "TR-808 and TR-606 service notes",
+"author": "the maker (1981, 1982)",
+"licence": "cited",
+"voices": "the 808's and 606's circuits, read from the schematics"
+},
+{
+"group": "References: Drum machines and effects",
+"title": "Wurlitzer 4500 service schematics",
+"author": "the maker",
+"licence": "cited",
+"voices": "the divider organ's tab networks, amplifiers and Spectra-Tone"
+},
+{
+"group": "References: Drum machines and effects",
+"title": "MC34017 telephone tone ringer datasheet",
+"author": "the maker",
+"licence": "cited",
+"voices": "the telephone's ringer"
+},
+{
+"group": "References: Drum machines and effects",
+"title": "Acoustical characterization of gunshots",
+"author": "R. C. Maher (2007)",
+"licence": "cited",
+"voices": "the gunshot"
+},
+{
+"group": "References: Drum machines and effects",
+"title": "On the Sensations of Tone",
+"author": "H. von Helmholtz (1863)",
+"licence": "cited",
+"voices": "the double siren; temperaments with two chains of fifths"
+},
+{
+"group": "References: Drum machines and effects",
+"title": "ITU-R M.1677-1, International Morse code",
+"author": "ITU",
+"licence": "cited",
+"voices": "the Morse keyboard"
+},
+{
+"group": "References: Rooms, space and level",
+"title": "Collected Papers on Acoustics",
+"author": "W. C. Sabine (1922)",
+"licence": "cited",
+"voices": "the room and its distance"
+},
+{
+"group": "References: Rooms, space and level",
+"title": "Reverberation time in 'dead' rooms",
+"author": "C. F. Eyring (J. Acoust. Soc. Am. 1, 1930)",
+"licence": "cited",
+"voices": "each room's decay"
+},
+{
+"group": "References: Rooms, space and level",
+"title": "Room Acoustics",
+"author": "H. Kuttruff",
+"licence": "cited",
+"voices": "the room's reflections thickening"
+},
+{
+"group": "References: Rooms, space and level",
+"title": "New method of measuring reverberation time",
+"author": "M. R. Schroeder (J. Acoust. Soc. Am. 37, 1965)",
+"licence": "cited",
+"voices": "decay times read from recordings"
+},
+{
+"group": "References: Rooms, space and level",
+"title": "(the Schroeder frequency)",
+"author": "M. R. Schroeder",
+"licence": "cited",
+"voices": "where a room's modes give way"
+},
+{
+"group": "References: Rooms, space and level",
+"title": "Efficient convolution without input-output delay",
+"author": "W. G. Gardner (J. Audio Eng. Soc. 43, 1995)",
+"licence": "cited",
+"voices": "the convolution reverb"
+},
+{
+"group": "References: Rooms, space and level",
+"title": "Audio EQ Cookbook",
+"author": "R. Bristow-Johnson",
+"licence": "cited",
+"voices": "the effects' equalisers"
+},
+{
+"group": "References: Rooms, space and level",
+"title": "A structural model for binaural sound synthesis",
+"author": "C. P. Brown, R. O. Duda (IEEE Trans. Speech Audio Proc. 6, 1998)",
+"licence": "cited",
+"voices": "the head's shadow"
+},
+{
+"group": "References: Rooms, space and level",
+"title": "Experimental Psychology",
+"author": "R. S. Woodworth (1938)",
+"licence": "cited",
+"voices": "each ear's delay"
+},
+{
+"group": "References: Rooms, space and level",
+"title": "ISO 9613-1, Attenuation of sound during propagation outdoors",
+"author": "ISO (1993)",
+"licence": "cited",
+"voices": "the air's absorption"
+},
+{
+"group": "References: Rooms, space and level",
+"title": "ITU-R BS.775 (multichannel layout); ITU-R BS.1770 (loudness)",
+"author": "ITU",
+"licence": "cited",
+"voices": "the pan's angle; every level balance"
+},
+{
+"group": "References: Rooms, space and level",
+"title": "RP-036, default pan curve",
+"author": "MIDI Manufacturers Association",
+"licence": "cited",
+"voices": "the pan law"
+},
+{
+"group": "References: Tunings",
+"title": "L'Accordage des instruments à clavier (Bulletin du G.A.M. 75)",
+"author": "Serge Cordier (1974)",
+"licence": "cited",
+"voices": "equal temperament with pure fifths; the Pleyel temperament"
+},
+{
+"group": "References: Tunings",
+"title": "Maîtrise de l'inharmonicité et accord des pianos",
+"author": "Serge Cordier (1994)",
+"licence": "cited",
+"voices": "the pure-fifth octave"
+},
+{
+"group": "References: Tunings",
+"title": "Influence de l'inharmonicité sur les rapidités d'intervalles",
+"author": "Serge Cordier (AFARP, 1996)",
+"licence": "cited",
+"voices": "the Pleyel temperament on real strings"
+},
+{
+"group": "References: Tunings",
+"title": "Werckmeister III",
+"author": "John Sankey (web)",
+"licence": "cited",
+"voices": "the Werckmeister III tuning's cents"
+},
+{
+"group": "References: Tunings",
+"title": "The Bechstein of Savona Cathedral (1898)",
+"author": "bach1722.com",
+"url": "http://www.bach1722.com/",
+"licence": "cited",
+"voices": "the Bechstein tuning"
+},
+{
+"group": "References: Tunings",
+"title": "Assessing the tuning of sung Indian classical music",
+"author": "J. Serra, G. K. Koduri, M. Miron, X. Serra (ISMIR 2011)",
+"licence": "cited",
+"voices": "the ragas' equal-tempered system; how swaras were measured"
+},
+{
+"group": "References: Tunings",
+"title": "Raga intonation",
+"author": "B. Bel (1988)",
+"url": "https://bolprocessor.org/raga-intonation/",
+"licence": "cited",
+"voices": "the Todi tuning"
+},
+{
+"group": "References: Tunings",
+"title": "Hindustani Sangeet Paddhati",
+"author": "V. N. Bhatkhande",
+"licence": "cited",
+"voices": "the ten thaats"
+},
+{
+"group": "References: Methods",
+"title": "YIN, a fundamental frequency estimator for speech and music",
+"author": "A. de Cheveigné, H. Kawahara (J. Acoust. Soc. Am. 111, 2002)",
+"licence": "cited",
+"voices": "pitches read from recordings"
+},
+{
+"group": "References: Methods",
+"title": "Handbook of Mathematical Functions",
+"author": "M. Abramowitz, I. Stegun (1964)",
+"licence": "cited",
+"voices": "a source's directivity"
+},
+{
+"group": "References: Methods",
+"title": "Rundungsfehleranalyse einiger Verfahren zur Summation endlicher Summen",
+"author": "A. Neumaier (ZAMM 54, 1974)",
+"licence": "cited",
+"voices": "exact sums, so every engine sounds the same"
+},
+{
+"group": "References: Methods",
+"title": "A note on the generation of random normal deviates",
+"author": "G. E. P. Box, M. E. Muller (1958)",
+"licence": "cited",
+"voices": "random numbers, alike in every engine"
+},
+{
+"group": "References: Methods",
+"title": "Mersenne twister",
+"author": "M. Matsumoto, T. Nishimura (ACM TOMACS 8, 1998)",
+"licence": "cited",
+"voices": "random numbers, alike in every engine"
+},
+{
+"group": "References: Methods",
+"title": "Algorithm 116: Complex division",
+"author": "R. L. Smith (Comm. ACM 5, 1962)",
+"licence": "cited",
+"voices": "exact arithmetic in every engine"
+},
+{
+"group": "References: Methods",
+"title": "A precision approximation of the gamma function",
+"author": "C. Lanczos (SIAM J. Numer. Anal. B1, 1964)",
+"licence": "cited",
+"voices": "exact arithmetic in every engine"
 }
 ]
