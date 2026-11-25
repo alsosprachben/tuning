@@ -387,6 +387,9 @@ int nv_organ_tone(const OrganSpec *og, const VoiceSnap *host, const ToneIn *t, c
                     gM *= gxl;
                 if (!isnan(n->organ_hx))                /* the Expression stop (harmonium_pressure_gain) */
                     gM *= nv_hpressure_gain(scp, m, hpw);
+                if (og->sbox_div >= 0 && n->organ_sbox < 1.0
+                    && (og->n_div > 1 ? og->rank_div[ri] : 0) == og->sbox_div)   /* the Swell's box's colour */
+                    gM *= nv_obox_tone(og, hf, n->organ_sbox);
                 if (og->hwind && (n->organ_box != 0.0 || n->organ_meta))   /* its box's colour, the Metaphone's felt */
                     gM *= nv_hbox_tone(og, scp, hf, n->organ_box, n->organ_meta);
                 double gL = gM * nv_hrtf_gain(host, hf, tr.li), gR = gM * nv_hrtf_gain(host, hf, tr.ri);

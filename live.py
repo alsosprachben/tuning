@@ -9131,9 +9131,22 @@ class Live:
         """
         # (a harmonium's CC11 is its wind, wind.HarmoniumWind: its level rides the wind's rows)
         e = 127 if self._wind11(ch) else self.expr.get(ch, T.GM_DEFAULT_EXPRESSION)
-        g = ((self.vol.get(ch, T.GM_DEFAULT_VOLUME) / 127.0) * (e / 127.0)) ** 2
+        # (a pipe organ with a Swell box: its CC7 is the box's pedal, as the file's)
+        v = 127 if self._sbox7(ch) else self.vol.get(ch, T.GM_DEFAULT_VOLUME)
+        g = ((v / 127.0) * (e / 127.0)) ** 2
         cm = self.cmx_now.get(ch)
         return g * cm['amp'] if cm and cm['amp'] != 1.0 else g     # (the matrix's amplitude)
+
+    def _sbox7(self, ch):
+        """Is this channel's CC7 a Swell box's pedal (a pipe organ part on it
+        with a box: tonelib.organ_box_t), not a level?"""
+        return any(getattr(p.patch.wind_pc, "swell_divisions", None) for p in self.parts
+                   if p.patch.wind_pc is not None and self._listens(p, ch))
+
+    def _sbox_target(self, part):
+        """The Swell's pedal for a part now (CC7 / 127; open until moved)."""
+        ch = part.channel if part.channel is not None else 0
+        return self.vol.get(ch, 127) / 127.0
 
     def _wind11(self, ch):
         """Is this channel's CC11 a harmonium's wind (a part on it whose voice
@@ -12475,6 +12488,16 @@ class Live:
         _gx = _gv[T.rank_division(part.patch.wind_pc, rank) if len(_gv) > 1 else 0]
         if _gx != 1.0:
             self._groove_stamp(part, rank, _gx)
+        _wpc = part.patch.wind_pc
+        if _wpc is not None and getattr(_wpc, "swell_divisions", None) and T.swell_division(_wpc, rank):
+            # THE SWELL'S BOX at its onset (organ_box_tone): each slot by its frequency
+            _st = self.wind_st.get(part.pid)
+            _o = T.organ_box_open(_st["box_s"] if _st and "box_s" in _st else self._sbox_target(part))
+            _sl = self.slab.last_slots
+            if _o < 1.0 and _sl is not None and len(_sl):
+                _om = self.slab.a["om"][np.fromiter(_sl, np.int64, len(_sl))].astype(np.float64)
+                self.slab.channel_gain(_sl, np.array([T.organ_box_tone(_wpc, float(w) * (self.rate / (2.0 * math.pi)), _o)
+                                                      for w in _om], np.float32))
         if part.patch.wind_pc is not None and getattr(part.patch.wind_pc, 'pallet_gentle_s', None):
             self._touch_stamp(part, note, rank, self.hvel.get((ch, note), 100))
         # THE WHEEL'S TREMOLO on a note struck with the wheel already up, as
@@ -12572,6 +12595,8 @@ class Live:
             st = dict(winds=[_WND.Wind(pc, B.BLK / float(self.rate), seed=part.pid + 7919 * _d,
                                        scale=_wsc, wander_scale=(1.0 if _wsc else 0.0)) for _d in range(_nd)],
                       rows={}, rank_row={}, acc={}, ratios={}, laws={}, divs={})
+            if getattr(pc, "swell_divisions", None):      # (the Swell's box: its pedal's travel)
+                st["box_s"] = self._sbox_target(part)
             for r in part.patch.stop_ranks:
                 if r[1] is None:
                     continue
@@ -12895,13 +12920,27 @@ class Live:
             pc = part.patch.wind_pc
             ps = [st["winds"][_d].blocks((demd[_d],), ((trem if (_nd == 1 or T.division_tremulant(pc, _d)) else 0.0),))[0]
                   for _d in range(_nd)]
+            _bx = None
+            if "box_s" in st:
+                # THE SWELL'S BOX (tonelib.organ_box_level): the pedal through the
+                # fader's one pole, its level at the block's two edges
+                _tg = self._sbox_target(part)
+                _s0 = st["box_s"]
+                _s1 = _tg + (_s0 - _tg) * math.exp(-frames / (B.TAU * float(self.rate)))
+                st["box_s"] = _s1
+                _bx = (pc.swell_divisions[0], T.organ_box_level(pc, T.organ_box_open(_s0)),
+                       T.organ_box_level(pc, T.organ_box_open(_s1)))
             for (dv, a, b), row in st["rows"].items():
                 p = ps[dv]
                 r, lv = _WND.pitch_level(p[None, :], a, b)
                 sl.BR[row, 0] = r[0]
                 sl.BC[row, 0] = st["acc"][row]
-                sl.BL[row, 0] = lv[0]
-                sl.BL[row, 1] = lv[1]
+                if _bx is not None and dv == _bx[0]:
+                    sl.BL[row, 0] = lv[0] * _bx[1]
+                    sl.BL[row, 1] = lv[1] * _bx[2]
+                else:
+                    sl.BL[row, 0] = lv[0]
+                    sl.BL[row, 1] = lv[1]
                 st["acc"][row] += (float(sl.BR[row, 0]) - 1.0) * frames
 
     def _hwind_inputs(self, part):

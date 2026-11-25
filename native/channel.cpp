@@ -448,6 +448,9 @@ struct Song {
         std::vector<std::vector<std::pair<double, double>>> rank_ev;
         std::vector<std::pair<double, double>> swell_ev;
         std::vector<int> wrow;
+        std::vector<float> box;     // (the Swell's pedal travel a block: its box's, the kernel's row left open)
+        double box_sr = 0.0;
+        int box_blk = 0;
     };
     std::vector<Organ> organs;
     int n_grows = 0;
@@ -675,7 +678,7 @@ struct Song {
                     if (e.second >= 0.5)
                         trem = true;
             trem = trem && sp->trem_class_depth > 0.0;
-            if (!(sp->wsc != 0.0 || trem))
+            if (!(sp->wsc != 0.0 || trem || sp->sbox_div >= 0))   // (the Swell's box rides these rows too)
                 continue;
             std::vector<std::tuple<int, double, double>> fams;     // (division, a, b)
             std::vector<int> frow;
@@ -2432,10 +2435,21 @@ int nv_song_organ_rows(void *s, long nblk, int blk, double sr, double tau, float
     nv::Song *Sg = (nv::Song *)s;
     const double *law = nullptr, *first = nullptr;
     std::vector<std::pair<long, const double *>> laws;      // (its swell row, its law), in the organs' order
-    for (const auto &o : Sg->organs) {
+    for (auto &o : Sg->organs) {
         for (int ri = 0; ri < o.spec->n_rank; ri++)
             nv::Song::onepole(o.rank_ev[ri], nblk, blk, sr, tau, G + (long)(o.g0 + ri) * nblk);
         nv::Song::onepole(o.swell_ev, nblk, blk, sr, tau, S + (long)o.cr * nblk);
+        if (o.spec->sbox_div >= 0) {
+            // THE SWELL'S BOX: the pedal's travel kept for it, the kernel's
+            // whole-organ shutter left open (ones, no law)
+            float *row = S + (long)o.cr * nblk;
+            o.box.assign(row, row + nblk);
+            o.box_sr = sr;
+            o.box_blk = blk;
+            for (long q = 0; q < nblk; q++)
+                row[q] = 1.0f;
+            continue;
+        }
         if (!o.spec->swells)
             continue;
         law = o.spec->swell_law;
@@ -2808,6 +2822,13 @@ void nv_song_organ_wind(void *s, long nblk, int blk, double sr, const float *G, 
                 L[b] = (float)pow(p[(size_t)b * 9], ab.second);
             }
             L[nblk] = (float)pow(p[(size_t)(nblk - 1) * 9 + 8], ab.second);
+            if (sp->sbox_div >= 0 && dv == sp->sbox_div && !o.box.empty()) {
+                // THE SWELL'S BOX (organ_box_level): each edge its block's opening
+                for (long e = 0; e <= nblk; e++) {
+                    double lv = pow(e < nblk ? p[(size_t)e * 9] : p[(size_t)(nblk - 1) * 9 + 8], ab.second);
+                    L[e] = (float)(lv * nv_obox_level(sp, nv_obox_open((double)o.box[std::min(e, nblk - 1)])));
+                }
+            }
             row++;
         }
     }
@@ -2895,6 +2916,12 @@ int nv_song_organ_note(void *s, int i, int family, NoteIn *n)
     // key's draw with every stop out; 1 / (1 + r^2)
     for (int dv = 0; dv < 4; dv++)
         n->organ_groove[dv] = 1.0;
+    n->organ_sbox = 1.0;            // (the Swell's shutters at its onset: _note_sbox)
+    if (o->spec->sbox_div >= 0 && !o->box.empty()) {
+        long b = std::min((long)o->box.size() - 1, (long)(e.on * o->box_sr / o->box_blk));
+        double ob = nv_obox_open((double)o->box[b]);
+        n->organ_sbox = ob < 1.0 ? ob : 1.0;
+    }
     if (o->spec->groove_margin > 0.0) {
         const OrganSpec *gs = o->spec;
         const int nd = gs->n_div > 1 ? gs->n_div : 1;

@@ -2613,6 +2613,7 @@ struct Part {
     double level_db = 0.0, swell = 1.0, rate, retrigger;
     int nbuckets, speed, damper_pedal, soft_drop, soft_top;
     int vol[NV_NCH], expr[NV_NCH], cpan[NV_NCH], pedal_v[NV_NCH];
+    bool vol_seen[NV_NCH] = {false};            // (live's self.vol has the channel: a CC7 or a reset)
     bool soft[NV_NCH];
     double cgain[NV_NCH];
     bool cgain_set[NV_NCH];
@@ -4472,6 +4473,9 @@ struct Part {
         std::map<int, double> acc;
         int rank_row[NV_MAX_RANK] = {0};      // (each rank's: as many as an organ has, nv.h)
         NvHWind hw;                           // (a harmonium's chest: wind.HarmoniumWind)
+        bool has_box = false;                 // (the Swell's box: its pedal's travel, live's box_s)
+        double box_s = 1.0;
+        int chn = 0;
     };
     int knee_v[NV_NCH][2];                    // a harmonium's knee boards (CC21/22), as sent
     std::map<long long, WindSt> wind_st;
@@ -4865,10 +4869,27 @@ struct Part {
         return false;
     }
 
+    // live._sbox7: is channel ch's CC7 a Swell box's pedal (a pipe organ part
+    // on it with a box), not a level?
+    bool sbox7(int ch) const
+    {
+        for (const Patch &p : patches)
+            if (p.organ && p.organ->sbox_div >= 0 && !p.muted && !p.gone && (p.channel < 0 || p.channel == pc(ch)))
+                return true;
+        return false;
+    }
+    // live._sbox_target: the Swell's pedal for a part (CC7 / 127; open until moved)
+    double sbox_target(int chn) const
+    {
+        const int c = chn < 0 ? 0 : chn;
+        return (vol_seen[c] ? vol[c] : 127) / 127.0;
+    }
+
     double chan_gain(int ch) const
     {
         const int e = wind11(ch) ? 127 : expr[ch];
-        const double g = pow((vol[ch] / 127.0) * (e / 127.0), 2.0);
+        const int v = sbox7(ch) ? 127 : vol[ch];
+        const double g = pow((v / 127.0) * (e / 127.0), 2.0);
         auto c = cmx_now.find(ch);              // (the matrix's amplitude)
         return c != cmx_now.end() && c->second[0] != 1.0 ? g * c->second[0] : g;
     }
@@ -8187,6 +8208,7 @@ struct Part {
             reset_controllers(c, n0);
             jobs_power_on(c, n0);
             vol[c] = 100;
+            vol_seen[c] = true;
             expr[c] = 127;
             control(c, 10, 64, n0);
             brange[c] = -1.0;                   // (live's bend_range, the session's, is not a file's)
@@ -8661,6 +8683,11 @@ struct Part {
             WindSt &st = wind_st[pid];
             wind_order.push_back(pid);
             st.og = og;
+            st.chn = patches[cur].channel;
+            if (og->sbox_div >= 0) {            // (the Swell's box: its pedal's travel)
+                st.has_box = true;
+                st.box_s = sbox_target(st.chn);
+            }
             // a chest a division (tonelib.divisions), the first keeping the part's seed
             const int nd = og->n_div > 1 ? og->n_div : 1;
             st.cs.resize(nd);
@@ -8795,6 +8822,19 @@ struct Part {
                 for (long s : sl)
                     S.f8[F8_om][s] *= pa;
                 S.channel_gain_each(sl, std::vector<float>(sl.size(), (float)pow(gx, og->fam_b[ri])));
+            }
+        }
+        if (og->sbox_div >= 0 && (og->n_div > 1 ? og->rank_div[ri] : 0) == og->sbox_div) {
+            // ...and the Swell's box at its onset (organ_box_tone): each slot by its frequency
+            auto wi = wind_st.find(pid);
+            double o = nv_obox_open(wi != wind_st.end() && wi->second.has_box ? wi->second.box_s
+                                                                               : sbox_target(patches[cur].channel));
+            if (o < 1.0 && !S.last_slots.empty()) {
+                const std::vector<long> sl = S.last_slots;
+                std::vector<float> g(sl.size());
+                for (size_t q = 0; q < sl.size(); q++)
+                    g[q] = (float)nv_obox_tone(og, S.f8[F8_om][sl[q]] * (rate / (2.0 * M_PI)), o);
+                S.channel_gain_each(sl, g);
             }
         }
         if (og->touch_gentle > 0.0 && og->touch_cyc[ri] > 0.0 && !S.last_slots.empty()) {
@@ -9231,6 +9271,18 @@ struct Part {
                 demd[nd > 1 ? og->rank_div[ri] : 0] += pysum(d, rk.n_ratio);
             }
             bool on_all = og->trem_rank >= 0 && patches[pi].drawn[og->trem_rank];
+            // THE SWELL'S BOX (organ_box_level): the pedal through the fader's
+            // one pole, its level at the block's two edges
+            bool bx = false;
+            double bl0 = 1.0, bl1 = 1.0;
+            if (st.has_box) {
+                double tg = sbox_target(st.chn), s0 = st.box_s;
+                double s1 = tg + (s0 - tg) * exp(-(double)frames / (0.015 * (double)rate));
+                st.box_s = s1;
+                bx = true;
+                bl0 = nv_obox_level(og, nv_obox_open(s0));
+                bl1 = nv_obox_level(og, nv_obox_open(s1));
+            }
             for (int dv = 0; dv < nd; dv++) {
             WindSt::WChest &c = st.cs[dv];
             double dem = demd[dv];
@@ -9319,8 +9371,13 @@ struct Part {
                     sum = sum + pow(p[j], a);
                 BRt[row] = (float)(sum / 8.0);
                 BCt[row] = st.acc[row];
-                BLt[2 * row] = (float)pow(p[0], b);
-                BLt[2 * row + 1] = (float)pow(p[8], b);
+                if (bx && dv == og->sbox_div) {
+                    BLt[2 * row] = (float)(pow(p[0], b) * bl0);
+                    BLt[2 * row + 1] = (float)(pow(p[8], b) * bl1);
+                } else {
+                    BLt[2 * row] = (float)pow(p[0], b);
+                    BLt[2 * row + 1] = (float)pow(p[8], b);
+                }
                 st.acc[row] += ((double)BRt[row] - 1.0) * frames;
             }
             }
@@ -11468,6 +11525,8 @@ struct Part {
         }
         if (cc == 7 || cc == 11) {
             (cc == 7 ? vol : expr)[ch] = v;
+            if (cc == 7)
+                vol_seen[ch] = true;
             double g = chan_gain(ch), was = cgain_set[ch] ? cgain[ch] : 1.0;
             if (g != was) {
                 cgain[ch] = g;

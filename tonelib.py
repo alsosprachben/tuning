@@ -11697,6 +11697,25 @@ FlueOrganProperties.rank_divisions = {
 }
 FlueOrganProperties.tremulant_divisions = (1, 2)
 FlueOrganProperties.swell_divisions = (2,)
+# THE SWELL'S BOX (organ_box_t): the Swell division speaks into a box whose
+# shutters the swell pedal (CC7) opens -- the harmonium's diffuse-field balance
+# (harmonium_box_t), referred to the shutters OPEN (the pipes are voiced open),
+# its walls passing the bass by the mass law. A typical box, named for the ear:
+# ~3 x 2 x 3 m (42 m^2 inside, a painted lining's alpha 0.05 rising past 2 kHz),
+# 6 m^2 of shutters, 0.03 m^2 of gaps round them shut, walls ~20 kg/m^2.
+# Closed: ~-9 dB in the bass, -18 at 1 kHz, -21 at 4 kHz; nearly all its work in
+# the pedal's last quarter (the shutters' area soon dwarfs the lining's loss).
+# The kernel's whole-organ shutter (OrganProperties.shutter) is made neutral:
+# the Hauptwerk, Positiv and Pedal speak open.
+FlueOrganProperties.swellbox_surface_m2 = 42.0
+FlueOrganProperties.swellbox_alpha = 0.05
+FlueOrganProperties.swellbox_alpha_hz = 2000.0
+FlueOrganProperties.swellbox_gap_m2 = 0.03
+FlueOrganProperties.swellbox_shutter_m2 = 6.0
+FlueOrganProperties.swellbox_wall_kg_m2 = 20.0
+FlueOrganProperties.swellbox_level_hz = 250.0
+FlueOrganProperties.swell_floor = 1.0
+FlueOrganProperties.swell_hf_max = 0.0
 # the panel's third row (Alt+digit): the flutes and mutations, then the pedal;
 # its fourth (Alt+shift+digit): the strings, then the solo reeds
 FlueOrganProperties.stop_rows = FlueOrganProperties.stop_rows + [
@@ -26648,6 +26667,49 @@ def division_tremulant(cls, d):
     the class names no tremulant_divisions)."""
     td = getattr(cls, 'tremulant_divisions', None)
     return td is None or d in td
+
+
+def organ_box_t(cls, o, f):
+    """The share of the Swell's sound leaving its box, shutters open by o, at
+    f Hz: (gap + o x shutters + walls' transmission) over that plus the
+    lining's absorption -- the walls by the mass law, tau = (rho c / (pi f m))^2."""
+    al = cls.swellbox_alpha * (1.0 + (f / cls.swellbox_alpha_hz) ** 2)
+    al = 1.0 if al > 1.0 else al
+    ff = f if f > 1.0 else 1.0
+    tw = (1.204 * 343.2 / (_pi * ff * cls.swellbox_wall_kg_m2)) ** 2
+    tw = 1.0 if tw > 1.0 else tw
+    a = cls.swellbox_gap_m2 + o * cls.swellbox_shutter_m2 + cls.swellbox_surface_m2 * tw
+    return a / (a + cls.swellbox_surface_m2 * al)
+
+
+def organ_box_open(s):
+    """The shutters' opening for the swell pedal at s (0 shut, 1 open): its
+    blades turn, their open area going as 1 - cos of the angle."""
+    if s >= 1.0:
+        return 1.0                  # (open is open: cos(pi/2) is not quite 0 in floats)
+    s = 0.0 if s < 0.0 else s
+    return 1.0 - _cos(0.5 * _pi * s)
+
+
+def organ_box_level(cls, o):
+    """A Swell rank's level, shutters open by o, re open: at swellbox_level_hz."""
+    if o >= 1.0:
+        return 1.0
+    f = cls.swellbox_level_hz
+    return (organ_box_t(cls, o, f) / organ_box_t(cls, 1.0, f)) ** 0.5
+
+
+def organ_box_tone(cls, f, o):
+    """A Swell partial at f Hz at note-on: the box's colour beyond its level."""
+    if o >= 1.0:
+        return 1.0
+    return (organ_box_t(cls, o, f) / organ_box_t(cls, 1.0, f)) ** 0.5 / organ_box_level(cls, o)
+
+
+def swell_division(cls, rank):
+    """Whether a rank speaks inside the Swell's box."""
+    sd = getattr(cls, 'swell_divisions', None)
+    return bool(sd) and rank_division(cls, rank) in sd
 
 
 def pallet_time(cls, vel):

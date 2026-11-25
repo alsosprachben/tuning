@@ -640,6 +640,9 @@ typedef struct OrganSpec {
     double v_w, v_zeta, v_gain, v_q0, v_tau, v_vent;
     int has_vra;            // (the regulator restoring its mean, a sub-step's coefficient)
     double v_ra;
+    // THE SWELL'S BOX (tonelib.organ_box_t): the division it encloses (-1 none), its constants
+    int sbox_div;
+    double sb_surf, sb_alpha, sb_alpha_hz, sb_gap, sb_shutter, sb_wall, sb_level_hz;
     double touch_cyc[NV_MAX_RANK], touch_att[NV_MAX_RANK];   // (live's: each rank's wind class's speech)
     /* A REED ORGAN'S EFFECT STOPS (the harmonium's): its Expression,
        Percussion and Tremolo stops' ranks (-1 none), the Expression's tilt,
@@ -868,6 +871,37 @@ static inline double nv_hbox_level(const OrganSpec *og, double o)
     if (o == 0.0)
         return 1.0;
     return pow(nv_hbox_t(og, o, 0.0) / nv_hbox_t(og, 0.0, 0.0), 0.5);
+}
+/* the Swell's box (tonelib.organ_box_t, _open, _level, _tone), operation for operation */
+static inline double nv_obox_t(const OrganSpec *og, double o, double f)
+{
+    double al = og->sb_alpha * (1.0 + pow(f / og->sb_alpha_hz, 2.0));
+    al = al > 1.0 ? 1.0 : al;
+    double ff = f > 1.0 ? f : 1.0;
+    double tw = pow(1.204 * 343.2 / (M_PI * ff * og->sb_wall), 2.0);
+    tw = tw > 1.0 ? 1.0 : tw;
+    double a = og->sb_gap + o * og->sb_shutter + og->sb_surf * tw;
+    return a / (a + og->sb_surf * al);
+}
+static inline double nv_obox_open(double s)
+{
+    if (s >= 1.0)
+        return 1.0;                 /* (open is open: cos(pi/2) is not quite 0 in floats) */
+    s = s < 0.0 ? 0.0 : s;
+    return 1.0 - cos(0.5 * M_PI * s);
+}
+static inline double nv_obox_level(const OrganSpec *og, double o)
+{
+    if (o >= 1.0)
+        return 1.0;
+    double f = og->sb_level_hz;
+    return pow(nv_obox_t(og, o, f) / nv_obox_t(og, 1.0, f), 0.5);
+}
+static inline double nv_obox_tone(const OrganSpec *og, double f, double o)
+{
+    if (o >= 1.0)
+        return 1.0;
+    return pow(nv_obox_t(og, o, f) / nv_obox_t(og, 1.0, f), 0.5) / nv_obox_level(og, o);
 }
 static inline double nv_hbox_tone(const OrganSpec *og, const OrganPipe *q, double f, double o, int meta)
 {
@@ -1639,6 +1673,7 @@ typedef struct {
     // ...and its key's groove at its onset (tonelib.groove_pressure): the
     // groove's pressure over the chest's, 0 / 1 none
     double organ_groove[4];     // (one a division's chest: tonelib.groove_pressures)
+    double organ_sbox;          // (the Swell's shutters at its onset: 1 open)
     // THE BREATH'S OWN ROW (bbr_set: the player's breath noise wobbling on
     // its own, bbrow_of's second); else the note's
     int bbr_set;

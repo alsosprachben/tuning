@@ -2987,9 +2987,16 @@ def _prep_organ_rows(_CMXEV, ccs, ch_progs, nblk, notes):
             pr = pc(261.6,0,1,1); g,s,rev = registration_blocks(ch, pr, ccs, nblk, _CMXEV['amp'].get(ch),
                                                                 recalls=_rcl)
             rankev_of[_orgk]=rev
+            if getattr(pr, 'swell_divisions', None):
+                # THE SWELL'S BOX (_prep_chest_wind): the pedal's travel kept for
+                # its box, the kernel's whole-organ shutter left open (a row of
+                # ones, no law): only the enclosed division swells
+                rev['swellbox'] = np.asarray(s, np.float32).copy()
+                s = np.ones_like(s)
             crow_of[_orgk]=len(Srows); Srows.append(s)
             for r in pr.stop_ranks: k=r[0]; grow_of[(_orgk,k)]=len(Grows); Grows.append(g[k])
-            if tuple(getattr(pr, 'stop_word_ccs', (11, 43)))[0] == 11:   # only what swells shapes the swell
+            if (tuple(getattr(pr, 'stop_word_ccs', (11, 43)))[0] == 11   # only what swells shapes the swell
+                    and not getattr(pr, 'swell_divisions', None)):
                 _laws.append((crow_of[_orgk], (pr.swell_floor, pr.swell_gain_power,
                                              pr.swell_hf_max, pr.swell_hf_ref_hz)))
     return (Grows, Srows, _laws, crow_of, grow_of, rankev_of, sh)
@@ -3144,7 +3151,10 @@ def _prep_chest_wind(Grows, ch_progs, grow_of, nblk, notes, rankev_of, ccs=None,
         _tr = rankev_of[_wk].get('tremulant', ())
         _trem_on = any(tg >= 0.5 for _t, tg in _tr) and pc.tremulant_depth > 0.0
         _wsc = wind_scale_for(pc)
-        if not (_wsc or _trem_on):
+        # (the Swell's box rides these rows too: a swell pedal that moves needs them)
+        _sbx = rankev_of[_wk].get('swellbox')
+        _box = _sbx is not None
+        if not (_wsc or _trem_on or _box):
             continue
         import wind as _WND
         _bt = (np.arange(nblk) + 0.5) * BLK / SR
@@ -3182,6 +3192,14 @@ def _prep_chest_wind(Grows, ch_progs, grow_of, nblk, notes, rankev_of, ccs=None,
             wrow_key[(ch, r[0])] = _key
             if _key not in _WROWS[ch]:
                 _WROWS[ch][_key] = _WND.pitch_level(_ps[_d], *_ab)
+                if _sbx is not None and T.swell_division(pc, r):
+                    # THE SWELL'S BOX (tonelib.organ_box_level): its level rides
+                    # this chest's rows, the pedal's opening each block (its swell
+                    # row, float32 as the native's), each edge its block's
+                    _bl = np.array([T.organ_box_level(pc, T.organ_box_open(float(_sbx[min(e, nblk - 1)])))
+                                    for e in range(nblk + 1)])
+                    _rr, _lv = _WROWS[ch][_key]
+                    _WROWS[ch][_key] = (_rr, _lv * _bl)
         if _VERBOSE_WIND:
             for _d, _p in enumerate(_ps):
                 print("  wind ch%d chest %d: pressure %.4f..%.4f, peak draw %.1f units%s"
@@ -5099,7 +5117,7 @@ class _Note(object):
     __slots__ = ('ch', 'note', 'on', 'off', 'vel', 'v7', 'v11', 'pan', 'prog', 'key_off', 'drum',
                  'organ', 'pc', 'organ_key', 'freq', 'chan_vol', 'efx_gain', 'f0', 'non', 'noff',
                  'fade', 'rel', 'chiff', 'cv', 'cc', 'crl', 'csc', 'sjit', 'li', 'ri', 'row0',
-                 'song_index', 'drum_plain', 'sung', 'groove')
+                 'song_index', 'drum_plain', 'sung', 'groove', 'sbox')
 
 
 class _Emitter(object):
@@ -7184,6 +7202,16 @@ SONG_STATS = [0, 0]     # notes whose channel questions were checked, that diffe
 READING_STATS = [0, 0]  # files whose check song is the engine's own reading; whose notes need passes it lacks
 
 
+def _note_sbox(nt, rev):
+    """The Swell's shutters at a note's onset (tonelib.organ_box_open of its
+    swell row's block), or None where open or no box."""
+    sb = rev.get('swellbox')
+    if sb is None:
+        return None
+    o = T.organ_box_open(float(sb[min(len(sb) - 1, int(nt.on * SR / BLK))]))
+    return o if o < 1.0 else None
+
+
 def _note_groove(nt, rev):
     """A note's key's groove at its onset (tonelib.groove_pressure): each
     rank's draw state its last registration event at or before the onset (rev:
@@ -7262,6 +7290,7 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
         # and whether it was pushed in before the key-up (_note_stops')
         rev, grs, cr, wrow, wcombo, bnote = organ
         nt.groove = _note_groove(nt, rev)                   # (its key's groove, as _note_stops reads it)
+        nt.sbox = _note_sbox(nt, rev)                       # (the Swell's shutters at its onset)
         aj = getattr(P, 'attack_jitter', 0.0)
         br = em.bend_row if (em.bend_row >= 0 or em.fader_row < 0) else em.fader_row   # (n.br, set below)
         for i, (key, ratio, *_r) in enumerate(stops):
@@ -7298,6 +7327,8 @@ def _note_native_begin(em, props, nt, stops, onsets, seats, mls, _als, _sir, st,
         n.organ_box, n.organ_meta = (harmonium_note_box(em, nt, rev) if 'forte fixe B' in rev
                                      else (0.0, False))
         n.organ_perc = int(_pe is not None and T.stop_drawn_at(_pe, nt.on))
+    _sbo = getattr(nt, 'sbox', None)                    # (the Swell's shutters at its onset: 1 open)
+    n.organ_sbox = _sbo if _sbo is not None else 1.0
     _gv = getattr(nt, 'groove', (1.0,))                 # (its key's grooves at its onset, a chest each)
     for _d in range(4):
         n.organ_groove[_d] = _gv[_d] if _d < len(_gv) else 1.0
@@ -7533,6 +7564,7 @@ def _note_stops(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TBN, 
     # state its last registration event at or before the onset, as the native
     # note setup reads it
     nt.groove = _note_groove(nt, rankev_of.get(nt.organ_key, {})) if nt.organ else (1.0,)
+    nt.sbox = _note_sbox(nt, rankev_of.get(nt.organ_key, {})) if nt.organ else None
     if NATIVE_TONE != 'off':
         got = _tone_native(em, props, nt, stops, onsets, seats, mls, _als, _hx, _hperc, _pjit, _sir, sjit_n, B)
         if got is not None and NATIVE_TONE == 'on':
@@ -7825,6 +7857,10 @@ def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TB
             # more stops speak on the key
             _gv = getattr(nt, 'groove', (1.0,))
             _gx = _gv[T.rank_division(nt.pc, key) if len(_gv) > 1 else 0]
+            # ...AND THE SWELL'S BOX at its onset, on the enclosed ranks: its colour
+            _sbo = getattr(nt, 'sbox', None)
+            if _sbo is not None and not T.swell_division(nt.pc, key):
+                _sbo = None
             _gxl = 1.0
             if _gx != 1.0:
                 _gwc = T.rank_wind_class(nt.pc, (key, ratio, gain) + tuple(rest))
@@ -7898,6 +7934,8 @@ def _note_stops_py(em, props, nt, A, B, _CBW, _DL, _PUSH_SEG, _SPANNED, _TB, _TB
                     gM *= _gxl
                 if _hx is not None:              # (its tone at the wind: the stop's answer)
                     gM *= float(T.harmonium_pressure_gain(_sc, m, _hp))
+                if _sbo is not None:             # (the Swell's box's colour)
+                    gM *= float(T.organ_box_tone(nt.pc, hf, _sbo))
                 if em.hbox is not None:          # (its box's colour and the Metaphone's felt)
                     gM *= float(T.harmonium_box_tone(_sc, hf, em.hbox[0], em.hbox[1]))
                 gL = gM*props.hrtf_gain(hf, nt.li); gR = gM*props.hrtf_gain(hf, nt.ri)

@@ -343,7 +343,7 @@ class NoteIn(ctypes.Structure):
                    ('seat', C), ('held', C), ('rnd_draws', C * 4), ('stroke_tilt', C), ('stroke_mouth', C),
                    ('stroke_morph', C), ('snd_at', C), ('snd_rt', C), ('rank_gr', C * NV_MAX_RANK), ('rank_sp', C * NV_MAX_RANK),
                    ('rank_skip', I * NV_MAX_RANK), ('rank_rel1', I * NV_MAX_RANK), ('organ_cr', C), ('rank_br', C * NV_MAX_RANK),
-                   ('carry_radius', C), ('organ_hx', C), ('organ_perc', I), ('organ_box', C), ('organ_meta', I), ('organ_groove', C * 4),
+                   ('carry_radius', C), ('organ_hx', C), ('organ_perc', I), ('organ_box', C), ('organ_meta', I), ('organ_groove', C * 4), ('organ_sbox', C),
                    ('bbr_set', I), ('bbr', C),
                    ('rank_drawn_off', I * NV_MAX_RANK), ('snd_moog', I), ('snd_d', C * 8),
                    ('sung_hz', C), ('part', I), ('dist', C), ('gliss_lv', C),
@@ -3216,6 +3216,8 @@ class OrganSpec(ctypes.Structure):
                    ('draw_u', C * NV_MAX_RANK), ('draw_e', C * NV_MAX_RANK), ('groove_margin', C), ('touch_gentle', C), ('touch_sharp', C), ('touch_file_vel', I), ('n_div', I), ('rank_div', I * NV_MAX_RANK), ('trem_div_mask', I),
                    ('tvalve', I), ('v_w', C), ('v_zeta', C), ('v_gain', C), ('v_q0', C), ('v_tau', C), ('v_vent', C),
                    ('has_vra', I), ('v_ra', C),
+                   ('sbox_div', I), ('sb_surf', C), ('sb_alpha', C), ('sb_alpha_hz', C), ('sb_gap', C),
+                   ('sb_shutter', C), ('sb_wall', C), ('sb_level_hz', C),
                    ('touch_cyc', C * NV_MAX_RANK), ('touch_att', C * NV_MAX_RANK), ('expr_rank', I), ('perc_rank', I), ('htrem_rank', I),
                    ('perc_attack_s', C), ('afm', C), ('pipe_radius', I), ('wheel_trem', C),
                    ('wtrem_hz', C), ('htrem_depth', C), ('htrem_hz', C), ('wtrem_stereo', I),
@@ -3494,6 +3496,12 @@ def organ(cls):
     o.n_order = len(order)
     o.order[:len(order)] = [keys.index(k) for k in order]
     o.swells = int(wccs[0] == 11)
+    _sd = getattr(p, 'swell_divisions', None)              # (the Swell's box: tonelib.organ_box_t)
+    o.sbox_div = int(_sd[0]) if _sd else -1
+    if _sd:
+        (o.sb_surf, o.sb_alpha, o.sb_alpha_hz, o.sb_gap, o.sb_shutter, o.sb_wall, o.sb_level_hz) = (
+            p.swellbox_surface_m2, p.swellbox_alpha, p.swellbox_alpha_hz, p.swellbox_gap_m2,
+            p.swellbox_shutter_m2, p.swellbox_wall_kg_m2, p.swellbox_level_hz)
     o.swell_law[:] = [float(p.swell_floor), float(p.swell_gain_power), float(p.swell_hf_max),
                       float(p.swell_hf_ref_hz)]
     o.family = _FAMILIES.setdefault(BR.organ_family(cls), len(_FAMILIES))
