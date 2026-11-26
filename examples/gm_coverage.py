@@ -2203,7 +2203,7 @@ def class_tree_md():
 # the earliest of each branch that has it -- GM1 under both, then GM2 on one
 # branch and the Sound Canvas maps on the other (GS1 the SC-55's, GS2 the
 # SC-88's, GS3 the SC-88 Pro's, GS4 the SC-8850's, each keeping the one before)
-# -- or CT1, ours alone. GS came first and GM2 took most of its variations
+# -- or CVT1, ours alone. GS came first and GM2 took most of its variations
 # from it under its own numbers, so a tone may carry both (GM2 and GS2).
 # The drum sets' maps from the manuals' lists (~/Documents/refs/roland:
 # sc88pro_drumsets.tsv's three maps side by side, sc8850_drumsets.tsv; the
@@ -2216,8 +2216,8 @@ KIT_STD = {"GM1": {0}, "GM2": {0, 8, 16, 24, 25, 32, 40, 48, 56},
 
 
 def patch_standards(program, variation):
-    """The standards (GM1, GM2, GS1..GS4, CT1) whose files can select this patch:
-    the earliest of each branch, or CT1 for a tone of ours alone."""
+    """The standards (GM1, GM2, GS1..GS4, CVT1) whose files can select this patch:
+    the earliest of each branch, or CVT1 for a tone of ours alone."""
     import patch_map as PMC
     from gm2_names import GM2_NAMES
     p, v = int(program), int(variation)
@@ -2232,7 +2232,7 @@ def patch_standards(program, variation):
         if any(pp == p and PMC.map_bank(pp, b, m) == v for (pp, b) in PMC.MAP_NAMES[m]):
             out.append("GS%d" % m)
             break
-    return out or ["CT1"]
+    return out or ["CVT1"]
 
 
 def kit_standards(program):
@@ -2244,7 +2244,7 @@ def kit_standards(program):
             if not out or out[0] != "GM1":
                 out.append("GS%d" % m)
             break
-    return out or ["CT1"]
+    return out or ["CVT1"]
 
 
 def about_json(path):

@@ -23,20 +23,20 @@ struct Patch {
     int pick = 0, program = 0, variation = 0;
     bool drums = false;
     std::string name, desc, search;     // (desc: its few words, about.json's; search: its number, name, words and family, lower case)
-    std::vector<std::string> stds;      // (the standards it answers to: about.json's std -- GM1, GM2, GS1..GS4, CT1)
+    std::vector<std::string> stds;      // (the standards it answers to: about.json's std -- GM1, GM2, GS1..GS4, CVT1)
     std::string tag;                    // (...said on its tile: "GS3", "GM2 GS1")
 };
 
 // THE STANDARDS' FILTERS (Ben 2026-11-25): a standard shows what a file of it can
 // select -- GM1 its own; GM2 GM1's and its own; a Sound Canvas map GM1's and its
-// maps' up to it (GS3: GS1, GS2, GS3); CT1 ours alone
-static const char *STD_CHIPS[8] = {"all", "GM1", "GM2", "GS1", "GS2", "GS3", "GS4", "CT1"};
+// maps' up to it (GS3: GS1, GS2, GS3); CVT1 ours alone
+static const char *STD_CHIPS[8] = {"all", "GM1", "GM2", "GS1", "GS2", "GS3", "GS4", "CVT1"};
 inline bool std_shows(const std::string &f, const Patch &p)
 {
     if (f == "all")
         return true;
     for (const auto &s : p.stds) {
-        if (s == f || (s == "GM1" && f != "CT1"))
+        if (s == f || (s == "GM1" && f != "CVT1"))
             return true;
         if (f.rfind("GS", 0) == 0 && s.rfind("GS", 0) == 0 && s <= f)
             return true;

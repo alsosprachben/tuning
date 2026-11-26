@@ -101,7 +101,7 @@ const HELP = {
     intro: 'Every patch, to play on the selected part.',
     terms: [
       ['Families (left)', '★ Favourites, All, the sixteen General MIDI families, Drum kits, and the MT-32\'s and CM-64\'s own tones.'],
-      ['Standards (under the search)', 'ALL, or a standard: GM1, GM2, GS1 (the SC-55\'s), GS2 (SC-88), GS3 (SC-88 Pro), GS4 (SC-8850), or CT1 (Clavitone\'s own). A standard shows every patch a file written for it can select: GM2 includes GM1\'s, and each GS map includes GM1\'s and the maps before it. A tile says the standards it belongs to: the earliest of each, so a tone GM 2 took from the SC-55 says GM2 GS1.'],
+      ['Standards (under the search)', 'ALL, or a standard: GM1, GM2, GS1 (the SC-55\'s), GS2 (SC-88), GS3 (SC-88 Pro), GS4 (SC-8850), or CVT1 (Clavitone\'s own). A standard shows every patch a file written for it can select: GM2 includes GM1\'s, and each GS map includes GM1\'s and the maps before it. A tile says the standards it belongs to: the earliest of each, so a tone GM 2 took from the SC-55 says GM2 GS1.'],
       ['Search', 'Type words: a patch shows if its number, name or family has them all. The screen\'s own keys come up: CLEAR empties it, ⌫ takes a letter back, DONE puts the keys away.'],
       ['A tile', 'Tap to play that patch on the selected part. The lit tile is the part\'s patch now; one blinking is still being built.'],
       ['Number', 'The program number, a variation after the dot; KIT and a number for a drum kit.'],

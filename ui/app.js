@@ -407,12 +407,12 @@ famList.forEach(([id, label]) => {
 });
 // THE STANDARDS (about.json's std, kit_std): what a file of each can select -- GM1
 // its own; GM2 GM1's and its own; a Sound Canvas map GM1's and its maps' up to it;
-// CT1 ours alone (nui/library.h's std_shows)
-const LIB_STDS = ['all', 'GM1', 'GM2', 'GS1', 'GS2', 'GS3', 'GS4', 'CT1'];
+// CVT1 ours alone (nui/library.h's std_shows)
+const LIB_STDS = ['all', 'GM1', 'GM2', 'GS1', 'GS2', 'GS3', 'GS4', 'CVT1'];
 S.stdf = 'all';
 const stdsOf = p => (S.about && (p.drums ? S.about.kit_std && S.about.kit_std[p.program]
   : S.about.std && S.about.std[p.program + '.' + p.variation])) || [];
-const stdShows = (f, p) => f === 'all' || stdsOf(p).some(s => s === f || (s === 'GM1' && f !== 'CT1')
+const stdShows = (f, p) => f === 'all' || stdsOf(p).some(s => s === f || (s === 'GM1' && f !== 'CVT1')
   || (f.startsWith('GS') && s.startsWith('GS') && s <= f));
 LIB_STDS.forEach(id => {
   const b = document.createElement('button'); b.className = 'fam'; b.dataset.id = id; b.dataset.kit = '1';
