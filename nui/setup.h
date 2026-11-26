@@ -123,6 +123,7 @@ inline void draw_setup(App &a)
                     if (str(&x, "path") == path)
                         x.o["on"] = sess::boolean(!on);
             }
+            tap_yields(a);
             look::latch(a, AX + 12, y, AW - 24, 50, on);
             text(a, a.font, 14, AX + 24, y + (IP ? 7 : 8), on ? LCD : SILK, str(&d, "name"));
             std::string p = path;

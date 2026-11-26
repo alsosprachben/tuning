@@ -182,6 +182,7 @@ inline int choice_grid(App &a, const std::string &id, float x, float y, float w,
         ImGui::SetCursorScreenPos(P(a, bx, by));
         if (ImGui::InvisibleButton(bid.c_str(), ImVec2(bw * a.k, bh * a.k)))
             hit = (int)i;
+        tap_yields(a);
         const bool on = (int)i == lit;
         look::chip(a, bx, by, bw, bh, on, ImGui::IsItemActive());
         text(a, a.font, 14, bx + 7, by + (bh - 14) / 2, on ? LCD_BG : SILK, fit(a, a.font, 14, names[i], bw - 12));

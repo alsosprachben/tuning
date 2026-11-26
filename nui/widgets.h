@@ -178,8 +178,12 @@ inline int scroll_list(App &a, const std::string &id, float x, float y, float w,
     if (ImGui::IsItemActive() && t.down) {
         if (!t.moved && std::fabs(my - t.y0) * a.k > SLOP)
             t.moved = true;
-        if (t.moved)
-            scroll = std::max(0.0f, std::min(t.s0 - (my - t.y0), std::max(0.0f, content - hgt)));
+        if (t.moved) {      // (by the finger's motion; what the list's ends stop goes on to a scrolled card)
+            const float want = scroll - ImGui::GetIO().MouseDelta.y / a.k;
+            scroll = std::max(0.0f, std::min(want, std::max(0.0f, content - hgt)));
+            if (a.vcard)
+                a.vcard_push += want - scroll;
+        }
     }
     int tap = -1;
     if (ImGui::IsItemDeactivated() && t.down) {

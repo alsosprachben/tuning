@@ -256,6 +256,7 @@ inline bool key(App &a, const char *id, float x, float y, float w, float h, cons
     ImGui::SetCursorScreenPos(P(a, x, y));
     ImGui::PushID(id);
     const bool hit = ImGui::InvisibleButton("b", ImVec2(w * a.k, h * a.k)) && enabled;
+    tap_yields(a);
     const bool held = ImGui::IsItemActive() && enabled;
     ImGui::PopID();
     key_cap(a, x, y, w, h, held, enabled);

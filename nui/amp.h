@@ -68,6 +68,7 @@ inline int pk_switch(App &a, const std::string &kind, float x, float y, float w,
         ImGui::PushID(i);
         if (ImGui::InvisibleButton("z", ImVec2(std::max(1.0f, zw * k), std::max(1.0f, zh * k))))
             hit = pos[(size_t)i];
+        tap_yields(a);
         ImGui::PopID();
         ImGui::PopID();
     };
@@ -126,6 +127,7 @@ inline int pk_switch(App &a, const std::string &kind, float x, float y, float w,
                 ImGui::PushID(r * 2 + half);
                 if (ImGui::InvisibleButton("z", ImVec2(tw * k, th / 2 * k)))
                     hit = c;
+                tap_yields(a);
                 ImGui::PopID();
                 ImGui::PopID();
             }
@@ -167,6 +169,7 @@ inline int pk_switch(App &a, const std::string &kind, float x, float y, float w,
             ImGui::PushID(s);
             if (ImGui::InvisibleButton("z", ImVec2((2 * R + 20) * k, (2 * R + 50) * k)))
                 hit = c;
+            tap_yields(a);
             ImGui::PopID();
             ImGui::PopID();
         }

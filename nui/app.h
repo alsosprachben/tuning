@@ -60,6 +60,10 @@ struct App {
     bool ph = false, cards_open = false;
     // (a phone card drawn at the iPad's height, scrolled under the panel: its foot the iPad mini's)
     bool vcard = false;
+    // (its scroll's hand-offs this frame: what a list or the pad grid inside it could not take
+    //  (vcard_push, card units, + down), and a button's press turned into the card's drag)
+    float vcard_push = 0;
+    bool vcard_grab = false;
     float W = 1920, H = 1080, ts = 1.0f;
     float lh(float size) const;         // (a line of text at size: its height in design units)
     J parts, meters, build;
@@ -402,6 +406,24 @@ inline void lang_apply(App &a)
     if (!lang_known(c) || !i18n_load(a.ui_dir, c))
         i18n_load(a.ui_dir, "en");
 }
+// (a press that has become a drag along the screen -- a scroll, not a tap: a finger's
+//  wobble stays a tap; vertical only, so a knob's turn or a slide across is not one)
+inline bool drag_is_scroll(const App &a)
+{
+    const ImVec2 d = ImGui::GetMouseDragDelta(0, 0.0f);
+    return std::fabs(d.y) / a.k > 12 && std::fabs(d.y) > 1.5f * std::fabs(d.x);
+}
+
+// (a tap's item on a scrolled card -- the phone's -- dragged: the drag is the card's
+//  scroll, the item let go unpressed; called just after the item)
+inline void tap_yields(App &a)
+{
+    if (a.vcard && ImGui::IsItemActive() && drag_is_scroll(a)) {
+        ImGui::ClearActiveID();
+        a.vcard_grab = true;
+    }
+}
+
 }  // namespace nui
 // (the hardware's look: after the primitives above, which it draws with; every
 // file includes app.h first, so this is where look.h is first read)
@@ -415,6 +437,7 @@ inline bool button(App &a, const char *id, float x, float y, float w, float h, c
     ImGui::SetCursorScreenPos(P(a, x, y));
     ImGui::PushID(id);
     const bool hit = ImGui::InvisibleButton("b", ImVec2(w * a.k, h * a.k)) && enabled;
+    tap_yields(a);
     const bool held = ImGui::IsItemActive();
     ImGui::PopID();
     const bool press = held && enabled;
@@ -474,6 +497,7 @@ inline float heading(App &a, float x, float y, const std::string &t, const std::
     ImGui::PushID(("q" + key).c_str());
     if (ImGui::InvisibleButton("q", ImVec2((2 * r + 12) * a.k, (2 * r + 12) * a.k)))
         a.help = "@" + key;             // (opened by the frame: help_open)
+    tap_yields(a);
     const bool held = ImGui::IsItemActive();
     ImGui::PopID();
     dl()->AddCircle(P(a, qx + r, y + 7), r * a.k, held ? LCD : SILK_DIM, 20, 1.5f * a.k);

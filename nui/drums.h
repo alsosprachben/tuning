@@ -28,6 +28,7 @@ struct DrumsUi {
     int down_key = -1;                  // (the pad held: released on lift)
     std::map<int, std::pair<double, int>> flash;   // key -> (when, velocity)
     float scroll = 0;
+    bool pdrag = false;                 // (a pad's press dragged: the pads scrolled by the finger)
     std::map<std::string, float> list_scroll;
 };
 static DrumsUi g_drums;
@@ -260,6 +261,10 @@ inline void draw_drums(App &a)
                 D.browse = -1;
             D.sel = D.touched = k.key;
         }
+        if (ImGui::IsItemActive() && !ImGui::IsItemActivated() && drag_is_scroll(a)) {
+            ImGui::ClearActiveID();     // (dragged: a scroll of the pads -- the pad let go below)
+            D.pdrag = true;
+        }
         if (ImGui::IsItemDeactivated() && D.down_key == k.key) {
             call(a, "{\"call\":\"drum_hit\",\"row\":" + std::to_string(a.row) + ",\"key\":" + std::to_string(k.key) + ",\"v\":0}");
             D.down_key = -1;
@@ -291,6 +296,18 @@ inline void draw_drums(App &a)
             text(a, a.font, 14, x + 8, y + (IP ? 6 : 8) + (i + 1) * (a.lh(14) + (IP ? 2 : 3)), unset ? SILK_DIM : SILK, ls[i]);
     }
     dl()->PopClipRect();
+    if (D.pdrag && D.down_key >= 0) {   // (the pad the drag began on: let go -- no item now hears its lift)
+        call(a, "{\"call\":\"drum_hit\",\"row\":" + std::to_string(a.row) + ",\"key\":" + std::to_string(D.down_key) + ",\"v\":0}");
+        D.down_key = -1;
+    }
+    if (D.pdrag && ImGui::IsMouseDown(0)) {     // (the pads follow the finger; past their ends, a scrolled card)
+        const float want = D.scroll - ImGui::GetIO().MouseDelta.y / a.k;
+        D.scroll = std::max(0.0f, std::min(want, std::max(0.0f, content - view)));
+        if (a.vcard)
+            a.vcard_push += want - D.scroll;
+        a.animate = true;
+    } else
+        D.pdrag = false;
     if (content > view) {
         const float bh = std::max(30.0f, view * view / content), by = Y0 + (view - bh) * D.scroll / (content - view);
         ImGui::SetCursorScreenPos(P(a, PX1 - 14, Y0));

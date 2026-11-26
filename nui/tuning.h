@@ -142,6 +142,7 @@ inline int flow_buttons(App &a, const std::string &id, float x, float &y, float 
         ImGui::SetCursorScreenPos(P(a, cx, y));
         if (ImGui::InvisibleButton(bid.c_str(), ImVec2(bw * a.k, bh * a.k)))
             hit = (int)i;
+        tap_yields(a);
         const bool on = i < lit.size() && lit[i];
         look::chip(a, cx, y, bw, bh, on, ImGui::IsItemActive());
         text_c(a, a.font, ws, cx + bw / 2, y + (bh - a.lh(ws)) / 2, on ? LCD_BG : SILK, words[i]);

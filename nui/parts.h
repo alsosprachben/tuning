@@ -200,6 +200,7 @@ inline void draw_parts(App &a)
         ImGui::PushID(100 + i);
         if (ImGui::InvisibleButton("head", ImVec2(sw * a.k, 60 * a.k)))
             select(a, i);
+        tap_yields(a);
         ImGui::PopID();
         const float nw = text_w(a, a.font, 21, pad2(i + 1));
         text(a, a.font, 21, x + 8, sy + 8, dim ? SILK_DIM : LCD, pad2(i + 1));
@@ -291,6 +292,7 @@ inline void draw_strips_tab(App &a, float X0, float X1, float sy, float Y1)
         ImGui::PushID(100 + i);
         if (ImGui::InvisibleButton("head", ImVec2(sw * a.k, 44 * a.k)))
             select(a, i);
+        tap_yields(a);
         ImGui::PopID();
         // the head: its number 3x, its name and program 2x
         text(a, a.font, 21, x + 6, sy + 6, dim ? SILK_DIM : LCD, pad2(i + 1));
@@ -377,6 +379,7 @@ inline void draw_strips_phone(App &a, float X0, float X1, float sy, float Y1, fl
         ImGui::PushID(100 + i);
         if (ImGui::InvisibleButton("head", ImVec2(sw * a.k, 30 * a.k)))
             select(a, i);
+        tap_yields(a);
         ImGui::PopID();
         // the head: its number and name on a line
         text(a, a.font, 21, x + 6, sy + 5, dim ? SILK_DIM : LCD, pad2(i + 1));

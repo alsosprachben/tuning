@@ -111,6 +111,7 @@ inline void draw_stops(App &a)
                         const std::string id = "org" + std::to_string(p.pick);
                         ImGui::SetCursorScreenPos(P(a, x, y));
                         const bool hit = ImGui::InvisibleButton(id.c_str(), ImVec2(ow * a.k, 54 * a.k));
+                        tap_yields(a);
                         rect(a, x, y, ow, 54, ImGui::IsItemActive() ? PANEL_HI : IM_COL32(0x1f, 0x22, 0x26, 255), 8);
                         frame(a, x, y, ow, 54, EDGE, 8, 1);
                         char pn[8];
@@ -221,6 +222,7 @@ inline void draw_stops(App &a)
                 const std::string id = "tab" + std::to_string(r);
                 ImGui::SetCursorScreenPos(P(a, x, ty));
                 const bool hit = ImGui::InvisibleButton(id.c_str(), ImVec2(tw * a.k, th * a.k));
+                tap_yields(a);
                 const bool held = ImGui::IsItemActive();
                 look::chip(a, x, ty, tw, th, on, held);
                 const auto np = stop_parts(r < (int)labels.size() ? labels[(size_t)r] : std::to_string(r), feet);

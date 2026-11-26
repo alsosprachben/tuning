@@ -226,6 +226,8 @@ static void draw(App &a)
     const bool virt = a.ph && !PHONE_READY.count(a.card);
     const ImVec2 org0 = a.org;
     float vscroll = 0, vmax = 0;
+    a.vcard_push = 0;
+    a.vcard_grab = false;
     if (virt) {
         float &sc = card_scroll[a.card];
         const float top = 106, bot = a.H - 6, view = bot - top - 4;
@@ -311,8 +313,8 @@ static void draw(App &a)
         const ImGuiIO &io = ImGui::GetIO();
         const float my = (io.MousePos.y - org0.y) / a.k, mx = (io.MousePos.x - org0.x) / a.k;
         const bool in = mx >= 6 && mx < 826 && my >= 106 && my < a.H - 6;
-        if (ImGui::IsMouseClicked(0) && in && !ImGui::IsAnyItemActive()) {
-            sdrag = true;
+        if ((ImGui::IsMouseClicked(0) && in && !ImGui::IsAnyItemActive()) || (a.vcard_grab && !sdrag)) {
+            sdrag = true;               // (a button's press dragged comes here too: from where the finger is now)
             sy0 = my;
             ss0 = sc;
         }
@@ -320,6 +322,8 @@ static void draw(App &a)
             sc = std::max(0.0f, std::min(vmax, ss0 - (my - sy0)));
         else
             sdrag = false;
+        if (a.vcard_push != 0)          // (what a list or the pads could not scroll: the card's)
+            sc = std::max(0.0f, std::min(vmax, sc + a.vcard_push));
         if (in && io.MouseWheel != 0 && !ImGui::IsAnyItemHovered())
             sc = std::max(0.0f, std::min(vmax, sc - io.MouseWheel * 40));
         if (sdrag)

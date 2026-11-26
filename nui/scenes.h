@@ -236,6 +236,7 @@ inline void draw_metro_gs(App &a, float MX, float Y0, float MW, float Y1)
         ImGui::SetCursorScreenPos(P(a, MX + 12, ky - 30));
         if (ImGui::InvisibleButton("metroon", ImVec2(cw * a.k, 60 * a.k)))
             gset(10, on ? 0 : C.last_bpm);
+        tap_yields(a);
         text_c(a, a.bold, 14, MX + 12 + cw / 2, ky + 24, SILK_DIM, T("ON"));
         int picked;
         list_knob(a, "metbpm", MX + 12 + 1.5f * cw, ky, 48, irange(30, 300), {}, on ? bpm : C.last_bpm, T("Tempo"), false, cw - 4, picked);

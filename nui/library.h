@@ -269,6 +269,7 @@ inline void draw_library(App &a)
     ImGui::SetCursorScreenPos(P(a, MX, SY));
     if (ImGui::InvisibleButton("search", ImVec2(SW * a.k, SH * a.k)))
         L.typing = true;
+    tap_yields(a);
     if (L.typing) {                     // (a keyboard's typing too, while the keys are up)
         ImGuiIO &io = ImGui::GetIO();
         for (int i = 0; i < io.InputQueueCharacters.Size; i++) {

@@ -85,6 +85,7 @@ inline bool pedal_btn(App &a, const char *id, float cx, float y, bool on, const 
     const float w = a.tab ? 64 : 84, h = a.tab ? 110 : 150, x = cx - w / 2, dy = on ? (a.tab ? 4 : 6) : 0;
     ImGui::SetCursorScreenPos(P(a, x, y));
     const bool hit = ImGui::InvisibleButton(id, ImVec2(w * a.k, h * a.k));
+    tap_yields(a);
     // (a pedal of turned metal, convex across: lit along its crown, darker to
     // its sides and toward the floor; down, it sinks and its shadow goes;
     // on, its metal warm with the light)
