@@ -177,7 +177,15 @@ std::string nv_host::presets_default_path() const
         if (access(p.c_str(), R_OK) == 0)
             return p;
     }
-    return in(nv_self_exe());
+    // (a Mac app's: its Resources, beside its program's folder -- a bundle's Frameworks hold code only)
+    const std::string self = nv_self_exe();
+    const size_t k = self.rfind('/');
+    if (k != std::string::npos) {
+        const std::string r = self.substr(0, k) + "/../Resources/ui/presets_default.json";
+        if (access(r.c_str(), R_OK) == 0)
+            return r;
+    }
+    return in(self);
 }
 bool nv_host::presets_read(sess::J &d, std::set<std::string> *defaults, std::set<std::string> *mine) const
 {
