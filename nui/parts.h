@@ -186,7 +186,7 @@ inline void draw_parts(App &a)
         draw_strips_tab(a, X0, X1, ly0 + n * lane + 10, card_y1(a));
         return;
     }
-    const float sy = ly0 + n * lane + 14, sh = 1056 - sy;
+    const float sy = ly0 + n * lane + 14, sh = card_y1(a) - sy;
     const float gap = 10, sw = std::max(108.0f, std::min(240.0f, (X1 - X0 - gap * (n - 1)) / std::max(1, n)));
     for (int i = 0; i < n; i++) {
         const J *p = part(a, i);

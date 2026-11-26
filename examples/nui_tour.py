@@ -137,6 +137,8 @@ def tour(nvx, out, layout, session, ps, keep_ppm):
     if os.path.exists(rep):
         os.remove(rep)
     size = "2266x1488" if layout == "ipad" else "1920x1080"
+    if layout == "laptop" and os.environ.get("NUI_TOUR_SIZE"):     # (a Mac's window: its shape, at its Retina pixels)
+        size = os.environ["NUI_TOUR_SIZE"]
     env = dict(os.environ, SDL_VIDEODRIVER="offscreen", NUI_SIZE=size, NUI_SCRIPT=script, NUI_TEXT_AUDIT=rep,
                NUI_LAYOUT=layout)
     with open(os.path.join(d, "run.log"), "w") as log:

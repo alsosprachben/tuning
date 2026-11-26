@@ -72,12 +72,20 @@ static void draw(App &a)
         const char *lay = getenv("NUI_LAYOUT");
         // (the phone's: NUI_LAYOUT=phone, or a screen under 500 points tall -- a phone in landscape)
         a.ph = lay ? !strcmp(lay, "phone") : ds.y < 500.0f;
-        a.tab = a.ph || (lay ? !strcmp(lay, "ipad") : ds.x / std::max(1.0f, ds.y) < 1.65f);
+        // (the iPad's on an iPad's shape; a Mac's or a desktop's window keeps the laptop's down
+        //  to 1.45 -- a 16:10 screen, a window with its title bar -- its cards as tall as the window)
+#if defined(__APPLE__) && TARGET_OS_IPHONE
+        const float narrow = 1.65f;
+#else
+        const float narrow = 1.45f;
+#endif
+        a.tab = a.ph || (lay ? !strcmp(lay, "ipad") : ds.x / std::max(1.0f, ds.y) < narrow);
         a.W = a.ph ? 832.0f : a.tab ? 1133.0f : 1920.0f;
         // (the iPad's as tall as the screen's shape: 744 on an iPad mini's
         //  1133x744, 787 on an 11-inch iPad's 1180x820 -- the cards' feet follow, card_y1)
         a.H = a.ph ? std::max(400.0f, std::floor(832.0f * ds.y / std::max(1.0f, ds.x)))
-            : a.tab ? std::max(744.0f, std::floor(1133.0f * ds.y / std::max(1.0f, ds.x))) : 1080.0f;
+            : a.tab ? std::max(744.0f, std::floor(1133.0f * ds.y / std::max(1.0f, ds.x)))
+                    : std::min(1324.0f, std::max(1080.0f, std::floor(1920.0f * ds.y / std::max(1.0f, ds.x))));
         a.ts = a.tab ? 0.5f : 1.0f;
     }
     a.k = std::min(ds.x / a.W, ds.y / a.H);
@@ -173,7 +181,7 @@ static void draw(App &a)
                 a.card = CARDS[i][0];
         if (button(a, "help", X + nc * (w + gap), Y, 56, 46, "?"))
             help_open(a, "basics");
-        look::module(a, 14, 338, 1892, 728, 10.0f);
+        look::module(a, 14, 338, 1892, a.H - 352, 10.0f);     // (to the window's foot: 728 at 1080)
     }
     piano_card(a, a.card == "piano");   // (the engine pushes the pedals only while it is open)
     if (a.card != "amp")

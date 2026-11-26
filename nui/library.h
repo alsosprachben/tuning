@@ -384,16 +384,11 @@ inline void draw_library(App &a)
                     name_x = std::max(name_x, 10 + text_w(a, a.font, 21, pn) + text_w(a, a.font, 14, vs) + 8);
                 }
             }
-            // (its standards, small, beside the star)
-            const float tagw = p.tag.empty() ? 0 : text_w(a, a.font, 14, p.tag) + 8;
+            // (its standards, small, over the star in its column: the name keeps its whole line)
+            const float tagw = 0;
             if (!p.tag.empty())
-                text(a, a.font, 14, x + tw - star - tagw,
-                     y + (p.desc.empty() ? (th - a.lh(14)) / 2
-                                         : (th - (1 + wrap_max(a, a.font, 14, p.desc, tw - name_x - star - 4, 2).size()) * a.lh(14)
-                                            - 2 * wrap_max(a, a.font, 14, p.desc, tw - name_x - star - 4, 2).size()) / 2),
-                     isc ? LCD_BG : SILK_DIM, p.tag);
+                text_c(a, a.font, 14, x + tw - star / 2, y + 5, isc ? LCD_BG : SILK_DIM, p.tag);
             // (the name; under it, the patch's few words -- "Hammond", "Moog: two saws, ladder")
-            // (the tag shares the name's line only: the words under it keep the width)
             const float nw = tw - name_x - star - 4;
             if (p.desc.empty())
                 text(a, a.font, 14, x + name_x, y + (th - h14) / 2, isc ? LCD_BG : SILK, fit(a, a.font, 14, p.name, nw - tagw));
@@ -406,7 +401,7 @@ inline void draw_library(App &a)
                     text(a, a.font, 14, x + name_x, y0 + (h14 + 2) * (i + 1), isc ? LCD_BG : SILK_DIM,
                          dl2[i]);
             }
-            look::star(a, x + tw - star / 2, y + th / 2, h21 * 0.5f, fav ? (isc ? LCD_BG : LCD) : (isc ? LCD_DIM : SILK_DIM), fav);
+            look::star(a, x + tw - star / 2, y + th / 2 + (p.tag.empty() ? 0 : 5), h21 * 0.5f, fav ? (isc ? LCD_BG : LCD) : (isc ? LCD_DIM : SILK_DIM), fav);
         }
     if (list.empty())
         text(a, a.font, 21, MX, TY + 10, SILK_DIM,

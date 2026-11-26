@@ -189,7 +189,7 @@ inline float page_kx(const App &a, int n, int pg, float x0, float w = 190)
     return a.ph ? 818 - n * (a.ph && n > 2 ? 130 : 160) + 4 + pg * (n > 2 ? 130 : 160) : x0 + pg * (w + 6);
 }
 inline float page_kw(const App &a, int n, float w = 190) { return a.ph ? (n > 2 ? 126 : 156) : w; }
-inline float card_y1(const App &a) { return a.vcard ? 728.0f : a.ph ? a.H - 12.0f : a.tab ? a.H - 16.0f : 1056.0f; }
+inline float card_y1(const App &a) { return a.vcard ? 728.0f : a.ph ? a.H - 12.0f : a.tab ? a.H - 16.0f : a.H - 24.0f; }
 inline float px(const App &a, float size)           // (code7's sizes: whole multiples of its 7 device pixels)
 {
     // (in points for ImGui; snapped where the screen's pixels are: 7, 14, 21 ... device px,
