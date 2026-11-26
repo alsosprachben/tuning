@@ -159,7 +159,7 @@ inline int toggle(App &a, const char *id, float cx, float cy, bool on, const std
 inline int segments(App &a, const std::string &id, float cx, float cy, const std::vector<std::string> &words, int sel,
                     const std::string &label, bool own, int &picked, float lw = 0, float xmin = -1e9f, float xmax = 1e9f)
 {
-    bool vert = words.size() > 2;
+    bool vert = words.size() > (a.ph ? 3u : 2u);
     for (const auto &w : words)
         vert = vert || w.size() > 6;
     float maxw = 0;
@@ -190,6 +190,189 @@ inline int segments(App &a, const std::string &id, float cx, float cy, const std
     return flags;
 }
 
+// ONE CONTROL of the synth's, centred at (ccx, ccy) in a cell cellw wide (its stack's left cl,
+// the section's left gx and right xmax): a switch, segments, or a knob (a wave's with its scope)
+inline void syn_ctl(App &a, size_t i, float ccx, float ccy, float cellw, float cl, float gx, float xmax)
+{
+    SynthUi &Y = g_syn;
+    const Knob &k = Y.knobs[i];
+    const bool own = syn_own(k);
+    const std::string id = "k" + std::to_string(k.knob);
+    const double pn = syn_pn(a, k);
+    const J *tx = Y.synth.get("text");
+    std::string words = Y.text.count((int)i) ? Y.text[(int)i]
+                        : tx && tx->is(J::ARR) && i < tx->a.size() && tx->a[i].is(J::STR) ? tx->a[i].s : "";
+    if (!k.steps.empty()) {
+        // a switch: off/on a pill; else segments
+        int sel = 0;
+        for (size_t s = 0; s < k.steps.size(); s++)
+            if (std::fabs(k.steps[s] - pn) < 1e-6)
+                sel = (int)s;
+        std::string label = k.generic;
+        for (char &ch : label)
+            ch = (char)toupper((unsigned char)ch);
+        if (k.steps.size() == 2 && k.words.size() == 2 && k.words[0] == "off" && k.words[1] == "on") {
+            const int f = toggle(a, id.c_str(), ccx, ccy - 10, sel == 1, label, own, cellw - 24);
+            if (f & K_RESET)
+                syn_forget(a, k);
+            else if (f & K_TAP)
+                syn_set(a, k, (int)i, k.steps[sel == 1 ? 0 : 1]);
+        } else {
+            int picked;
+            // (a stack wider than its cell starts at its cell's left, so it clears the control before)
+            const int f = segments(a, id, ccx, ccy - 10, k.words, sel, label, own, picked, a.ph ? cellw - 8 : cellw - 24,
+                                   k.words.size() > 2 ? cl : gx, xmax);
+            if (f & K_RESET)
+                syn_forget(a, k);
+            else if (picked >= 0 && picked != sel)
+                syn_set(a, k, (int)i, k.steps[(size_t)picked]);
+        }
+        return;
+    }
+    // a knob: a wave's with its scope; the cutoff big
+    const bool wave = k.kind == "wave" || k.kind == "subwave", big = k.kind == "hz";
+    float v01 = (float)pn;
+    std::vector<float> det;
+    if (k.kind == "wave")
+        det = {(float)W_TRI, (float)W_SAW, (float)W_SQUARE};
+    else if (k.kind == "subwave")
+        det = {(float)W_SUB_SQUARE};
+    else if (k.centred)
+        det = {0.5f};
+    const float size = std::max(a.tab ? 44.0f : 0.0f, big ? std::min(110.0f, cellw * 0.8f) : std::min(56.0f, cellw * 0.6f));   // (44 points the least on the iPad)
+    float ky = ccy - (big ? 20 : 14);
+    if (wave) {
+        const float sw = std::min(96.0f, cellw - 10);
+        scope(a, ccx - sw / 2, ky - size / 2 - 50, sw, 36, k.kind == "subwave", pn);
+        ky += 12;
+    }
+    std::string label = k.generic;
+    for (char &ch : label)
+        ch = (char)toupper((unsigned char)ch);
+    const int f = knob(a, id.c_str(), ccx, ky, size, v01, label, words, k.centred, det, cellw - 24, own);
+    if (f & K_CHANGED)
+        syn_set(a, k, (int)i, v01);
+    if (f & K_RESET)
+        syn_forget(a, k);
+}
+
+// A CONTROL's LEAST WIDTH on the phone's line: a knob's, a wave's (its scope), the cutoff's;
+// a switch's; segments in a row (three short words at most) or stacked
+inline float syn_minw(App &a, const Knob &k)
+{
+    if (k.steps.empty())
+        return k.kind == "wave" || k.kind == "subwave" ? 84 : k.kind == "hz" ? 96 : 68;
+    if (k.steps.size() == 2 && k.words.size() == 2 && k.words[0] == "off" && k.words[1] == "on")
+        return 68;
+    float maxw = 0;
+    bool vert = k.words.size() > 3;
+    for (const auto &w : k.words) {
+        maxw = std::max(maxw, text_w(a, a.font, 14, w));
+        vert = vert || w.size() > 6;
+    }
+    const float bw = std::max(vert ? 54.0f : 40.0f, maxw + 16);
+    return (vert ? bw : bw * k.words.size()) + 10;
+}
+
+// THE PHONE's SYNTH PAGE: its sections side by side, each a tray the page's height; a
+// section's iPad rows laid along a line (the phone short, wide), a line or two of them --
+// each control as wide as it needs, the rest shared; its rows' groups named, a rule between
+inline void syn_phone_page(App &a, int page)
+{
+    SynthUi &Y = g_syn;
+    struct Sec {
+        const char *name;
+        std::vector<std::vector<int>> lines;        // (each line: the iPad's rows along it)
+    };
+    static const std::vector<std::vector<Sec>> PP = {
+        {{"Oscillators", {{1, 2, 3}}}},
+        {{"Mixer", {{1, 2}}}, {"Filter", {{1, 2, 3}}}},
+        {{"Envelopes", {{1, 2}, {3}}}},
+        {{"LFO 1", {{1, 2, 3}}}, {"Left hand", {{1, 2}}}},
+        {{"Delay", {{1, 2, 3, 4}}}}};
+    auto group = [](const std::string &sec, int row) -> const char * {
+        if (sec == "Oscillators")
+            return row == 1 ? "OSC 1" : row == 2 ? "OSC 2" : "1\xe2\x86\x92" "2";
+        if (sec == "Envelopes")
+            return row == 1 ? "FILTER" : row == 2 ? "AMPLIFIER" : "";
+        return "";
+    };
+    const auto &secs = PP[(size_t)std::max(0, std::min(page, (int)PP.size() - 1))];
+    struct Cell {
+        size_t i;
+        int row;
+        float w;
+    };
+    std::vector<std::vector<std::vector<Cell>>> cells(secs.size());
+    std::vector<float> need(secs.size(), 0);
+    for (size_t s = 0; s < secs.size(); s++)
+        for (const auto &line : secs[s].lines) {
+            std::vector<Cell> cl;
+            float sum = 0;
+            for (int r : line) {
+                std::vector<size_t> ks;
+                for (size_t i = 0; i < Y.knobs.size(); i++)
+                    if (Y.knobs[i].column == secs[s].name && Y.knobs[i].row == r)
+                        ks.push_back(i);
+                std::sort(ks.begin(), ks.end(), [&](size_t x, size_t y) { return Y.knobs[x].col < Y.knobs[y].col; });
+                for (size_t i : ks) {
+                    const float w = syn_minw(a, Y.knobs[i]);
+                    cl.push_back({i, r, w});
+                    sum += w;
+                }
+            }
+            cells[s].push_back(cl);
+            need[s] = std::max(need[s], sum + 12);
+        }
+    const float X0 = 14, X1 = 818, gap = 6, top = 160, bottom = card_y1(a);
+    float tot = 0;
+    for (float n : need)
+        tot += n;
+    const float avail = X1 - X0 - gap * (secs.size() - 1);
+    float cx0 = X0;
+    for (size_t s = 0; s < secs.size(); s++) {
+        const float cw = avail * need[s] / std::max(1.0f, tot);
+        look::tray(a, cx0, top, cw, bottom - top, 8);
+        a.lab_x0 = cx0 + 4;
+        a.lab_x1 = cx0 + cw - 4;
+        std::string up = secs[s].name;
+        for (char &ch : up)
+            ch = (char)toupper((unsigned char)ch);
+        heading(a, cx0 + 12, top + 10, up, std::string("synth:") + secs[s].name);
+        const size_t nl = cells[s].size();
+        const float gy = top + 34, lh = (bottom - top - 40) / std::max<size_t>(1, nl);
+        for (size_t li = 0; li < nl; li++) {
+            const auto &cl = cells[s][li];
+            float sum = 0;
+            for (const Cell &c : cl)
+                sum += c.w;
+            const float gx = cx0 + 6, gw = cw - 12, k = sum > 0 ? gw / sum : 1, ly = gy + li * lh;
+            if (li > 0)
+                rect(a, cx0 + 10, ly - 2, cw - 20, 1, IM_COL32(0x33, 0x36, 0x3a, 255), 0);
+            float x = gx;
+            int prow = -1;
+            bool named = false;
+            for (const Cell &c : cl) {
+                const float w = c.w * k;
+                if (c.row != prow) {            // (a new row's group: a rule before it, its name over it)
+                    if (prow >= 0)
+                        rect(a, x - 1, ly + 6, 1, lh - 12, IM_COL32(0x33, 0x36, 0x3a, 255), 0);
+                    const char *g = group(secs[s].name, c.row);
+                    if (*g) {
+                        text(a, a.bold, 14, x + 6, ly + 2, SILK_DIM, g);
+                        named = true;
+                    }
+                    prow = c.row;
+                }
+                syn_ctl(a, c.i, x + w / 2, ly + lh / 2 + (named ? 6 : 0), w, x, gx, gx + gw);
+                x += w;
+            }
+        }
+        cx0 += cw + gap;
+        a.lab_x0 = a.lab_x1 = 0;
+    }
+}
+
 inline void draw_synth(App &a)
 {
     SynthUi &Y = g_syn;
@@ -200,36 +383,46 @@ inline void draw_synth(App &a)
     const J *p = part(a, a.row);
     const int layers = (int)num(&Y.synth, "layers");
     const bool T = a.tab;               // (the iPad's: its card from y 210 to card_y1 + 6, two pages)
-    const float HX = T ? 22 : 34, HY = T ? 224 : 356, BY = T ? 216 : 346, BH = T ? 44 : 38, HX1 = T ? (a.ph ? 810 : 1105) : 1886;
+    const bool PH = a.ph;               // (the phone's: its own card from y 106, five pages)
+    const float HX = PH ? 14 : T ? 22 : 34, HY = PH ? 120 : T ? 224 : 356, BY = PH ? 112 : T ? 216 : 346, BH = PH ? 40 : T ? 44 : 38,
+                HX1 = PH ? 818 : T ? 1105 : 1886;
     const float TX = heading(a, HX, HY, "SYNTH", "synth");
     if (layers <= 0) {
-        text(a, a.font, 21, HX, T ? 270 : 400, SILK_DIM,
+        text(a, a.font, 21, HX, PH ? 166 : T ? 270 : 400, SILK_DIM,
              layers < 0 ? std::string("Reading the part\xe2\x80\xa6")
                         : (p ? str(p, "name") : std::string("This part")) + " is not a synth.");
-        text(a, a.font, 14, HX, T ? 300 : 432, SILK_DIM,
+        text(a, a.font, 14, HX, PH ? 196 : T ? 300 : 432, SILK_DIM,
              "The synth programs (Synth Lead, Synth Pad, the synth basses, brass and strings) bring their knobs here.");
         return;
     }
-    text(a, a.font, 14, TX, HY + 1, OWN, fit(a, a.font, 14, "part " + pad2(a.row + 1) + " \xc2\xb7 " + (p ? str(p, "name") : ""), a.ph ? 150 : T ? 200 : 900));
+    if (!PH)                            // (the phone's display names the part; its row is the pages')
+        text(a, a.font, 14, TX, HY + 1, OWN, fit(a, a.font, 14, "part " + pad2(a.row + 1) + " \xc2\xb7 " + (p ? str(p, "name") : ""), T ? 200 : 900));
     // (the iPad's two pages: the sound's sources and shaping; its movement and time)
-    static int page = 0;
-    if (T)
+    static int page = 0, ppage = 0;
+    if (PH) {                           // (the phone's five: a section or two each, a line of controls)
+        static const char *PN[5] = {"OSC", "MIX \xc2\xb7 FILTER", "ENV", "LFO", "DELAY"};
+        static const float PW[5] = {62, 118, 62, 62, 78};
+        float px_ = TX + 6;
+        for (int pg = 0; pg < 5; pg++) {
+            const std::string id = "syppage" + std::to_string(pg);
+            if (button(a, id.c_str(), px_, BY, PW[pg], BH, PN[pg], ppage == pg, true, 21))
+                ppage = pg;
+            px_ += PW[pg] + 4;
+        }
+    } else if (T)
         for (int pg = 0; pg < 2; pg++) {
             const std::string id = "sypage" + std::to_string(pg);
-            const float px_ = a.ph ? (layers >= 2 ? 502 : 654) - 228 + pg * 114 : 300 + pg * 214;
-            if (button(a, id.c_str(), px_, BY, a.ph ? 110 : 208, BH,
-                       a.ph ? (pg ? "LFO \xc2\xb7 ENV" : "OSC \xc2\xb7 FILTER")
-                            : pg ? "LFO \xc2\xb7 ENV \xc2\xb7 DELAY" : "OSC \xc2\xb7 MIX \xc2\xb7 FILTER",
-                       page == pg, true, 21))
+            if (button(a, id.c_str(), 300 + pg * 214, BY, 208, BH,
+                       pg ? "LFO \xc2\xb7 ENV \xc2\xb7 DELAY" : "OSC \xc2\xb7 MIX \xc2\xb7 FILTER", page == pg, true, 21))
                 page = pg;
         }
     // the head: back to the patch (how many changed), the layers
     int changed = 0;
     for (const Knob &k : Y.knobs)
         changed += syn_own(k);
-    const float bbw = a.ph ? 150 : T ? (layers >= 2 ? 200 : 360) : 420;
+    const float bbw = a.ph ? 124 : T ? (layers >= 2 ? 200 : 360) : 420;
     if (button(a, "synback", HX1 - bbw, BY, bbw, BH,
-               changed ? std::to_string(changed) + (T && (layers >= 2 || a.ph) ? " CHANGED \xc2\xb7 BACK" : " CHANGED \xc2\xb7 BACK TO THE PATCH")
+               changed ? PH ? std::to_string(changed) + " \xc2\xb7 BACK" : std::to_string(changed) + (T && layers >= 2 ? " CHANGED \xc2\xb7 BACK" : " CHANGED \xc2\xb7 BACK TO THE PATCH")
                        : "AS THE PATCH", false, changed > 0, T ? 21 : 14)) {
         for (const Knob &k : Y.knobs)
             if (syn_own(k))
@@ -240,8 +433,8 @@ inline void draw_synth(App &a)
     if (layers >= 2)
         for (int l = 0; l < 2; l++) {
             const std::string id = "layer" + std::to_string(l);
-            if (button(a, id.c_str(), HX1 - bbw - (a.ph ? 152 : T ? 176 : 260) + l * (a.ph ? 74 : T ? 86 : 124), BY,
-                       a.ph ? 70 : T ? 82 : 120, BH, l ? "LAYER B" : "LAYER A",
+            if (button(a, id.c_str(), HX1 - bbw - (a.ph ? 116 : T ? 176 : 260) + l * (a.ph ? 56 : T ? 86 : 124), BY,
+                       a.ph ? 52 : T ? 82 : 120, BH, a.ph ? (l ? "B" : "A") : l ? "LAYER B" : "LAYER A",
                        Y.layer == l, true, T ? 14 : 14)) {
                 Y.layer = l;
                 take_parts(a, call(a, "{\"call\":\"select\",\"row\":" + std::to_string(a.row) + ",\"layer\":" + std::to_string(l) + "}"));
@@ -249,6 +442,10 @@ inline void draw_synth(App &a)
             }
         }
 
+    if (PH) {
+        syn_phone_page(a, ppage);
+        return;
+    }
     // THE COLUMNS: the panel's sections, their widths in proportion
     struct Col {
         const char *name;
@@ -325,65 +522,8 @@ inline void draw_synth(App &a)
                     continue;
                 const int c = k.col;
                 const float ccx = gxk + (c - 0.5f) * cellw, ccy = gy + (k.row - 1) * cellh + k.rows * cellh / 2;
-                const bool own = syn_own(k);
-                const std::string id = "k" + std::to_string(k.knob);
-                const double pn = syn_pn(a, k);
-                const J *tx = Y.synth.get("text");
-                std::string words = Y.text.count((int)i) ? Y.text[(int)i]
-                                    : tx && tx->is(J::ARR) && i < tx->a.size() && tx->a[i].is(J::STR) ? tx->a[i].s : "";
-                if (!k.steps.empty()) {
-                    // a switch: off/on a pill; else segments
-                    int sel = 0;
-                    for (size_t s = 0; s < k.steps.size(); s++)
-                        if (std::fabs(k.steps[s] - pn) < 1e-6)
-                            sel = (int)s;
-                    std::string label = k.generic;
-                    for (char &ch : label)
-                        ch = (char)toupper((unsigned char)ch);
-                    if (k.steps.size() == 2 && k.words.size() == 2 && k.words[0] == "off" && k.words[1] == "on") {
-                        const int f = toggle(a, id.c_str(), ccx, ccy - 10, sel == 1, label, own, cellw - 24);
-                        if (f & K_RESET)
-                            syn_forget(a, k);
-                        else if (f & K_TAP)
-                            syn_set(a, k, (int)i, k.steps[sel == 1 ? 0 : 1]);
-                    } else {
-                        int picked;
-                        // (a stack wider than its cell starts at its cell's left, so it clears the control before)
-                        const float cl = gxk + (c - 1) * cellw;
-                        const int f = segments(a, id, ccx, ccy - 10, k.words, sel, label, own, picked, cellw - 24,
-                                               k.words.size() > 2 ? cl : gx, gx + gw);
-                        if (f & K_RESET)
-                            syn_forget(a, k);
-                        else if (picked >= 0 && picked != sel)
-                            syn_set(a, k, (int)i, k.steps[(size_t)picked]);
-                    }
-                    continue;
-                }
-                // a knob: a wave's with its scope; the cutoff big
-                const bool wave = k.kind == "wave" || k.kind == "subwave", big = k.kind == "hz";
-                float v01 = (float)pn;
-                std::vector<float> det;
-                if (k.kind == "wave")
-                    det = {(float)W_TRI, (float)W_SAW, (float)W_SQUARE};
-                else if (k.kind == "subwave")
-                    det = {(float)W_SUB_SQUARE};
-                else if (k.centred)
-                    det = {0.5f};
-                const float size = std::max(a.tab ? 44.0f : 0.0f, big ? std::min(110.0f, cellw * 0.8f) : std::min(56.0f, cellw * 0.6f));   // (44 points the least on the iPad)
-                float ky = ccy - (big ? 20 : 14);
-                if (wave) {
-                    const float sw = std::min(96.0f, cellw - 10);
-                    scope(a, ccx - sw / 2, ky - size / 2 - 50, sw, 36, k.kind == "subwave", pn);
-                    ky += 12;
-                }
-                std::string label = k.generic;
-                for (char &ch : label)
-                    ch = (char)toupper((unsigned char)ch);
-                const int f = knob(a, id.c_str(), ccx, ky, size, v01, label, words, k.centred, det, cellw - 24, own);
-                if (f & K_CHANGED)
-                    syn_set(a, k, (int)i, v01);
-                if (f & K_RESET)
-                    syn_forget(a, k);
+                const float cl = gxk + (c - 1) * cellw;
+                syn_ctl(a, i, ccx, ccy, cellw, cl, gx, gx + gw);
             }
         }
         cx0 += cw + gap;

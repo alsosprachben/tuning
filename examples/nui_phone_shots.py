@@ -15,7 +15,11 @@ CARDS = ['parts', 'scenes', 'library', 'synth', 'stops', 'piano', 'drums', 'amp'
 def card(c): i = CARDS.index(c); return 'tap %.0f %.0f' % (14 + (i % 5) * (cw + 8) + cw / 2, 114 + (i // 5) * 64 + 28)
 P2, P3 = [(580, 134), (740, 134)], [(495, 134), (625, 134), (755, 134)]
 STATES = [  # (shot, patch, card, taps after opening)
-    ('synth_lead', dict(program=84, variation=0), 'synth', []), ('synth_lead_p2', dict(program=84, variation=0), 'synth', [(720, 134)]),
+    ('synth_lead', dict(program=84, variation=0), 'synth', [(117, 132)]),
+    ('synth_lead_p2', dict(program=84, variation=0), 'synth', [(211, 132)]),
+    ('synth_lead_p3', dict(program=84, variation=0), 'synth', [(305, 132)]),
+    ('synth_lead_p4', dict(program=84, variation=0), 'synth', [(371, 132)]),
+    ('synth_lead_p5', dict(program=84, variation=0), 'synth', [(445, 132)]),
     ('synth_bass', dict(program=38, variation=0), 'synth', []),
     ('stops_drawbar', dict(program=16, variation=0), 'stops', []), ('stops_church', dict(program=19, variation=0), 'stops', []),
     ('stops_harmonium', dict(program=20, variation=0), 'stops', []),
