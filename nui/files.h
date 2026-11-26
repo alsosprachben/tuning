@@ -6,7 +6,10 @@
 // worth trying, the MT-32's or the mux's report), played live (the parts
 // its own, one per channel), or rendered offline: as heard (the live
 // engine) or at best quality (the file renderer, then the room's tail), in
-// the mode chosen (what the file says, GM, a Sound Canvas map, MT-32).
+// the mode chosen (what the file says, GM, a Sound Canvas map, MT-32). An
+// AUDIO file (MP3, WAV, FLAC -- our renders among them) is played instead,
+// beside what the keyboard plays, at its own level (audioplay.cpp): the
+// controls change to a player's.
 #pragma once
 
 #include "app.h"
@@ -20,6 +23,7 @@ struct FilesUi {
     std::string dir, sel, mode = "auto", rep_for;
     float scroll = 0, scroll_find = 0, scroll_rep = 0;
     bool find_open = false, rep_open = true;
+    float seek_drag = -1;               // (the position bar dragged: its place, till let go)
 };
 static FilesUi g_fl;
 
@@ -81,6 +85,37 @@ inline void fl_take(const J &r)
     }
     if (const J *f = r.get("files"))
         F.f = *f;
+}
+inline bool fl_is_audio(const std::string &p)
+{
+    std::string l = p;
+    for (char &c : l)
+        c = (char)tolower((unsigned char)c);
+    auto ends = [&](const char *x) { size_t k = strlen(x); return l.size() > k && l.compare(l.size() - k, k, x) == 0; };
+    return ends(".mp3") || ends(".wav") || ends(".flac");
+}
+inline void fl_report(App &a);
+// A FILE CHOSEN: a MIDI file read and checked; an audio file opened in the player
+inline void fl_select(App &a, const std::string &p)
+{
+    FilesUi &F = g_fl;
+    F.sel = p;
+    F.rep_for.clear();
+    F.scroll_find = 0;
+    F.seek_drag = -1;
+    if (fl_is_audio(p)) {
+        J r = call(a, "{\"call\":\"audio_open\",\"path\":" + jstr(p) + "}");
+        F.info = J();
+        if (!flag(&r, "ok") && r.get("error")) {
+            F.info = sess::obj();
+            F.info.o["audio_err"] = sess::str(str(&r, "error"));
+        }
+        fl_take(r);
+        return;
+    }
+    J r = call(a, "{\"call\":\"file_info\",\"path\":" + jstr(p) + "}");
+    F.info = r.get("info") ? *r.get("info") : J();
+    fl_report(a);
 }
 inline void fl_go(App &a, const std::string &dir)
 {
@@ -155,6 +190,8 @@ inline void draw_files(App &a)
                 page = pg;
         }
     const bool ok = flag(&F.info, "ok");
+    const J *au = F.f.get("audio");                 // (the audio player: an audio file chosen)
+    const bool aud = !F.sel.empty() && fl_is_audio(F.sel);
     const J *pl = F.f.get("player"), *rd = F.f.get("render");
     const bool playing = flag(pl, "busy"), rendering = flag(rd, "busy");
     if (playing)
@@ -182,12 +219,7 @@ inline void draw_files(App &a)
         if (nui_pick_take(pk, (int)sizeof pk) && pk[0]) {
             const std::string p = pk;
             fl_go(a, p.substr(0, p.rfind('/')));
-            F.sel = p;
-            F.rep_for.clear();
-            J r = call(a, "{\"call\":\"file_info\",\"path\":" + jstr(p) + "}");
-            F.info = r.get("info") ? *r.get("info") : J();
-            F.scroll_find = 0;
-            fl_report(a);
+            fl_select(a, p);
         }
     }
     std::string d = F.dir;
@@ -206,23 +238,17 @@ inline void draw_files(App &a)
         const bool on = p == F.sel;
         look::chip(a, X0 + 12, y, BW - 32, FB, on);
         text(a, a.font, 14, X0 + 22, y + (FB - a.lh(14)) / 2, on ? LCD_BG : dir ? LCD : SILK,
-             fit(a, a.font, 14, (dir ? "\xe2\x96\xb8 " : "") + str(&e, "name"), BW - 56));
+             fit(a, a.font, 14, (dir ? "\xe2\x96\xb8 " : flag(&e, "audio") ? "\xe2\x99\xaa " : "") + str(&e, "name"), BW - 56));
     });
     if (!ne)
-        text(a, a.font, 14, X0 + 12, Y0 + 86, SILK_DIM, "No folders or MIDI files here.");
+        text(a, a.font, 14, X0 + 12, Y0 + 86, SILK_DIM, "No folders, MIDI or audio files here.");
     if (tap >= 0) {
         const J &e = es->a[(size_t)tap];
         const std::string p = F.dir + "/" + str(&e, "name");
         if (flag(&e, "dir"))
             fl_go(a, p);
-        else {
-            F.sel = p;
-            F.rep_for.clear();
-            J r = call(a, "{\"call\":\"file_info\",\"path\":" + jstr(p) + "}");
-            F.info = r.get("info") ? *r.get("info") : J();
-            F.scroll_find = 0;
-            fl_report(a);
-        }
+        else
+            fl_select(a, p);
     }
 
     }
@@ -236,7 +262,19 @@ inline void draw_files(App &a)
              fit(a, a.font, 14, F.sel.substr(F.sel.rfind('/') + 1), FW - 140));
     std::string about;
     if (F.sel.empty())
-        about = "Choose a MIDI file on the left.";
+        about = "Choose a MIDI or audio file on the left.";
+    else if (aud) {
+        const std::string ae = str(&F.info, "audio_err");
+        const double sr = num(au, "sr");
+        const int ch = (int)num(au, "ch");
+        char hz[32];
+        snprintf(hz, sizeof hz, "%.1f kHz", sr / 1000.0);
+        about = !ae.empty() ? "It cannot be played: " + ae + "."
+              : str(au, "path") != F.sel ? std::string("Opening it\xe2\x80\xa6")
+              : "Audio, " + mmss(num(au, "len")) + " long \xc2\xb7 " + hz + " \xc2\xb7 " +
+                    (ch == 1 ? "mono" : ch == 2 ? "stereo" : std::to_string(ch) + " channels (the first two played)") +
+                    ". It plays beside what you play, at its own level" + (IP ? ": on the PLAY page." : ", on the right.");
+    }
     else if (!F.info.is(J::OBJ))
         about = "Reading it\xe2\x80\xa6";
     else if (!ok)
@@ -262,6 +300,7 @@ inline void draw_files(App &a)
         text(a, a.font, 14, FX + 12, y, SILK_DIM, l);
         y += LH;
     }
+    if (!aud) {                         // (an audio file: no mode, no check)
     const std::string sug = str(&F.info, "suggest");
     if (ok && !sug.empty() && fl_eff() != sug)
         for (const auto &l : wrap(a, a.font, 14, "Worth trying " + fl_mode_label(sug) + ": " + str(&F.info, "suggest_why") + ".", FW - 24)) {
@@ -319,6 +358,7 @@ inline void draw_files(App &a)
         if (F.rep_open && nr)
             lines_box(a, "flrepbox", FX + 12, y, FW - 24, bh - 8, F.rep, F.scroll_rep);
     }
+    }
 
     }
     // PLAY LIVE (the iPad's a page of its own, the file named at its top)
@@ -333,6 +373,55 @@ inline void draw_files(App &a)
         text(a, a.font, 21, PX + 8, py, LCD, F.sel.empty() ? std::string("No file chosen: choose one on the CHOOSE page.")
                                                          : fit(a, a.font, 21, F.sel.substr(F.sel.rfind('/') + 1), PW - 24));
         py += a.lh(21) + 14;
+    }
+    if (aud) {                          // THE PLAYER: an audio file, beside what is played
+        heading(a, PX + 8, py, "PLAYER", "fl:audio");
+        py += 26;
+        const bool here = str(au, "path") == F.sel, pl = here && flag(au, "playing");
+        const double len = num(au, "len"), at = F.seek_drag >= 0 ? F.seek_drag : num(au, "at");
+        if (button(a, "flaplay", PX + 8, py, 160, 44, pl ? "PAUSE" : "PLAY", pl, here && len > 0, B21) && here)
+            fl_take(call(a, std::string("{\"call\":\"audio_play\",\"on\":") + (pl ? "0" : "1") + "}"));
+        if (button(a, "flastop", PX + 176, py, 110, 44, "STOP", false, here && (pl || at > 0), B21)) {
+            fl_take(call(a, "{\"call\":\"audio_play\",\"on\":0}"));
+            fl_take(call(a, "{\"call\":\"audio_seek\",\"at\":0}"));
+        }
+        text(a, a.font, 21, PX + 304, py + (44 - a.lh(21)) / 2, LCD, mmss(at) + " / " + mmss(len));
+        py += 62;
+        // (its place: a bar to drag, the file sought where it is let go)
+        const float bx = PX + 8, bw = PW - 150, bh = 40;
+        ImGui::SetCursorScreenPos(P(a, bx, py));
+        ImGui::InvisibleButton("flaseek", ImVec2(bw * a.k, bh * a.k));
+        if (ImGui::IsItemActive() && here && len > 0) {
+            const float mx = (ImGui::GetIO().MousePos.x - a.org.x) / a.k;
+            F.seek_drag = (float)(std::max(0.0, std::min(1.0, (double)(mx - bx) / bw)) * len);
+        }
+        if (ImGui::IsItemDeactivated() && F.seek_drag >= 0) {
+            fl_take(call(a, "{\"call\":\"audio_seek\",\"at\":" + std::to_string(F.seek_drag) + "}"));
+            F.seek_drag = -1;
+        }
+        const float fr = len > 0 ? (float)std::min(1.0, at / len) : 0.0f;
+        rect(a, bx, py + bh / 2 - 4, bw, 8, IM_COL32(0x2b, 0x2f, 0x34, 255), 4);
+        rect(a, bx, py + bh / 2 - 4, bw * fr, 8, F.seek_drag >= 0 ? OWN : LCD, 4);
+        rect(a, bx + bw * fr - 6, py + bh / 2 - 14, 12, 28, F.seek_drag >= 0 ? OWN : SILK, 4);
+        // (its level: a fader at the right, 0 dB its detent)
+        {
+            static float lv = 0;
+            static bool held = false;
+            const int fl_ = fader(a, "flalevel", PX + PW - 70, Y0 + (IP ? 90 : 130), IP ? 240 : 170, lv, -30, 6, 0.5f, {0.0f},
+                                  "LEVEL", (lv > 0 ? "+" : "") + std::to_string((int)std::lround(lv)) + " dB");
+            if (fl_ & K_CHANGED)
+                fl_take(call(a, "{\"call\":\"audio_level\",\"db\":" + std::to_string(lv) + "}"));
+            held = (fl_ & K_ACTIVE) != 0;
+            if (!held)
+                lv = (float)num(au, "level_db");
+        }
+        py += bh + 20;
+        for (const auto &l : wrap(a, a.font, 14, "It plays through the same output as the keyboard, mixed beside it: "
+                                                 "play along, or listen back to a render.", PW - 170)) {
+            text(a, a.font, 14, PX + 8, py, SILK_DIM, l);
+            py += LH;
+        }
+        return;
     }
     heading(a, PX + 8, py, "PLAY LIVE", "fl:play");
     py += 26;
@@ -427,6 +516,11 @@ inline void draw_files(App &a)
                 text(a, a.font, 14, PX + 8, py, LCD, l);
                 py += LH;
             }
+            if (button(a, "flplayit", PX + 8, py + 6, IP ? 200 : 160, IP ? 44 : 40, "PLAY IT", false, true, B21)) {
+                fl_go(a, out.substr(0, out.rfind('/')));        // (its folder, and the player)
+                fl_select(a, out);
+            }
+            py += 56;
         }
     }
     // (the caution under the render buttons and what they said, not at the card's foot)

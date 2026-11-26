@@ -70,7 +70,7 @@ extern "C" void nui_pick_midi(void)
 {
     dispatch_async(dispatch_get_main_queue(), ^{
         NSMutableArray<UTType *> *types = [NSMutableArray array];
-        for (NSString *x in @[ @"mid", @"midi", @"kar", @"smf" ])
+        for (NSString *x in @[ @"mid", @"midi", @"kar", @"smf", @"mp3", @"wav", @"flac" ])     // (audio too: the player's)
             if (UTType *t = [UTType typeWithFilenameExtension:x])
                 [types addObject:t];
         UIDocumentPickerViewController *dp = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:types

@@ -2815,6 +2815,8 @@ void nv_host::render_block(long long n0, float *buf, bool step)
     }
     long long t1 = rt::now_ns();
     nv_part_output(part, n0, (long)BLK, L, R, fn[0], fn[1], fn[2], BLK, master_now);
+    if (void *ap = aplay.load(std::memory_order_acquire))     // (the Files card's audio, beside what is played)
+        nv_aplay_mix(ap, L, R, (long)BLK);
     last_step_ms = (t1 - t0) / 1e6;
     last_out_ms = (rt::now_ns() - t1) / 1e6;
     if (!rub_on)
@@ -4440,6 +4442,8 @@ void nv_host::teardown()
         bcv.notify_all();
         builder.join();
     }
+    if (void *ap = aplay.exchange(nullptr))
+        nv_aplay_free(ap);
     if (part) {
         nv_part_stop_workers(part);
         nv_part_free(part);

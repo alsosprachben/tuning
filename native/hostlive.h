@@ -162,6 +162,17 @@ void nv_part_scan_async(void *h);
 void nv_part_busy_test(void *h, int n);
 void nv_part_stop_workers(void *h);
 void nv_part_free(void *h);
+// THE FILES CARD's AUDIO PLAYER (audioplay.cpp): a file beside what is played
+void *nv_aplay_new(double out_sr);
+void nv_aplay_free(void *p);
+int nv_aplay_open(void *p, const char *path, char *err, int cap);
+void nv_aplay_close(void *p);
+void nv_aplay_play(void *p, int on);
+void nv_aplay_seek(void *p, double s);
+void nv_aplay_level(void *p, double db);
+void nv_aplay_state(void *p, double *at, double *len, int *playing, double *sr, int *ch, double *level_db);
+const char *nv_aplay_path(void *p);
+void nv_aplay_mix(void *p, float *L, float *R, long n);
 void nv_part_rt_prepare(void *h, long frames);
 void nv_part_busy_stats(void *h, long *out);
 void nv_part_amp_async(void *h);
@@ -1729,6 +1740,20 @@ struct nv_host {
     // A HOST LET GO (an in-process --test run's, nv_live_render_test): its part
     // and its workers, its patches, the export's map -- the rest with the object
     void teardown();
+    // (the Files card's audio player: made when first asked, mixed after the part's output)
+    std::atomic<void *> aplay{nullptr};
+    void *aplay_get()
+    {
+        void *p = aplay.load();
+        if (!p) {
+            void *n = nv_aplay_new(SR);
+            if (aplay.compare_exchange_strong(p, n))
+                p = n;
+            else
+                nv_aplay_free(n);
+        }
+        return p;
+    }
     std::atomic<bool> builder_busy{false};
     int building();
     // THE BUILD UNDER WAY (the panel's progress): templates done of the

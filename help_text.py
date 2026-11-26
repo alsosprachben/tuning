@@ -852,3 +852,20 @@ HELP_TOC = [['Start here', ['basics']],
  ['Files', ['files', 'fl:browse', 'fl:file', 'fl:mode', 'fl:vel', 'fl:play', 'fl:render']],
  ['Setup', ['setup', 'su:midi', 'su:module', 'su:msgr', 'su:sound', 'su:rubato']],
  ['About', ['credits']]]
+
+# THE FILES CARD's AUDIO PLAYER (2026-11-26)
+HELP['fl:audio'] = {
+    'title': 'Player',
+    'intro': 'An audio file -- MP3, WAV or FLAC, your renders among them -- chosen on the left plays here, '
+             'beside what you play, through the same output.',
+    'terms': [
+        ['PLAY / PAUSE', 'Plays the file from where it is, or holds it there.'],
+        ['STOP', 'Stops it and goes back to the start.'],
+        ['The bar', 'Where it is in the file. Drag along it and let go to play from there.'],
+        ['LEVEL', "The file's level beside the keyboard's, -30 to +6 dB; 0 dB as the file is."],
+        ['PLAY IT', 'Under a finished render: chooses that render here, ready to play.'],
+    ],
+}
+for _g in HELP_TOC:
+    if _g[0] == 'Files' and 'fl:audio' not in _g[1]:
+        _g[1].insert(_g[1].index('fl:render') + 1 if 'fl:render' in _g[1] else len(_g[1]), 'fl:audio')

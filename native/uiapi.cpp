@@ -92,6 +92,11 @@ double arg_d(const J &q, const char *k, double d)
     const J *v = q.get(k);
     return v ? v->d(d) : d;
 }
+std::string arg_s(const J &q, const char *k)
+{
+    const J *v = q.get(k);
+    return v && v->is(J::STR) ? v->s : "";
+}
 
 // THE KNOB TABLE (nv_host_synth_knobs), parsed once
 struct Knob {
@@ -1156,10 +1161,31 @@ extern "C" void nv_ui_files_shutdown(nv_host *h)
     g_render.halt();
     module::shutdown();
 }
+static nv_host *g_files_host = nullptr;     // (the host the Files card's audio player is on: files_state's)
+// THE AUDIO PLAYER's state (audioplay.cpp): its file, place, length, playing, the file's rate and channels, its level
+static J audio_state(nv_host *h)
+{
+    J a = sess::obj();
+    void *ap = h ? h->aplay.load() : nullptr;
+    double at = 0, len = 0, sr = 0, lv = 0;
+    int pl = 0, ch = 0;
+    if (ap)
+        nv_aplay_state(ap, &at, &len, &pl, &sr, &ch, &lv);
+    const std::string p = ap ? nv_aplay_path(ap) : "";
+    a.o["path"] = sess::str(p);
+    a.o["at"] = num(at);
+    a.o["len"] = num(len);
+    a.o["playing"] = sess::boolean(pl != 0);
+    a.o["sr"] = num(sr);
+    a.o["ch"] = sess::integer(ch);
+    a.o["level_db"] = num(lv);
+    return a;
+}
 static J files_state()
 {
     J o = sess::obj();
     o.o["player"] = g_player.state();
+    o.o["audio"] = audio_state(g_files_host);
     o.o["render"] = g_render.state();
     o.o["renders"] = sess::str(g_renders_dir);
     o.o["file_export"] = sess::boolean(!g_file_export.empty());
@@ -1754,6 +1780,25 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         g_render.start(h, pj && pj->is(J::STR) ? pj->s : "", mj && mj->is(J::STR) ? mj->s : "auto",
                        kj && kj->is(J::STR) && kj->s == "best" ? "best" : "heard", arg_i(q, "whole", 0) != 0,
                        g_renders_dir.empty() ? fileplay::music_root() + "/renders" : g_renders_dir, g_file_export);
+        r.o["files"] = files_state();
+    } else if (call == "audio_open" || call == "audio_play" || call == "audio_seek" || call == "audio_level"
+               || call == "audio_close") {
+        // THE AUDIO PLAYER: a file opened (paused at its start), played or paused, its place, its level, closed
+        g_files_host = h;
+        void *ap = h->aplay_get();
+        if (call == "audio_open") {
+            char err[160] = {};
+            ok = nv_aplay_open(ap, arg_s(q, "path").c_str(), err, sizeof err) == 0;
+            if (!ok)
+                r.o["error"] = sess::str(err);
+        } else if (call == "audio_play")
+            nv_aplay_play(ap, (int)arg_i(q, "on", 1));
+        else if (call == "audio_seek")
+            nv_aplay_seek(ap, arg_d(q, "at", 0.0));
+        else if (call == "audio_level")
+            nv_aplay_level(ap, arg_d(q, "db", 0.0));
+        else
+            nv_aplay_close(ap);
         r.o["files"] = files_state();
     } else if (call == "file_render_stop") {
         g_render.halt();

@@ -498,7 +498,7 @@ def _lib_units(apple):
              # live host (host.h: nvlive's, as a library); a part's own bus live
              # (live.LiveBus: efxbus's processors, block by block)
              + [(f[:-4], cxx, nat(f)) for f in ('roomtail.cpp', 'host.cpp', 'hostsession.cpp', 'uiapi.cpp', 'livebus.cpp',
-                                                'nvroomtail.cpp', 'nvrender.cpp', 'kernels.cpp')]
+                                                'nvroomtail.cpp', 'nvrender.cpp', 'kernels.cpp', 'audioplay.cpp')]
              + _kernel_units(nat))
     return units
 
@@ -512,7 +512,7 @@ def _load():
                                                        'npyrandom.c', 'npyrandom.h', 'pocketfft.c', 'efxrev.c', 'leslie.cpp', 'tubeamp.cpp', 'scanner.cpp', 'reed.cpp',
                                                        'epiano.cpp', 'efxchain.cpp', 'roomtail.cpp', 'host.cpp', 'hostsession.cpp', 'uiapi.cpp', 'session.h', 'hostint.h', 'hostlive.h', 'host.h', 'livebus.cpp',
                                                        'relocate.h', 'selfexe.h', 'lfqueue.h', 'rtjoin.h', 'rtsem.h', 'rubfill.h',
-                                                       'nvroomtail.cpp', 'nvrender.cpp', 'kernels.cpp')]
+                                                       'nvroomtail.cpp', 'nvrender.cpp', 'kernels.cpp', 'audioplay.cpp')]
             + [os.path.join(HERE, f) for f in ('roomcore.c', 'registercore.c', 'tapkernel.c', 'convolver.c')
                + _BR_KERNEL_PARTS])
     # ...and EVERY header and include in native/: a header a unit includes

@@ -155,7 +155,8 @@ static J list_dir(std::string dir)
             for (char &c : low)
                 c = (char)tolower((unsigned char)c);
             auto ends = [&](const char *x) { size_t k = strlen(x); return low.size() > k && low.compare(low.size() - k, k, x) == 0; };
-            if (ends(".mid") || ends(".midi") || ends(".kar") || ends(".smf") || ends(".rmi"))
+            if (ends(".mid") || ends(".midi") || ends(".kar") || ends(".smf") || ends(".rmi")
+                || ends(".mp3") || ends(".wav") || ends(".flac"))           // (audio too: the card's player)
                 got.push_back({false, n});
         }
         closedir(d);
@@ -169,6 +170,15 @@ static J list_dir(std::string dir)
         J e = sess::obj();
         e.o["name"] = sess::str(g.second);
         e.o["dir"] = sess::boolean(g.first);
+        {                                   // (an audio file: the player's, not the engine's)
+            std::string low = g.second;
+            for (char &c : low)
+                c = (char)tolower((unsigned char)c);
+            const bool au = !g.first && (low.size() > 4 && (low.compare(low.size() - 4, 4, ".mp3") == 0
+                                                             || low.compare(low.size() - 4, 4, ".wav") == 0)
+                                          || (low.size() > 5 && low.compare(low.size() - 5, 5, ".flac") == 0));
+            e.o["audio"] = sess::boolean(au);
+        }
         ents.a.push_back(e);
     }
     o.o["dir"] = sess::str(dir);
