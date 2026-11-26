@@ -524,8 +524,7 @@ const HELP = {
     terms: [
       ['Presets', 'The whole setup.'],
       ['Scenes', 'Only each channel\'s control settings.'],
-      ['Metronome', 'A click to play with.'],
-      ['GS reset', 'Everything back to power-on.'],
+      ['Metronome, GS reset', 'On the Control card.'],
     ],
   },
   'sc:presets': {
