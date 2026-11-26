@@ -586,3 +586,11 @@ terms, and the audio is lossy, so fit below about 15 kHz.
 - **Pergolesi, Stabat Mater** score (CC BY-NC-SA): a demo render only.
 - **Roland**: names only, used nominatively (what a GS file asks for); no
   Roland module or sample was fitted (memory: no Roland sounds).
+- **The interface's fonts** (ui/fonts): code7 is Ben's own. IBM Plex Sans
+  is OFL (OFL-IBMPlexSans.txt). The CJK fallback, Fusion Pixel 8px
+  (TakWolf, 2026.11.10, fusion-pixel-8px-monospaced-ja.bdf), is OFL
+  (OFL-FusionPixel.txt), built from Misaki (free for any use, commercial
+  included), Galmuri, Boutique Bitmap 7x7 and Miseki Bitmap (all OFL); their
+  notices are in ui/fonts/LICENSES-FusionPixel. The OFL lets fonts be
+  bundled in a sold app; only selling the font by itself is barred. Ship the
+  notices with the app (the bundle carries ui/fonts whole).

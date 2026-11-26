@@ -27,6 +27,11 @@ struct BdfGlyph {
 
 struct Bdf {
     int ascent = 6, descent = 1;
+    // (a FALLBACK font -- Fusion Pixel's CJK, for what code7 lacks -- set to
+    //  code7's 7-pixel cell, so it scales and sits as code7 does; its wide
+    //  glyphs, wide_from pixels or more, centred in wide_dw, code7w's 12: two
+    //  of code7's cells, the grid full-width text keeps)
+    int wide_from = 0, wide_dw = 0;
     std::unordered_map<uint32_t, int> idx;   // codepoint -> glyph + 1
     std::vector<BdfGlyph> g;
 };
@@ -144,11 +149,13 @@ inline bool bdf_load_glyph(ImFontAtlas *atlas, ImFontConfig *src, ImFontBaked *b
     const BdfGlyph &g = b->g[(size_t)glyph_index - 1];
     const float d = bdf_density(baked);
     const int s = bdf_scale(*b, baked->Size * d);
+    const bool wide = b->wide_dw > 0 && g.dw >= b->wide_from;
+    const int dw = wide ? b->wide_dw : g.dw, xo = g.xo + (wide ? (b->wide_dw - g.dw) / 2 : 0);
     if (out_advance_x) {
-        *out_advance_x = (float)(g.dw * s) / d;
+        *out_advance_x = (float)(dw * s) / d;
         return true;
     }
-    out_glyph->AdvanceX = (float)(g.dw * s) / d;
+    out_glyph->AdvanceX = (float)(dw * s) / d;
     if (g.w <= 0 || g.h <= 0)
         return true;
     const int w = g.w * s, h = g.h * s;
@@ -173,7 +180,7 @@ inline bool bdf_load_glyph(ImFontAtlas *atlas, ImFontConfig *src, ImFontBaked *b
                 }
     // (the line's top 0, its baseline at the ascent; BDF's yo the glyph's bottom from the baseline)
     const float top = ((float)(b->ascent * s) - (float)((g.yo + g.h) * s)) / d;
-    out_glyph->X0 = (float)(g.xo * s) / d;
+    out_glyph->X0 = (float)(xo * s) / d;
     out_glyph->Y0 = top;
     out_glyph->X1 = out_glyph->X0 + (float)w / d;
     out_glyph->Y1 = top + (float)h / d;

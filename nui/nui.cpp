@@ -566,15 +566,31 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
     a.h = h;
     a.ui_dir = std::string(fonts_dir).substr(0, std::string(fonts_dir).rfind('/'));
     a.w = nv_ui_watch_new();
+    // (after code7w, a FALLBACK for what code7 lacks: Fusion Pixel 8px
+    //  (OFL; Misaki's Japanese, Galmuri's Hangul, Boutique Bitmap's Chinese),
+    //  its CJK drawn 7x7 -- code7's height -- so Japanese, Korean and Chinese
+    //  names show in the same pixels. Its cell taken as code7's (an 8-pixel
+    //  cell would scale apart at 5x), its wide glyphs centred in code7w's 12)
+    static Bdf fb;
+    if (load("fusion-pixel-8px-monospaced-ja.bdf", fb)) {
+        fb.ascent = c7.ascent;
+        fb.descent = c7.descent;
+        fb.wide_from = 8;
+        fb.wide_dw = 12;
+    }
+    auto merge = [&](unsigned flags) {
+        if (c7w.g.size())
+            bdf_add(io.Fonts, &c7w, flags ? "code7wdots" : "code7w", true, flags);
+        if (fb.g.size())
+            bdf_add(io.Fonts, &fb, flags ? "fusiondots" : "fusion", true, flags);
+    };
+    load("code7w.bdf", c7w);
     a.font = bdf_add(io.Fonts, &c7, "code7", false);
-    if (load("code7w.bdf", c7w))
-        bdf_add(io.Fonts, &c7w, "code7w", true);
+    merge(0);
     a.lcd = bdf_add(io.Fonts, &c7, "code7dots", false, BDF_DOTS);     // (the display's: its pixels dots)
-    if (c7w.g.size())
-        bdf_add(io.Fonts, &c7w, "code7wdots", true, BDF_DOTS);
+    merge(BDF_DOTS);
     a.bold = bdf_add(io.Fonts, &c7sc, "code7sc", false);
-    if (c7w.g.size())
-        bdf_add(io.Fonts, &c7w, "code7w", true);
+    merge(0);
     io.FontDefault = a.font;
 
     // the engine's state, as the web page asks it at its start
