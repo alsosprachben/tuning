@@ -25,7 +25,7 @@ static KeysUi g_keys;
 
 inline void keys_note(App &a, int row, int key, int v)
 {
-    call(a, "{\"call\":\"drum_hit\",\"row\":" + std::to_string(row) + ",\"key\":" + std::to_string(key) +
+    call(a, "{\"call\":\"drum_hit\",\"free\":1,\"row\":" + std::to_string(row) + ",\"key\":" + std::to_string(key) +
                 ",\"v\":" + std::to_string(v) + "}");
 }
 // (every key let go -- the card shut, the part changed -- and the pedal up)

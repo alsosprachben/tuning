@@ -1472,7 +1472,21 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
             ok = false;
             r.o["error"] = sess::str("no part " + std::to_string(row) + " or key " + std::to_string(key));
         } else {
-            const int ch = ps[(size_t)row].channel < 0 ? 9 : ps[(size_t)row].channel;
+            // (a part on ALL CH hears every channel: a pad's note goes on 10, the drums'; the Keys card's --
+            //  "free" -- on a channel no other part listens on, so the part alone plays it, not the kit on 10)
+            int ch = ps[(size_t)row].channel < 0 ? 9 : ps[(size_t)row].channel;
+            if (ps[(size_t)row].channel < 0 && arg_i(q, "free", 0)) {
+                ch = 0;
+                for (int c = 0; c < 16; c++) {
+                    bool taken = c == 9;
+                    for (int i = 0; i < n && !taken; i++)
+                        taken = i != row && ps[(size_t)i].channel == c;
+                    if (!taken) {
+                        ch = c;
+                        break;
+                    }
+                }
+            }
             const uint8_t m[3] = {(uint8_t)((v ? 0x90 : 0x80) | ch), (uint8_t)key, (uint8_t)(v ? v : 64)};
             nv_host_midi(h, m, 3);
         }
