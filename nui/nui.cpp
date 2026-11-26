@@ -126,6 +126,7 @@ static void draw(App &a)
     const int nc = (int)(sizeof CARDS / sizeof CARDS[0]);
     if (a.ph) {                         // THE PHONE's: two rows, then the card (or the cards' menu over it)
         draw_display_phone(a);
+        draw_corner_jog(a);
         std::string title;
         for (int i = 0; i < nc; i++)
             if (a.card == CARDS[i][0])

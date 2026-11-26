@@ -170,6 +170,10 @@ int main(int argc, char *argv[])
     // LANDSCAPE ONLY: SDL lets a resizable window turn every way unless told
     // (its hint, over the Info.plist's iPad orientations)
     SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+    // (a phone: the home indicator dimmed and its swipe deferred -- a second swipe to leave -- so the
+    //  jog wheel in the bottom-right corner turns without the system taking the sweep)
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPhone)
+        SDL_SetHint(SDL_HINT_IOS_HIDE_HOME_INDICATOR, "2");
     // ...supported: landscape alone (SDL's controller; iPadOS turns it so at
     // launch, and between its two landscapes) -- with sizes logged once the
     // window is up (the scene's, the window's, the view's: a mismatch shows)

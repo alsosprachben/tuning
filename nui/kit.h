@@ -135,6 +135,48 @@ struct Dial {
     ImGuiID active = 0;
     float last = 0, acc = 0, rot = 0;
 };
+// A DIAL TURNED FROM A ZONE (the phone's corner wheel): a touch in the rect z0-z1
+// turns D by its angle round c -- zones sharing one D, the one touched turning it
+inline int dial_zone(Kit &K, Dial &D, const char *id, ImVec2 c, ImVec2 z0, ImVec2 z1, float per_deg = 12.0f)
+{
+    if (z1.x - z0.x < 4 || z1.y - z0.y < 4)
+        return 0;
+    ImGui::SetCursorScreenPos(z0);
+    ImGui::PushID(id);
+    ImGui::InvisibleButton("z", ImVec2(z1.x - z0.x, z1.y - z0.y));
+    const ImGuiID me = ImGui::GetItemID();
+    ImGui::PopID();
+    const ImVec2 m = ImGui::GetIO().MousePos;
+    const float ang = std::atan2(m.y - c.y, m.x - c.x) * 180.0f / 3.14159265f;
+    int steps = 0;
+    if (ImGui::IsItemActivated()) {
+        D.active = me;
+        D.last = ang;
+        D.acc = 0;
+    }
+    if (ImGui::IsItemActive() && D.active == me) {
+        float d = ang - D.last;
+        D.last = ang;
+        if (d > 180)
+            d -= 360;
+        if (d < -180)
+            d += 360;
+        D.rot += d;
+        D.acc += d;
+        const float per = K.fine() ? 3 * per_deg : per_deg;
+        while (D.acc >= per) {
+            D.acc -= per;
+            steps++;
+        }
+        while (D.acc <= -per) {
+            D.acc += per;
+            steps--;
+        }
+    }
+    if (ImGui::IsItemDeactivated() && D.active == me)
+        D.active = 0;
+    return steps;
+}
 inline int dial(Kit &K, Dial &D, const char *id, ImVec2 c, float r)
 {
     ImGui::SetCursorScreenPos(ImVec2(c.x - r, c.y - r));

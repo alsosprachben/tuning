@@ -425,6 +425,37 @@ inline void draw_display_phone(App &a)
             a.quit_armed = now;
     }
 }
+// THE PHONE's JOG WHEEL, in the screen's bottom-right corner: outside the safe
+// area (the panel and cards never there), a wheel whose rim is the corner's own
+// curve -- its edge showing round the corner, as if under the panel; a thumb
+// swept along the corner turns it (the strips beside and under the safe area,
+// by the angle round its centre), stepping the display's chosen field
+inline void draw_corner_jog(App &a)
+{
+    const ImGuiIO &io = ImGui::GetIO();
+    const float W = io.DisplaySize.x, H = io.DisplaySize.y;
+    const float sr = a.safe_w > 0 ? a.safe_x + a.safe_w : W, sb = a.safe_h > 0 ? a.safe_y + a.safe_h : H;
+    const float side = W - sr;          // (the strip beside the safe area: 62 points on a 16 Pro Max)
+    if (side < 24)
+        return;
+    // (the corner's radius: near the side inset, which iOS sets to clear it and the island)
+    const float Rc = 0.92f * side, cx = W - Rc, cy = H - Rc;
+    const int steps = dial_zone(a.K, a.jog, "cjog1", ImVec2(cx, cy), ImVec2(sr, H * 0.4f), ImVec2(W, H)) +
+                      dial_zone(a.K, a.jog, "cjog2", ImVec2(cx, cy), ImVec2(W * 0.55f, sb), ImVec2(sr, H));
+    const J *p = part(a, a.row);
+    if (steps && p)
+        field_set(a, a.field, field_get(a, a.field) + steps);
+    // (drawn as the panel's dial, once, before the card: the card's tray over its inner part)
+    const float k = a.k;
+    const float dcx = (cx - a.org.x) / k, dcy = (cy - a.org.y) / k, dr = Rc / k;
+    dl()->PushClipRect(ImVec2(0, 0), ImVec2(W, H), false);
+    look::dial_cap(a, dcx, dcy, dr, a.jog.rot);
+    dl()->PopClipRect();
+    // (the field it turns, small, above it in the strip)
+    const std::string lb = FIELDS[a.field].label;
+    const float tw = text_w(a, a.bold, 14, lb) * k;
+    text(a, a.bold, 14, (sr + (W - sr - tw) / 2 - a.org.x) / k, (cy - Rc - 6 - a.lh(14) * k - a.org.y) / k, LCD, lb);
+}
 inline void draw_keys_tab(App &a)
 {
     const J *p = part(a, a.row);
