@@ -586,7 +586,11 @@ terms, and the audio is lossy, so fit below about 15 kHz.
 - **Pergolesi, Stabat Mater** score (CC BY-NC-SA): a demo render only.
 - **Roland**: names only, used nominatively (what a GS file asks for); no
   Roland module or sample was fitted (memory: no Roland sounds).
-- **The interface's fonts** (ui/fonts): code7 is Ben's own. IBM Plex Sans
+- **The interface's fonts** (ui/fonts): code7 is Ben's own. Its Arabic (drawn
+  from skeletons) and code7t's Thai and Devanagari are ours too; code7t's
+  letters were drafted from renderings of Noto Looped Thai and Noto Sans
+  Devanagari (OFL) on a 6x9 grid and corrected by hand (code7's tools/tall/).
+  A GPL font (Gargi) was tried for the draft and dropped for that reason. IBM Plex Sans
   is OFL (OFL-IBMPlexSans.txt). The CJK fallback, Fusion Pixel 8px
   (TakWolf, 2026.11.10, fusion-pixel-8px-monospaced-ja.bdf), is OFL
   (OFL-FusionPixel.txt), built from Misaki (free for any use, commercial
