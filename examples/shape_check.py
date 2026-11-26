@@ -38,6 +38,19 @@ CASES = [
     ("Hebrew name, extension at the end", "שלום עליכם.mid", "םכילע םולש.mid"),
     ("bracketed number beside Hebrew (N0)", "Track 5 - שיר (2).mid", "Track 5 - (2) ריש.mid"),
     ("Latin in brackets beside Hebrew", "שיר (live).mid", "ריש (live).mid"),
+    # THAI: sara am split, its circle a mark under the tone mark
+    ("Thai sara am", "น้ำ", u(0x0E19, 0x0E49, 0x0E4D, 0x0E32)),
+    ("Thai unchanged", "ดนตรี", "ดนตรี"),
+    # DEVANAGARI: half forms at U+E900 + offset, reph U+E980, rakaar U+E981, ligatures U+E9A0..
+    ("Devanagari half form", "नमस्ते", u(0x928, 0x92E, 0xE938, 0x924, 0x947)),
+    ("Devanagari short i before its consonant", "हिन्दी", u(0x93F, 0x939, 0xE928, 0x926, 0x940)),
+    ("Devanagari short i before a whole cluster", "स्थिति", u(0x93F, 0xE938, 0x925, 0x93F, 0x924)),
+    ("Devanagari short i alone", "पियानो", u(0x93F, 0x92A, 0x92F, 0x93E, 0x928, 0x94B)),
+    ("Devanagari reph", "धर्म", u(0x927, 0x92E, 0xE980)),
+    ("Devanagari rakaar", "प्रेम", u(0x92A, 0xE981, 0x947, 0x92E)),
+    ("Devanagari ksha", "क्षमा", u(0xE9A0, 0x92E, 0x93E)),
+    ("Devanagari no half form: virama", "विद्या", u(0x93F, 0x935, 0x926, 0x94D, 0x92F, 0x93E)),
+    ("Devanagari anusvara", "संगीत", u(0x938, 0x902, 0x917, 0x940, 0x924)),
 ]
 
 def main():

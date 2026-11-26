@@ -35,7 +35,14 @@ inline const uint32_t *sh_find(const uint32_t (&t)[N][M], uint32_t cp)     // (r
     }
     return lo < N && t[lo][0] <= cp && cp <= t[lo][1] ? t[lo] : nullptr;
 }
-inline bool sh_is_mark(uint32_t cp) { return sh_find(SH_MARK, cp) != nullptr; }
+// (code7's Private Use page for Devanagari: U+E900 + a consonant's offset its
+//  half form (स् U+E938); U+E980.. marks (the reph र्, the rakaar ्र); U+E9A0..
+//  the ligatures क्ष ज्ञ त्र श्र)
+static const uint32_t SH_DEVA_HALF = 0xE900, SH_REPH = 0xE980, SH_RAKAAR = 0xE981, SH_DEVA_LIG = 0xE9A0;
+inline bool sh_is_mark(uint32_t cp)
+{
+    return (cp >= 0xE980 && cp <= 0xE98F) || sh_find(SH_MARK, cp) != nullptr;
+}
 inline int sh_bidi(uint32_t cp)
 {
     const uint32_t *r = sh_find(SH_BIDI, cp);
@@ -97,7 +104,8 @@ inline void sh_encode(uint32_t cp, std::string &o)
 inline bool sh_needs(const std::vector<uint32_t> &u)
 {
     for (uint32_t c : u)
-        if (c >= 0x300 && (sh_is_mark(c) || sh_bidi(c) == 1 || sh_bidi(c) == 2 || sh_bidi(c) == 4))
+        if (c >= 0x300 && (sh_is_mark(c) || sh_bidi(c) == 1 || sh_bidi(c) == 2 || sh_bidi(c) == 4 ||
+                           (c >= 0x900 && c <= 0x97F) || c == 0x0E33))
             return true;
     return false;
 }
@@ -327,6 +335,127 @@ inline void sh_bidi_order(std::vector<uint32_t> &u, int base = 0)
     u.swap(o);
 }
 
+// THAI: sara am (ำ) as its circle (ํ, a mark over the letter, under a tone
+// mark) and sara aa (า), as Thai fonts draw it. Thai is stored in the order
+// it is seen; its vowels above and below and its tone marks are marks.
+inline void sh_thai(std::vector<uint32_t> &u)
+{
+    std::vector<uint32_t> o;
+    o.reserve(u.size() + 2);
+    for (uint32_t c : u) {
+        if (c == 0x0E33)
+            o.push_back(0x0E4D), o.push_back(0x0E32);
+        else
+            o.push_back(c);
+    }
+    u.swap(o);
+}
+
+// DEVANAGARI: each cluster -- consonants joined by viramas, then its vowel
+// signs -- drawn as code7 can: a consonant before another its half form
+// (or a visible virama where it has none), र before another the reph (a mark
+// over the cluster's end), र after another the rakaar (a mark under it),
+// क्ष ज्ञ त्र श्र their ligatures, and the short i (ि) moved before the cluster
+inline bool sh_deva_cons(uint32_t c) { return (c >= 0x915 && c <= 0x939) || (c >= 0x958 && c <= 0x95F) || (c >= 0x978 && c <= 0x97F); }
+inline bool sh_deva_has_half(uint32_t c)
+{
+    // (the consonants with a stem to drop; ङ छ ट ठ ड ढ द ह र have none)
+    switch (c) {
+    case 0x919: case 0x91B: case 0x91F: case 0x920: case 0x921: case 0x922: case 0x926: case 0x939: case 0x930:
+        return false;
+    }
+    return sh_deva_cons(c);
+}
+inline void sh_devanagari(std::vector<uint32_t> &u)
+{
+    const uint32_t VIRAMA = 0x94D, NUKTA = 0x93C, RA = 0x930, I = 0x93F;
+    std::vector<uint32_t> o;
+    o.reserve(u.size() + 4);
+    const size_t n = u.size();
+    for (size_t i = 0; i < n;) {
+        if (!sh_deva_cons(u[i])) {
+            o.push_back(u[i++]);
+            continue;
+        }
+        // (the cluster's consonants, each with its nukta)
+        std::vector<std::pair<uint32_t, bool>> cs;
+        bool dead = false;
+        while (i < n && sh_deva_cons(u[i])) {
+            bool nk = i + 1 < n && u[i + 1] == NUKTA;
+            cs.push_back({u[i], nk});
+            i += nk ? 2 : 1;
+            if (i < n && u[i] == VIRAMA) {
+                if (i + 1 < n && sh_deva_cons(u[i + 1])) {
+                    i++;
+                    continue;
+                }
+                dead = true;                    // (a virama ending the cluster: drawn)
+                i++;
+            }
+            break;
+        }
+        // (its vowel signs and marks)
+        std::vector<uint32_t> ms;
+        bool short_i = false;
+        while (i < n && ((u[i] >= 0x900 && u[i] <= 0x903) || (u[i] >= 0x93A && u[i] <= 0x94F && u[i] != VIRAMA) ||
+                         (u[i] >= 0x955 && u[i] <= 0x957) || u[i] == 0x962 || u[i] == 0x963)) {
+            if (u[i] == I)
+                short_i = true;
+            else
+                ms.push_back(u[i]);
+            i++;
+        }
+        const bool reph = cs.size() >= 2 && cs[0].first == RA && !cs[0].second;
+        if (reph)
+            cs.erase(cs.begin());
+        if (short_i)
+            o.push_back(I);
+        for (size_t k = 0; k < cs.size(); k++) {
+            const uint32_t c = cs[k].first;
+            const bool last = k + 1 == cs.size();
+            if (!last && !cs[k].second && !cs[k + 1].second) {
+                const uint32_t d = cs[k + 1].first;
+                uint32_t lig = c == 0x915 && d == 0x937 ? 0 : c == 0x91C && d == 0x91E ? 1 : c == 0x924 && d == RA ? 2
+                             : c == 0x936 && d == RA ? 3 : 0xFF;
+                if (lig != 0xFF) {
+                    o.push_back(SH_DEVA_LIG + lig);
+                    k++;
+                    if (k + 1 < cs.size())
+                        o.push_back(VIRAMA);
+                    continue;
+                }
+                if (d == RA) {                   // (the rakaar: the consonant whole, its stroke under)
+                    o.push_back(c);
+                    o.push_back(SH_RAKAAR);
+                    k++;
+                    if (k + 1 < cs.size())
+                        o.push_back(VIRAMA);
+                    continue;
+                }
+            }
+            if (last) {
+                o.push_back(c);
+                if (cs[k].second)
+                    o.push_back(NUKTA);
+            } else if (!cs[k].second && sh_deva_has_half(c))
+                o.push_back(SH_DEVA_HALF + (c - 0x900));
+            else {
+                o.push_back(c);
+                if (cs[k].second)
+                    o.push_back(NUKTA);
+                o.push_back(VIRAMA);
+            }
+        }
+        if (dead)
+            o.push_back(VIRAMA);
+        for (uint32_t m : ms)
+            o.push_back(m);
+        if (reph)
+            o.push_back(SH_REPH);
+    }
+    u.swap(o);
+}
+
 inline std::string shape_uncached(const std::string &s)
 {
     std::vector<uint32_t> u;
@@ -344,6 +473,8 @@ inline std::string shape_uncached(const std::string &s)
             c.push_back(cp);
     }
     sh_arabic_join(c);
+    sh_thai(c);
+    sh_devanagari(c);
     sh_bidi_order(c);
     std::string o;
     o.reserve(s.size() + 8);
