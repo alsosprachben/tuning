@@ -43,6 +43,7 @@ int nv_midi_muxed(void *p);
 int nv_roomtail_main(int argc, char **argv);    // (the room's tail, in this process: nvroomtail.cpp)
 int nv_render_main(int argc, char **argv);      // (the file renderer, in this process: nvrender.cpp)
 extern "C" void nv_render_progress(double *at_s, double *len_s);
+extern "C" int nv_render_pass(void);
 void nv_render_stop(void);
 const char *nv_render_last(void);
 void nv_env_set(const char *const *names, const char *const *values, int n);
@@ -600,6 +601,7 @@ struct Render {
     std::atomic<bool> busy{false}, stopped{false};
     std::atomic<pid_t> pid{-1};
     std::string kind, name, stage, last, out, msg, ask, ask_why;
+    bool whole_ = false;                    // (a best-quality render's: rendered whole, as asked)
     double t0 = 0.0, t1 = 0.0;
 
     J state()
@@ -609,7 +611,16 @@ struct Render {
         o.o["busy"] = sess::boolean(busy);
         o.o["kind"] = sess::str(kind);
         o.o["name"] = sess::str(name);
-        o.o["stage"] = sess::str(stage);
+        // (a best-quality render's passes, numbered: a streamed one reads the song,
+        // renders it, adds the room; a whole one renders, adds the room)
+        std::string sg = stage;
+        if (busy && inproc_on && stage == "rendering, streamed on the GPU")
+            sg = nv_render_pass() == 1 ? "1/3 reading the song" : "2/3 rendering, streamed on the GPU";
+        else if (stage == "adding the room")
+            sg = kind == "best" && whole_ ? "2/2 adding the room" : "3/3 adding the room";
+        else if (stage == "rendering whole (the file renderer)")
+            sg = "1/2 rendering whole (the file renderer)";
+        o.o["stage"] = sess::str(sg);
         o.o["last"] = sess::str(last);
         o.o["out"] = sess::str(out);
         o.o["msg"] = sess::str(msg);
@@ -901,11 +912,21 @@ struct Render {
                 common.push_back("--tuner=" + tuner);
             if (!east.empty())
                 common.push_back("--eastern=" + east);
+            // (streamed: the render reads the song first and, where it cannot stream,
+            // stops saying why (--stream-only: exit 3) -- asked before a whole render,
+            // with no pass of its own to find out)
+            {
+                std::lock_guard<std::mutex> lk(mu);
+                whole_ = whole;
+            }
+            say(whole ? "rendering whole (the file renderer)" : "rendering, streamed on the GPU");
+            auto a = common;
             if (!whole) {
-                say("checking it streams");
-                auto a = common;
-                a.push_back("--stream-why");
-                const int r = inproc(a, env);
+                a.push_back("--stream-only");
+                a.push_back("--gpu");
+            }
+            int r = inproc(a, env);
+            if (!whole && (r == 3 || r == 2)) {     // (cannot stream: asked; not the engine's file: refused)
                 std::string why;
                 {
                     std::lock_guard<std::mutex> lk(mu);
@@ -913,27 +934,14 @@ struct Render {
                 }
                 if (why.rfind("nvrender: ", 0) == 0)
                     why = why.substr(10);
-                if (r == -2) {
-                    clean();
-                    return finish("render stopped");
+                clean();
+                {
+                    std::lock_guard<std::mutex> lk(mu);
+                    ask = r == 3 ? "whole" : "refused";
+                    ask_why = why;
                 }
-                if (r != 0 || why != "streams") {
-                    clean();
-                    {
-                        std::lock_guard<std::mutex> lk(mu);
-                        ask = r != 0 ? "refused" : "whole";
-                        ask_why = why;
-                    }
-                    return finish("");
-                }
+                return finish("");
             }
-            say(whole ? "rendering whole (the file renderer)" : "rendering, streamed on the GPU");
-            auto a = common;
-            if (!whole) {
-                a.push_back("--stream");
-                a.push_back("--gpu");
-            }
-            int r = inproc(a, env);
             if (r != 0) {
                 std::string l;
                 {

@@ -95,6 +95,7 @@ static void stop_point()
 // ITS PLACE IN THE SONG (nv_render_progress): the frames written and the length,
 // as each streamed window goes out, read from another thread (the Files card's)
 static std::atomic<long long> g_prog_done{0}, g_prog_len{0};
+static std::atomic<int> g_prog_pass{0};     // (1 the song read, its scan; 2 the render)
 static std::atomic<double> g_prog_sr{0.0};
 
 // ITS OUTPUT: written as before, its last line kept for the window (nv_render_last)
@@ -415,7 +416,8 @@ static inline double unpack(const unsigned char *b, int c)
 }
 
 static bool g_stream = false;
-static bool g_stream_why_only = false;      // (--stream-why: the scan's reasons, no render)
+static bool g_stream_why_only = false;
+static bool g_stream_only = false;          // (--stream-only: what cannot stream said and exit 3, not rendered whole)      // (--stream-why: the scan's reasons, no render)
 static bool g_gpu = false;                  // (--gpu: the stream's windows on the GPU, gpufile.h)
 // a note's rows as a sink is handed them (engine.cpp's NvPlaySink)
 struct StreamSinkDesc {
@@ -1105,6 +1107,8 @@ static int run(int argc, char **argv)
             g_stream = g_stream_why_only = true;
         else if (!strcmp(argv[i], "--stream"))
             g_stream = true;
+        else if (!strcmp(argv[i], "--stream-only"))
+            g_stream = g_stream_only = true;
         else if (!strcmp(argv[i], "--gpu"))
             g_gpu = g_stream = true;        // (the GPU renders the stream's windows: streamrender's gpu=)
         else if (!strncmp(argv[i], "--eastern=", 10))
@@ -2769,6 +2773,7 @@ static int run(int argc, char **argv)
     StreamRegDesc scan_r{&scan, &StreamScan::reg_rows, &StreamScan::reg_horizon, &StreamScan::sym_rows};
     if (g_stream) {                             // PASS A: the scan
         nv_stream_reset();
+        g_prog_pass.store(1);
         g_prog_sr.store(SR);                    // (its place: the notes' onsets against the song's length)
         g_prog_done.store(0);
         g_prog_len.store((long long)(total * SR));
@@ -4856,6 +4861,10 @@ static int run(int argc, char **argv)
         printf("%s\n", nv_stream_why()[0] ? nv_stream_why() : "streams");
         return 0;
     }
+    if (g_stream_only && nv_stream_why()[0]) {       // (the caller asks before a whole render)
+        fprintf(stderr, "nvrender: %s\n", nv_stream_why());
+        return 3;
+    }
     if (g_stream && nv_stream_why()[0]) {
         fprintf(stderr, "nvrender: --stream: %s: rendered whole\n", nv_stream_why());
         std::vector<char *> av;
@@ -5678,6 +5687,7 @@ static int run(int argc, char **argv)
         };
         g_prog_sr.store(SR);
         g_prog_done.store(0);                   // (the render's own place from here: the scan's was the song's notes)
+        g_prog_pass.store(2);
         g_prog_len.store((long long)N);
         auto out_emit = [&](BusSet &b, long long s0, long long n_) {
             if (&b == &bset[0])
@@ -6450,7 +6460,8 @@ extern "C" int nv_render_main(int argc, char **argv)
     g_rowB = 8 * NCOLS;
     std::fill(g_pk, g_pk + NCOLS, 0);
     std::fill(g_po, g_po + NCOLS, 0);
-    g_stream = g_stream_why_only = g_gpu = false;
+    g_stream = g_stream_why_only = g_stream_only = g_gpu = false;
+    g_prog_pass.store(0);
     g_stop_req.store(false);
     g_prog_done.store(0);
     g_prog_len.store(0);
@@ -6466,6 +6477,7 @@ extern "C" int nv_render_main(int argc, char **argv)
 extern "C" void nv_render_stop(void) { nvrender::g_stop_req.store(true); }
 // where the render running is in the song, in seconds (its length 0: not known yet,
 // or not a streamed render)
+extern "C" int nv_render_pass(void) { return nvrender::g_prog_pass.load(); }   // (0 none yet, 1 the song read, 2 the render)
 extern "C" void nv_render_progress(double *at_s, double *len_s)
 {
     const double sr = nvrender::g_prog_sr.load();
