@@ -503,9 +503,11 @@ struct StreamScan {
     }
     int jn = 0;
     long long glast = 0;
-    static void note(void *c_, const double *at, long long i0, long long i1, double)
+    static void note(void *c_, const double *at, long long i0, long long i1, double next_on)
     {
         StreamScan &c = *(StreamScan *)c_;
+        if (!std::isnan(next_on))           // (its place in the song, for the Files card: the next note's onset)
+            g_prog_done.store(std::max(g_prog_done.load(), (long long)(next_on * c.sr)));
         long long n = i1 - i0;
         if (n <= 0)
             return;
@@ -2767,6 +2769,9 @@ static int run(int argc, char **argv)
     StreamRegDesc scan_r{&scan, &StreamScan::reg_rows, &StreamScan::reg_horizon, &StreamScan::sym_rows};
     if (g_stream) {                             // PASS A: the scan
         nv_stream_reset();
+        g_prog_sr.store(SR);                    // (its place: the notes' onsets against the song's length)
+        g_prog_done.store(0);
+        g_prog_len.store((long long)(total * SR));
         scan.gsd = nv_gsd_new(K.data(), song, E.kind.data(), SR);
         scan.mf = nv_mf104_new(song, E.kind.data(), SR);
         scan.kind = E.kind.data();
@@ -5672,6 +5677,7 @@ static int run(int argc, char **argv)
             return std::make_pair(b.outL.data() + (s0 - b.outO), b.outR.data() + (s0 - b.outO));
         };
         g_prog_sr.store(SR);
+        g_prog_done.store(0);                   // (the render's own place from here: the scan's was the song's notes)
         g_prog_len.store((long long)N);
         auto out_emit = [&](BusSet &b, long long s0, long long n_) {
             if (&b == &bset[0])
