@@ -25,8 +25,8 @@ import sys
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
 
-CARDS = ["parts", "library", "synth", "stops", "piano", "drums", "amp", "effects", "matrix",
-         "tuning", "control", "scenes", "files", "setup"]
+CARDS = ["parts", "scenes", "library", "synth", "stops", "piano", "drums", "amp", "effects", "matrix",
+         "tuning", "control", "files", "setup"]
 # (each state: the patch put on part 1, and the cards whose look it changes -- every card for the first)
 STATES = [
     ("lead", dict(program=84, variation=0), CARDS),

@@ -302,7 +302,7 @@ int nv_host::run(int argc, char **argv)
                     size_t c = pa.find(':');
                     if (session_on && c != std::string::npos && (long long)(atof(pa.substr(0, c).c_str()) * SR) / BLK == b) {
                         sess::J d;
-                        const sess::J *p = sess::load(presets_path(), d) ? d.get(pa.substr(c + 1)) : nullptr;
+                        const sess::J *p = presets_read(d) ? d.get(pa.substr(c + 1)) : nullptr;
                         if (p && p->is(sess::J::OBJ)) {
                             apply_setup(*p, false);
                             fprintf(stderr, "nvlive: preset %s at block %lld\n", pa.substr(c + 1).c_str(), b);
@@ -1437,10 +1437,17 @@ int nv_host::run(int argc, char **argv)
                 return std::string("could not write ") + presets_path();
             return "saved '" + name + "' to " + base(presets_path());
         };
-        H.preset_names = [&, names_in]() { return names_in(presets_path()); };
+        H.preset_names = [&]() {
+            std::vector<std::string> ns;
+            sess::J d;
+            if (presets_read(d))
+                for (const auto &kv : d.o)
+                    ns.push_back(kv.first);
+            return ns;
+        };
         H.load_preset = [&](const std::string &name) {
             sess::J d;
-            const sess::J *p = sess::load(presets_path(), d) ? d.get(name) : nullptr;
+            const sess::J *p = presets_read(d) ? d.get(name) : nullptr;
             if (!p || !p->is(sess::J::OBJ))
                 return "no preset '" + name + "'";
             routes_replaced = H.routes;

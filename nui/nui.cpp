@@ -54,9 +54,10 @@
 
 namespace nui {
 
-static const char *CARDS[][2] = {{"parts", "PARTS"}, {"library", "LIBRARY"}, {"synth", "SYNTH"}, {"stops", "STOPS"},
-                                 {"piano", "PIANO"}, {"drums", "DRUMS"}, {"amp", "AMP"}, {"effects", "EFFECTS"}, {"matrix", "MATRIX"},
-                                 {"tuning", "TUNING"}, {"control", "CONTROL"}, {"scenes", "SCENES"},
+// (SCENES after PARTS: a setup's parts arranged, then saved and brought back -- Ben 2026-11-25)
+static const char *CARDS[][2] = {{"parts", "PARTS"}, {"scenes", "SCENES"}, {"library", "LIBRARY"}, {"synth", "SYNTH"},
+                                 {"stops", "STOPS"}, {"piano", "PIANO"}, {"drums", "DRUMS"}, {"amp", "AMP"},
+                                 {"effects", "EFFECTS"}, {"matrix", "MATRIX"}, {"tuning", "TUNING"}, {"control", "CONTROL"},
                                  {"files", "FILES"}, {"setup", "SETUP"}};
 
 

@@ -8,3 +8,6 @@ session.json.tmp
 third_party/
 .build_target
 .organ_bake_cache.json
+presets.json
+scenes.json
+patch_sizes.json

@@ -823,16 +823,21 @@ J scenes_of(nv_host *h)
     J o = sess::obj();
     J pa = sess::arr(), sa = sess::arr();
     sess::J d;
-    if (!h->session_path.empty() && sess::load(h->presets_path(), d) && d.is(J::OBJ))
+    std::set<std::string> dflt, mine;
+    if (h->presets_read(d, &dflt, &mine))
         for (const auto &kv : d.o) {
             J e = sess::obj();
             e.o["name"] = sess::str(kv.first);
+            e.o["default"] = sess::boolean(dflt.count(kv.first) > 0);   // (shipped: it stays, deleted or not)
+            e.o["mine"] = sess::boolean(mine.count(kv.first) > 0);     // (the player's: over a default of its name)
             J parts = sess::arr();
             const J *ps = kv.second.get("parts");
             if (ps && ps->is(J::ARR))
                 for (const J &x : ps->a) {
                     J q = sess::arr();
                     const J *pg = x.get("program"), *dr = x.get("drums"), *va = x.get("variation");
+                    if (!va)
+                        va = x.get("bank");         // (a preset's part keeps its variation as its bank)
                     q.a.push_back(sess::integer(pg ? pg->i(0) : 0));
                     q.a.push_back(sess::integer(va ? va->i(0) : 0));
                     q.a.push_back(sess::boolean(dr && dr->is(J::BOOL) && dr->b));
@@ -1621,8 +1626,19 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
             rc = nv_host_scene_recall(h, name.c_str(), msg, sizeof msg);
         } else {
             const bool pre = call == "preset_delete";
-            rc = forget_named(pre ? h->presets_path() : h->scenes_path(), name) ? 0 : -1;
-            snprintf(msg, sizeof msg, rc ? "could not take '%s' out" : "'%s' taken out", name.c_str());
+            std::set<std::string> dflt, mine;
+            sess::J all_;
+            if (pre)
+                h->presets_read(all_, &dflt, &mine);
+            if (pre && dflt.count(name) && !mine.count(name)) {     // (a shipped one: it stays)
+                rc = -1;
+                snprintf(msg, sizeof msg, "'%s' is one of the defaults: it stays", name.c_str());
+            } else {
+                rc = forget_named(pre ? h->presets_path() : h->scenes_path(), name) ? 0 : -1;
+                snprintf(msg, sizeof msg, rc ? "could not take '%s' out"
+                                         : pre && dflt.count(name) ? "'%s': yours taken out, the default back"
+                                                                   : "'%s' taken out", name.c_str());
+            }
         }
         ok = rc == 0;
         r.o["msg"] = sess::str(msg);

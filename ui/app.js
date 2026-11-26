@@ -189,9 +189,9 @@ async function soloPart(row) {
 
 // ---------------------------------------------------------------- THE CARD KEYS
 const CARDS = [
-  ['parts', 'Parts', true], ['library', 'Library', true], ['synth', 'Synth', true],
+  ['parts', 'Parts', true], ['scenes', 'Scenes', true], ['library', 'Library', true], ['synth', 'Synth', true],
   ['stops', 'Stops', true], ['piano', 'Piano', true], ['drums', 'Drums', true], ['amp', 'Amp', true], ['effects', 'Effects', true],
-  ['matrix', 'Matrix', true], ['tuning', 'Tuning', true], ['control', 'Control', true], ['scenes', 'Scenes', true], ['files', 'Files', true], ['setup', 'Setup', true],
+  ['matrix', 'Matrix', true], ['tuning', 'Tuning', true], ['control', 'Control', true], ['files', 'Files', true], ['setup', 'Setup', true],
 ];
 const LATER = {
   setup: 'MIDI, audio, borrowed time and the globals',

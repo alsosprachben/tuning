@@ -1835,6 +1835,11 @@ struct nv_host {
     void udrum_queue(int s, int key, int code, int v);
     int scene_recall(const std::vector<std::string> &events);
     std::string presets_path() const, scenes_path() const;
+    // THE PRESETS: the shipped defaults (ui/presets_default.json beside the
+    // program, the app's bundle) under the player's own (presets.json beside the
+    // session), the player's winning a name both have; d an object of them
+    std::string presets_default_path() const;
+    bool presets_read(sess::J &d, std::set<std::string> *defaults = nullptr, std::set<std::string> *mine = nullptr) const;
     const OrganSpec *organ_of(int prog, int var) const;      // (live._organ_class)
     bool moog_pn_of(int prog, int var, double *pn) const;    // (live._moog_class)
     std::vector<std::string> pending_drawn; // a preset's stops (names), for its organ once it is swapped in

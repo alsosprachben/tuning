@@ -122,6 +122,11 @@ def main(argv):
         shutil.copy2(hp, os.path.join(mac, h))
         fix_rpaths(os.path.join(mac, h), ["@executable_path/../Frameworks"])
 
+    # THE DEFAULT PRESETS (ui/presets_default.json): beside libnative, where the
+    # engine looks for them (hostsession.cpp's presets_default_path)
+    os.makedirs(os.path.join(fw, "ui"), exist_ok=True)
+    shutil.copy2(os.path.join(REPO, "ui", "presets_default.json"), os.path.join(fw, "ui", "presets_default.json"))
+
     # RESOURCES: the kernel's sources and the exports
     for k in KERNELS:
         shutil.copy2(os.path.join(REPO, k), os.path.join(res, k))

@@ -4,6 +4,8 @@
 // loads the presets nvlive and live.py do, the same files, the same keys.
 // nvlive, the terminal client, links them from the library as before.
 #include <dlfcn.h>
+#include <unistd.h>
+#include "selfexe.h"
 #include <algorithm>
 #include <cmath>
 #include <map>
@@ -161,6 +163,40 @@ bool nv_host::moog_pn_of(int prog, int var, double *pn) const
 }
 
 std::string nv_host::presets_path() const { return beside(session_path, "presets.json"); }
+// (ui/presets_default.json beside the engine's library -- the repository's, the
+// iPad app's binary, the Mac bundle's Frameworks -- else beside the program)
+std::string nv_host::presets_default_path() const
+{
+    auto in = [](const std::string &f) {
+        const size_t k = f.rfind('/');
+        return (k == std::string::npos ? std::string(".") : f.substr(0, k)) + "/ui/presets_default.json";
+    };
+    Dl_info di;
+    if (dladdr((const void *)&nv_host_presets, &di) && di.dli_fname) {
+        const std::string p = in(di.dli_fname);
+        if (access(p.c_str(), R_OK) == 0)
+            return p;
+    }
+    return in(nv_self_exe());
+}
+bool nv_host::presets_read(sess::J &d, std::set<std::string> *defaults, std::set<std::string> *mine) const
+{
+    d = sess::obj();
+    sess::J df, u;
+    if (sess::load(presets_default_path(), df) && df.is(sess::J::OBJ))
+        for (const auto &kv : df.o) {
+            d.o[kv.first] = kv.second;
+            if (defaults)
+                defaults->insert(kv.first);
+        }
+    if (!session_path.empty() && sess::load(presets_path(), u) && u.is(sess::J::OBJ))
+        for (const auto &kv : u.o) {
+            d.o[kv.first] = kv.second;
+            if (mine)
+                mine->insert(kv.first);
+        }
+    return !d.o.empty();
+}
 std::string nv_host::scenes_path() const { return beside(session_path, "scenes.json"); }
 
 static std::string cc_text(int ch, int c, int v)
@@ -1199,7 +1235,7 @@ int nv_host_presets(nv_host *h, char *names, int cap)
 {
     sess::J d;
     std::string all;
-    if (sess::load(h->presets_path(), d))
+    if (h->presets_read(d))
         for (const auto &kv : d.o)
             all += (all.empty() ? "" : "\n") + kv.first;
     return copy_out(all, names, cap);
@@ -1222,7 +1258,7 @@ int nv_host_preset_save(nv_host *h, const char *name, char *msg, int cap)
 int nv_host_preset_load(nv_host *h, const char *name, char *msg, int cap)
 {
     sess::J d;
-    const sess::J *p = name && sess::load(h->presets_path(), d) ? d.get(name) : nullptr;
+    const sess::J *p = name && h->presets_read(d) ? d.get(name) : nullptr;
     if (!p || !p->is(sess::J::OBJ))
         return copy_out(std::string("no preset '") + (name ? name : "") + "'", msg, cap), -1;
     h->apply_setup(*p, false);
@@ -1462,7 +1498,9 @@ std::string preset_smf(const sess::J &p, const std::string &name, const nv_host 
 extern "C" int nv_preset_midi_file(const nv_host *h, const char *presets_path, const char *name, const char *out)
 {
     sess::J d;
-    const sess::J *p = presets_path && name && sess::load(presets_path, d) ? d.get(name) : nullptr;
+    // (the player's presets file: the defaults under it; another file as it is)
+    const bool ours = h && presets_path && h->presets_path() == presets_path;
+    const sess::J *p = presets_path && name && (ours ? h->presets_read(d) : sess::load(presets_path, d)) ? d.get(name) : nullptr;
     if (!p || !p->is(sess::J::OBJ) || !out)
         return -1;
     const std::string f = preset_smf(*p, name, h);
