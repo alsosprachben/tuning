@@ -1,4 +1,4 @@
-// THE DRUMS CARD (ui/app.js's): the selected part's kit as pads, by kind;
+// THE DRUMS CARD (the retired web interface's): the selected part's kit as pads, by kind;
 // a pad struck harder the higher it is touched, lit as the keyboard or a
 // file plays it (the engine's hits). The kits down the side. A user set
 // (GS's two): each key takes its sound from a key of any set. Beside the

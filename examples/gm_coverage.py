@@ -2469,8 +2469,13 @@ def main(argv):
     _sc88pro_extra_rated()      # ...and the Standard keys that borrow from those sets
     for a in argv[1:]:
         if a == "--about" or a.startswith("--about="):
-            return about_json(a.split("=", 1)[1] if "=" in a else os.path.join(
-                os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ui", "about.json"))
+            path = a.split("=", 1)[1] if "=" in a else os.path.join(
+                os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "ui", "about.json")
+            r = about_json(path)
+            # ...and the help's credits from the credits.json just written (help_json.py)
+            import help_json
+            help_json.main(["help_json", os.path.dirname(path)])
+            return r
     out = argv[1] if len(argv) > 1 else os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'coverage.md')
     fams = dict(FAMILY)

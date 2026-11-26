@@ -1,4 +1,4 @@
-// THE EFFECTS CARD (ui/app.js's): the insertion effect (the Sound Canvas's
+// THE EFFECTS CARD (the retired web interface's): the insertion effect (the Sound Canvas's
 // EFX: one, for the parts put on it) -- its type by family, its parameters
 // as knobs in Roland's own printed values, its sends -- and the system
 // effects every part sends to (CC91, 93, 94) and the EQ. What a file sets

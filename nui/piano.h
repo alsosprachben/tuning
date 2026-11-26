@@ -1,4 +1,4 @@
-// THE PIANO CARD (ui/app.js's): the selected part's pedals as the engine
+// THE PIANO CARD (the retired web interface's): the selected part's pedals as the engine
 // has them (a file's, the keyboard's, these) -- soft, sostenuto, the sustain
 // as a fader with DOWN / HALF / UP -- each damper's rest on its strings at
 // the sustain's value (a half pedal: the bass's heavier dampers still

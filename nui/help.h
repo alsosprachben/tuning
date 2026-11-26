@@ -1,10 +1,10 @@
-// THE HELP (ui/help.js's viewer): a ? beside every card's name and its
+// THE HELP (the retired web help's viewer): a ? beside every card's name and its
 // titled regions (heading()), and the ? key after the card keys, each
 // opening the viewer at its topic -- the contents and a search on the left,
 // the topic on the right: each button and control by the words printed on
 // it and what it does, the guides step by step, links to the topics near
-// it, and the card it describes to go to. The topics are help.js's own,
-// as ui/help.json (examples/help_json.js).
+// it, and the card it describes to go to. The topics are help_text.py's,
+// as ui/help.json (examples/help_json.py).
 #pragma once
 
 #include "app.h"

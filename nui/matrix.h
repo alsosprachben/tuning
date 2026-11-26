@@ -1,4 +1,4 @@
-// THE MATRIX CARD (ui/app.js's): what each controller moves on the selected
+// THE MATRIX CARD (the retired web interface's): what each controller moves on the selected
 // part's channel (GS's controller matrix, 40 2x) -- the six sources down
 // the side, the eleven destinations across, a knob in each cell in the
 // destination's own unit. Changed from power-on: orange. Double-tap a cell:

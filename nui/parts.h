@@ -1,4 +1,4 @@
-// THE PARTS CARD (ui/app.js's): the keyboard's map -- each part a lane over
+// THE PARTS CARD (the retired web interface's): the keyboard's map -- each part a lane over
 // its keys, its ends dragged to set them, a tap selecting it -- and a strip
 // per part: its name, pan, level, KEY, CH, MUTE, SOLO and touch; LAYER,
 // SPLIT and REMOVE in the card's head.

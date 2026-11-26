@@ -1,7 +1,7 @@
 #ifdef __APPLE__
 #include <TargetConditionals.h>
 #endif
-// THE FILES CARD (ui/app.js's): a MIDI file on this machine -- found in its
+// THE FILES CARD (the retired web interface's): a MIDI file on this machine -- found in its
 // folders, checked (what it reads as, the file check's findings, a mode
 // worth trying, the MT-32's or the mux's report), played live (the parts
 // its own, one per channel), or rendered offline: as heard (the live

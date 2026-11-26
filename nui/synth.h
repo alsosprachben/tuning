@@ -1,4 +1,4 @@
-// THE SYNTH CARD (ui/app.js's): the part's synth as the Messenger's panel
+// THE SYNTH CARD (the retired web interface's): the part's synth as the Messenger's panel
 // lays it out -- its sections in columns (LFO 1 with the left hand under
 // it, the oscillators, mixer, filter, envelopes, delay), each control at its
 // place ("row.col[.rows]" in the engine's knob table). A knob, a wave knob

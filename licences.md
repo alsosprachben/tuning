@@ -454,8 +454,8 @@ legal advice: a lawyer reads this before sale.
   > sounds were studied in building our models, and the MIDI standards'
   > named sounds a file asks for.
 
-- **The marks, as of 2026-11-22** (counted in ui/about.json, ui/app.js,
-  ui/help.js, nui/*.h, patch_map.py, percussion_map.py; owners to confirm
+- **The marks, as of 2026-11-22** (counted in ui/about.json, help_text.py
+  (then the web interface, retired 2026-11-25), nui/*.h, patch_map.py, percussion_map.py; owners to confirm
   before sale -- several have changed hands):
   - Roland: Roland, GS, Sound Canvas, SC-55/88/8850, MT-32, CM-64/32L,
     TR-808/909/707/606, TR-8, CR-78, Jupiter, Juno, JC-120.
@@ -508,7 +508,7 @@ legal advice: a lawyer reads this before sale.
     a device.
   - THE MESSENGER CARD, the facts for a lawyer: the sections and their
     controls' places follow the Messenger's panel (LFO 1 with the left
-    hand, oscillators, mixer, filter, envelopes; nui/synth.h, ui/app.js);
+    hand, oscillators, mixer, filter, envelopes; nui/synth.h);
     everything drawn is ours -- our knobs with scopes, segmented switches,
     our theme, colours and fonts; no logo, artwork, lettering or wood; the
     controls carry generic function names. Whether the arrangement alone is

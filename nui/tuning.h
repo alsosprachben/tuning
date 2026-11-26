@@ -1,4 +1,4 @@
-// THE TUNING CARD (ui/app.js's): the rig's tuner (every part: the patches
+// THE TUNING CARD (the retired web interface's): the rig's tuner (every part: the patches
 // built again in it), grouped by what it is for; its shape drawn -- an
 // octave's notes in cents from equal temperament, and how far each key
 // strays across the keyboard (stretch); the Eastern tuning the Indian

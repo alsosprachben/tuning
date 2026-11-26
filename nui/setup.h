@@ -1,4 +1,4 @@
-// THE SETUP CARD (ui/app.js's): the MIDI inputs (each plugged-in device on
+// THE SETUP CARD (the retired web interface's): the MIDI inputs (each plugged-in device on
 // or off, merged), playing as a module (the input read as a sound module
 // reads it, your parts set aside and put back), the Messenger, the globals
 // every part plays through (livetui's GLOBALS), the room, how program

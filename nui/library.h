@@ -1,4 +1,4 @@
-// THE LIBRARY CARD (ui/app.js's): every patch the engine plays, by family
+// THE LIBRARY CARD (the retired web interface's): every patch the engine plays, by family
 // (favourites, all, GM's sixteen, the drum kits, the MT-32's and CM-32P's
 // own), or by search -- the words in its number, name and family; a tile's
 // tap plays it on the part selected, its star keeps it among the

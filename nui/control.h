@@ -1,4 +1,4 @@
-// THE CONTROL CARD (ui/app.js's): the on-screen controls (a pedal or wheel
+// THE CONTROL CARD (the retired web interface's): the on-screen controls (a pedal or wheel
 // the keyboard lacks), each sent straight to the engine on its channel -- a
 // switch latching (press down, press up), the pitch wheel and aftertouch
 // springing back when let go. And the routes: the keyboard's own controls

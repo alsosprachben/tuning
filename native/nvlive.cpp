@@ -7,8 +7,6 @@
 //                       [--no-register] [--pedal-key=N] [--press-db=DB] [--gpu[=cl|c]] [--gpu-min=N]
 //                       [--no-rt] [--rt-prio=N] [--reg-sync] [--no-governor] [--dry] [--no-panel]
 //                       [--tuner=NAME [--a=HZ | --c=HZ]] [--eastern=SPEC] [--eastern-at=S:SPEC] [--stops=WORD] [--stops-at=S:WORD]
-//                       [--ui[=PORT] [--ui-no-browser]]   (the touch interface: ui/, in Chromium, full screen,
-//                                                          in place of the panel; closing its window stops nvlive)
 //                       [--file-export=PATH]   (the Files card's best-quality renders: native_export.py's file export)
 //     nvlive EXPORT.nvx --test IN.mid OUT.wav [--program=N] [--seconds=S] [--no-register] [--pedal-key=N]
 //                       [--rt] [--reg-async] [--async] [--busy=N] [--govern] [--paced] [--build-async] [--tuner-at=S:NAME] [--preset-at=S:NAME] [--metronome=BPM[:RING]]
@@ -100,7 +98,6 @@
 #endif
 #include "hostlive.h"
 #include "host.h"
-#include "uiserve.h"
 #ifdef NV_NATIVE_UI
 extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*stopped)(void));   // (nui/nui.cpp)
 static int nui_stopped(void) { return g_stop ? 1 : 0; }    // (Ctrl-C, the engine's end: the window closes)
@@ -628,12 +625,12 @@ int nv_host::run(int argc, char **argv)
         }
     }
     // (none: the panel's I opens one once it is plugged in; no panel, nothing to play)
-    // (--ui: the touch interface instead of the panel; its Setup card opens
+    // (--app: the native interface instead of the panel; its Setup card opens
     // an input once one is plugged in)
     bool no_panel = !isatty(1), with_ui = false;
     for (int i = 1; i < argc; i++) {
         no_panel = no_panel || !strcmp(argv[i], "--no-panel");
-        with_ui = with_ui || !strcmp(argv[i], "--ui") || !strncmp(argv[i], "--ui=", 5);
+        with_ui = with_ui || !strcmp(argv[i], "--app") || !strcmp(argv[i], "--app-windowed");
     }
     if (dev.empty() || !midi_exists(dev)) {
         if (with_ui) {
@@ -924,11 +921,6 @@ int nv_host::run(int argc, char **argv)
         }
     };
     player = std::thread(audio);
-    // THE TOUCH INTERFACE (--ui[=PORT], 8710 by default): ui/ beside nvlive,
-    // served on 127.0.0.1 (uiserve.h, uiapi.cpp) and shown in Chromium, full
-    // screen in its own profile (--ui-no-browser: served only)
-    int ui_port = 0;
-    bool ui_browser = true;
     // THE NATIVE INTERFACE (--app, --app-windowed: nui/nui.cpp, drawn here on
     // the GPU, in this process -- no server, no browser)
     bool app_mode = false, app_windowed = false;
@@ -936,24 +928,10 @@ int nv_host::run(int argc, char **argv)
         app_windowed = app_windowed || !strcmp(argv[i], "--app-windowed");
         app_mode = app_mode || !strcmp(argv[i], "--app") || !strcmp(argv[i], "--app-windowed");
     }
-    for (int i = 1; i < argc; i++) {
-        if (!strcmp(argv[i], "--ui"))
-            ui_port = 8710;
-        else if (!strncmp(argv[i], "--ui=", 5))
-            ui_port = atoi(argv[i] + 5);
-        ui_browser = ui_browser && strcmp(argv[i], "--ui-no-browser") != 0;
-    }
-    std::atomic<bool> ui_stop{false};
-    std::thread ui_thr;
-    pid_t ui_pid = -1;
-    uiserve::Server ui_srv;
+    // (the interface's Files card: its export and its renders' folder)
     auto start_ui = [&]() {
-        if (ui_port <= 0 && !app_mode)
+        if (!app_mode)
             return;
-        std::string d = nv_self_exe();
-        d = d.substr(0, d.rfind('/') == std::string::npos ? 0 : d.rfind('/'));
-        ui_srv.h = this;
-        ui_srv.root = (d.empty() ? std::string(".") : d) + "/ui";
         // THE FILES CARD: the file export for best-quality renders
         // (--file-export=PATH; else the newest file-*.nvx beside this export)
         // and the folder renders go to (~/Music/renders)
@@ -984,49 +962,14 @@ int nv_host::run(int argc, char **argv)
             const std::string rd = std::string(hm ? hm : "/tmp") + "/Music/renders";
 #endif
             nv_ui_files_config(fx.c_str(), rd.c_str());
-            ui_srv.renders = rd;
             fprintf(stderr, "nvlive: files: renders to %s%s\n", rd.c_str(),
                     fx.empty() ? " (no file export: best quality off)" : ("; best quality from " + fx).c_str());
         }
-        if (ui_port <= 0)
-            return;                             // (the native interface: no server)
-        if (!ui_srv.listen_on(ui_port)) {
-            fprintf(stderr, "nvlive: --ui: port %d is taken\n", ui_port);
-            return;
-        }
-        ui_thr = std::thread([&]() { ui_srv.run(ui_stop); });
-        const std::string url = "http://127.0.0.1:" + std::to_string(ui_port) + "/";
-        fprintf(stderr, "nvlive: the touch interface at %s\n", url.c_str());
-        if (!ui_browser)
-            return;
-        // (the snap's Chromium writes only under ~/snap/chromium)
-        const char *home = getenv("HOME");
-        std::string prof = std::string(home ? home : "/tmp");
-        struct stat st;
-        prof += stat((prof + "/snap/chromium").c_str(), &st) == 0 ? "/snap/chromium/common/clavitone-ui"
-                                                                   : "/.cache/clavitone-ui";
-        std::vector<std::string> av = {"chromium", "--app=" + url, "--start-fullscreen", "--user-data-dir=" + prof,
-                                       "--no-first-run", "--no-default-browser-check", "--disable-features=Translate",
-                                       "--ozone-platform-hint=auto"};
-        std::vector<char *> ap;
-        for (auto &x : av)
-            ap.push_back(&x[0]);
-        ap.push_back(nullptr);
-        posix_spawn_file_actions_t fa;
-        posix_spawn_file_actions_init(&fa);
-        posix_spawn_file_actions_addopen(&fa, 1, "/dev/null", O_WRONLY, 0);
-        posix_spawn_file_actions_addopen(&fa, 2, "/dev/null", O_WRONLY, 0);
-        extern char **environ;
-        if (posix_spawnp(&ui_pid, "chromium", &fa, nullptr, ap.data(), environ) != 0) {
-            ui_pid = -1;
-            fprintf(stderr, "nvlive: --ui: no chromium to show it; open %s\n", url.c_str());
-        }
-        posix_spawn_file_actions_destroy(&fa);
     };
     if (nopanel) {
         globals_init();
         session_apply();
-        if (ui_port > 0 || app_mode)
+        if (app_mode)
             patches_init();                     // (the interface's library)
         start_ui();
         // (the routes in force, --pedal-key's own not among them)
@@ -1079,23 +1022,10 @@ int nv_host::run(int argc, char **argv)
             g_stop = true;
 #endif
         }
-        // THE SESSION, saved every 2 s while the interface is up (as the
-        // panel does); the window closed, or the interface's QUIT: stopped
-        const auto t_ui = std::chrono::steady_clock::now();
+        // (no interface: played until stopped -- a signal, or the native one's QUIT)
         nv_ui_quit = []() { g_stop = true; };
         for (int n = 0; !g_stop; n++) {
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
-            if (ui_port > 0 && n % 20 == 19)
-                session_save(routes_now());
-            int st;
-            if (ui_pid > 0 && waitpid(ui_pid, &st, WNOHANG) == ui_pid) {
-                ui_pid = -1;
-                // (gone at once: an open window of that profile took it over)
-                if (std::chrono::steady_clock::now() - t_ui > std::chrono::seconds(5)) {
-                    fprintf(stderr, "nvlive: the window closed\n");
-                    g_stop = true;
-                }
-            }
         }
         nv_ui_quit = nullptr;
         session_save(routes_now());
@@ -1542,12 +1472,6 @@ int nv_host::run(int argc, char **argv)
     }
     g_stop = true;
     nv_ui_files_shutdown(this);                 // (the Files card's player and render)
-    if (ui_thr.joinable()) {
-        ui_stop = true;
-        ui_thr.join();
-    }
-    if (ui_pid > 0)
-        kill(ui_pid, SIGTERM);                  // (the window this run opened)
     player.join();
     bcv.notify_all();
     builder.join();

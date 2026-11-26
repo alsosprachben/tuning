@@ -35,7 +35,7 @@ static const char *FAMILIES[16] = {"PIANO", "CHROMATIC PERC.", "ORGAN", "GUITAR"
                                    "BRASS", "REED", "PIPE", "SYNTH LEAD", "SYNTH PAD", "SYNTH EFFECTS", "ETHNIC",
                                    "PERCUSSIVE", "SOUND EFFECTS"};
 
-// THE SEVEN FIELDS (ui/app.js's FIELDS): in field units (LEVEL in half dB)
+// THE SEVEN FIELDS (the retired web interface's FIELDS): in field units (LEVEL in half dB)
 struct Field {
     const char *label;
     int lo, hi, reset;                  // (reset INT32_MIN: none)

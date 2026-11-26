@@ -5216,7 +5216,6 @@ def build_nvlive():
     hdr = os.path.join(HERE, 'native', 'panel.h')
     hint = os.path.join(HERE, 'native', 'hostint.h')
     hlive = os.path.join(HERE, 'native', 'hostlive.h')
-    uis = os.path.join(HERE, 'native', 'uiserve.h')
     # THE NATIVE INTERFACE (nui/, --app): built in when its libraries are
     # (examples/third_party.py): SDL3 static, Dear ImGui's sources, ours
     nui_objs, nui_flags, nui_libs = [], [], []
@@ -5238,10 +5237,13 @@ def build_nvlive():
                                      [('nui_imgui_impl_opengl3', ucx, os.path.join(imgui, 'backends', 'imgui_impl_opengl3.cpp')),
                                       ('nui_gfx_gl', ucx, os.path.join(HERE, 'nui', 'gfx_gl.cpp'))]))
         nui_flags = ['-DNV_NATIVE_UI']
-        # (its help: ui/help.js's topics as ui/help.json, made again when help.js is newer and node is here)
-        hjs, hjson = os.path.join(HERE, 'ui', 'help.js'), os.path.join(HERE, 'ui', 'help.json')
-        if shutil.which('node') and (not os.path.exists(hjson) or os.path.getmtime(hjs) > os.path.getmtime(hjson)):
-            subprocess.run(['node', os.path.join(HERE, 'examples', 'help_json.js'), os.path.join(HERE, 'ui')], check=True)
+        # (its help: help_text.py's topics and credits.json's sources as ui/help.json,
+        # made again when either is newer -- examples/help_json.py)
+        hjson = os.path.join(HERE, 'ui', 'help.json')
+        srcs = [os.path.join(HERE, 'help_text.py'), os.path.join(HERE, 'ui', 'credits.json')]
+        if not os.path.exists(hjson) or any(os.path.getmtime(s) > os.path.getmtime(hjson) for s in srcs if os.path.exists(s)):
+            subprocess.run([sys.executable, os.path.join(HERE, 'examples', 'help_json.py'), os.path.join(HERE, 'ui')],
+                           check=True)
         nui_libs = [os.path.join(sdl, 'lib', 'libSDL3.a')]
         if sys.platform == 'darwin':        # (its frameworks, as its sdl3.pc names them -- and CoreGraphics, which it leaves to Cocoa)
             pc = os.path.join(sdl, 'lib', 'pkgconfig', 'sdl3.pc')
@@ -5249,7 +5251,7 @@ def build_nvlive():
                 if l.startswith(('Libs:', 'Libs.private:')):
                     nui_libs += [w for w in l.split(':', 1)[1].split() if not w.startswith(('-L', '-lSDL3'))]
             nui_libs += ['-Wl,-framework,CoreGraphics']
-    newest = max([os.path.getmtime(x) for x in (src, hdr, hint, hlive, uis, so)] + [os.path.getmtime(o) for o in nui_objs])
+    newest = max([os.path.getmtime(x) for x in (src, hdr, hint, hlive, so)] + [os.path.getmtime(o) for o in nui_objs])
     if not os.path.exists(exe) or newest > os.path.getmtime(exe):
         tmp = '%s.%d.tmp' % (exe, os.getpid())
         subprocess.check_call(_TC.cmd(['g++', '-std=c++17', '-O2', '-march=native', '-ffp-contract=off', '-fno-builtin']

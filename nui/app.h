@@ -447,7 +447,7 @@ inline float heading(App &a, float x, float y, const std::string &t, const std::
     return qx + 2 * r + 12;
 }
 
-// ---- the formats (ui/app.js's)
+// ---- the formats (the retired web interface's)
 inline std::string pad2(int n)
 {
     char b[16];

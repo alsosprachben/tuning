@@ -1,4 +1,4 @@
-// THE STOPS CARD (ui/app.js's): the selected part's organ as a stop jamb --
+// THE STOPS CARD (the retired web interface's): the selected part's organ as a stop jamb --
 // the voice's rows as the panel has them (stops_of's rows), each row's
 // groups apart, a tab lit when drawn. A tap draws or retires it; the whole
 // registration goes to the engine (stops_set). A tonewheel organ's DRIVE

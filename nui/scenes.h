@@ -1,4 +1,4 @@
-// THE SCENES CARD (ui/app.js's): the presets (the whole setup) and the
+// THE SCENES CARD (the retired web interface's): the presets (the whole setup) and the
 // scenes (each channel's controls), kept beside the session and shared with
 // live.py and the apps: a tap chooses one, LOAD or RECALL brings it, SAVE
 // OVER keeps the present one in it, DELETE takes it out; a new one named on
