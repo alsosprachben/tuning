@@ -15,14 +15,14 @@ inline void bubble(App &a, const std::string &s)
     if (!a.K.moved || a.K.active == 0)
         return;
     const ImVec2 m = a.K.bubble_at;
-    const float sz = px(a, 21), w = a.font->CalcTextSizeA(sz, FLT_MAX, 0, s.c_str()).x + 24 * a.k,
+    std::string t = shape(s + (a.K.fine() ? "  \xc2\xb7 fine" : ""));
+    const float sz = px(a, 21), w = a.font->CalcTextSizeA(sz, FLT_MAX, 0, t.c_str()).x + 24 * a.k,
                 h = sz + 16 * a.k;
     const ImVec2 p0(std::floor(m.x - w / 2), std::floor(m.y - 90 * a.k - h));
     ImDrawList *fg = ImGui::GetForegroundDrawList();
     fg->AddCallback(ImGui::GetPlatformIO().DrawCallback_SetSamplerNearest, nullptr);
     fg->AddRectFilled(p0, ImVec2(p0.x + w, p0.y + h), LCD_BG, 6 * a.k);
     fg->AddRect(p0, ImVec2(p0.x + w, p0.y + h), LCD, 6 * a.k, 0, 1.5f * a.k);
-    std::string t = s + (a.K.fine() ? "  \xc2\xb7 fine" : "");
     fg->AddText(a.font, sz, ImVec2(p0.x + 12 * a.k, std::floor(p0.y + 8 * a.k)), LCD, t.c_str());
 }
 

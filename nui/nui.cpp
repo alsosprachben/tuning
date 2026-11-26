@@ -562,6 +562,7 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
         fprintf(stderr, "nvlive: --app: code7's BDFs are not in %s\n", fonts_dir);
         return 1;
     }
+    c7.marks = c7sc.marks = true;
     App a;
     a.h = h;
     a.ui_dir = std::string(fonts_dir).substr(0, std::string(fonts_dir).rfind('/'));

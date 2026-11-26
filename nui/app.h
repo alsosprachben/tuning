@@ -19,6 +19,7 @@
 #include "../native/host.h"
 #include "../native/session.h"
 #include "kit.h"
+#include "shape.h"
 
 namespace nui {
 
@@ -202,9 +203,10 @@ inline float px(const App &a, float size)           // (code7's sizes: whole mul
 }
 inline ImDrawList *dl() { return ImGui::GetWindowDrawList(); }
 inline float App::lh(float size) const { return px(*this, size) / k; }
+// (drawn and measured SHAPED, shape.h: composed, joined, in its visual order)
 inline float text_w(App &a, ImFont *f, float size, const std::string &s)
 {
-    return f->CalcTextSizeA(px(a, size), FLT_MAX, 0.0f, s.c_str()).x / a.k;
+    return f->CalcTextSizeA(px(a, size), FLT_MAX, 0.0f, shape(s).c_str()).x / a.k;
 }
 
 // ---- THE TEXT AUDIT (NUI_TEXT_AUDIT=FILE, for the tour's checks): each
@@ -253,7 +255,7 @@ inline void audit_text(App &a, ImFont *f, float size, float x, float y, const st
 inline void text(App &a, ImFont *f, float size, float x, float y, ImU32 col, const std::string &s)
 {
     audit_text(a, f, size, x, y, s);
-    dl()->AddText(f, px(a, size), P(a, x, y), col, s.c_str());
+    dl()->AddText(f, px(a, size), P(a, x, y), col, shape(s).c_str());
 }
 // (a centred text kept inside the panel being drawn, where a card says which: App::lab_x0..lab_x1)
 inline void text_c(App &a, ImFont *f, float size, float cx, float y, ImU32 col, const std::string &s)

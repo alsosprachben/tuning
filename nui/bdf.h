@@ -15,12 +15,14 @@
 
 #include "imgui.h"
 #include "imgui_internal.h"
+#include "shape.h"
 
 namespace nui {
 
 static const unsigned BDF_DOTS = 1;       // (ImFontConfig::FontLoaderFlags: the dotted font)
 
 struct BdfGlyph {
+    uint32_t cp = 0;
     int w = 0, h = 0, xo = 0, yo = 0, dw = 0;
     std::vector<uint32_t> rows;         // (MSB first: bit 31 the leftmost pixel)
 };
@@ -32,6 +34,9 @@ struct Bdf {
     //  glyphs, wide_from pixels or more, centred in wide_dw, code7w's 12: two
     //  of code7's cells, the grid full-width text keeps)
     int wide_from = 0, wide_dw = 0;
+    // (its MARKS -- accents, points, harakat, the shaping pass's -- drawn as
+    //  a terminal draws them: zero width, over the letter before, its cell)
+    bool marks = false;
     std::unordered_map<uint32_t, int> idx;   // codepoint -> glyph + 1
     std::vector<BdfGlyph> g;
 };
@@ -62,6 +67,7 @@ inline bool bdf_parse(const std::string &text, Bdf &out)
         if (in_bitmap >= 0) {
             if (l == "ENDCHAR") {
                 if (enc >= 0) {
+                    cur.cp = (uint32_t)enc;
                     out.g.push_back(cur);
                     out.idx[(uint32_t)enc] = (int)out.g.size();
                 }
@@ -150,7 +156,9 @@ inline bool bdf_load_glyph(ImFontAtlas *atlas, ImFontConfig *src, ImFontBaked *b
     const float d = bdf_density(baked);
     const int s = bdf_scale(*b, baked->Size * d);
     const bool wide = b->wide_dw > 0 && g.dw >= b->wide_from;
-    const int dw = wide ? b->wide_dw : g.dw, xo = g.xo + (wide ? (b->wide_dw - g.dw) / 2 : 0);
+    const bool mark = b->marks && sh_is_mark(g.cp);
+    const int dw = mark ? 0 : wide ? b->wide_dw : g.dw,
+              xo = g.xo + (wide ? (b->wide_dw - g.dw) / 2 : 0) - (mark ? g.dw : 0);
     if (out_advance_x) {
         *out_advance_x = (float)(dw * s) / d;
         return true;

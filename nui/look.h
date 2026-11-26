@@ -523,10 +523,11 @@ inline void dial_cap(App &a, float cx, float cy, float r, float rot_deg)
 }
 
 // ---- THE DISPLAY's TEXT: code7's dots (the dotted font, a.lcd) with their glow on the glass
-inline void lcd_text(App &a, float size, float x, float y, ImU32 col, const std::string &s, bool glow = true)
+inline void lcd_text(App &a, float size, float x, float y, ImU32 col, const std::string &s0, bool glow = true)
 {
     ImFont *f = a.lcd ? a.lcd : a.font;
-    audit_text(a, f, size, x, y, s);
+    audit_text(a, f, size, x, y, s0);
+    const std::string s = shape(s0);
     if (glow) {
         const float fb = std::max(1.0f, ImGui::GetIO().DisplayFramebufferScale.x);
         const float o = 1.0f / fb;      // (a device pixel, in points)
