@@ -359,9 +359,10 @@ inline void sh_thai(std::vector<uint32_t> &u)
 inline bool sh_deva_cons(uint32_t c) { return (c >= 0x915 && c <= 0x939) || (c >= 0x958 && c <= 0x95F) || (c >= 0x978 && c <= 0x97F); }
 inline bool sh_deva_has_half(uint32_t c)
 {
-    // (the consonants with a stem to drop; ङ छ ट ठ ड ढ द ह र have none)
+    // (the consonants with a stem to drop; ङ छ ट ठ ड ढ द ह र have none, nor ऱ ड़ ढ़; code7t draws the rest)
     switch (c) {
     case 0x919: case 0x91B: case 0x91F: case 0x920: case 0x921: case 0x922: case 0x926: case 0x939: case 0x930:
+    case 0x931: case 0x95C: case 0x95D:
         return false;
     }
     return sh_deva_cons(c);

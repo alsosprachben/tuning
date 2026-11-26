@@ -572,6 +572,14 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
     //  its CJK drawn 7x7 -- code7's height -- so Japanese, Korean and Chinese
     //  names show in the same pixels. Its cell taken as code7's (an 8-pixel
     //  cell would scale apart at 5x), its wide glyphs centred in code7w's 12)
+    // (and before it code7t: code7's Thai and Devanagari, a 6x9 cell -- code7's 7 rows and one above and one
+    //  below, for their marks -- set to code7's cell, so its glyphs reach a row past the line each way)
+    static Bdf c7t;
+    if (load("code7t.bdf", c7t)) {
+        c7t.ascent = c7.ascent;
+        c7t.descent = c7.descent;
+        c7t.marks = true;
+    }
     static Bdf fb;
     if (load("fusion-pixel-8px-monospaced-ja.bdf", fb)) {
         fb.ascent = c7.ascent;
@@ -582,6 +590,8 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
     auto merge = [&](unsigned flags) {
         if (c7w.g.size())
             bdf_add(io.Fonts, &c7w, flags ? "code7wdots" : "code7w", true, flags);
+        if (c7t.g.size())
+            bdf_add(io.Fonts, &c7t, flags ? "code7tdots" : "code7t", true, flags);
         if (fb.g.size())
             bdf_add(io.Fonts, &fb, flags ? "fusiondots" : "fusion", true, flags);
     };
