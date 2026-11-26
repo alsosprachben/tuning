@@ -145,7 +145,9 @@ function drawMeters(m) {
 function drawHealth() {
   const b = S.build, m = lastMeters;
   let t = '';
-  if (b && b.n > 0) t = 'BUILDING' + (b.total > 0 ? ' ' + Math.round(100 * b.done / b.total) + '%' : '');
+  if (b && b.n > 0) t = 'BUILDING' + (b.total > 0 ? ' ' + Math.round(100 * b.done / b.total) + '%'
+    + (b.est_mb >= 1024 ? ` · ${Math.round(b.est_mb / 1024)} GB` : b.est_mb > 0 ? ` · ${b.est_mb} MB` : '')
+    + (b.over ? ' · TOO BIG: MIDDLE FIRST' : '') : '');
   else if (m && m.underruns) t = `UNDERRUNS ${m.underruns}`;
   else if (m && m.rt_dropped) t = 'RT DROPPED';
   $('health').textContent = t || '\u00a0';     // (its line kept, empty: nothing above it moves)

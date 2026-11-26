@@ -981,7 +981,9 @@ J build_of(nv_host *h)
 {
     J b = sess::obj();
     long done = 0, total = 0;
-    char name[96] = {};
+    long long est = 0;
+    bool over = false;
+    std::string name;
     // (the builder's own work only: nv_host_building also counts what is
     // posted to the audio thread -- the cards' reads between two blocks --
     // which made the display say BUILDING for a moment every few seconds)
@@ -992,10 +994,12 @@ J build_of(nv_host *h)
              + (h->east_req_set ? 1 : 0) + (int)h->add_req.size() + (int)h->add_done.size();
     }
     b.o["n"] = sess::integer(n);
-    if (n > 0 && nv_host_progress(h, &done, &total, name, sizeof name)) {
+    if (n > 0 && h->progress(&done, &total, &name, &est, &over)) {
         b.o["name"] = sess::str(name);
         b.o["done"] = sess::integer(done);
         b.o["total"] = sess::integer(total);
+        b.o["est_mb"] = sess::integer((long)(est >> 20));      // (its size, known or sampled: 0 not known)
+        b.o["over"] = sess::boolean(over);                    // (more than the patches have room for)
     }
     // A5's ON DEMAND: notes struck late on their own template, on a
     // neighbour's (a stand-in), held now; the octave filling

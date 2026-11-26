@@ -141,8 +141,13 @@ inline std::string health_line(App &a, const J *m, bool &warn)
         return a.warn;
     }
     if (num(&a.build, "n") > 0) {
-        const double tot = num(&a.build, "total"), done = num(&a.build, "done");
-        return tot > 0 ? "BUILDING " + std::to_string((int)std::lround(100 * done / tot)) + "%" : "BUILDING";
+        const double tot = num(&a.build, "total"), done = num(&a.build, "done"), mb = num(&a.build, "est_mb");
+        // (its size beside the percent, known or sampled; over the budget, the middle octaves first)
+        const std::string size = mb >= 1024 ? " \xc2\xb7 " + std::to_string((int)std::lround(mb / 1024.0)) + " GB"
+                               : mb > 0 ? " \xc2\xb7 " + std::to_string((int)mb) + " MB" : "";
+        return tot > 0 ? "BUILDING " + std::to_string((int)std::lround(100 * done / tot)) + "%" + size +
+                             (flag(&a.build, "over") ? " \xc2\xb7 TOO BIG: MIDDLE FIRST" : "")
+                       : "BUILDING";
     }
     const std::string fill = str(&a.build, "fill");
     if (!fill.empty())

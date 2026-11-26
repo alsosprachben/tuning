@@ -2629,6 +2629,25 @@ long nv_tcache_warm_b(void *h, int program, int lo, int hi, int nb, const int *s
     return n;
 }
 
+// ONE TEMPLATE (a patch's size sampled before it is built, A5): note's at bucket
+// bk and speeds[q], in the shape (nb, speeds) the warm will use, built and kept
+// (the warm passes it by); its bytes, 0 none (none built, or one there already)
+long long nv_tcache_sample(void *h, int program, int note, int bk, int q, int nb, const int *speeds, int nsp)
+{
+    nv::live::Cache *C = (nv::live::Cache *)h;
+    C->shape(nb, speeds, nsp);
+    auto k = std::make_tuple(note, bk, speeds[q]);
+    if (C->tm.count(k))
+        return 0;
+    int vel = (int)std::min(127.0, (bk + 0.5) * 128.0 / nb);    // Patch.bucket_vel
+    nv::live::Template T;
+    if (!C->build(program, note, vel, speeds[q], T))
+        return 0;
+    const long long tb = (long long)tmpl_bytes(T);
+    C->keep(k, std::move(T));
+    return tb;
+}
+
 long nv_tcache_warm(void *h, int program, int lo, int hi, int nb, const int *speeds, int nsp)
 {
     return nv_tcache_warm_p(h, program, lo, hi, nb, speeds, nsp, nullptr);

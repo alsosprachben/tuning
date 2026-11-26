@@ -1460,17 +1460,23 @@ int nv_host::open(int argc, char **argv)
         raga_for(c, prog, dr);
         if (var)
             nv_tcache_set_var(c, var);
-        // ITS ROOM (A5): with a budget, the patches no part plays let go first;
-        // the bytes left are this one's to take
+        // ITS ROOM (A5): with a budget, the patches no part plays let go first --
+        // BEFORE it builds, as far as its size asks (built here before, or kept in
+        // patch_sizes.json, or sampled: make_room below); the bytes left are its to take
         long long limit = 0;
+        long long want_ = 0;                    // (its size, known or estimated: 0 not known)
         if (patch_budget > 0) {
-            // (the least recently used let go, as far as this one took when last built)
-            long long want_ = 0;
-            {
-                std::lock_guard<std::mutex> lk(cmu);
-                auto wb = built_bytes.find(key);
-                want_ = wb != built_bytes.end() ? wb->second : 0;
-            }
+            std::lock_guard<std::mutex> lk(cmu);
+            if (sizes_sr == 0.0)
+                sizes_load();
+            auto wb = built_bytes.find(key);
+            auto wk = sizes_known.find(key);
+            want_ = wb != built_bytes.end() ? wb->second
+                  : wk != sizes_known.end() ? (long long)(wk->second * (sizes_sr > 0.0 ? SR / sizes_sr : 1.0)) : 0;
+        }
+        auto make_room = [&]() {
+            if (patch_budget <= 0)
+                return;
             trim_to = std::max(0LL, patch_budget - want_);
             cache_trim({});
             trim_to = -1;
@@ -1485,7 +1491,7 @@ int nv_host::open(int argc, char **argv)
                 }
             }
             limit = std::max(1LL, patch_budget - held_);
-        }
+        };
         // ...and A FILE's OCTAVES, while one plays (0: every octave)
         unsigned oct = 0;
         {
@@ -1508,16 +1514,18 @@ int nv_host::open(int argc, char **argv)
             if (limit <= 0 || oct)
                 return nv_tcache_warm_b(c, p_, lo, hi, nb, sp, nsp, &bp_done, oct, limit, &got) >= 0;
             static const int ORD[11] = {4, 5, 3, 6, 2, 7, 1, 8, 0, 9, 10};
-            const long step_ = (long)(hi - lo + 1) * nb * nsp / 11;
             for (int o : ORD) {
+                const int lo_ = std::max(lo, 12 * o), hi_ = std::min(hi, 12 * o + 11);
+                if (lo_ > hi_)
+                    continue;
                 const long long left = limit - got;
                 long long g = 0;
                 if (left <= 0) {
                     thin = true;
                     break;
                 }
-                const long r = nv_tcache_warm_b(c, p_, lo, hi, nb, sp, nsp, nullptr, 1u << o, left, &g);
-                __atomic_fetch_add(&bp_done, step_, __ATOMIC_RELAXED);
+                // (its octave's keys alone: the progress counted key by key, as the whole's)
+                const long r = nv_tcache_warm_b(c, p_, lo_, hi_, nb, sp, nsp, &bp_done, 0, left, &g);
                 if (r < 0) {
                     thin = true;
                     got = nv_tcache_bytes(c);      // (what that octave kept of itself too)
@@ -1545,9 +1553,12 @@ int nv_host::open(int argc, char **argv)
             bp_name = (dr ? "drum set " : "program ") + std::to_string(prog & 127) + " "
                       + (dr ? kit_name(prog) : E.prog[prog & 127].name);
             __atomic_store_n(&bp_done, 0L, __ATOMIC_RELAXED);
+            bp_est = want_;
+            bp_over = false;
             __atomic_store_n(&bp_total, total, __ATOMIC_RELEASE);
         };
         if (dr) {
+            make_room();
             nv_tcache_kits(c, E.kit_f0.data(), E.kit_seat.data(), E.kit_choke.data(), E.kit_skind.data(),
                            E.kit_spar.data(), 100.0);
             int nsp[1] = {-1};
@@ -1567,9 +1578,52 @@ int nv_host::open(int argc, char **argv)
             }
             const int *pq = prec(prog, var);
             int sp[3] = {pq[3], pq[4], pq[5]};
-            begin(76L * pq[1] * pq[2]);
+            begin(88L * pq[1] * pq[2]);         // (MELODIC_RANGE's 88 keys, each bucket and speed)
+            // ITS SIZE SAMPLED, a patch never built whole (A5, under a budget): one
+            // template an octave -- the middle key, the loudest bucket, the first
+            // speed -- times the octave's templates; kept, so the warm passes them by
+            long long sampled = 0;              // (the samples' own bytes: the patch's, which the warm does not count)
+            if (patch_budget > 0 && !oct && want_ <= 0) {
+                long long est = 0, keys_in = 0, keys_out = 0;
+                // (middle octaves first; the samples themselves held to an eighth of the
+                // budget -- a monster's octaves past that extrapolated from those sampled)
+                static const int SO[9] = {5, 4, 6, 3, 7, 2, 8, 1, 9};
+                for (int o : SO) {
+                    const int lo_ = std::max(21, 12 * o), hi_ = std::min(108, 12 * o + 11);
+                    if (lo_ > hi_)
+                        continue;
+                    if (sampled > patch_budget / 8 && keys_in > 0) {
+                        keys_out += hi_ - lo_ + 1;
+                        continue;
+                    }
+                    const long long tb = nv_tcache_sample(c, prog & 127, (lo_ + hi_) / 2, pq[1] - 1, 0, pq[1], sp, pq[2]);
+                    est += tb * (long long)(hi_ - lo_ + 1) * pq[1] * pq[2];
+                    keys_in += hi_ - lo_ + 1;
+                    sampled += tb;
+                }
+                if (keys_out && keys_in)
+                    est += est / keys_in * keys_out;
+                want_ = est;
+            }
+            make_room();
+            if (getenv("NV_PATCH_SIZES") && patch_budget > 0)
+                fprintf(stderr, "nvlive: program %d var %d: about %.1f MB, %.1f MB of room\n", prog & 127, var,
+                        want_ / 1048576.0, limit / 1048576.0);
+            {
+                std::lock_guard<std::mutex> lk(bmu);
+                bp_est = want_;
+                bp_over = patch_budget > 0 && !oct && want_ > limit;
+            }
+            if (bp_over) {                      // (said before it builds, not after)
+                char b_[220];
+                snprintf(b_, sizeof b_, "%s: about %.0f MB, more than the %.0f MB the patches have room for -- its middle "
+                         "octaves first, the rest as they are played", tone_name(prog, dr, var).c_str(),
+                         want_ / 1048576.0, limit / 1048576.0);
+                tell(b_);
+            }
             if (!warm(prog & 127, 21, 108, pq[1], sp, pq[2]))     // (MELODIC_RANGE)
                 return refuse();
+            got += sampled;
             retune(prog);
         }
         __atomic_store_n(&bp_total, 0L, __ATOMIC_RELEASE);
@@ -1582,7 +1636,7 @@ int nv_host::open(int argc, char **argv)
             if (k60 && k60->n_dchoice && k60->dchoice_var)
                 build_drone(prog, k60);
         }
-        if (thin) {
+        if (thin && !bp_over) {
             char b_[200];
             snprintf(b_, sizeof b_, "%s: more than the %.0f MB left of the patches' %.0f MB -- its middle octaves "
                      "built (%.0f MB), the rest as they are played", tone_name(prog, dr, var).c_str(),
@@ -1594,8 +1648,13 @@ int nv_host::open(int argc, char **argv)
         cache_used[key] = ++cache_tick;
         if (oct || thin)
             partial.insert(key);
-        else
+        else {
             built_bytes[key] = got;
+            if (patch_budget > 0 && sizes_known[key] != got) {
+                sizes_known[key] = got;
+                sizes_save();
+            }
+        }
         return c;
     };
     // PATCHES LET GO (off the audio thread): to the part with their
@@ -3584,6 +3643,45 @@ void nv_host::set_global(int i, double v)
 // THE PICKER's: every program and set, which are native; the variations
 // (VNAM), native where every key of their slots the capital plays is one
 // the engine plays too
+// PATCH SIZES KEPT (A5): {"sr": rate, "sizes": {"key": bytes}} beside the
+// session, each patch's size built whole -- read once, written as one is learnt
+void nv_host::sizes_load()
+{
+    sizes_sr = -1.0;                            // (read, or none to read)
+    if (session_path.empty())
+        return;
+    const size_t k = session_path.rfind('/');
+    const std::string p = (k == std::string::npos ? std::string() : session_path.substr(0, k + 1)) + "patch_sizes.json";
+    sess::J j;
+    if (!sess::load(p, j))
+        return;
+    const sess::J *sr = j.get("sr"), *sz = j.get("sizes");
+    if (!sr || !sz || !sr->is(sess::J::NUM) || !sz->is(sess::J::OBJ))
+        return;
+    sizes_sr = atof(sr->num.c_str());
+    for (const auto &kv : sz->o)
+        if (kv.second.is(sess::J::NUM))
+            sizes_known[atoll(kv.first.c_str())] = atoll(kv.second.num.c_str());
+}
+void nv_host::sizes_save()
+{
+    if (session_path.empty())
+        return;
+    const size_t k = session_path.rfind('/');
+    const std::string p = (k == std::string::npos ? std::string() : session_path.substr(0, k + 1)) + "patch_sizes.json";
+    if (sizes_sr > 0.0 && sizes_sr != SR) {     // (another rate's sizes: rescaled to this one's)
+        for (auto &kv : sizes_known)
+            kv.second = (long long)(kv.second * (SR / sizes_sr));
+    }
+    sizes_sr = SR;
+    sess::J j = sess::obj(), sz = sess::obj();
+    j.o["sr"] = sess::integer((long)SR);
+    for (const auto &kv : sizes_known)
+        sz.o[std::to_string(kv.first)] = sess::integer((long)kv.second);
+    j.o["sizes"] = sz;
+    sess::save(p, j);
+}
+
 void nv_host::patches_init()
 {
     pnames.assign(256, "");
@@ -4331,7 +4429,7 @@ bool nv_host::part_delete(size_t row, std::string &why)
 }
 
 // the build under way: templates done of its total, and its name; false none
-bool nv_host::progress(long *done, long *total, std::string *name)
+bool nv_host::progress(long *done, long *total, std::string *name, long long *est, bool *over)
 {
     long t = __atomic_load_n(&bp_total, __ATOMIC_ACQUIRE);
     if (t <= 0)
@@ -4340,6 +4438,10 @@ bool nv_host::progress(long *done, long *total, std::string *name)
     *done = std::min(t, __atomic_load_n(&bp_done, __ATOMIC_RELAXED));
     std::lock_guard<std::mutex> lk(bmu);
     *name = bp_name;
+    if (est)
+        *est = bp_est;
+    if (over)
+        *over = bp_over;
     return true;
 }
 

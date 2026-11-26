@@ -96,6 +96,7 @@ void *nv_tcache_new(const NoteClass *const *K, const NoteIn *tmpl, const double 
                     double xdec_nepers, double SR);
 long nv_tcache_warm(void *h, int program, int lo, int hi, int nb, const int *speeds, int nsp);
 long nv_tcache_warm_p(void *h, int program, int lo, int hi, int nb, const int *speeds, int nsp, long *done);
+long long nv_tcache_sample(void *h, int program, int note, int bk, int q, int nb, const int *speeds, int nsp);
 long nv_tcache_warm_b(void *h, int program, int lo, int hi, int nb, const int *speeds, int nsp, long *done,
                       unsigned oct, long long limit, long long *bytes);
 void nv_tcache_kits(void *h, const double *f0, const double *seat, const unsigned long long *choke,
@@ -1730,7 +1731,15 @@ struct nv_host {
     // total, and what it is (bmu); total 0 none
     long bp_done = 0, bp_total = 0;
     std::string bp_name;
-    bool progress(long *done, long *total, std::string *name);
+    long long bp_est = 0;                   // (its size, estimated or known: 0 not known)
+    bool bp_over = false;                   // (...over the patches' budget: its middle octaves first)
+    // EACH PATCH's SIZE BUILT WHOLE, KEPT (A5): patch_sizes.json beside the
+    // session -- the room a patch needs known before it builds, next time
+    std::map<long long, long long> sizes_known;
+    double sizes_sr = 0.0;
+    void sizes_load();
+    void sizes_save();
+    bool progress(long *done, long *total, std::string *name, long long *est = nullptr, bool *over = nullptr);
     MidiParse midi_in;                      // (nv_host_midi's)
     std::mutex midi_in_mu;
     long long play_n0 = 0;                  // (nv_host_render's)
