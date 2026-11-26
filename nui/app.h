@@ -51,6 +51,8 @@ struct App {
     // (the PHONE's: a landscape phone's safe area, 832x419 points on a 16 Pro Max --
     //  tab set too (its sizes, the iPad's), its own panel and cards; the cards' menu open)
     bool ph = false, cards_open = false;
+    // (a phone card drawn at the iPad's height, scrolled under the panel: its foot the iPad mini's)
+    bool vcard = false;
     float W = 1920, H = 1080, ts = 1.0f;
     float lh(float size) const;         // (a line of text at size: its height in design units)
     J parts, meters, build;
@@ -180,7 +182,14 @@ inline ImVec2 P(const App &a, float x, float y)
 // screen's height -- 728 on an iPad mini's 744, lower on a squarer iPad's
 // (the design 1133 wide, as tall as the screen's shape makes it) -- the
 // laptop's 1056
-inline float card_y1(const App &a) { return a.ph ? a.H - 12.0f : a.tab ? a.H - 16.0f : 1056.0f; }
+// A CARD's PAGE KEYS (the iPad's and the phone's): the iPad's from x0, w wide; the phone's
+// at the card's right, narrower (its heading's notes give way to them)
+inline float page_kx(const App &a, int n, int pg, float x0, float w = 190)
+{
+    return a.ph ? 818 - n * (a.ph && n > 2 ? 130 : 160) + 4 + pg * (n > 2 ? 130 : 160) : x0 + pg * (w + 6);
+}
+inline float page_kw(const App &a, int n, float w = 190) { return a.ph ? (n > 2 ? 126 : 156) : w; }
+inline float card_y1(const App &a) { return a.vcard ? 728.0f : a.ph ? a.H - 12.0f : a.tab ? a.H - 16.0f : 1056.0f; }
 inline float px(const App &a, float size)           // (code7's sizes: whole multiples of its 7 device pixels)
 {
     // (in points for ImGui; snapped where the screen's pixels are: 7, 14, 21 ... device px,

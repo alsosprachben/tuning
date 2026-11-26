@@ -51,13 +51,13 @@ inline void draw_setup(App &a)
     // (the iPad's: its card from y 210 to card_y1 + 6, two pages -- the input; the sound)
     const bool IP = a.tab;
     static int page = 0;
-    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 266 : 394, Y1 = card_y1(a), HY = IP ? 224 : 356;
+    const float X0 = IP ? 20 : 34, X1 = IP ? (a.ph ? 818 : 1113) : 1886, Y0 = IP ? 266 : 394, Y1 = card_y1(a), HY = IP ? 224 : 356;
     const float LH = a.lh(14) + (IP ? 3 : 4);
     const float TX = heading(a, X0, HY, "SETUP", "setup");
     if (IP)
         for (int pg = 0; pg < 2; pg++) {
             const std::string id = "supage" + std::to_string(pg);
-            if (button(a, id.c_str(), 300 + pg * 196, 216, 190, 44, pg ? "SOUND" : "INPUT", page == pg, true, 21))
+            if (button(a, id.c_str(), page_kx(a, 2, pg, 300), 216, page_kw(a, 2), 44, pg ? "SOUND" : "INPUT", page == pg, true, 21))
                 page = pg;
         }
     if (!U.s.is(J::OBJ))
@@ -68,7 +68,8 @@ inline void draw_setup(App &a)
     if (IP) {                           // (shorter, beside the pages)
         char sh[48];
         snprintf(sh, sizeof sh, "%.0f Hz \xc2\xb7 %.0f frames", rate, block);
-        text(a, a.font, 14, 700, HY + 1, SILK_DIM, sh);
+        if (!a.ph)
+            text(a, a.font, 14, 700, HY + 1, SILK_DIM, sh);
     } else
         text(a, a.font, 14, TX, HY + 1, SILK_DIM, inf);
     const J *g = U.s.get("globals");
@@ -85,7 +86,7 @@ inline void draw_setup(App &a)
     };
 
     // MIDI IN, PLAY AS A MODULE, THE MESSENGER
-    const float AW = IP ? X1 - X0 : 760, BW = IP ? 690 : 640, gap = IP ? 6 : 10, AX = X0, BX = IP ? X0 : AX + AW + gap,
+    const float AW = IP ? X1 - X0 : 760, BW = IP ? (a.ph ? 540 : 690) : 640, gap = IP ? 6 : 10, AX = X0, BX = IP ? X0 : AX + AW + gap,
                 CX = BX + BW + gap, CW = X1 - CX;
     const bool show_in = !IP || page == 0, show_snd = !IP || page == 1;
     for (const auto &b : {std::pair<float, float>{AX, AW}, {BX, BW}, {CX, CW}}) {

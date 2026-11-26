@@ -89,7 +89,7 @@ inline void draw_stops(App &a)
         T.for_row = a.row;
     }
     const bool IP = a.tab;              // (the iPad's: its card from y 210 to card_y1 + 6)
-    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, HY = IP ? 224 : 356, Y0_ = IP ? 260 : 394, Y1_ = card_y1(a);
+    const float X0 = IP ? 20 : 34, X1 = IP ? (a.ph ? 818 : 1113) : 1886, HY = IP ? 224 : 356, Y0_ = IP ? 260 : 394, Y1_ = card_y1(a);
     const float TX = heading(a, X0, HY, "STOPS", "stops");
     const int prog = (int)num(&T.st, "program", -1);
     const std::string part_name = str(&T.st, "part");
@@ -104,12 +104,13 @@ inline void draw_stops(App &a)
             for (const J &pg : T.organs.a)
                 for (const Patch &p : L.patches)
                     if (!p.drums && p.variation == 0 && p.program == (int)pg.d()) {
-                        const float x = X0 + (i % (IP ? 3 : 4)) * 300, y = Y0_ + 56 + (i / (IP ? 3 : 4)) * 64;
+                        const float ow = a.ph ? 260 : 290;      // (the phone's three narrower)
+                        const float x = X0 + (i % (IP ? 3 : 4)) * (ow + 10), y = Y0_ + 56 + (i / (IP ? 3 : 4)) * 64;
                         const std::string id = "org" + std::to_string(p.pick);
                         ImGui::SetCursorScreenPos(P(a, x, y));
-                        const bool hit = ImGui::InvisibleButton(id.c_str(), ImVec2(290 * a.k, 54 * a.k));
-                        rect(a, x, y, 290, 54, ImGui::IsItemActive() ? PANEL_HI : IM_COL32(0x1f, 0x22, 0x26, 255), 8);
-                        frame(a, x, y, 290, 54, EDGE, 8, 1);
+                        const bool hit = ImGui::InvisibleButton(id.c_str(), ImVec2(ow * a.k, 54 * a.k));
+                        rect(a, x, y, ow, 54, ImGui::IsItemActive() ? PANEL_HI : IM_COL32(0x1f, 0x22, 0x26, 255), 8);
+                        frame(a, x, y, ow, 54, EDGE, 8, 1);
                         char pn[8];
                         snprintf(pn, sizeof pn, "%03d", p.program);
                         text(a, a.font, 21, x + 10, y + (54 - a.lh(21)) / 2, LCD, pn);

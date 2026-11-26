@@ -200,7 +200,7 @@ inline void draw_synth(App &a)
     const J *p = part(a, a.row);
     const int layers = (int)num(&Y.synth, "layers");
     const bool T = a.tab;               // (the iPad's: its card from y 210 to card_y1 + 6, two pages)
-    const float HX = T ? 22 : 34, HY = T ? 224 : 356, BY = T ? 216 : 346, BH = T ? 44 : 38, HX1 = T ? 1105 : 1886;
+    const float HX = T ? 22 : 34, HY = T ? 224 : 356, BY = T ? 216 : 346, BH = T ? 44 : 38, HX1 = T ? (a.ph ? 810 : 1105) : 1886;
     const float TX = heading(a, HX, HY, "SYNTH", "synth");
     if (layers <= 0) {
         text(a, a.font, 21, HX, T ? 270 : 400, SILK_DIM,
@@ -210,13 +210,16 @@ inline void draw_synth(App &a)
              "The synth programs (Synth Lead, Synth Pad, the synth basses, brass and strings) bring their knobs here.");
         return;
     }
-    text(a, a.font, 14, TX, HY + 1, OWN, fit(a, a.font, 14, "part " + pad2(a.row + 1) + " \xc2\xb7 " + (p ? str(p, "name") : ""), T ? 200 : 900));
+    text(a, a.font, 14, TX, HY + 1, OWN, fit(a, a.font, 14, "part " + pad2(a.row + 1) + " \xc2\xb7 " + (p ? str(p, "name") : ""), a.ph ? 150 : T ? 200 : 900));
     // (the iPad's two pages: the sound's sources and shaping; its movement and time)
     static int page = 0;
     if (T)
         for (int pg = 0; pg < 2; pg++) {
             const std::string id = "sypage" + std::to_string(pg);
-            if (button(a, id.c_str(), 300 + pg * 214, BY, 208, BH, pg ? "LFO \xc2\xb7 ENV \xc2\xb7 DELAY" : "OSC \xc2\xb7 MIX \xc2\xb7 FILTER",
+            const float px_ = a.ph ? (layers >= 2 ? 502 : 654) - 228 + pg * 114 : 300 + pg * 214;
+            if (button(a, id.c_str(), px_, BY, a.ph ? 110 : 208, BH,
+                       a.ph ? (pg ? "LFO \xc2\xb7 ENV" : "OSC \xc2\xb7 FILTER")
+                            : pg ? "LFO \xc2\xb7 ENV \xc2\xb7 DELAY" : "OSC \xc2\xb7 MIX \xc2\xb7 FILTER",
                        page == pg, true, 21))
                 page = pg;
         }
@@ -224,9 +227,9 @@ inline void draw_synth(App &a)
     int changed = 0;
     for (const Knob &k : Y.knobs)
         changed += syn_own(k);
-    const float bbw = T ? (layers >= 2 ? 200 : 360) : 420;
+    const float bbw = a.ph ? 150 : T ? (layers >= 2 ? 200 : 360) : 420;
     if (button(a, "synback", HX1 - bbw, BY, bbw, BH,
-               changed ? std::to_string(changed) + (T && layers >= 2 ? " CHANGED \xc2\xb7 BACK" : " CHANGED \xc2\xb7 BACK TO THE PATCH")
+               changed ? std::to_string(changed) + (T && (layers >= 2 || a.ph) ? " CHANGED \xc2\xb7 BACK" : " CHANGED \xc2\xb7 BACK TO THE PATCH")
                        : "AS THE PATCH", false, changed > 0, T ? 21 : 14)) {
         for (const Knob &k : Y.knobs)
             if (syn_own(k))
@@ -237,7 +240,8 @@ inline void draw_synth(App &a)
     if (layers >= 2)
         for (int l = 0; l < 2; l++) {
             const std::string id = "layer" + std::to_string(l);
-            if (button(a, id.c_str(), HX1 - bbw - (T ? 176 : 260) + l * (T ? 86 : 124), BY, T ? 82 : 120, BH, l ? "LAYER B" : "LAYER A",
+            if (button(a, id.c_str(), HX1 - bbw - (a.ph ? 152 : T ? 176 : 260) + l * (a.ph ? 74 : T ? 86 : 124), BY,
+                       a.ph ? 70 : T ? 82 : 120, BH, l ? "LAYER B" : "LAYER A",
                        Y.layer == l, true, T ? 14 : 14)) {
                 Y.layer = l;
                 take_parts(a, call(a, "{\"call\":\"select\",\"row\":" + std::to_string(a.row) + ",\"layer\":" + std::to_string(l) + "}"));
@@ -268,7 +272,7 @@ inline void draw_synth(App &a)
     float tot = 0;
     for (const Col &c : cols)
         tot += c.weight;
-    const float X0 = T ? 18 : 22, X1 = T ? 1115 : 1898, gap = T ? 6 : 5, top = T ? 266 : 394, bottom = card_y1(a);
+    const float X0 = T ? 18 : 22, X1 = T ? (a.ph ? 820 : 1115) : 1898, gap = T ? 6 : 5, top = T ? 266 : 394, bottom = card_y1(a);
     const float avail = X1 - X0 - gap * (cols.size() - 1);
     float cx0 = X0;
     for (const Col &col : cols) {

@@ -199,7 +199,7 @@ inline void draw_effects(App &a)
     const bool IP = a.tab;
     static int page = 0;
     const bool show_type = !IP || page == 0, show_par = !IP || page == 1, show_sys = !IP || page == 2;
-    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 266 : 394, HY = IP ? 224 : 356, Y1 = card_y1(a);
+    const float X0 = IP ? 20 : 34, X1 = IP ? (a.ph ? 818 : 1113) : 1886, Y0 = IP ? 266 : 394, HY = IP ? 224 : 356, Y1 = card_y1(a);
     const float GH = IP ? 44 : 28, GR = GH + 4, LH = a.lh(14) + (IP ? 3 : 4);    // (a choice's height, its row)
     const float TX = heading(a, X0, HY, "EFFECTS", "effects");
     const J *p = part(a, a.row);
@@ -209,7 +209,7 @@ inline void draw_effects(App &a)
         for (int pg = 0; pg < 3; pg++) {
             static const char *PN[3] = {"TYPE", "PARAMETERS", "SYSTEM"};
             const std::string id = "fxpage" + std::to_string(pg);
-            if (button(a, id.c_str(), 340 + pg * 196, 216, 190, 44, PN[pg], page == pg, true, 21))
+            if (button(a, id.c_str(), page_kx(a, 3, pg, 340), 216, page_kw(a, 3), 44, PN[pg], page == pg, true, 21))
                 page = pg;
         }
     const J *x = F.e.get("efx"), *y = F.e.get("sys");

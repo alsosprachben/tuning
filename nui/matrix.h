@@ -65,7 +65,7 @@ inline void draw_matrix(App &a)
     if ((int)num(&M.m, "row", -1) != a.row)
         mx_take(a, call(a, "{\"call\":\"matrix\"}"));
     const bool IP = a.tab;              // (the iPad's: its card from y 210 to card_y1 + 6, no notes box: the ? has them)
-    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 262 : 394, HY = IP ? 224 : 356;
+    const float X0 = IP ? 20 : 34, X1 = IP ? (a.ph ? 818 : 1113) : 1886, Y0 = IP ? 262 : 394, HY = IP ? 224 : 356;
     const float TX = heading(a, X0, HY, "MATRIX", "matrix");
     if (!M.m.is(J::OBJ) || M.t.size() < 11)
         return;

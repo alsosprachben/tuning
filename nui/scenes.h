@@ -107,7 +107,7 @@ inline void draw_scenes(App &a)
     if (!C.s.is(J::OBJ))
         sc_take(call(a, "{\"call\":\"scenes\",\"open\":1}"));
     const bool IP = a.tab;              // (the iPad's: its card from y 210 to card_y1 + 6)
-    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 260 : 394, Y1 = card_y1(a), HY = IP ? 224 : 356;
+    const float X0 = IP ? 20 : 34, X1 = IP ? (a.ph ? 818 : 1113) : 1886, Y0 = IP ? 260 : 394, Y1 = card_y1(a), HY = IP ? 224 : 356;
     const float LH = a.lh(14) + (IP ? 3 : 4);
     heading(a, X0, HY, "SCENES", "scenes");
     if (!C.s.is(J::OBJ))
@@ -121,7 +121,7 @@ inline void draw_scenes(App &a)
 
     // A NAME, typed on the screen's own keys (or a keyboard's)
     if (!C.naming.empty()) {
-        const float W = IP ? 760 : 900, x = ((IP ? 1133 : 1920) - W) / 2;
+        const float W = IP ? (a.ph ? 700 : 760) : 900, x = ((IP ? (a.ph ? 832 : 1133) : 1920) - W) / 2;
         look::module(a, x - 20, Y0, W + 40, Y1 - Y0, 10);
         const float NY = Y0 + (IP ? 30 : 44), NH = IP ? 48 : 56;
         text(a, a.bold, 14, x, Y0 + (IP ? 10 : 16), SILK, C.naming == "preset_save" ? "SAVE THIS SETUP AS" : "SAVE THE CONTROLS AS");

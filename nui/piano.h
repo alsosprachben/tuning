@@ -125,7 +125,7 @@ inline void draw_piano(App &a)
     }
     pedal_flush(a);
     const bool IP = a.tab;              // (the iPad's: its card from y 210 to card_y1 + 6)
-    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, HY = IP ? 224 : 356, LH = a.lh(14) + (IP ? 3 : 4);
+    const float X0 = IP ? 20 : 34, X1 = IP ? (a.ph ? 818 : 1113) : 1886, HY = IP ? 224 : 356, LH = a.lh(14) + (IP ? 3 : 4);
     const float TX = heading(a, X0, HY, "PIANO", "piano");
     if (!N.pn.is(J::OBJ))
         return;

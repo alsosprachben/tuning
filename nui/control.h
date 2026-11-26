@@ -92,13 +92,13 @@ inline void draw_control(App &a)
     // (the iPad's: its card from y 210 to card_y1 + 6, two pages -- the on-screen controls; the routes)
     const bool IP = a.tab;
     static int page = 0;
-    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 266 : 394, Y1 = card_y1(a), HY = IP ? 224 : 356;
+    const float X0 = IP ? 20 : 34, X1 = IP ? (a.ph ? 818 : 1113) : 1886, Y0 = IP ? 266 : 394, Y1 = card_y1(a), HY = IP ? 224 : 356;
     const float TX = heading(a, X0, HY, "CONTROL", "control");
     if (IP)
         for (int pg = 0; pg < 3; pg++) {
             static const char *PG[3] = {"CONTROLS", "ROUTES", "METRONOME"};
             const std::string id = "ctpage" + std::to_string(pg);
-            if (button(a, id.c_str(), 300 + pg * 196, 216, 190, 44, PG[pg], page == pg, true, 21))
+            if (button(a, id.c_str(), page_kx(a, 3, pg, 300), 216, page_kw(a, 3), 44, PG[pg], page == pg, true, 21))
                 page = pg;
         }
     // THE METRONOME AND THE GS RESET: under the on-screen controls (the iPad's a page of its own)
@@ -113,7 +113,8 @@ inline void draw_control(App &a)
     const J *ctls = C.c.get("controls"), *routes = C.c.get("routes");
     const int nc = ctls && ctls->is(J::ARR) ? (int)ctls->a.size() : 0, nr = routes && routes->is(J::ARR) ? (int)routes->a.size() : 0;
     const std::string info = std::to_string(nc) + " control" + (nc == 1 ? "" : "s") + " \xc2\xb7 " + std::to_string(nr) + " route" + (nr == 1 ? "" : "s");
-    text(a, a.font, 14, X1 - text_w(a, a.font, 14, info), HY + 1, SILK_DIM, info);
+    if (!a.ph)
+        text(a, a.font, 14, X1 - text_w(a, a.font, 14, info), HY + 1, SILK_DIM, info);
     const int pch = p ? (int)num(p, "channel", -1) : -1;
 
     // THE ON-SCREEN CONTROLS

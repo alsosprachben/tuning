@@ -188,13 +188,13 @@ inline void draw_tuning(App &a)
     // (the iPad's: its card from y 210 to card_y1 + 6, two pages -- the tuners and their shape; the Eastern tuning)
     const bool IP = a.tab;
     static int page = 0;
-    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 266 : 394, Y1 = card_y1(a), HY = IP ? 224 : 356;
+    const float X0 = IP ? 20 : 34, X1 = IP ? (a.ph ? 818 : 1113) : 1886, Y0 = IP ? 266 : 394, Y1 = card_y1(a), HY = IP ? 224 : 356;
     const float LH = a.lh(14) + (IP ? 3 : 4);
     text(a, a.font, 14, heading(a, X0, HY, "TUNING", "tuning"), HY + 1, OWN, "every part");
     if (IP)
         for (int pg = 0; pg < 2; pg++) {
             const std::string id = "tnpage" + std::to_string(pg);
-            if (button(a, id.c_str(), 300 + pg * 196, 216, 190, 44, pg ? "EASTERN" : "TUNERS", page == pg, true, 21))
+            if (button(a, id.c_str(), page_kx(a, 2, pg, 300), 216, page_kw(a, 2), 44, pg ? "EASTERN" : "TUNERS", page == pg, true, 21))
                 page = pg;
         }
     if (!T.t.is(J::OBJ) || !T.lists)
@@ -206,7 +206,8 @@ inline void draw_tuning(App &a)
     const std::string info = building ? "building the patches in " + tuner_words(tuner, "").first + "\xe2\x80\xa6"
                                       : "playing " + tuner_words(now, "").first;
     const std::string info_ = fit(a, a.font, 14, info, IP ? 300 : 900);
-    text(a, a.font, 14, X1 - text_w(a, a.font, 14, info_), HY + 1, building ? OWN : SILK_DIM, info_);
+    if (!a.ph || building)          // (the phone's: only while building, under the pages' line)
+        text(a, a.font, 14, a.ph ? X0 : X1 - text_w(a, a.font, 14, info_), a.ph ? HY + 22 : HY + 1, building ? OWN : SILK_DIM, info_);
     if (building)
         a.animate = true;
 
@@ -235,7 +236,7 @@ inline void draw_tuning(App &a)
             other.push_back(&t);
     groups.push_back({"Indian, every part", raga});
     groups.push_back({"Other systems", other});
-    const float LW = IP ? 600 : 1070, cols = IP ? 2 : 3, gap = 8, tw = (LW - 10 - gap * (cols - 1)) / cols, th = 64, hh = 30;
+    const float LW = IP ? (a.ph ? 470 : 600) : 1070, cols = IP ? 2 : 3, gap = 8, tw = (LW - 10 - gap * (cols - 1)) / cols, th = 64, hh = 30;
     // (the layout, then the touch, then the drawing)
     struct Tile {
         const std::pair<std::string, std::string> *t;

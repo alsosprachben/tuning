@@ -187,9 +187,29 @@ static void draw(App &a)
     setup_card(a, a.card == "setup");
     // (on the iPad, a card not yet laid out for it says so)
     static const std::set<std::string> TAB_READY = {"parts", "library", "synth", "stops", "piano", "drums", "amp", "effects", "matrix", "tuning", "control", "scenes", "files", "setup"};
+    // (on the phone, a card not laid out for its height: the iPad's height, the
+    //  phone's width, scrolled -- a drag on the card's empty ground, or the wheel)
     static const std::set<std::string> PHONE_READY = {"parts", "library"};
-    if (a.ph && !PHONE_READY.count(a.card)) {
-        text(a, a.font, 21, 20, 124, SILK_DIM, "This card's phone layout is still to come.");
+    static std::map<std::string, float> card_scroll, card_foot;     // (the foot: as drawn last frame, in iPad units)
+    const bool virt = a.ph && !PHONE_READY.count(a.card);
+    const ImVec2 org0 = a.org;
+    float vscroll = 0, vmax = 0;
+    if (virt) {
+        float &sc = card_scroll[a.card];
+        const float top = 106, bot = a.H - 6, view = bot - top - 4;
+        const auto ft = card_foot.find(a.card);
+        const float content = (ft != card_foot.end() ? std::min(728.0f, ft->second) : 728.0f) + 8 - 210;
+        vmax = std::max(0.0f, content - view);
+        if (const char *s0 = getenv("NUI_CARD_SCROLL"))     // (the tour's: a card shown scrolled to its foot)
+            sc = (float)atof(s0) * vmax;
+        sc = std::max(0.0f, std::min(sc, vmax));
+        vscroll = sc;
+        ImGui::PushClipRect(P(a, 6, top + 2), P(a, 826, bot - 2), true);
+        a.org.y = std::floor(a.org.y + (top - 210 - sc) * a.k);
+        a.vcard = true;
+    }
+    const int vtx0 = dl()->VtxBuffer.Size;  // (what the card draws: its lowest point, for its scroll's reach)
+    if (a.ph && !virt) {
     } else if (a.tab && !TAB_READY.count(a.card)) {
         text(a, a.font, 21, 24, 226, SILK_DIM, "This card's iPad layout is still to come; the laptop's has it.");
     } else if (a.card == "parts") {
@@ -227,6 +247,53 @@ static void draw(App &a)
                 title = CARDS[i][1];
         text(a, a.bold, 14, 34, 356, SILK, title);
         text(a, a.font, 21, 34, 400, SILK_DIM, "Not built in the native interface yet: the web interface has it (nvlive --ui).");
+    }
+    if (a.ph && !virt) {                // (the phone's own cards)
+        if (a.card == "parts")
+            draw_parts(a);
+        else if (a.card == "library")
+            draw_library(a);
+    }
+    if (virt) {                         // (the scrolled card's place: a rail at its right edge)
+        // (its scroll: a touch on the card that no control took, dragged; or the wheel off a control --
+        //  judged after the card, so a control under the finger always has it first)
+        static bool sdrag = false;
+        static float sy0 = 0, ss0 = 0;
+        float &sc = card_scroll[a.card];
+        const ImGuiIO &io = ImGui::GetIO();
+        const float my = (io.MousePos.y - org0.y) / a.k, mx = (io.MousePos.x - org0.x) / a.k;
+        const bool in = mx >= 6 && mx < 826 && my >= 106 && my < a.H - 6;
+        if (ImGui::IsMouseClicked(0) && in && !ImGui::IsAnyItemActive()) {
+            sdrag = true;
+            sy0 = my;
+            ss0 = sc;
+        }
+        if (sdrag && ImGui::IsMouseDown(0))
+            sc = std::max(0.0f, std::min(vmax, ss0 - (my - sy0)));
+        else
+            sdrag = false;
+        if (in && io.MouseWheel != 0 && !ImGui::IsAnyItemHovered())
+            sc = std::max(0.0f, std::min(vmax, sc - io.MouseWheel * 40));
+        if (sdrag)
+            a.animate = true;
+        {
+            float lo = 0;
+            const ImDrawList *d = dl();
+            for (int i = vtx0; i < d->VtxBuffer.Size; i++)
+                lo = std::max(lo, d->VtxBuffer[i].pos.y);
+            const float foot = (lo - a.org.y) / a.k;            // (in the card's own units)
+            if (std::fabs(card_foot[a.card] - foot) > 1)
+                a.animate = true;                               // (its reach changed: drawn again with it)
+            card_foot[a.card] = foot;
+        }
+        a.org = org0;
+        a.vcard = false;
+        ImGui::PopClipRect();
+        if (vmax > 0) {
+            const float top = 110, h = a.H - 6 - 4 - top, th = std::max(30.0f, h * h / (h + vmax));
+            rect(a, 821, top, 3, h, IM_COL32(0x2b, 0x2f, 0x34, 255), 1.5f);
+            rect(a, 821, top + (h - th) * vscroll / vmax, 3, th, SILK_DIM, 1.5f);
+        }
     }
     ImGui::End();
     ImGui::PopStyleColor();

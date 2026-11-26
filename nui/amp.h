@@ -230,7 +230,7 @@ inline void draw_amp(App &a)
 {
     AmpUi &M = g_amp;
     const bool IP = a.tab;
-    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, HY = IP ? 224 : 356, Y0 = IP ? 266 : 394, Y1 = card_y1(a);
+    const float X0 = IP ? 20 : 34, X1 = IP ? (a.ph ? 818 : 1113) : 1886, HY = IP ? 224 : 356, Y0 = IP ? 266 : 394, Y1 = card_y1(a);
     const float LH = a.lh(14) + (IP ? 3 : 4);
     amp_open(a, true);                  // (the engine pushes it as it moves: nui.cpp's poll, amp_take)
     if (M.for_row != a.row) {           // (another part: its amp asked at once)
@@ -465,7 +465,7 @@ inline void draw_amp(App &a)
         for (int c : offer)
             if (c != own)
                 ring.push_back(c);
-        const int cols = IP ? 2 : 3;
+        const int cols = IP ? (a.ph ? 1 : 2) : 3;      // (the phone's a column: its speaker names whole)
         const float bg = IP ? 6 : 8, bw = (SW - 28 - bg * (cols - 1)) / cols, bh = IP ? 44 : 46;
         for (size_t i = 0; i < ring.size(); i++) {
             const int c = ring[i];

@@ -180,13 +180,13 @@ inline void draw_files(App &a)
     // (the iPad's: its card from y 210 to card_y1 + 6, two pages -- choosing the file; playing and rendering it)
     const bool IP = a.tab;
     static int page = 0;
-    const float X0 = IP ? 20 : 34, X1 = IP ? 1113 : 1886, Y0 = IP ? 266 : 394, Y1 = card_y1(a), HY = IP ? 224 : 356;
+    const float X0 = IP ? 20 : 34, X1 = IP ? (a.ph ? 818 : 1113) : 1886, Y0 = IP ? 266 : 394, Y1 = card_y1(a), HY = IP ? 224 : 356;
     const float LH = a.lh(14) + (IP ? 3 : 4), B21 = IP ? 21 : 14, BB = IP ? 44 : 34;
     const float TX = heading(a, X0, HY, "FILES", "files");
     if (IP)
         for (int pg = 0; pg < 2; pg++) {
             const std::string id = "flpage" + std::to_string(pg);
-            if (button(a, id.c_str(), 300 + pg * 196, 216, 190, 44, pg ? "PLAY" : "CHOOSE", page == pg, true, 21))
+            if (button(a, id.c_str(), page_kx(a, 2, pg, 300), 216, page_kw(a, 2), 44, pg ? "PLAY" : "CHOOSE", page == pg, true, 21))
                 page = pg;
         }
     const bool ok = flag(&F.info, "ok");
