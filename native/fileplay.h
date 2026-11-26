@@ -43,6 +43,10 @@ int nv_midi_muxed(void *p);
 int nv_roomtail_main(int argc, char **argv);    // (the room's tail, in this process: nvroomtail.cpp)
 int nv_render_main(int argc, char **argv);      // (the file renderer, in this process: nvrender.cpp)
 extern "C" void nv_render_progress(double *at_s, double *len_s);
+// (nvlive.cpp's: an as-heard render on a host of its own in this process -- weak:
+// a library without nvlive.cpp, the host tests', has none)
+extern "C" int nv_live_render_test(int argc, char **argv) __attribute__((weak));
+extern "C" void nv_live_render_stop(void) __attribute__((weak));
 void nv_render_stop(void);
 const char *nv_render_last(void);
 void nv_env_set(const char *const *names, const char *const *values, int n);
@@ -711,6 +715,8 @@ struct Render {
             kill(-p, SIGTERM);
         if (inproc_on)
             nv_render_stop();
+        if (heard_on && nv_live_render_stop)    // (an as-heard render in this process: stopped between blocks)
+            nv_live_render_stop();
         if (th.joinable())
             th.join();
     }
@@ -719,7 +725,7 @@ struct Render {
     // runs no helper programs): ARGS as its command line, ENV (NAME=VALUE) its
     // settings -- this thread's own (nv_env_set), not the process's, which the
     // live engine reads beside it. Its exit code (-2 stopped); its last line kept
-    std::atomic<bool> inproc_on{false};
+    std::atomic<bool> inproc_on{false}, heard_on{false};
     int inproc(const std::vector<std::string> &args, const std::vector<std::string> &env)
     {
         std::vector<std::string> names, values;
@@ -841,7 +847,7 @@ struct Render {
                 std::lock_guard<std::mutex> lk(mu);
                 o = out;
             }
-            if (k == "heard" && !HELPERS) {     // (the live engine offline: a second one, not on this system yet)
+            if (k == "heard" && !HELPERS && !nv_live_render_test) {
                 clean();
                 return finish("rendering as heard is not on this device yet: use best quality");
             }
@@ -852,7 +858,24 @@ struct Render {
                     fclose(f);
                 }
                 say("rendering as heard (the live engine, on the CPU)");
-                const int r = step({exe + "nvlive", live_export, "--test", in, o, "--session=" + sp, "--programs", "--cpu"}, env);
+                const std::vector<std::string> args = {exe + "nvlive", live_export, "--test", in, o, "--session=" + sp,
+                                                       "--programs", "--cpu"};
+                int r;
+                if (HELPERS)
+                    r = step(args, env);
+                else {                          // (no helper program: a second live engine, in this process)
+                    std::vector<std::string> a(args);
+                    a.push_back("--messenger-out=none");
+                    std::vector<char *> av;
+                    for (auto &x : a)
+                        av.push_back(&x[0]);
+                    av.push_back(nullptr);
+                    heard_on = true;
+                    r = stopped ? -2 : nv_live_render_test((int)a.size(), av.data());
+                    heard_on = false;
+                    std::lock_guard<std::mutex> lk(mu);
+                    last = r ? "the live engine's render ended " + std::to_string(r) : "";
+                }
                 clean();
                 std::string l;
                 {

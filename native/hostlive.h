@@ -161,6 +161,7 @@ void nv_part_scan(void *h, const double *X, long n);
 void nv_part_scan_async(void *h);
 void nv_part_busy_test(void *h, int n);
 void nv_part_stop_workers(void *h);
+void nv_part_free(void *h);
 void nv_part_rt_prepare(void *h, long frames);
 void nv_part_busy_stats(void *h, long *out);
 void nv_part_amp_async(void *h);
@@ -1725,6 +1726,9 @@ struct nv_host {
     void patches_init();
     void pick(int sp);                      // sp: a program, 128 + a set, 256 + a variation (vpv's)
     void panic();
+    // A HOST LET GO (an in-process --test run's, nv_live_render_test): its part
+    // and its workers, its patches, the export's map -- the rest with the object
+    void teardown();
     std::atomic<bool> builder_busy{false};
     int building();
     // THE BUILD UNDER WAY (the panel's progress): templates done of the

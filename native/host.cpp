@@ -30,6 +30,11 @@
 #include "panel.h"
 #include "pycompat.h"
 #include <sys/mman.h>
+#if defined(__APPLE__)
+#include <malloc/malloc.h>
+#elif defined(__linux__)
+#include <malloc.h>
+#endif
 #include <sys/stat.h>
 #include "hostint.h"
 #include "rtjoin.h"
@@ -4426,6 +4431,38 @@ bool nv_host::part_delete(size_t row, std::string &why)
         pats[row].gone = true;
     });
     return true;
+}
+
+void nv_host::teardown()
+{
+    if (builder.joinable()) {               // (an in-process run starts none: as a guard)
+        g_stop = true;
+        bcv.notify_all();
+        builder.join();
+    }
+    if (part) {
+        nv_part_stop_workers(part);
+        nv_part_free(part);
+        part = nullptr;
+    }
+    {
+        std::lock_guard<std::mutex> lk(cmu);
+        for (auto &kv : caches)
+            nv_tcache_free(kv.second);
+        caches.clear();
+    }
+    if (E.map) {
+        munmap(E.map, E.map_n);
+        E.map = nullptr;
+        E.map_n = 0;
+    }
+    // (what was freed handed back to the system: the allocator keeps it otherwise,
+    // and iOS counts it against the app)
+#if defined(__APPLE__)
+    malloc_zone_pressure_relief(nullptr, 0);
+#elif defined(__linux__)
+    malloc_trim(0);
+#endif
 }
 
 // the build under way: templates done of its total, and its name; false none

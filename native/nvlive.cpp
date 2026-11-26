@@ -107,6 +107,12 @@ static int nui_stopped(void) { return g_stop ? 1 : 0; }    // (Ctrl-C, the engin
 #include <sys/wait.h>
 #include <dirent.h>
 
+// AN IN-PROCESS AS-HEARD RENDER's STOP (nv_live_render_stop, from the Files card's
+// thread): looked at between blocks, the run ended -2 -- the live host's g_stop
+// not touched; cleared as each such render begins
+static std::atomic<bool> g_heard_stop{false};
+extern "C" void nv_live_render_stop(void) { g_heard_stop = true; }
+
 int nv_host::run(int argc, char **argv)
 {
     int rc = open(argc, argv);
@@ -405,6 +411,11 @@ int nv_host::run(int argc, char **argv)
             const std::string rubo = opt(argc, argv, "rubato", "");
             if (rubo.empty()) {
                 for (long long b = 0; b < nb; b++) {
+                    if (g_heard_stop) {         // (an in-process render stopped: nothing written)
+                        nv_midi_free(m);
+                        fprintf(stderr, "nvlive: --test: stopped at block %lld of %lld\n", b, nb);
+                        return -2;
+                    }
                     if (paced)
                         std::this_thread::sleep_until(tstart + std::chrono::nanoseconds((long long)((double)(b * BLK) * 1e9 / SR)));
                     one_block(b, buf.data());
@@ -1497,9 +1508,11 @@ int nv_host::run(int argc, char **argv)
 // --drums or --bank says otherwise) and its routes. --session=PATH, else
 // session.json beside nvlive (live's: beside live.py); --fresh: not read
 // (but written, as live's); --test: neither.
-int main(int argc, char **argv)
+// the program's whole: a host on the command line; own -- an in-process --test
+// run's (nv_live_render_test) -- the host let go when its run returns
+static int live_main(int argc, char **argv, bool own)
 {
-    nv_host *h = new nv_host();                 // (never freed: its threads run to the end)
+    nv_host *h = new nv_host();                 // (not own: never freed, its threads run to the end)
     std::vector<char *> args(argv, argv + argc);
     std::vector<std::string> extra;
     bool test = false, fresh = false, given = false, tuned = false;
@@ -1564,5 +1577,127 @@ int main(int argc, char **argv)
     }
     for (auto &x : extra)
         args.push_back(&x[0]);
-    return h->run((int)args.size(), args.data());
+    const int r = h->run((int)args.size(), args.data());
+    if (own) {
+        h->teardown();
+        delete h;
+    }
+    return r;
+}
+
+// AN AS-HEARD RENDER IN THIS PROCESS (the Files card's, where no helper program
+// runs: iOS): nvlive's command line, --test among it, on a host of its own that
+// is let go at the end -- the live host beside it untouched (its builder, its
+// workers and g_stop its own)
+extern "C" int nv_live_render_test(int argc, char **argv)
+{
+    bool test = false;
+    for (int i = 1; i < argc; i++)
+        test = test || !strcmp(argv[i], "--test");
+    g_heard_stop = false;
+    return test ? live_main(argc, argv, true) : 2;
+}
+
+// --inproc-test=N IN.mid OUT.wav [nvlive's options]: a live host opened and played
+// (its blocks rendered on a thread, as an app's audio would) while N as-heard
+// renders run in this process one after another -- each written OUT.k.wav, and
+// this process's resident memory said after each (a host let go leaves little)
+#if defined(__linux__)
+#include <malloc.h>
+#endif
+static long heap_mb()                       // (bytes allocated now, the allocator's own count)
+{
+#if defined(__linux__)
+    malloc_trim(0);
+    struct mallinfo2 mi = mallinfo2();
+    return (long)((mi.uordblks + mi.hblkhd) >> 20);
+#else
+    return -1;
+#endif
+}
+static long rss_mb()
+{
+    long kb = 0;
+    if (FILE *f = fopen("/proc/self/status", "r")) {
+        char ln[256];
+        while (fgets(ln, sizeof ln, f))
+            if (!strncmp(ln, "VmRSS:", 6))
+                kb = atol(ln + 6);
+        fclose(f);
+    }
+    return kb / 1024;
+}
+static int inproc_test(int argc, char **argv, int n)
+{
+    std::vector<std::string> a;
+    for (int i = 0; i < argc; i++)
+        if (strncmp(argv[i], "--inproc-test=", 14))
+            a.push_back(argv[i]);
+    if (a.size() < 4)
+        return 2;
+    const std::string mid = a[2], out = a[3];
+    std::vector<char *> lav = {&a[0][0], &a[1][0]};
+    std::string c1 = "--cpu", c2 = "--messenger-out=none", c3 = "--fresh";
+    lav.push_back(&c1[0]);
+    lav.push_back(&c2[0]);
+    lav.push_back(&c3[0]);
+    char err[256] = {};
+    nv_host *live = nv_host_open_args((int)lav.size(), lav.data(), err, sizeof err);
+    if (!live) {
+        fprintf(stderr, "inproc: the live host refused: %s\n", err);
+        return 2;
+    }
+    nv_host_start(live);
+    std::atomic<bool> done{false};
+    std::atomic<long> blocks{0};
+    std::thread audio([&]() {
+        const int blk = nv_host_block(live);
+        std::vector<float> L(blk), R(blk);
+        while (!done) {
+            nv_host_render(live, L.data(), R.data(), blk);
+            blocks++;
+            std::this_thread::sleep_for(std::chrono::milliseconds(1));
+        }
+    });
+    {
+        const long hp = heap_mb();
+        fprintf(stderr, "inproc: before, %ld MB resident, %ld MB allocated\n", rss_mb(), hp);
+    }
+    int rc = 0;
+    for (int k = 0; k < n && rc == 0; k++) {
+        const std::string o = out.substr(0, out.size() - 4) + "." + std::to_string(k) + ".wav";
+        std::vector<std::string> t = {a[0], a[1], "--test", mid, o, "--programs", "--cpu", "--messenger-out=none"};
+        for (size_t i = 4; i < a.size(); i++)
+            t.push_back(a[i]);
+        std::vector<char *> tv;
+        for (auto &x : t)
+            tv.push_back(&x[0]);
+        std::thread stopper;
+        const char *sm = getenv("NV_INPROC_STOP_MS");
+        if (k == 0 && sm)                       // (the first render stopped partway: the next must be whole)
+            stopper = std::thread([sm]() {
+                std::this_thread::sleep_for(std::chrono::milliseconds(atol(sm)));
+                nv_live_render_stop();
+            });
+        rc = nv_live_render_test((int)tv.size(), tv.data());
+        if (stopper.joinable())
+            stopper.join();
+        if (k == 0 && sm && rc == -2)
+            rc = 0;                             // (stopped, as asked)
+        const long hp = heap_mb();
+        fprintf(stderr, "inproc: render %d -> %s: rc %d, %ld MB resident, %ld MB allocated, the live host %ld blocks on\n", k,
+                o.c_str(), rc, rss_mb(), hp, blocks.load());
+    }
+    done = true;
+    audio.join();
+    fprintf(stderr, "inproc: g_stop %d (the live host's: untouched)\n", g_stop ? 1 : 0);
+    return rc;
+}
+
+int main(int argc, char **argv)
+{
+    for (int i = 1; i < argc; i++)
+        if (!strncmp(argv[i], "--inproc-test=", 14))
+            return inproc_test(argc, argv, atoi(argv[i] + 14));
+    return live_main(argc, argv, false);
 }
