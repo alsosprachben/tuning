@@ -642,7 +642,9 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
                 sscanf(sa, "%d,%d,%d,%d", &r.x, &r.y, &r.w, &r.h);
             if ((getenv("NUI_SAFE") || SDL_GetWindowSafeArea(win, &r)) && r.w > 0 && r.h > 0) {
 #if defined(__APPLE__) && TARGET_OS_IPHONE
-                const float m = 12.0f;  // (an iPad's rounded corners: clear of their curve)
+                // (an iPad's rounded corners: clear of their curve; a phone's safe area clears its own
+                //  -- the Dynamic Island's side, the corners -- and its height has none to spare)
+                const float m = r.h < 500 ? 0.0f : 12.0f;
 #else
                 const float m = 0.0f;
 #endif

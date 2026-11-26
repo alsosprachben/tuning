@@ -31,7 +31,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.clavitone.app
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
-        TARGETED_DEVICE_FAMILY: "2"
+        TARGETED_DEVICE_FAMILY: "1,2"          # (iPhone and iPad: the phone its own layout, nui.cpp)
         HEADER_SEARCH_PATHS: "$(SRCROOT)/../native $(SRCROOT)/../nui $(SRCROOT)/../third_party/imgui-1.93.0 $(SRCROOT)/../third_party/sdl3-ios-$(PLATFORM_NAME)/include"
         OTHER_LDFLAGS: "$(SRCROOT)/../libnative-ios-$(PLATFORM_NAME).a $(SRCROOT)/../libnui-ios-$(PLATFORM_NAME).a $(SRCROOT)/../third_party/sdl3-ios-$(PLATFORM_NAME)/lib/libSDL3.a -framework CoreMedia -framework CoreVideo -framework CoreGraphics -framework GameController -framework Metal -framework QuartzCore -framework UIKit -framework AVFoundation -framework AudioToolbox -framework CoreMIDI -framework CoreFoundation -framework UniformTypeIdentifiers -lc++"
         CODE_SIGN_STYLE: Automatic
@@ -41,6 +41,7 @@ targets:
         INFOPLIST_KEY_UIRequiresFullScreen: YES
         INFOPLIST_KEY_UIStatusBarHidden: YES
         INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad: "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
+        INFOPLIST_KEY_UISupportedInterfaceOrientations_iPhone: "UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight"
         GENERATE_INFOPLIST_FILE: YES
         INFOPLIST_KEY_CFBundleDisplayName: Clavitone
     # THE GPU's KERNEL, as text beside the executable (relocate.h): compiled
