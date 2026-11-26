@@ -1022,7 +1022,13 @@ int nv_host::run(int argc, char **argv)
             });
             std::string d = nv_self_exe();
             d = d.substr(0, d.rfind('/') == std::string::npos ? 0 : d.rfind('/'));
-            const int r = nui_run(this, ((d.empty() ? std::string(".") : d) + "/ui/fonts").c_str(), app_windowed ? 1 : 0,
+            if (d.empty())
+                d = ".";
+            // (ui/ beside the program; a Mac app's in its Resources, where a bundle keeps what is not code)
+            struct stat ust;
+            if (stat((d + "/ui/fonts").c_str(), &ust) != 0 && stat((d + "/../Resources/ui/fonts").c_str(), &ust) == 0)
+                d += "/../Resources";
+            const int r = nui_run(this, (d + "/ui/fonts").c_str(), app_windowed ? 1 : 0,
                                   nui_stopped);
             if (r == 0)
                 fprintf(stderr, "nvlive: the window closed\n");

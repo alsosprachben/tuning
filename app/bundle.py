@@ -1,11 +1,15 @@
 #!/usr/bin/env python3
-"""A self-contained Clavitone.app: python3 app/bundle.py [--out=DIR] [--no-exports] [--debug]
+"""A self-contained Clavitone.app: python3 app/bundle.py [--out=DIR] [--no-exports]
 
 Built from the repo as it stands (run on the Mac, after native.py has built
 the engine and the exports are made -- ~/nvx/live.nvx, ~/nvx/file.nvx):
 
-  the app        xcodebuild's Release build (--debug: Debug), copied to
-                 DIR/Clavitone.app (default app/dist)
+  the app        the native interface (2026-11-26; the SwiftUI app's
+                 panels retired): MacOS/Clavitone is native.py's
+                 build_mac_app -- nvlive --app-windowed behind app/mac/main.mm
+                 -- its Info.plist written here, DIR/Clavitone.app (default
+                 app/dist); ui/ (fonts, help, the library's words, the
+                 default presets) in Resources
   Frameworks     the engine's libraries (libnative and the kernels, every
                  *.so the repo holds) and libomp, each one's links rewritten
                  to @rpath, found beside one another (@loader_path) -- the
@@ -32,6 +36,26 @@ import sys
 import tempfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
+# (the Mac app's: its program, its name, a music app, Apple silicon and macOS 15 on)
+INFO_PLIST = """<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>CFBundleExecutable</key><string>Clavitone</string>
+  <key>CFBundleIdentifier</key><string>com.clavitone.app</string>
+  <key>CFBundleName</key><string>Clavitone</string>
+  <key>CFBundleDisplayName</key><string>Clavitone</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleShortVersionString</key><string>0.1</string>
+  <key>CFBundleVersion</key><string>1</string>
+  <key>CFBundleIconFile</key><string>Clavitone</string>
+  <key>LSMinimumSystemVersion</key><string>15.0</string>
+  <key>LSApplicationCategoryType</key><string>public.app-category.music</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>NSSupportsAutomaticGraphicsSwitching</key><true/>
+</dict>
+</plist>
+"""
 REPO = os.path.dirname(HERE)
 HELPERS = ("nvlive", "nvrender", "nvroomtail")
 KERNELS = ("gpukernel.metal", "gpukernel.cl", "voicedesc.h")
@@ -68,26 +92,40 @@ def fix_rpaths(path, want):
 
 def main(argv):
     out = next((a.split("=", 1)[1] for a in argv if a.startswith("--out=")), os.path.join(HERE, "dist"))
-    conf = "Debug" if "--debug" in argv else "Release"
     bad = []
 
-    # THE APP
-    print("== xcodebuild %s" % conf, flush=True)
-    r = subprocess.run(["xcodebuild", "-scheme", "Clavitone", "-configuration", conf, "-derivedDataPath", "build", "build"],
-                       cwd=HERE, capture_output=True, text=True)
-    if "BUILD SUCCEEDED" not in r.stdout:
-        print("\n".join(ln for ln in r.stdout.splitlines() if "error:" in ln)[-2000:] or r.stdout[-2000:])
-        return 1
-    src = os.path.join(HERE, "build", "Build", "Products", conf, "Clavitone.app")
+    # THE APP: the native interface's program, the bundle around it
+    print("== the native interface (native.py build_mac_app)", flush=True)
+    sys.path.insert(0, REPO)
+    import native
+    native.lib()
+    for b in ("build_nvlive", "build_nvrender", "build_nvroomtail"):
+        if hasattr(native, b):
+            getattr(native, b)()
+    prog = native.build_mac_app()
     app = os.path.join(out, "Clavitone.app")
     os.makedirs(out, exist_ok=True)
     if os.path.exists(app):
         shutil.rmtree(app)
-    shutil.copytree(src, app, symlinks=True)
     C = os.path.join(app, "Contents")
     fw, mac, res = os.path.join(C, "Frameworks"), os.path.join(C, "MacOS"), os.path.join(C, "Resources")
-    for d in (fw, res):
+    for d in (fw, mac, res):
         os.makedirs(d, exist_ok=True)
+    shutil.copy2(prog, os.path.join(mac, "Clavitone"))
+    with open(os.path.join(C, "Info.plist"), "w") as fh:
+        fh.write(INFO_PLIST)
+    # (ui/: the interface's fonts, its help, the library's words; the default presets)
+    shutil.copytree(os.path.join(REPO, "ui"), os.path.join(res, "ui"),
+                    ignore=shutil.ignore_patterns("presets.json", "scenes.json", "*.tmp"))
+    icon = os.path.join(REPO, "ios", "Assets.xcassets", "AppIcon.appiconset", "AppIcon-1024.png")
+    if os.path.exists(icon):                # (the iPad's icon, as the Mac's .icns)
+        iset = tempfile.mkdtemp(prefix="icon") + "/Clavitone.iconset"
+        os.makedirs(iset)
+        for sz in (16, 32, 128, 256, 512):
+            for sc in (1, 2):
+                run(["sips", "-z", str(sz * sc), str(sz * sc), icon, "--out",
+                     os.path.join(iset, "icon_%dx%d%s.png" % (sz, sz, "@2x" if sc == 2 else ""))])
+        run(["iconutil", "-c", "icns", iset, "-o", os.path.join(res, "Clavitone.icns")])
 
     # FRAMEWORKS: the engine's libraries and libomp
     libs = sorted(glob.glob(os.path.join(REPO, "*.so")))

@@ -5209,9 +5209,25 @@ def render(F):
 def build_nvlive():
     """native/nvlive (the live engine), built beside libnative.so when a source
     is newer: its path."""
+    return _build_nvlive_exe(os.path.join(HERE, 'nvlive'))
+
+
+def build_mac_app():
+    """THE MAC APP's PROGRAM (macOS only): nvlive with the native interface,
+    its main renamed, behind app/mac/main.mm (the Mac's places, its open
+    panel) -- ./clavitone, which app/bundle.py makes Clavitone.app's own
+    executable: its path."""
+    if sys.platform != 'darwin':
+        raise RuntimeError('build_mac_app: macOS only')
+    mm = os.path.join(HERE, 'app', 'mac', 'main.mm')
+    return _build_nvlive_exe(os.path.join(HERE, 'clavitone'), extra_srcs=[mm],
+                             extra_flags=['-Dmain=nvlive_main'],
+                             extra_libs=['-Wl,-framework,AppKit', '-Wl,-framework,UniformTypeIdentifiers'])
+
+
+def _build_nvlive_exe(exe, extra_srcs=(), extra_flags=(), extra_libs=()):
     lib()
     src = os.path.join(HERE, 'native', 'nvlive.cpp')
-    exe = os.path.join(HERE, 'nvlive')
     so = os.path.join(HERE, 'libnative.so')
     hdr = os.path.join(HERE, 'native', 'panel.h')
     hint = os.path.join(HERE, 'native', 'hostint.h')
@@ -5251,11 +5267,19 @@ def build_nvlive():
                 if l.startswith(('Libs:', 'Libs.private:')):
                     nui_libs += [w for w in l.split(':', 1)[1].split() if not w.startswith(('-L', '-lSDL3'))]
             nui_libs += ['-Wl,-framework,CoreGraphics']
-    newest = max([os.path.getmtime(x) for x in (src, hdr, hint, hlive, so)] + [os.path.getmtime(o) for o in nui_objs])
+    # (the Mac app's entry, Objective-C++: an object of its own, its frameworks after)
+    extra_objs = []
+    for e in extra_srcs:
+        o = os.path.join(HERE, '.nvbuild', 'mac_' + os.path.basename(e).rsplit('.', 1)[0] + '.o')
+        os.makedirs(os.path.dirname(o), exist_ok=True)
+        if not os.path.exists(o) or os.path.getmtime(e) > os.path.getmtime(o):
+            subprocess.check_call(['clang++', '-std=c++17', '-O2', '-x', 'objective-c++', '-fobjc-arc', '-c', e, '-o', o])
+        extra_objs.append(o)
+    newest = max([os.path.getmtime(x) for x in (src, hdr, hint, hlive, so)] + [os.path.getmtime(o) for o in nui_objs + extra_objs])
     if not os.path.exists(exe) or newest > os.path.getmtime(exe):
         tmp = '%s.%d.tmp' % (exe, os.getpid())
         subprocess.check_call(_TC.cmd(['g++', '-std=c++17', '-O2', '-march=native', '-ffp-contract=off', '-fno-builtin']
-                                      + nui_flags + [src] + nui_objs + nui_libs
+                                      + nui_flags + list(extra_flags) + [src] + nui_objs + extra_objs + nui_libs + list(extra_libs)
                                       + ['-o', tmp, '-L' + HERE, '-lnative', '-ldl', '-lpthread', '-lm',
                                          '-Wl,-rpath,$ORIGIN']))
         os.replace(tmp, exe)

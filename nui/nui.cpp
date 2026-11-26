@@ -521,6 +521,15 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
     int ww = 1920, wh = 1080;
     if (const char *sz = getenv("NUI_SIZE"))
         sscanf(sz, "%dx%d", &ww, &wh);
+#if !(defined(__APPLE__) && TARGET_OS_IPHONE)
+    else if (windowed) {                // (a desktop's window: most of the screen it opens on, clear of the menu bar and Dock)
+        SDL_Rect ub;
+        if (SDL_GetDisplayUsableBounds(SDL_GetPrimaryDisplay(), &ub) && ub.w > 0 && ub.h > 0) {
+            ww = std::min(1920, (int)(ub.w * 0.92f));
+            wh = std::min(1324, (int)(ub.h * 0.92f));
+        }
+    }
+#endif
     // (its graphics: OpenGL on Linux, Metal on macOS and iOS -- gfx.h)
     SDL_Window *win = gfx_window("Clavitone", ww, wh,
                                  SDL_WINDOW_RESIZABLE | SDL_WINDOW_HIGH_PIXEL_DENSITY | (windowed ? 0 : SDL_WINDOW_FULLSCREEN));
