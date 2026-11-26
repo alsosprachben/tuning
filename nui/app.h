@@ -48,6 +48,9 @@ struct App {
     // THE LAYOUT: the laptop's (a 1920x1080 canvas) or the iPad's (tab: 1133x744
     // points, its text half the design sizes -- 2x, 3x code7 on its 2x screen)
     bool tab = false;
+    // (the PHONE's: a landscape phone's safe area, 832x419 points on a 16 Pro Max --
+    //  tab set too (its sizes, the iPad's), its own panel and cards; the cards' menu open)
+    bool ph = false, cards_open = false;
     float W = 1920, H = 1080, ts = 1.0f;
     float lh(float size) const;         // (a line of text at size: its height in design units)
     J parts, meters, build;
@@ -177,7 +180,7 @@ inline ImVec2 P(const App &a, float x, float y)
 // screen's height -- 728 on an iPad mini's 744, lower on a squarer iPad's
 // (the design 1133 wide, as tall as the screen's shape makes it) -- the
 // laptop's 1056
-inline float card_y1(const App &a) { return a.tab ? a.H - 16.0f : 1056.0f; }
+inline float card_y1(const App &a) { return a.ph ? a.H - 12.0f : a.tab ? a.H - 16.0f : 1056.0f; }
 inline float px(const App &a, float size)           // (code7's sizes: whole multiples of its 7 device pixels)
 {
     // (in points for ImGui; snapped where the screen's pixels are: 7, 14, 21 ... device px,

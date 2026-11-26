@@ -70,11 +70,14 @@ static void draw(App &a)
     // THE LAYOUT: the iPad's where the screen is its shape (narrower than 16:10.5) or NUI_LAYOUT=ipad says so
     {
         const char *lay = getenv("NUI_LAYOUT");
-        a.tab = lay ? !strcmp(lay, "ipad") : ds.x / std::max(1.0f, ds.y) < 1.65f;
-        a.W = a.tab ? 1133.0f : 1920.0f;
+        // (the phone's: NUI_LAYOUT=phone, or a screen under 500 points tall -- a phone in landscape)
+        a.ph = lay ? !strcmp(lay, "phone") : ds.y < 500.0f;
+        a.tab = a.ph || (lay ? !strcmp(lay, "ipad") : ds.x / std::max(1.0f, ds.y) < 1.65f);
+        a.W = a.ph ? 832.0f : a.tab ? 1133.0f : 1920.0f;
         // (the iPad's as tall as the screen's shape: 744 on an iPad mini's
         //  1133x744, 787 on an 11-inch iPad's 1180x820 -- the cards' feet follow, card_y1)
-        a.H = a.tab ? std::max(744.0f, std::floor(1133.0f * ds.y / std::max(1.0f, ds.x))) : 1080.0f;
+        a.H = a.ph ? std::max(400.0f, std::floor(832.0f * ds.y / std::max(1.0f, ds.x)))
+            : a.tab ? std::max(744.0f, std::floor(1133.0f * ds.y / std::max(1.0f, ds.x))) : 1080.0f;
         a.ts = a.tab ? 0.5f : 1.0f;
     }
     a.k = std::min(ds.x / a.W, ds.y / a.H);
@@ -121,7 +124,35 @@ static void draw(App &a)
         return;
     }
     const int nc = (int)(sizeof CARDS / sizeof CARDS[0]);
-    if (a.tab) {                        // THE iPad's: the panel shorter, the tabs 44 points tall, the card below
+    if (a.ph) {                         // THE PHONE's: two rows, then the card (or the cards' menu over it)
+        draw_display_phone(a);
+        std::string title;
+        for (int i = 0; i < nc; i++)
+            if (a.card == CARDS[i][0])
+                title = CARDS[i][1];
+        if (button(a, "cards", 6, 56, 150, 44, title + " \xe2\x96\xbe", a.cards_open, true, 21))
+            a.cards_open = !a.cards_open;
+        look::module(a, 6, 106, 820, a.H - 112, 6.0f);
+        if (a.cards_open) {             // (every card a key, and the help: one tap away)
+            const float gx = 14, gy = 114, cw = (804 - 4 * 8) / 5.0f, ch = 56;
+            for (int i = 0; i <= nc; i++) {
+                const float x = gx + (i % 5) * (cw + 8), y = gy + (i / 5) * (ch + 8);
+                if (i == nc) {
+                    if (button(a, "help", x, y, cw, ch, "HELP", false, true, 21)) {
+                        a.cards_open = false;
+                        help_open(a, "basics");
+                    }
+                } else if (button(a, CARDS[i][0], x, y, cw, ch, CARDS[i][1], a.card == CARDS[i][0], true, 21)) {
+                    a.card = CARDS[i][0];
+                    a.cards_open = false;
+                }
+            }
+            ImGui::End();
+            ImGui::PopStyleColor();
+            ImGui::PopStyleVar(2);
+            return;
+        }
+    } else if (a.tab) {                        // THE iPad's: the panel shorter, the tabs 44 points tall, the card below
         draw_display_tab(a);
         draw_keys_tab(a);
         const float X = 10, Y = 160, gap = 4, w = (1113 - gap * nc - 44) / nc;
@@ -156,7 +187,10 @@ static void draw(App &a)
     setup_card(a, a.card == "setup");
     // (on the iPad, a card not yet laid out for it says so)
     static const std::set<std::string> TAB_READY = {"parts", "library", "synth", "stops", "piano", "drums", "amp", "effects", "matrix", "tuning", "control", "scenes", "files", "setup"};
-    if (a.tab && !TAB_READY.count(a.card)) {
+    static const std::set<std::string> PHONE_READY = {"parts", "library"};
+    if (a.ph && !PHONE_READY.count(a.card)) {
+        text(a, a.font, 21, 20, 124, SILK_DIM, "This card's phone layout is still to come.");
+    } else if (a.tab && !TAB_READY.count(a.card)) {
         text(a, a.font, 21, 24, 226, SILK_DIM, "This card's iPad layout is still to come; the laptop's has it.");
     } else if (a.card == "parts") {
         draw_parts(a);
@@ -537,7 +571,9 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
         settle--;
         {                               // (the safe area: the screen's corners and home indicator kept clear)
             SDL_Rect r;
-            if (SDL_GetWindowSafeArea(win, &r) && r.w > 0 && r.h > 0) {
+            if (const char *sa = getenv("NUI_SAFE"))
+                sscanf(sa, "%d,%d,%d,%d", &r.x, &r.y, &r.w, &r.h);
+            if ((getenv("NUI_SAFE") || SDL_GetWindowSafeArea(win, &r)) && r.w > 0 && r.h > 0) {
 #if defined(__APPLE__) && TARGET_OS_IPHONE
                 const float m = 12.0f;  // (an iPad's rounded corners: clear of their curve)
 #else

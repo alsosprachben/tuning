@@ -338,6 +338,93 @@ inline void draw_display_tab(App &a)
     rect(a, X + 8, my + 24, W - 16, 1, LCD_OFF, 0);
     look::glass(a, X, Y, W, H);
 }
+// THE PHONE's PANEL: the display's two lines and the part keys; under them
+// (the card's key drawn by the frame) the seven fields, PANIC and QUIT
+inline void draw_display_phone(App &a)
+{
+    look::plate(a, -400, -100, a.W + 800, 206);         // (under the safe area's edges too)
+    const float X = 6, Y = 4, W = 560, H = 48;
+    look::well(a, X - 2, Y - 2, W + 4, H + 4, 5.0f, IM_COL32(0x0b, 0x0c, 0x0e, 255));
+    lcd_floor(a, X, Y, W, H);
+    const J *p = part(a, a.row);
+    std::string fam;
+    if (p) {
+        const int prog = (int)num(p, "program"), var = (int)num(p, "variation"), ch = (int)pv(a, a.row, "channel", -1);
+        char b[96];
+        if (flag(p, "drums"))
+            snprintf(b, sizeof b, "DRUM SET %d", prog);
+        else
+            snprintf(b, sizeof b, "PROGRAM %03d%s \xc2\xb7 %s", prog, var ? ("." + std::to_string(var)).c_str() : "",
+                     var == 127 ? "MT-32" : var == 126 ? "CM-64 PCM" : FAMILIES[(prog >> 3) & 15]);
+        fam = std::string(b) + (ch < 0 ? " \xc2\xb7 ALL CH" : " \xc2\xb7 CH " + std::to_string(ch + 1));
+    }
+    look::lcd_text(a, 14, X + 8, Y + 5, LCD, fit(a, a.lcd ? a.lcd : a.font, 14, "PART  " + fam, W - 130));
+    const J *m = a.meters.is(J::OBJ) ? &a.meters : nullptr;
+    {
+        char b[64];
+        const double bud = num(m, "budget_ms"), mean = num(m, "ms_mean");
+        const int cpu = bud > 0 ? (int)std::lround(100.0 * mean / bud) : 0;
+        snprintf(b, sizeof b, "%s %d%% \xc2\xb7 %d V", flag(m, "gpu") ? "GPU" : "CPU", std::min(cpu, 999),
+                 (int)std::min(9999.0, num(m, "voices")));
+        bool warn = false;
+        const std::string health = health_line(a, m, warn);
+        const std::string r = warn ? health : std::string(b);
+        look::lcd_text(a, 14, X + W - 8 - text_w(a, a.lcd ? a.lcd : a.font, 14, r), Y + 5, warn ? BAD : LCD, r);
+    }
+    look::lcd_text(a, 28, X + 8, Y + 19, LCD, p ? pad2(a.row + 1) : "--");
+    const float nx = X + 8 + text_w(a, a.font, 28, "00") + 8;
+    const std::string nm = p ? fit(a, a.font, 28, str(p, "name"), W - (nx - X) - 12) : "";
+    look::lcd_text(a, 28, nx, Y + 19, LCD, nm);
+    if (p) {
+        const float dx = nx + text_w(a, a.lcd ? a.lcd : a.font, 28, nm) + 12, dw = X + W - 8 - dx;
+        const std::string pd = patch_desc(a, p);
+        if (!pd.empty() && dw > 80)
+            display_desc(a, pd, dx, Y + 19, a.lh(28), dw, 14);
+    }
+    look::glass(a, X, Y, W, H);
+    // the part keys
+    const int n = nparts(a);
+    const float KX = 572, bw = 60, g = 4;
+    if (look::key(a, "prev", KX, Y, bw, 44, "\xe2\x97\x80 PART", false, a.row > 0, 21, false))
+        select(a, a.row - 1);
+    if (look::key(a, "next", KX + bw + g, Y, bw, 44, "PART \xe2\x96\xb6", false, a.row + 1 < n, 21, false))
+        select(a, a.row + 1);
+    const bool muted = pv(a, a.row, "muted") != 0;
+    if (look::key(a, "mute", KX + 2 * (bw + g), Y, bw, 44, "MUTE", muted, true, 21) && p)
+        part_set(a, a.row, "muted", muted ? 0 : 1);
+    if (look::key(a, "solo", KX + 3 * (bw + g), Y, bw, 44, "SOLO", num(p, "solo") == 1, true, 21) && p)
+        take_parts(a, call(a, "{\"call\":\"part_solo\",\"row\":" + std::to_string(a.row) + "}"));
+    // the seven fields: dragged, or held for their sheet (no jog dial: no room)
+    const float FX = 162, FY = 56, FW = 526;
+    look::well(a, FX - 2, FY - 2, FW + 4, 48, 5.0f, IM_COL32(0x0b, 0x0c, 0x0e, 255));
+    lcd_floor(a, FX, FY, FW, 44);
+    const float fw = (FW - 8 - 6 * 4) / 7.0f;
+    for (int i = 0; i < 7 && p; i++) {
+        const float fx = FX + 4 + i * (fw + 4);
+        float v = (float)field_get(a, i);
+        const int f = lcd_field(a, FIELDS[i].label, fx, FY + 4, fw, 36, v, (float)FIELDS[i].lo, (float)FIELDS[i].hi,
+                                FIELDS[i].label, field_text(i, (int)v), a.field == i, 21, i == 0 ? 0.5f : 1.0f);
+        if (f & (K_TAP | K_ACTIVE))
+            a.field = i;
+        if (f & K_CHANGED)
+            field_set(a, i, (int)v);
+        if ((f & K_RESET) && FIELDS[i].reset != INT32_MIN)
+            field_set(a, i, FIELDS[i].reset);
+    }
+    look::glass(a, FX, FY, FW, 44);
+    if (look::key(a, "panic", 694, 56, 64, 44, "PANIC", false, true, 21, false))
+        call(a, "{\"call\":\"panic\"}");
+    const double now = ImGui::GetTime();
+    const bool armed = now - a.quit_armed < 3.0;
+    if (armed)
+        a.animate = true;
+    if (look::key(a, "quit", 762, 56, 64, 44, armed ? "AGAIN" : "QUIT", armed, true, 21)) {
+        if (armed)
+            a.quit = true;
+        else
+            a.quit_armed = now;
+    }
+}
 inline void draw_keys_tab(App &a)
 {
     const J *p = part(a, a.row);

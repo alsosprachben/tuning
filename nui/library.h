@@ -180,7 +180,7 @@ inline bool osk(App &a, std::string &q, float x, float y, float w, bool name = f
     static const char *ROWS[4] = {"1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm"};
     static const char *NROWS[4] = {"1234567890", "qwertyuiop", "asdfghjkl-", "zxcvbnm_"};
     const char *const *rows = name ? NROWS : ROWS;
-    const float kh = 50, gap = 6, kw = (w - gap * 9) / 10;
+    const float kh = a.ph ? 36 : 50, gap = a.ph ? 4 : 6, kw = (w - gap * 9) / 10;   // (the phone's shorter)
     rect(a, x - 10, y - 10, w + 20, 5 * (kh + gap) + 14, IM_COL32(0x17, 0x19, 0x1c, 255), 10);
     for (int r = 0; r < 4; r++) {
         const int n = (int)strlen(rows[r]);
@@ -221,8 +221,9 @@ inline void draw_library(App &a)
     fams.push_back({"drums", "Drum kits"});
     fams.push_back({"mt32", "MT-32"});
     fams.push_back({"cm32p", "CM-64 PCM"});
-    const bool T = a.tab;               // (the iPad's: its card from y 210 to card_y1 + 6)
-    const float FX = T ? 20 : 34, FY = T ? 218 : 356, fw = T ? 196 : 196, fh = 44, fg = 6, Y1 = card_y1(a);
+    const bool T = a.tab, PH = a.ph;    // (the iPad's: its card from y 210 to card_y1 + 6; the phone's from 106)
+    const float FX = PH ? 14 : T ? 20 : 34, FY = PH ? 112 : T ? 218 : 356, fw = PH ? 140 : 196, fh = PH ? 40 : 44, fg = 6,
+                Y1 = card_y1(a);
     const bool searching = !L.q.empty();
     float MX;
     if (T) {                            // (the families a column that scrolls, 44-point rows)
@@ -258,7 +259,8 @@ inline void draw_library(App &a)
         MX = FX + 2 * fw + fg + 24;
     }
     // THE SEARCH and the count
-    const float MW = (T ? 1105 : 1886) - MX, SY = T ? 216 : 350, SH = T ? 44 : 46, SW = T ? 330 : 560;
+    const float MW = (PH ? 820 : T ? 1105 : 1886) - MX, SY = PH ? 112 : T ? 216 : 350, SH = PH ? 40 : T ? 44 : 46,
+                SW = PH ? 250 : T ? 330 : 560;
     look::lcd_window(a, MX, SY, SW, SH, L.typing);
     look::lcd_text(a, 21, MX + 12, SY + (SH - a.lh(21)) / 2, L.q.empty() ? LCD_DIM : LCD,
                    L.q.empty() ? std::string("Search patches") : L.q + (L.typing ? "_" : ""), !L.q.empty());
@@ -289,12 +291,12 @@ inline void draw_library(App &a)
     snprintf(info, sizeof info, "%d patch%s \xc2\xb7 tap to play on part %02d%s", (int)list.size(),
              list.size() == 1 ? "" : "es", a.row + 1, L.favs_kept ? "" : " \xc2\xb7 (no session: stars are not kept)");
     const std::string info_ = fit(a, a.font, 14, info, MW - SW - 60);
-    text(a, a.font, 14, MX + SW + 16, SY + 16, SILK_DIM, info_);
-    heading(a, MX + SW + 16 + text_w(a, a.font, 14, info_) + 4, SY + 16, "", "library");   // (the card's ?)
+    text(a, a.font, 14, MX + SW + 16, SY + (PH ? 14 : 16), SILK_DIM, info_);
+    heading(a, MX + SW + 16 + text_w(a, a.font, 14, info_) + 4, SY + (PH ? 14 : 16), "", "library");   // (the card's ?)
 
     // THE STANDARDS: a chip each under the search (what a file of it can select)
     {
-        const float CY = SY + SH + 8, CH = T ? 40 : 40, cg = 6, cw = (MW - 7 * cg) / 8;
+        const float CY = SY + SH + (PH ? 6 : 8), CH = PH ? 34 : 40, cg = 6, cw = (MW - 7 * cg) / 8;
         for (int i = 0; i < 8; i++) {
             const std::string id = std::string("std") + STD_CHIPS[i];
             if (button(a, id.c_str(), MX + i * (cw + cg), CY, cw, CH, i ? STD_CHIPS[i] : "ALL", L.stdf == STD_CHIPS[i],
@@ -305,11 +307,12 @@ inline void draw_library(App &a)
         }
     }
     // (the patch's words are on its tile and on the display: the grid takes the card)
-    const float TY = T ? 322 : 462, TB = L.typing ? Y1 - 5 * 56 - 24 : Y1;
+    const float KH = PH ? 40 : 56;      // (a row of the on-screen keys, with its gap)
+    const float TY = PH ? 198 : T ? 322 : 462, TB = L.typing ? Y1 - 5 * KH - 24 : Y1;
 
     // THE TILES: a grid that scrolls under a finger
     // (three across, a line taller than the names alone: each patch's few words, whole, on two lines under its name)
-    const float tw_min = T ? 280 : 400, th = T ? 62 : 74, gap = T ? 6 : 8, star = T ? 44 : 52;
+    const float tw_min = PH ? 300 : T ? 280 : 400, th = T ? 62 : 74, gap = T ? 6 : 8, star = T ? 44 : 52;
     const int cols = std::max(1, (int)((MW + gap) / (tw_min + gap)));
     const float tw = (MW - gap * (cols - 1)) / cols;
     const int rows = ((int)list.size() + cols - 1) / cols;
@@ -434,7 +437,7 @@ inline void draw_library(App &a)
         }
     }
     // THE KEYS, while searching
-    if (L.typing && lib_keys(a, MX, Y1 - 5 * 56 + 6, MW))
+    if (L.typing && lib_keys(a, MX, Y1 - 5 * KH + 6, MW))
         L.typing = false;
 }
 
