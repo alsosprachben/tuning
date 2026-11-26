@@ -1,0 +1,3318 @@
+{
+"basics/title": {
+"en": "Using the screen",
+"t": "画面の使い方"
+},
+"basics/intro": {
+"en": "The front panel along the top always shows the selected part. The card keys under it choose the card below. Every card has a ? beside its name, and so do the regions inside it.",
+"t": "上部のフロントパネルには、常に選択中のパートが表示されます。その下のカードキーで、下に表示するカードを選びます。どのカードにも名前の横に ? があり、カード内の各領域にもあります。"
+},
+"basics/terms/0": {
+"en": "Touching the controls",
+"t": "コントロールの操作"
+},
+"basics/terms/1/0": {
+"en": "Drag",
+"t": "ドラッグ"
+},
+"basics/terms/1/1": {
+"en": "Up or right turns a knob, fader or field up; down or left turns it down.",
+"t": "上または右へ動かすとノブ、フェーダー、フィールドの値が上がり、下または左へ動かすと下がります。"
+},
+"basics/terms/2/0": {
+"en": "Fine",
+"t": "微調整"
+},
+"basics/terms/2/1": {
+"en": "Rest a second finger anywhere off the controls while you drag: the control moves ten times finer.",
+"t": "ドラッグ中に、コントロール以外の場所に2本目の指を置くと、コントロールが10倍細かく動きます。"
+},
+"basics/terms/3/0": {
+"en": "Detent",
+"t": "デテント"
+},
+"basics/terms/3/1": {
+"en": "A named position (a centre, 0 dB, triangle, saw or square on a wave knob) holds the value for a moment as you drag past it.",
+"t": "名前の付いた位置（センター、0 dB、波形ノブの三角波・ノコギリ波・矩形波など）では、ドラッグで通り過ぎるときに値が一瞬止まります。"
+},
+"basics/terms/4/0": {
+"en": "Double-tap",
+"t": "ダブルタップ"
+},
+"basics/terms/4/1": {
+"en": "Puts the control back to the patch's own value (or its default).",
+"t": "コントロールを音色本来の値（またはデフォルト値）に戻します。"
+},
+"basics/terms/5/0": {
+"en": "Long-press",
+"t": "長押し"
+},
+"basics/terms/5/1": {
+"en": "Opens a sheet to type the exact value.",
+"t": "正確な値を入力するシートを開きます。"
+},
+"basics/terms/6/0": {
+"en": "Orange",
+"t": "オレンジ"
+},
+"basics/terms/6/1": {
+"en": "A control drawn in orange (redder than the display's amber) has been changed from the patch.",
+"t": "オレンジ色（ディスプレイの琥珀色より赤み寄り）で描かれたコントロールは、音色から変更されています。"
+},
+"basics/terms/7": {
+"en": "The card keys",
+"t": "カードキー"
+},
+"basics/terms/8/0": {
+"en": "PARTS",
+"t": "パート"
+},
+"basics/terms/8/1": {
+"en": "Every part: its key range, level, pan, transpose, channel, mute and solo; layer, split and remove parts.",
+"t": "すべてのパート：鍵盤範囲、レベル、パン、トランスポーズ、チャンネル、ミュート、ソロ。パートのレイヤー、スプリット、削除もここで行います。"
+},
+"basics/terms/9/0": {
+"en": "LIBRARY",
+"t": "ライブラリ"
+},
+"basics/terms/9/1": {
+"en": "Every patch, by family or by search: tap one to play it on the selected part.",
+"t": "すべての音色を、ファミリー別または検索で表示します。タップすると選択中のパートでその音色が鳴ります。"
+},
+"basics/terms/10/0": {
+"en": "SYNTH",
+"t": "シンセ"
+},
+"basics/terms/10/1": {
+"en": "The selected part's synth knobs, laid out after the Moog Messenger's panel. Only for the synth programs.",
+"t": "選択中のパートのシンセのノブを、Moog Messenger のパネルにならって配置しています。シンセのプログラム専用です。"
+},
+"basics/terms/11/0": {
+"en": "STOPS",
+"t": "ストップ"
+},
+"basics/terms/11/1": {
+"en": "The selected part's organ: its stops or drawbars, and a tonewheel organ's drive.",
+"t": "選択中のパートのオルガン：ストップまたはドローバー、トーンホイールオルガンのドライブ。"
+},
+"basics/terms/12/0": {
+"en": "PIANO",
+"t": "ピアノ"
+},
+"basics/terms/12/1": {
+"en": "The pedals, the dampers on the strings, and a key used as the sustain pedal.",
+"t": "ペダル、弦のダンパー、サステインペダルとして使う鍵盤。"
+},
+"basics/terms/13/0": {
+"en": "DRUMS",
+"t": "ドラム"
+},
+"basics/terms/13/1": {
+"en": "The drum kits and their sounds as pads to play; the user sets.",
+"t": "ドラムセットとその音を、演奏できるパッドとして表示します。ユーザーセットもここにあります。"
+},
+"basics/terms/14/0": {
+"en": "AMP",
+"t": "アンプ"
+},
+"basics/terms/14/1": {
+"en": "The selected part's speaker, its pickups, its valve's drive, and a rotary speaker's rotors.",
+"t": "選択中のパートのスピーカー、ピックアップ、真空管のドライブ、ロータリースピーカーのローター。"
+},
+"basics/terms/15/0": {
+"en": "EFFECTS",
+"t": "エフェクト"
+},
+"basics/terms/15/1": {
+"en": "The insertion effect, and the reverb, chorus, delay and EQ every part shares.",
+"t": "インサーションエフェクトと、全パート共通のリバーブ、コーラス、ディレイ、EQ。"
+},
+"basics/terms/16/0": {
+"en": "MATRIX",
+"t": "マトリクス"
+},
+"basics/terms/16/1": {
+"en": "What the wheels, aftertouch and two controllers move on the selected part.",
+"t": "ホイール、アフタータッチ、2つのコントローラーが、選択中のパートで何を動かすか。"
+},
+"basics/terms/17/0": {
+"en": "TUNING",
+"t": "チューニング"
+},
+"basics/terms/17/1": {
+"en": "The tuning every part plays in, and the Indian voices' raga tuning.",
+"t": "全パートが演奏する音律と、インドの音色のラーガ・チューニング。"
+},
+"basics/terms/18/0": {
+"en": "CONTROL",
+"t": "コントロール"
+},
+"basics/terms/18/1": {
+"en": "Controls on the screen for what the keyboard lacks, routes that rewrite the keyboard's own, the metronome and the GS reset.",
+"t": "キーボードにない操作を補う画面上のコントロール、キーボード自身のコントロールを書き換えるルート、メトロノーム、GS リセット。"
+},
+"basics/terms/19/0": {
+"en": "SCENES",
+"t": "シーン"
+},
+"basics/terms/19/1": {
+"en": "Presets and scenes to save and bring back.",
+"t": "プリセットとシーンの保存と呼び出し。"
+},
+"basics/terms/20/0": {
+"en": "FILES",
+"t": "ファイル"
+},
+"basics/terms/20/1": {
+"en": "MIDI files on this machine: play one live, or render it to a WAV.",
+"t": "このマシン上の MIDI ファイル：ライブ再生するか、WAV に書き出します。"
+},
+"basics/terms/21/0": {
+"en": "SETUP",
+"t": "設定"
+},
+"basics/terms/21/1": {
+"en": "MIDI inputs, the Messenger, the sound settings for every part, and the room.",
+"t": "MIDI 入力、Messenger、全パート共通の音の設定、ルーム。"
+},
+"display/title": {
+"en": "The display",
+"t": "ディスプレイ"
+},
+"display/intro": {
+"en": "The selected part, how hard the engine is working, and the levels.",
+"t": "選択中のパート、エンジンの負荷、レベルを表示します。"
+},
+"display/terms/0/0": {
+"en": "PART",
+"t": "パート"
+},
+"display/terms/0/1": {
+"en": "The selected part's number. ◀ PART and PART ▶ choose another.",
+"t": "選択中のパートの番号です。◀ PART と PART ▶ で別のパートを選びます。"
+},
+"display/terms/1/0": {
+"en": "Name line",
+"t": "名前の行"
+},
+"display/terms/1/1": {
+"en": "The program number (a variation after the dot), its family, and the channel it listens on. ALL CH means every channel.",
+"t": "プログラム番号（ドットの後はバリエーション）、ファミリー、受信するチャンネルです。ALL CH はすべてのチャンネルを意味します。"
+},
+"display/terms/2/0": {
+"en": "CPU",
+"t": "CPU"
+},
+"display/terms/2/1": {
+"en": "How much of each audio block's time the engine spends making sound, on average. GPU+CPU when the graphics chip is helping. Near 100% the sound may break up.",
+"t": "各オーディオブロックの時間のうち、エンジンが音の生成に使っている割合の平均です。グラフィックスチップが手伝っているときは GPU+CPU と表示されます。100% に近づくと音が途切れることがあります。"
+},
+"display/terms/3/0": {
+"en": "VOICES",
+"t": "ボイス数"
+},
+"display/terms/3/1": {
+"en": "How many voices are sounding now.",
+"t": "現在鳴っているボイスの数です。"
+},
+"display/terms/4/0": {
+"en": "BUILDING",
+"t": "構築中"
+},
+"display/terms/4/1": {
+"en": "The engine is building the sounds for a new patch or tuning; the number is how far along it is. A patch plays when its build is done.",
+"t": "エンジンが新しい音色やチューニングの音を構築しています。数字は進み具合です。構築が終わると音色が鳴ります。"
+},
+"display/terms/5/0": {
+"en": "UNDERRUNS",
+"t": "音切れ"
+},
+"display/terms/5/1": {
+"en": "How many times the sound dropped out because a block was late.",
+"t": "ブロックが間に合わず音が途切れた回数です。"
+},
+"display/terms/6/0": {
+"en": "RT DROPPED",
+"t": "RT 解除"
+},
+"display/terms/6/1": {
+"en": "The engine gave up its real-time priority after a block ran away. Restart nvlive to get it back.",
+"t": "ブロックの処理が暴走したため、エンジンがリアルタイム優先度を手放しました。元に戻すには nvlive を再起動してください。"
+},
+"display/terms/7": {
+"en": "The seven fields",
+"t": "7つのフィールド"
+},
+"display/terms/8/0": {
+"en": "",
+"t": ""
+},
+"display/terms/8/1": {
+"en": "Tap a field to choose it, then drag it or turn the dial. Double-tap puts it back; long-press to type the value.",
+"t": "フィールドをタップして選び、ドラッグするかダイヤルを回します。ダブルタップで元に戻り、長押しで値を入力できます。"
+},
+"display/terms/9/0": {
+"en": "LEVEL",
+"t": "レベル"
+},
+"display/terms/9/1": {
+"en": "The part's level in dB.",
+"t": "パートのレベル（dB）です。"
+},
+"display/terms/10/0": {
+"en": "PAN",
+"t": "パン"
+},
+"display/terms/10/1": {
+"en": "Left to right: L64 to C (the centre) to R63.",
+"t": "左から右へ：L64 から C（センター）を経て R63 まで。"
+},
+"display/terms/11/0": {
+"en": "REVERB",
+"t": "リバーブ"
+},
+"display/terms/11/1": {
+"en": "How much of the part goes to the reverb, 0 to 127.",
+"t": "パートをリバーブに送る量、0〜127。"
+},
+"display/terms/12/0": {
+"en": "CHORUS",
+"t": "コーラス"
+},
+"display/terms/12/1": {
+"en": "How much goes to the chorus, 0 to 127.",
+"t": "コーラスに送る量、0〜127。"
+},
+"display/terms/13/0": {
+"en": "DELAY",
+"t": "ディレイ"
+},
+"display/terms/13/1": {
+"en": "How much goes to the delay, 0 to 127.",
+"t": "ディレイに送る量、0〜127。"
+},
+"display/terms/14/0": {
+"en": "KEY",
+"t": "キー"
+},
+"display/terms/14/1": {
+"en": "Transpose, in semitones (up to two octaves either way).",
+"t": "トランスポーズ（半音単位、上下それぞれ2オクターブまで）。"
+},
+"display/terms/15/0": {
+"en": "CH",
+"t": "CH"
+},
+"display/terms/15/1": {
+"en": "The MIDI channel the part listens to; ALL is every channel.",
+"t": "パートが受信する MIDI チャンネルです。ALL はすべてのチャンネルです。"
+},
+"display/terms/16": {
+"en": "The meters",
+"t": "メーター"
+},
+"display/terms/17/0": {
+"en": "Two long bars",
+"t": "2本の長いバー"
+},
+"display/terms/17/1": {
+"en": "The output's left and right peaks. Red within 1 dB of the top.",
+"t": "出力の左右のピークです。上端から 1 dB 以内で赤くなります。"
+},
+"display/terms/18/0": {
+"en": "1 to 16",
+"t": "1〜16"
+},
+"display/terms/18/1": {
+"en": "Each MIDI channel's level.",
+"t": "各 MIDI チャンネルのレベルです。"
+},
+"panel/title": {
+"en": "The panel keys and the dial",
+"t": "パネルキーとダイヤル"
+},
+"panel/intro": {
+"en": "These act on the selected part.",
+"t": "選択中のパートに対して働きます。"
+},
+"panel/terms/0/0": {
+"en": "◀ PART / PART ▶",
+"t": "◀ PART / PART ▶"
+},
+"panel/terms/0/1": {
+"en": "Select the part before or after.",
+"t": "前または次のパートを選びます。"
+},
+"panel/terms/1/0": {
+"en": "MUTE",
+"t": "ミュート"
+},
+"panel/terms/1/1": {
+"en": "Silences the selected part (lit while muted). Tap again to hear it.",
+"t": "選択中のパートを消音します（ミュート中は点灯）。もう一度タップすると聞こえるようになります。"
+},
+"panel/terms/2/0": {
+"en": "SOLO",
+"t": "ソロ"
+},
+"panel/terms/2/1": {
+"en": "Only the soloed parts sound (lit while soloed). Tap again to take it out of the solo.",
+"t": "ソロにしたパートだけが鳴ります（ソロ中は点灯）。もう一度タップするとソロから外れます。"
+},
+"panel/terms/3/0": {
+"en": "PANIC",
+"t": "パニック"
+},
+"panel/terms/3/1": {
+"en": "All notes off: every sounding note on every part is let go and fades as if its key were lifted, and notes left stuck with no key are cleared. Use it when a note hangs. Sounds and settings are not changed.",
+"t": "オールノートオフ：全パートで鳴っているすべてのノートを離し、鍵盤を上げたときのように減衰させます。押している鍵盤がないのに残っているノートも消去します。ノートが鳴りっぱなしになったときに使います。音色や設定は変わりません。"
+},
+"panel/terms/4/0": {
+"en": "The dial",
+"t": "ダイヤル"
+},
+"panel/terms/4/1": {
+"en": "Turns the field chosen on the display, a step each 15 degrees. The word under it names the field.",
+"t": "ディスプレイで選んだフィールドを、15度ごとに1ステップ動かします。下の文字がフィールド名を示します。"
+},
+"parts/title": {
+"en": "Parts",
+"t": "パート"
+},
+"parts/intro": {
+"en": "A part is one sound with its own keys, channel and level. Several parts can share the keyboard: layered (the same keys) or split (different keys).",
+"t": "パートとは、独自の鍵盤範囲、チャンネル、レベルを持つ1つの音です。複数のパートでキーボードを共有できます：レイヤー（同じ鍵盤）またはスプリット（別々の鍵盤）。"
+},
+"parts/terms/0": {
+"en": "The keyboard",
+"t": "キーボード"
+},
+"parts/terms/1/0": {
+"en": "Bars under the keys",
+"t": "鍵盤の下のバー"
+},
+"parts/terms/1/1": {
+"en": "Each part's key range. The selected part is lit; a muted or silenced part is dim.",
+"t": "各パートの鍵盤範囲です。選択中のパートは点灯し、ミュートまたは消音されたパートは暗くなります。"
+},
+"parts/terms/2/0": {
+"en": "Tap a bar",
+"t": "バーをタップ"
+},
+"parts/terms/2/1": {
+"en": "Selects that part.",
+"t": "そのパートを選択します。"
+},
+"parts/terms/3/0": {
+"en": "Drag a bar's end",
+"t": "バーの端をドラッグ"
+},
+"parts/terms/3/1": {
+"en": "Moves that end of the part's range, key by key.",
+"t": "パートの範囲のその端を、1鍵ずつ動かします。"
+},
+"parts/terms/4": {
+"en": "The buttons",
+"t": "ボタン"
+},
+"parts/terms/5/0": {
+"en": "LAYER",
+"t": "レイヤー"
+},
+"parts/terms/5/1": {
+"en": "Adds a copy of the selected part, with the same keys and channel. Choose another patch for it in the Library to play two sounds at once.",
+"t": "選択中のパートのコピーを、同じ鍵盤とチャンネルで追加します。ライブラリでそのパートに別の音色を選ぶと、2つの音を同時に演奏できます。"
+},
+"parts/terms/6/0": {
+"en": "SPLIT",
+"t": "スプリット"
+},
+"parts/terms/6/1": {
+"en": "Cuts the selected part's keys in two at the middle. The upper half becomes a new part; choose its sound in the Library.",
+"t": "選択中のパートの鍵盤範囲を中央で2つに分けます。上半分が新しいパートになるので、ライブラリで音を選んでください。"
+},
+"parts/terms/7/0": {
+"en": "REMOVE",
+"t": "削除"
+},
+"parts/terms/7/1": {
+"en": "Takes the selected part away and lets its notes go. The first part cannot be removed.",
+"t": "選択中のパートを取り除き、そのノートを離します。最初のパートは削除できません。"
+},
+"parts/terms/8": {
+"en": "Each part's strip",
+"t": "各パートのストリップ"
+},
+"parts/terms/9/0": {
+"en": "Name",
+"t": "名前"
+},
+"parts/terms/9/1": {
+"en": "Tap to select the part.",
+"t": "タップするとパートを選択します。"
+},
+"parts/terms/10/0": {
+"en": "level",
+"t": "レベル"
+},
+"parts/terms/10/1": {
+"en": "The part's level, −30 to +10 dB. Double-tap for 0 dB.",
+"t": "パートのレベル、−30〜+10 dB。ダブルタップで 0 dB。"
+},
+"parts/terms/11/0": {
+"en": "pan",
+"t": "パン"
+},
+"parts/terms/11/1": {
+"en": "Left to right. Double-tap for the centre.",
+"t": "左から右へ。ダブルタップでセンター。"
+},
+"parts/terms/12/0": {
+"en": "KEY",
+"t": "キー"
+},
+"parts/terms/12/1": {
+"en": "Transpose in semitones. Double-tap for none.",
+"t": "半音単位のトランスポーズ。ダブルタップでなし。"
+},
+"parts/terms/13/0": {
+"en": "CH",
+"t": "CH"
+},
+"parts/terms/13/1": {
+"en": "The channel it listens to; ALL is every channel.",
+"t": "受信するチャンネルです。ALL はすべてのチャンネルです。"
+},
+"parts/terms/14/0": {
+"en": "MUTE / SOLO",
+"t": "ミュート / ソロ"
+},
+"parts/terms/14/1": {
+"en": "As the panel keys, for this part.",
+"t": "パネルキーと同じ働きを、このパートに対して行います。"
+},
+"parts/terms/15/0": {
+"en": "VEL / FIXED",
+"t": "VEL / 固定"
+},
+"parts/terms/15/1": {
+"en": "VEL: how hard you play sets how loud. FIXED: every key sounds the same, as an organ's keys do.",
+"t": "VEL：弾く強さで音量が決まります。固定：オルガンの鍵盤のように、どの鍵盤も同じ音量で鳴ります。"
+},
+"library/title": {
+"en": "Library",
+"t": "ライブラリ"
+},
+"library/intro": {
+"en": "Every patch, to play on the selected part.",
+"t": "選択中のパートで鳴らせる、すべての音色です。"
+},
+"library/terms/0/0": {
+"en": "Families (left)",
+"t": "ファミリー（左）"
+},
+"library/terms/0/1": {
+"en": "★ Favourites, All, the sixteen General MIDI families, Drum kits, and the MT-32's and CM-64's own tones.",
+"t": "★ お気に入り、すべて、General MIDI の16ファミリー、ドラムセット、MT-32 と CM-64 独自の音色。"
+},
+"library/terms/1/0": {
+"en": "Standards (under the search)",
+"t": "規格（検索欄の下）"
+},
+"library/terms/1/1": {
+"en": "ALL, or a standard: GM1, GM2, GS1 (the SC-55's), GS2 (SC-88), GS3 (SC-88 Pro), GS4 (SC-8850), or CVT1 (Clavitone's own). A standard shows every patch a file written for it can select: GM2 includes GM1's, and each GS map includes GM1's and the maps before it. A tile says the standards it belongs to: the earliest of each, so a tone GM 2 took from the SC-55 says GM2 GS1.",
+"t": "ALL、または規格：GM1、GM2、GS1（SC-55）、GS2（SC-88）、GS3（SC-88 Pro）、GS4（SC-8850）、CVT1（Clavitone 独自）。規格を選ぶと、その規格向けに書かれたファイルが選べる音色がすべて表示されます。GM2 は GM1 の音色を含み、各 GS マップは GM1 とそれ以前のマップの音色を含みます。タイルには所属する規格が表示されます。各系列で最も早いものだけを示すので、GM 2 が SC-55 から取り入れた音色には GM2 GS1 と表示されます。"
+},
+"library/terms/2/0": {
+"en": "Search",
+"t": "検索"
+},
+"library/terms/2/1": {
+"en": "Type words: a patch shows if its number, name or family has them all. The screen's own keys come up: CLEAR empties it, ⌫ takes a letter back, DONE puts the keys away.",
+"t": "言葉を入力します。番号、名前、ファミリーにすべての言葉を含む音色が表示されます。画面上のキーが表示され、CLEAR で消去、⌫ で1文字戻し、DONE でキーを閉じます。"
+},
+"library/terms/3/0": {
+"en": "A tile",
+"t": "タイル"
+},
+"library/terms/3/1": {
+"en": "Tap to play that patch on the selected part. The lit tile is the part's patch now; one blinking is still being built.",
+"t": "タップすると選択中のパートでその音色が鳴ります。点灯しているタイルが現在のパートの音色で、点滅しているタイルはまだ構築中です。"
+},
+"library/terms/4/0": {
+"en": "Number",
+"t": "番号"
+},
+"library/terms/4/1": {
+"en": "The program number, a variation after the dot; KIT and a number for a drum kit.",
+"t": "プログラム番号（ドットの後はバリエーション）。ドラムセットは KIT と番号です。"
+},
+"library/terms/5/0": {
+"en": "★",
+"t": "★"
+},
+"library/terms/5/1": {
+"en": "Keeps the patch in Favourites (saved beside the session).",
+"t": "音色をお気に入りに入れます（セッションと一緒に保存されます）。"
+},
+"synth/title": {
+"en": "Synth",
+"t": "シンセ"
+},
+"synth/intro": {
+"en": "The selected part's synth, laid out after the Moog Messenger's front panel, then the delay. Each section has its own ?. Long-press a knob for its exact value and the Messenger's name for it.",
+"t": "選択中のパートのシンセです。Moog Messenger のフロントパネルにならって配置し、その後にディレイがあります。各セクションに ? があります。ノブを長押しすると、正確な値と Messenger での名前が表示されます。"
+},
+"synth/terms/0/0": {
+"en": "LAYER A / LAYER B",
+"t": "レイヤー A / レイヤー B"
+},
+"synth/terms/0/1": {
+"en": "A patch made of two synths: which one the knobs show.",
+"t": "2つのシンセでできた音色で、ノブがどちらを表示するかを選びます。"
+},
+"synth/terms/1/0": {
+"en": "N CHANGED · BACK TO THE PATCH",
+"t": "N 箇所変更 · 音色に戻す"
+},
+"synth/terms/1/1": {
+"en": "How many controls you have changed; tap to put them all back. AS THE PATCH when none are.",
+"t": "変更したコントロールの数です。タップするとすべて元に戻ります。変更がないときは「音色のまま」と表示されます。"
+},
+"synth/terms/2/0": {
+"en": "CONTROLS TEST",
+"t": "コントロールテスト"
+},
+"synth/terms/2/1": {
+"en": "Opens a page of every kind of control, to try them.",
+"t": "あらゆる種類のコントロールを試せるページを開きます。"
+},
+"synth/terms/3/0": {
+"en": "Orange",
+"t": "オレンジ"
+},
+"synth/terms/3/1": {
+"en": "Changed from the patch. Double-tap a knob, or a switch's name, to put it back.",
+"t": "音色から変更されています。ノブ、またはスイッチの名前をダブルタップすると元に戻ります。"
+},
+"synth/terms/4/0": {
+"en": "IN A MIDI FILE",
+"t": "MIDI ファイルでは"
+},
+"synth/terms/4/1": {
+"en": "CC86 at 64 or more puts a channel in Messenger mode: from there on it reads the Moog Messenger's own CC chart, so a file (or a sequencer) sets these knobs with the Messenger's numbers -- CC19 the cutoff, CC21 the resonance, and so on, the fine half of a knob 32 above it -- and a real Messenger on that channel follows the same file. Those numbers stop meaning what General MIDI says (CC10 is the Messenger's TUNE, not pan); volume, sustain, the reverb send and the mod wheel keep theirs. Below 64 it is General MIDI again; a GM System On or GS Reset turns it off. A program change keeps the mode and puts the knobs back to the new voice's own. In a file each note plays the knobs as they are when it starts; played live, turning one moves the notes sounding too.",
+"t": "CC86 を 64 以上にすると、チャンネルが Messenger モードになります。以後は Moog Messenger 独自の CC 表を読むので、ファイル（またはシーケンサー）から Messenger の番号でこれらのノブを設定できます。CC19 がカットオフ、CC21 がレゾナンスというように、ノブの細かい半分はその 32 上の番号です。そのチャンネルにつないだ本物の Messenger も同じファイルに従います。これらの番号は General MIDI の意味を失います（CC10 はパンではなく Messenger の TUNE です）。音量、サステイン、リバーブのセンド、モジュレーションホイールは元の意味のままです。64 未満で General MIDI に戻り、GM System On または GS Reset でモードは解除されます。プログラムチェンジではモードを保ったまま、ノブを新しい音色本来の値に戻します。ファイルでは各ノートが鳴り始めたときのノブの状態で鳴ります。ライブ演奏では、ノブを回すと鳴っているノートも変わります。"
+},
+"synth:LFO 1/title": {
+"en": "LFO 1",
+"t": "LFO 1"
+},
+"synth:LFO 1/intro": {
+"en": "A slow oscillator that moves one thing up and down by itself.",
+"t": "何か1つを自動的に上下させる、遅いオシレーターです。"
+},
+"synth:LFO 1/terms/0/0": {
+"en": "LFO 1 rate",
+"t": "LFO 1 レート"
+},
+"synth:LFO 1/terms/0/1": {
+"en": "How fast it moves.",
+"t": "動く速さです。"
+},
+"synth:LFO 1/terms/1/0": {
+"en": "Waveshape",
+"t": "波形"
+},
+"synth:LFO 1/terms/1/1": {
+"en": "The shape of the movement: tri (smooth up and down), saw, ramp, square (jumps between two values).",
+"t": "動きの形：tri（なめらかに上下）、saw、ramp、square（2つの値の間を跳ぶ）。"
+},
+"synth:LFO 1/terms/2/0": {
+"en": "LFO 1 depth",
+"t": "LFO 1 デプス"
+},
+"synth:LFO 1/terms/2/1": {
+"en": "How far it moves.",
+"t": "動く幅です。"
+},
+"synth:LFO 1/terms/3/0": {
+"en": "Destination",
+"t": "送り先"
+},
+"synth:LFO 1/terms/3/1": {
+"en": "What it moves: cutoff (the filter), osc 2 freq (oscillator 2's pitch), osc 1 wave, sub wave (their shapes).",
+"t": "動かす対象：cutoff（フィルター）、osc 2 freq（オシレーター2のピッチ）、osc 1 wave、sub wave（それぞれの波形）。"
+},
+"synth:LFO 1/terms/4/0": {
+"en": "KB reset",
+"t": "KB リセット"
+},
+"synth:LFO 1/terms/4/1": {
+"en": "On: each new key starts the LFO from the beginning.",
+"t": "オン：新しい鍵盤を弾くたびに LFO を最初から始めます。"
+},
+"synth:Left hand/title": {
+"en": "Left hand",
+"t": "左手"
+},
+"synth:Left hand/intro": {
+"en": "The controls by the wheels: glide, and what the mod wheel brings in through LFO 2. Turn the mod wheel up to hear it.",
+"t": "ホイールのそばのコントロール：グライドと、モジュレーションホイールで LFO 2 から加わるもの。モジュレーションホイールを上げると聞こえます。"
+},
+"synth:Left hand/terms/0/0": {
+"en": "Glide",
+"t": "グライド"
+},
+"synth:Left hand/terms/0/1": {
+"en": "How long a note takes to slide to the next one's pitch. 0 is no glide.",
+"t": "ノートが次のノートのピッチまで滑る時間です。0 はグライドなし。"
+},
+"synth:Left hand/terms/1/0": {
+"en": "LFO 2 rate",
+"t": "LFO 2 レート"
+},
+"synth:Left hand/terms/1/1": {
+"en": "How fast LFO 2 moves.",
+"t": "LFO 2 の動く速さです。"
+},
+"synth:Left hand/terms/2/0": {
+"en": "Pitch",
+"t": "ピッチ"
+},
+"synth:Left hand/terms/2/1": {
+"en": "On: the mod wheel brings LFO 2 onto the pitch (vibrato).",
+"t": "オン：モジュレーションホイールで LFO 2 をピッチにかけます（ビブラート）。"
+},
+"synth:Left hand/terms/3/0": {
+"en": "Cutoff",
+"t": "カットオフ"
+},
+"synth:Left hand/terms/3/1": {
+"en": "On: onto the filter (wah).",
+"t": "オン：フィルターにかけます（ワウ）。"
+},
+"synth:Left hand/terms/4/0": {
+"en": "Amp",
+"t": "アンプ"
+},
+"synth:Left hand/terms/4/1": {
+"en": "On: onto the level (tremolo).",
+"t": "オン：レベルにかけます（トレモロ）。"
+},
+"synth:Oscillators/title": {
+"en": "Oscillators",
+"t": "オシレーター"
+},
+"synth:Oscillators/intro": {
+"en": "The two oscillators, 1 and 2, and the sub oscillator an octave under oscillator 1.",
+"t": "2つのオシレーター（1 と 2）と、オシレーター1の1オクターブ下のサブオシレーターです。"
+},
+"synth:Oscillators/terms/0/0": {
+"en": "Octave",
+"t": "オクターブ"
+},
+"synth:Oscillators/terms/0/1": {
+"en": "The oscillator's octave, in organ feet: 32′ is lowest, 4′ highest.",
+"t": "オシレーターのオクターブをオルガンのフィートで表します。32′ が最も低く、4′ が最も高い音です。"
+},
+"synth:Oscillators/terms/1/0": {
+"en": "Tune",
+"t": "チューン"
+},
+"synth:Oscillators/terms/1/1": {
+"en": "Fine tuning.",
+"t": "微調整です。"
+},
+"synth:Oscillators/terms/2/0": {
+"en": "Sub wave",
+"t": "サブ波形"
+},
+"synth:Oscillators/terms/2/1": {
+"en": "The sub oscillator's shape, sweeping smoothly from triangle to square to a narrow pulse.",
+"t": "サブオシレーターの波形です。三角波から矩形波、細いパルスへとなめらかに変わります。"
+},
+"synth:Oscillators/terms/3/0": {
+"en": "Waveshape",
+"t": "波形"
+},
+"synth:Oscillators/terms/3/1": {
+"en": "The oscillator's shape, sweeping smoothly: fold, triangle, saw, square, pulse. The ticks mark triangle, saw and square; the little screen shows the wave.",
+"t": "オシレーターの波形です。fold、三角波、ノコギリ波、矩形波、パルスへとなめらかに変わります。目盛りは三角波、ノコギリ波、矩形波の位置を示し、小さな画面に波形が表示されます。"
+},
+"synth:Oscillators/terms/4/0": {
+"en": "Osc 2 freq",
+"t": "Osc 2 周波数"
+},
+"synth:Oscillators/terms/4/1": {
+"en": "Oscillator 2's pitch against oscillator 1: in tune at the centre, or a chosen interval for fatter or harmonised sounds.",
+"t": "オシレーター1に対するオシレーター2のピッチです。センターでユニゾン、または厚みやハーモニーのために選んだ音程にします。"
+},
+"synth:Oscillators/terms/5/0": {
+"en": "Mod amount",
+"t": "モッド量"
+},
+"synth:Oscillators/terms/5/1": {
+"en": "How much the mod destination is moved.",
+"t": "モッドの送り先をどれだけ動かすかです。"
+},
+"synth:Oscillators/terms/6/0": {
+"en": "Sync 1→2",
+"t": "シンク 1→2"
+},
+"synth:Oscillators/terms/6/1": {
+"en": "On: oscillator 2 restarts with every cycle of oscillator 1, for a hard, tearing tone as osc 2 freq moves.",
+"t": "オン：オシレーター1の周期ごとにオシレーター2をリスタートします。osc 2 freq を動かすと、硬く裂けるような音になります。"
+},
+"synth:Oscillators/terms/7/0": {
+"en": "Mod destination",
+"t": "モッド送り先"
+},
+"synth:Oscillators/terms/7/1": {
+"en": "1→2 FM: oscillator 1 bends oscillator 2's pitch at audio speed (bell and metal tones). F env→osc 2 freq, F env→osc 2 wave, F env→sub wave: the filter envelope moves that instead.",
+"t": "1→2 FM：オシレーター1がオーディオ速度でオシレーター2のピッチを揺らします（ベルや金属的な音）。F env→osc 2 freq、F env→osc 2 wave、F env→sub wave：代わりにフィルター・エンベロープがその対象を動かします。"
+},
+"synth:Mixer/title": {
+"en": "Mixer",
+"t": "ミキサー"
+},
+"synth:Mixer/intro": {
+"en": "How much of each source goes into the filter.",
+"t": "各音源をどれだけフィルターに送るかです。"
+},
+"synth:Mixer/terms/0/0": {
+"en": "Osc 1",
+"t": "Osc 1"
+},
+"synth:Mixer/terms/0/1": {
+"en": "Oscillator 1's level.",
+"t": "オシレーター1のレベルです。"
+},
+"synth:Mixer/terms/1/0": {
+"en": "Sub osc",
+"t": "サブ Osc"
+},
+"synth:Mixer/terms/1/1": {
+"en": "The sub oscillator's level.",
+"t": "サブオシレーターのレベルです。"
+},
+"synth:Mixer/terms/2/0": {
+"en": "Osc 2",
+"t": "Osc 2"
+},
+"synth:Mixer/terms/2/1": {
+"en": "Oscillator 2's level.",
+"t": "オシレーター2のレベルです。"
+},
+"synth:Mixer/terms/3/0": {
+"en": "Noise",
+"t": "ノイズ"
+},
+"synth:Mixer/terms/3/1": {
+"en": "White noise, for breath and percussion.",
+"t": "ホワイトノイズです。息づかいや打楽器的な音に使います。"
+},
+"synth:Filter/title": {
+"en": "Filter",
+"t": "フィルター"
+},
+"synth:Filter/intro": {
+"en": "The filter shapes the brightness of the sound.",
+"t": "フィルターは音の明るさを形づくります。"
+},
+"synth:Filter/terms/0/0": {
+"en": "Cutoff",
+"t": "カットオフ"
+},
+"synth:Filter/terms/0/1": {
+"en": "Where the filter starts to cut: low is dark, high is bright.",
+"t": "フィルターがカットを始める位置です。低いと暗く、高いと明るくなります。"
+},
+"synth:Filter/terms/1/0": {
+"en": "EG amount",
+"t": "EG 量"
+},
+"synth:Filter/terms/1/1": {
+"en": "How far the filter envelope opens the filter on each note.",
+"t": "ノートごとにフィルター・エンベロープがフィルターをどこまで開くかです。"
+},
+"synth:Filter/terms/2/0": {
+"en": "Resonance",
+"t": "レゾナンス"
+},
+"synth:Filter/terms/2/1": {
+"en": "A peak at the cutoff; turned high, it rings and whistles.",
+"t": "カットオフ位置のピークです。高くすると共鳴して笛のように鳴ります。"
+},
+"synth:Filter/terms/3/0": {
+"en": "KB tracking",
+"t": "KB トラッキング"
+},
+"synth:Filter/terms/3/1": {
+"en": "off: the cutoff is the same on every key. 1:1: it rises with the key, so high notes stay as bright as low ones.",
+"t": "off：カットオフはどの鍵盤でも同じです。1:1：鍵盤とともに上がるので、高音も低音と同じ明るさを保ちます。"
+},
+"synth:Filter/terms/4/0": {
+"en": "Mode",
+"t": "モード"
+},
+"synth:Filter/terms/4/1": {
+"en": "4P LP: a steep low-pass (after the classic Moog ladder). 2P LP: a gentler low-pass. BP: band-pass, only the middle. HP: high-pass, only the top.",
+"t": "4P LP：急峻なローパス（Moog の古典的なラダーにならったもの）。2P LP：ゆるやかなローパス。BP：バンドパス、中域だけ。HP：ハイパス、高域だけ。"
+},
+"synth:Filter/terms/5/0": {
+"en": "Res bass",
+"t": "Res ベース"
+},
+"synth:Filter/terms/5/1": {
+"en": "Puts back the bass that resonance takes away.",
+"t": "レゾナンスで失われる低音を補います。"
+},
+"synth:Envelopes/title": {
+"en": "Envelopes",
+"t": "エンベロープ"
+},
+"synth:Envelopes/intro": {
+"en": "How each note moves over time: the filter envelope (top row) opens the filter, the amplifier envelope (second row) shapes the level.",
+"t": "各ノートの時間的な変化です。フィルター・エンベロープ（上段）はフィルターを開き、アンプ・エンベロープ（2段目）はレベルを形づくります。"
+},
+"synth:Envelopes/terms/0/0": {
+"en": "Attack",
+"t": "アタック"
+},
+"synth:Envelopes/terms/0/1": {
+"en": "How long the note takes to rise when the key goes down.",
+"t": "鍵盤を押してから音が立ち上がるまでの時間です。"
+},
+"synth:Envelopes/terms/1/0": {
+"en": "Decay",
+"t": "ディケイ"
+},
+"synth:Envelopes/terms/1/1": {
+"en": "How long it takes to fall to the sustain level.",
+"t": "サステインレベルまで下がる時間です。"
+},
+"synth:Envelopes/terms/2/0": {
+"en": "Sustain",
+"t": "サステイン"
+},
+"synth:Envelopes/terms/2/1": {
+"en": "The level held while the key stays down.",
+"t": "鍵盤を押している間保たれるレベルです。"
+},
+"synth:Envelopes/terms/3/0": {
+"en": "Release",
+"t": "リリース"
+},
+"synth:Envelopes/terms/3/1": {
+"en": "How long it takes to die away after the key comes up.",
+"t": "鍵盤を離してから音が消えるまでの時間です。"
+},
+"synth:Envelopes/terms/4/0": {
+"en": "Multi-trig",
+"t": "マルチトリガー"
+},
+"synth:Envelopes/terms/4/1": {
+"en": "On: every key restarts the envelopes, even when played legato.",
+"t": "オン：レガートで弾いても、鍵盤ごとにエンベロープをリスタートします。"
+},
+"synth:Envelopes/terms/5/0": {
+"en": "F env vel",
+"t": "F env ベロシティ"
+},
+"synth:Envelopes/terms/5/1": {
+"en": "On: playing harder opens the filter envelope further.",
+"t": "オン：強く弾くほどフィルター・エンベロープが大きく開きます。"
+},
+"synth:Envelopes/terms/6/0": {
+"en": "A env vel",
+"t": "A env ベロシティ"
+},
+"synth:Envelopes/terms/6/1": {
+"en": "Whether playing harder is louder: voice (as the patch has it), off or on.",
+"t": "強く弾くと大きくなるかどうか：voice（音色の設定どおり）、off、on。"
+},
+"synth:Envelopes/terms/7/0": {
+"en": "F env loop / A env loop",
+"t": "F env ループ / A env ループ"
+},
+"synth:Envelopes/terms/7/1": {
+"en": "On: the envelope repeats while the key is held, as a rhythmic pulse.",
+"t": "オン：鍵盤を押している間エンベロープが繰り返され、リズミカルなパルスになります。"
+},
+"synth:Delay/title": {
+"en": "Delay",
+"t": "ディレイ"
+},
+"synth:Delay/intro": {
+"en": "An analog-style echo after the synth.",
+"t": "シンセの後に置かれた、アナログ風のエコーです。"
+},
+"synth:Delay/terms/0/0": {
+"en": "On",
+"t": "オン"
+},
+"synth:Delay/terms/0/1": {
+"en": "Turns the echo on.",
+"t": "エコーをオンにします。"
+},
+"synth:Delay/terms/1/0": {
+"en": "Range",
+"t": "レンジ"
+},
+"synth:Delay/terms/1/1": {
+"en": "short or long echo times.",
+"t": "short または long のエコータイム。"
+},
+"synth:Delay/terms/2/0": {
+"en": "Time",
+"t": "タイム"
+},
+"synth:Delay/terms/2/1": {
+"en": "The time between echoes.",
+"t": "エコーの間隔です。"
+},
+"synth:Delay/terms/3/0": {
+"en": "Feedback",
+"t": "フィードバック"
+},
+"synth:Delay/terms/3/1": {
+"en": "How many echoes: more feedback, more repeats.",
+"t": "エコーの回数です。フィードバックを増やすほど繰り返しが増えます。"
+},
+"synth:Delay/terms/4/0": {
+"en": "Mix",
+"t": "ミックス"
+},
+"synth:Delay/terms/4/1": {
+"en": "How loud the echoes are against the dry sound.",
+"t": "原音に対するエコーの音量です。"
+},
+"synth:Delay/terms/5/0": {
+"en": "LFO rate / LFO amount",
+"t": "LFO レート / LFO 量"
+},
+"synth:Delay/terms/5/1": {
+"en": "A slow wobble of the echo time, for a chorus-like or tape-like sway.",
+"t": "エコータイムをゆっくり揺らし、コーラスやテープのような揺れを加えます。"
+},
+"stops/title": {
+"en": "Stops",
+"t": "ストップ"
+},
+"stops/intro": {
+"en": "The selected part's organ. A pipe organ shows its stops by division; a tonewheel organ shows its drawbars and percussion. A part that is not an organ shows organs to put on it.",
+"t": "選択中のパートのオルガンです。パイプオルガンは鍵盤部（ディヴィジョン）ごとにストップを、トーンホイールオルガンはドローバーとパーカッションを表示します。オルガンでないパートでは、そのパートに設定できるオルガンが表示されます。"
+},
+"stops/terms/0/0": {
+"en": "A stop",
+"t": "ストップ"
+},
+"stops/terms/0/1": {
+"en": "Tap to draw it (lit) or put it in. Taps land at once, however fast.",
+"t": "タップすると引き出し（点灯）、もう一度で戻します。どんなに速くタップしても即座に反映されます。"
+},
+"stops/terms/1/0": {
+"en": "16′, 8′, 4′…",
+"t": "16′、8′、4′…"
+},
+"stops/terms/1/1": {
+"en": "The pitch in organ feet: 8′ sounds as written, 16′ an octave lower, 4′ an octave higher; 2-2/3′ and 1-3/5′ add the twelfth and the seventeenth.",
+"t": "オルガンのフィートで表したピッチです。8′ は記譜どおり、16′ は1オクターブ下、4′ は1オクターブ上で鳴ります。2-2/3′ と 1-3/5′ は12度と17度を加えます。"
+},
+"stops/terms/2/0": {
+"en": "Perc 3rd / Perc 2nd",
+"t": "Perc 3rd / Perc 2nd"
+},
+"stops/terms/2/1": {
+"en": "A tonewheel organ's percussion: a short ping on the third or second harmonic as each key goes down, voiced two ways, L102 and B3.",
+"t": "トーンホイールオルガンのパーカッション：鍵盤を押すたびに第3倍音または第2倍音で短く鳴る音です。L102 と B3 の2通りに調整されています。"
+},
+"stops/terms/3/0": {
+"en": "N of M drawn",
+"t": "N / M 本使用"
+},
+"stops/terms/3/1": {
+"en": "How many stops are drawn.",
+"t": "引き出しているストップの数です。"
+},
+"stops/terms/4/0": {
+"en": "The line below",
+"t": "下の行"
+},
+"stops/terms/4/1": {
+"en": "Touch a stop for what it is.",
+"t": "ストップに触れると、その説明が表示されます。"
+},
+"drive/title": {
+"en": "Valve (drive)",
+"t": "真空管（ドライブ）"
+},
+"drive/intro": {
+"en": "The valve amplifier's drive, in front of the speaker (or an organ's rotary speaker): a guitar's, a bass's, an organ's. On the AMP card for every amplified voice; an organ's on its Stops card too, where the mod wheel is the swell pedal.",
+"t": "スピーカー（またはオルガンのロータリースピーカー）の前にある真空管アンプのドライブです。ギター、ベース、オルガンのもの。アンプ付きのすべての音色ではアンプカードに、オルガンではストップカードにもあり、そこではモジュレーションホイールがスウェルペダルになります。"
+},
+"drive/terms/0/0": {
+"en": "Drive",
+"t": "ドライブ"
+},
+"drive/terms/0/1": {
+"en": "0 is clean; 1 the edge of breakup; turned past it, it growls and clips. Its distortion is mostly the notes mixing, so a chord thickens where one note barely would. Two knobs: DRIVE, the drive set (the patch's own, or turned), and WITH THE WHEEL, what plays: the mod wheel scales the drive, up to four times the patch's own. Both reach that far (at least 3).",
+"t": "0 はクリーン、1 は歪み始める寸前です。それを超えると唸ってクリップします。歪みの大部分はノート同士が混ざって生じるので、単音ではほとんど変わらなくても和音では厚くなります。ノブは2つ：DRIVE は設定したドライブ（音色本来の値、または回した値）、WITH THE WHEEL は実際に鳴るドライブです。モジュレーションホイールがドライブを音色本来の値の最大4倍まで拡大します。どちらもその範囲（少なくとも 3）まで届きます。"
+},
+"drive/terms/1/0": {
+"en": "AS THE PATCH (n)",
+"t": "音色のまま (n)"
+},
+"drive/terms/1/1": {
+"en": "The knob is at the patch's own drive, n.",
+"t": "ノブは音色本来のドライブ n にあります。"
+},
+"drive/terms/2/0": {
+"en": "BACK TO THE PATCH'S n",
+"t": "音色の n に戻す"
+},
+"drive/terms/2/1": {
+"en": "You have turned it; tap to put the patch's own back. Double-tapping the knob does the same.",
+"t": "ノブを回した状態です。タップすると音色本来の値に戻ります。ノブをダブルタップしても同じです。"
+},
+"rotary/title": {
+"en": "Rotary",
+"t": "ロータリー"
+},
+"rotary/intro": {
+"en": "How the rotating speaker is heard. Organs stand their cabinet in the room; the Rotary insertion effect records it with two mics. Either can be switched, part by part, and the part keeps it through program changes.",
+"t": "回転スピーカーの聞こえ方です。オルガンはキャビネットをルームの中に置き、Rotary インサーションエフェクトは2本のマイクで収録します。どちらもパートごとに切り替えられ、パートはプログラムチェンジの後もその設定を保ちます。"
+},
+"rotary/terms/0/0": {
+"en": "IN THE ROOM",
+"t": "ルーム内"
+},
+"rotary/terms/0/1": {
+"en": "The cabinet heard where it stands: its horn and drum turning toward you and away, the room around it.",
+"t": "置かれた場所で聞くキャビネット：ホーンとドラムがこちらを向いたり離れたりしながら回り、まわりにルームが響きます。"
+},
+"rotary/terms/1/0": {
+"en": "TWO MICS",
+"t": "2本のマイク"
+},
+"rotary/terms/1/1": {
+"en": "The cabinet as a studio records it: a mic either side, one to each speaker, each hearing the rotors from its own angle. Wide.",
+"t": "スタジオで収録したキャビネット：両側に1本ずつ、各スピーカーにマイクを向け、それぞれの角度からローターを聞きます。広がりがあります。"
+},
+"rotary/terms/2/0": {
+"en": "SPREAD",
+"t": "広がり"
+},
+"rotary/terms/2/1": {
+"en": "How far apart the two mics stand round the cabinet, in degrees. Double-tap for the default, the Rotary effect's own (136°).",
+"t": "キャビネットのまわりで2本のマイクを離す角度（度）です。ダブルタップでデフォルト、Rotary エフェクト本来の値（136°）になります。"
+},
+"rotary/terms/3/0": {
+"en": "CC82",
+"t": "CC82"
+},
+"rotary/terms/3/1": {
+"en": "A file or a keyboard knob sets it too, on the part's channel: 0 the cabinet in the room, 1 to 127 two mics, the value × 180/127 degrees apart (96 is 136°, the Rotary effect's own scale). A note hears the setting it starts under.",
+"t": "ファイルやキーボードのノブからも、パートのチャンネルで設定できます。0 はルーム内のキャビネット、1〜127 は2本のマイクで、値 × 180/127 度離れます（96 で 136°、Rotary エフェクト本来のスケール）。ノートは鳴り始めたときの設定で聞こえます。"
+},
+"couplers/title": {
+"en": "Couplers",
+"t": "カプラー"
+},
+"couplers/intro": {
+"en": "A 60's organ's coupler switches, on the left of its console: each makes the voices it takes sound again at another octave, on the manual it belongs to. The upper's take its six 8' voices (Flute, Diapason, String, Oboe, Trumpet, Kinura); the lower's every voice but its Quint. A Solo tab raises the coupled pitches with their voice.",
+"t": "60年代のオルガンのカプラースイッチで、コンソールの左側にあります。それぞれ、対象の音色をその鍵盤上で別のオクターブでも鳴らします。上鍵盤のカプラーは6つの 8' 音色（Flute、Diapason、String、Oboe、Trumpet、Kinura）に、下鍵盤のカプラーは Quint 以外のすべての音色にかかります。Solo タブは、カプラーで加わったピッチもその音色とともに持ち上げます。"
+},
+"couplers/terms/0/0": {
+"en": "16'",
+"t": "16'"
+},
+"couplers/terms/0/1": {
+"en": "Upper to Upper 16': each voice an octave lower as well.",
+"t": "Upper to Upper 16'：各音色を1オクターブ下でも鳴らします。"
+},
+"couplers/terms/1/0": {
+"en": "4'",
+"t": "4'"
+},
+"couplers/terms/1/1": {
+"en": "Upper to Upper 4', Lower to Lower 4': each voice an octave higher as well.",
+"t": "Upper to Upper 4'、Lower to Lower 4'：各音色を1オクターブ上でも鳴らします。"
+},
+"couplers/terms/2/0": {
+"en": "2'",
+"t": "2'"
+},
+"couplers/terms/2/1": {
+"en": "Upper to Upper 2': each voice two octaves higher as well.",
+"t": "Upper to Upper 2'：各音色を2オクターブ上でも鳴らします。"
+},
+"couplers/terms/3/0": {
+"en": "8' OFF",
+"t": "8' OFF"
+},
+"couplers/terms/3/1": {
+"en": "The coupled voices' own pitch silenced, their couplers' kept: with 4', a voice at 4' alone.",
+"t": "カプラー対象の音色本来のピッチを消し、カプラーのピッチは残します。4' と組み合わせると、音色は 4' だけで鳴ります。"
+},
+"couplers/terms/4/0": {
+"en": "CC87",
+"t": "CC87"
+},
+"couplers/terms/4/1": {
+"en": "A file or a keyboard sets them too, on the part's channel, a bit a switch: 1 8' Off, 2 16', 4 4', 8 2' (add them up). A program change puts back the preset's.",
+"t": "ファイルやキーボードからも、パートのチャンネルで設定できます。スイッチ1つにつき1ビット：1 = 8' Off、2 = 16'、4 = 4'、8 = 2'（足し合わせます）。プログラムチェンジでプリセットの設定に戻ります。"
+},
+"spectra/title": {
+"en": "Cone rotor",
+"t": "コーンローター"
+},
+"spectra/intro": {
+"en": "A 60's organ's turning speaker, after the Wurlitzer Spectra-Tone: two small speakers back to back on one rotor inside the console. Their beams sweep past you, so the higher a note the more swells it makes each turn, with a slight wobble of pitch. Choose it under Speaker for the part: SPECTRA-TONE sends the manual through the rotor, ST CHORUS through the rotor and the console speakers together.",
+"t": "60年代のオルガンの回転スピーカーで、Wurlitzer Spectra-Tone にならったものです。コンソール内の1つのローターに、2つの小さなスピーカーが背中合わせに付いています。音の向きがこちらを通り過ぎるため、高いノートほど1回転あたりのうねりが多くなり、ピッチもわずかに揺れます。パートの Speaker で選びます。SPECTRA-TONE は鍵盤の音をローターに通し、ST CHORUS はローターとコンソールのスピーカーの両方に通します。"
+},
+"spectra/terms/0/0": {
+"en": "CATHEDRAL",
+"t": "CATHEDRAL"
+},
+"spectra/terms/0/1": {
+"en": "The rocker down: the rotor turning slowly, about one turn in two seconds.",
+"t": "ロッカーを下に：ローターはゆっくり、約2秒で1回転します。"
+},
+"spectra/terms/1/0": {
+"en": "THEATER",
+"t": "THEATER"
+},
+"spectra/terms/1/1": {
+"en": "The rocker up: the rotor turning fast, about three turns a second. It climbs there over several seconds and drops back to Cathedral in about one.",
+"t": "ロッカーを上に：ローターは速く、1秒に約3回転します。数秒かけてその速さまで上がり、約1秒で Cathedral に戻ります。"
+},
+"spectra/terms/2/0": {
+"en": "CC80",
+"t": "CC80"
+},
+"spectra/terms/2/1": {
+"en": "A file or a keyboard sets it too, on the part's channel: below 64 Cathedral, 64 and over Theater.",
+"t": "ファイルやキーボードからも、パートのチャンネルで設定できます。64 未満で Cathedral、64 以上で Theater。"
+},
+"amp/title": {
+"en": "Amp",
+"t": "アンプ"
+},
+"amp/intro": {
+"en": "What the selected part's voice plays through, as it is modelled: a guitar's, a bass's or a clav's pickups, its valve amplifier, the speaker it drives, and an organ's rotary speaker. An acoustic voice has none of these: it is heard as it is.",
+"t": "選択中のパートの音色が通る経路を、モデル化したとおりに表示します。ギター、ベース、クラビのピックアップ、真空管アンプ、それが鳴らすスピーカー、オルガンのロータリースピーカーです。アコースティックの音色にはこれらがなく、そのままの音で聞こえます。"
+},
+"amp/terms/0/0": {
+"en": "PICKUP",
+"t": "ピックアップ"
+},
+"amp/terms/0/1": {
+"en": "Which of the instrument's pickups it plays on, on a switch drawn after the instrument's own: a 5-way blade (after the Fender Stratocaster's and the Ibanez's), two volume knobs (after the Fender Jazz Bass's), two rockers (after the Hohner Clavinet's). Under it, the string with its coils where they sit, the ones heard lit.",
+"t": "楽器のどのピックアップで鳴らすかを、その楽器本来のスイッチにならった形で選びます。5ウェイのブレードスイッチ（Fender Stratocaster と Ibanez にならったもの）、2つのボリュームノブ（Fender Jazz Bass にならったもの）、2つのロッカースイッチ（Hohner Clavinet にならったもの）。その下に弦とコイルの位置が描かれ、聞こえているコイルが点灯します。"
+},
+"amp/terms/1/0": {
+"en": "VALVE",
+"t": "真空管"
+},
+"amp/terms/1/1": {
+"en": "The amplifier's triode stage and its drive: clean at 0, the edge of breakup at 1, a clip past it. DRIVE is the drive set; WITH THE WHEEL beside it is what plays, the mod wheel scaling it (up to four times the patch's own). AS THE PATCH puts the patch's back.",
+"t": "アンプの三極管段とそのドライブ：0 でクリーン、1 で歪み始める寸前、それを超えるとクリップします。DRIVE は設定したドライブ、その横の WITH THE WHEEL は実際に鳴るドライブで、モジュレーションホイールが拡大します（音色本来の値の最大4倍）。AS THE PATCH で音色の値に戻ります。"
+},
+"amp/terms/2/0": {
+"en": "SPEAKER",
+"t": "スピーカー"
+},
+"amp/terms/2/1": {
+"en": "The cabinet: the voice's own, or another it can play through. The line under the buttons says what that speaker is.",
+"t": "キャビネット：音色本来のもの、または通して鳴らせる別のもの。ボタンの下の行に、そのスピーカーの説明が表示されます。"
+},
+"amp/terms/3/0": {
+"en": "ROTARY",
+"t": "ロータリー"
+},
+"amp/terms/3/1": {
+"en": "An organ's rotating speaker, after the Leslie 122: its speed (STOP, SLOW, FAST -- the half-moon, CC80) and how it is heard (IN THE ROOM, or TWO MICS round it). Shown when the organ plays through one.",
+"t": "Leslie 122 にならった、オルガンの回転スピーカーです。速さ（STOP、SLOW、FAST — ハーフムーンスイッチ、CC80）と聞こえ方（IN THE ROOM、またはまわりに TWO MICS）。オルガンがロータリースピーカーを通して鳴るときに表示されます。"
+},
+"amp/terms/4/0": {
+"en": "Kept",
+"t": "保持"
+},
+"amp/terms/4/1": {
+"en": "The part keeps its valve, speaker and how its rotary speaker is heard through program changes, and in the session.",
+"t": "パートは真空管、スピーカー、ロータリースピーカーの聞こえ方を、プログラムチェンジの後もセッション内でも保ちます。"
+},
+"pickup/title": {
+"en": "Pickup",
+"t": "ピックアップ"
+},
+"pickup/intro": {
+"en": "The pickups the part's instrument plays on, on the AMP card. A pickup hears the string at the point where it sits: near the bridge it hears the upper harmonics strongly and the fundamental weakly (bright, thin), toward the neck the reverse (round, full). Two coils together add their combs -- and where they hear the string in opposite phase, cancel, which is the in-between positions' hollow \"quack\". Choose a position, part by part; the session keeps it, and a program change puts the part back on its new voice's own.",
+"t": "アンプカードにある、パートの楽器が鳴らすピックアップです。ピックアップは自分の位置で弦の振動を拾います。ブリッジ寄りでは高次倍音を強く、基音を弱く拾い（明るく細い音）、ネック寄りではその逆です（丸く太い音）。2つのコイルを組み合わせるとそれぞれの櫛形の特性が足され、弦を逆位相で拾う部分は打ち消し合います。これが中間ポジションの中空な「クワッ」という音です。ポジションはパートごとに選べます。セッションはその設定を保ち、プログラムチェンジで新しい音色本来のポジションに戻ります。"
+},
+"pickup/terms/0/0": {
+"en": "Three single coils",
+"t": "シングルコイル3基"
+},
+"pickup/terms/0/1": {
+"en": "After the Fender Stratocaster: its 5-way blade, numbered as a Strat player numbers it: 1 the bridge pickup, 2 bridge and middle, 3 the middle, 4 middle and neck, 5 the neck.",
+"t": "Fender Stratocaster にならったもの：5ウェイのブレードスイッチで、Strat 奏者の数え方で番号を付けています。1 ブリッジ、2 ブリッジとミドル、3 ミドル、4 ミドルとネック、5 ネック。"
+},
+"pickup/terms/1/0": {
+"en": "Two humbuckers",
+"t": "ハムバッカー2基"
+},
+"pickup/terms/1/1": {
+"en": "After the Ibanez RG2820: its 5-way blade, numbered as Ibanez numbers it: 1 the neck humbucker, 2 its two coils in parallel, 3 both humbuckers, 4 the two inside coils, 5 the bridge humbucker. Overdriven and Distortion Guitar play the bridge; Jazz Guitar the neck.",
+"t": "Ibanez RG2820 にならったもの：5ウェイのブレードスイッチで、Ibanez の数え方で番号を付けています。1 ネックのハムバッカー、2 その2つのコイルをパラレルで、3 両方のハムバッカー、4 内側の2つのコイル、5 ブリッジのハムバッカー。Overdriven Guitar と Distortion Guitar はブリッジ、Jazz Guitar はネックで鳴ります。"
+},
+"pickup/terms/2/0": {
+"en": "Two-coil bass",
+"t": "2コイルのベース"
+},
+"pickup/terms/2/1": {
+"en": "After the Fender Jazz Bass. No switch: its two volume knobs, neck and bridge. Tap one to turn it fully up or off (one always stays up). Both up is the full sound; the bridge alone the growl, the neck alone the thump.",
+"t": "Fender Jazz Bass にならったもの。スイッチはなく、ネックとブリッジの2つのボリュームノブです。タップすると全開またはオフになります（どちらか一方は必ず上がっています）。両方上げるとフルな音、ブリッジだけで唸るような音、ネックだけで太く鈍い音になります。"
+},
+"pickup/terms/3/0": {
+"en": "Keyboard, two pickups",
+"t": "鍵盤楽器、ピックアップ2基"
+},
+"pickup/terms/3/1": {
+"en": "After the Hohner Clavinet D6: its two rocker switches, A/B and C/D. A C the centre pickup alone (warm), B C the bridge pickup (thin), B D both in phase (full), A D both against each other (hollow: the fundamental cancelled -- the funk sound).",
+"t": "Hohner Clavinet D6 にならったもの：2つのロッカースイッチ A/B と C/D。A C はセンターのピックアップだけ（暖かい音）、B C はブリッジのピックアップ（細い音）、B D は両方を同相で（フルな音）、A D は両方を逆相で（中空な音：基音が打ち消される — ファンクの音）。"
+},
+"pickup/terms/4/0": {
+"en": "Level",
+"t": "レベル"
+},
+"pickup/terms/4/1": {
+"en": "A bridge pickup is wound hotter, as a real one is, to make up for the string moving less there; parallel coils load each other, which lifts their resonance. The levels follow from that, as on the instrument.",
+"t": "ブリッジのピックアップは、本物と同じく巻き数を多くして、そこでは弦の動きが小さい分を補っています。パラレルのコイルは互いに負荷となり、共振が持ち上がります。レベルは楽器と同じく、こうした結果として決まります。"
+},
+"pickup/terms/5/0": {
+"en": "CC85",
+"t": "CC85"
+},
+"pickup/terms/5/1": {
+"en": "A file or a keyboard chooses it too, on the part's channel, at once (the next notes). A program change puts it back to the voice's own, so a file sends it after the program change, as it would a volume: bank select, program change, then CC83 and CC85. 0 the voice's own, 1 neck, 2 the second position (three single coils: neck and middle; two humbuckers: the neck one in parallel), 3 middle, 4 the fourth (three single coils: middle and bridge; two humbuckers: the inside coils), 5 bridge, 6 neck and bridge (both), 7 the clav's both in anti-phase. One the instrument does not have leaves it its own.",
+"t": "ファイルやキーボードからも、パートのチャンネルで即座に（次のノートから）選べます。プログラムチェンジで音色本来の設定に戻るので、ファイルでは音量と同じくプログラムチェンジの後に送ります：バンクセレクト、プログラムチェンジ、それから CC83 と CC85。0 音色本来、1 ネック、2 第2ポジション（シングルコイル3基：ネックとミドル、ハムバッカー2基：ネック側をパラレルで）、3 ミドル、4 第4ポジション（シングルコイル3基：ミドルとブリッジ、ハムバッカー2基：内側のコイル）、5 ブリッジ、6 ネックとブリッジ（両方）、7 クラビの両方を逆相で。楽器にないポジションを指定すると、音色本来のままです。"
+},
+"cabinet/title": {
+"en": "Speaker (cabinet)",
+"t": "スピーカー（キャビネット）"
+},
+"cabinet/intro": {
+"en": "The speaker the part's voice plays through, on the AMP card. Every amplified voice has one of its own: the guitars and basses their amps' cabinets, the tine electric piano its suitcase, the reed electric piano the speakers in its lid, the organs a rotary speaker or their console's own speaker. Choose another, part by part; the session keeps it, and a program change puts the part back on its new voice's own.",
+"t": "アンプカードにある、パートの音色を鳴らすスピーカーです。アンプを通るすべての音色が固有のスピーカーを持っています。ギターとベースはアンプのキャビネット、ティーン式エレクトリックピアノはスーツケース、リード式エレクトリックピアノは蓋のスピーカー、オルガンはロータリースピーカーまたはコンソール内蔵のスピーカーです。パートごとに別のものを選べます。セッションはその設定を保ち、プログラムチェンジで新しい音色本来のスピーカーに戻ります。"
+},
+"cabinet/terms/0/0": {
+"en": "PATCH'S OWN · name",
+"t": "音色本来 · 名前"
+},
+"cabinet/terms/0/1": {
+"en": "The patch's own speaker, named. Tap another to play through it; the line under the buttons says what that speaker is.",
+"t": "音色本来のスピーカーと、その名前です。別のものをタップするとそれを通して鳴ります。ボタンの下の行に、そのスピーカーの説明が表示されます。"
+},
+"cabinet/terms/1/0": {
+"en": "DIRECT",
+"t": "ダイレクト"
+},
+"cabinet/terms/1/1": {
+"en": "No speaker: the amplifier's output straight to the desk, as a direct box takes it. Brighter and harder, with nothing rounding the top.",
+"t": "スピーカーなし：ダイレクトボックスで取るように、アンプの出力をそのまま卓へ送ります。高域を丸めるものがないので、より明るく硬い音になります。"
+},
+"cabinet/terms/2/0": {
+"en": "ROTARY",
+"t": "ロータリー"
+},
+"cabinet/terms/2/1": {
+"en": "A tonewheel organ's rotating speaker, after the Leslie 122: its horn and drum turning. Only an organ offers it. Its speed and how it is heard are on the AMP card's ROTARY.",
+"t": "Leslie 122 にならった、トーンホイールオルガンの回転スピーカーです。ホーンとドラムが回転します。オルガンだけで選べます。速さと聞こえ方はアンプカードの ROTARY にあります。"
+},
+"cabinet/terms/3/0": {
+"en": "SPINET",
+"t": "スピネット"
+},
+"cabinet/terms/3/1": {
+"en": "A tonewheel organ's own speaker, after a Hammond spinet's: no rotors, a single 12-inch cone.",
+"t": "Hammond のスピネットにならった、トーンホイールオルガン内蔵のスピーカーです。ローターはなく、12インチのコーンが1つです。"
+},
+"cabinet/terms/4/0": {
+"en": "Level",
+"t": "レベル"
+},
+"cabinet/terms/4/1": {
+"en": "A rotary speaker coming or going keeps the organ's level: the rotors' path is quieter than a fixed speaker's, and that is put back.",
+"t": "ロータリースピーカーに切り替えても外しても、オルガンのレベルは保たれます。ローター経由の音は固定スピーカーより小さくなりますが、その分を補います。"
+},
+"cabinet/terms/5/0": {
+"en": "CC83",
+"t": "CC83"
+},
+"cabinet/terms/5/1": {
+"en": "A file or a keyboard chooses it too, on the part's channel, at once (the next notes). A program change puts it back to the voice's own, so a file sends it after the program change, as it would a volume: bank select, program change, then CC83 and CC85. 0 the voice's own (OWN), 1 DIRECT, 2 ROTARY (after the Leslie 122), 3 SPINET (after a Hammond spinet's speaker), 4 1x12 (a guitar combo), 5 4x12 (closed), 6 2x12 CLEAN (after the Roland JC-120), 7 BASS 4x10, 8 SUITCASE (a tine piano's), 9 LID PAIR (a reed piano's lid speakers), 10 CONE ROTOR (after the Wurlitzer Spectra-Tone), 11 ROTOR CHORUS (its chorus, a 60's organ's manuals). One the voice does not offer leaves it its own.",
+"t": "ファイルやキーボードからも、パートのチャンネルで即座に（次のノートから）選べます。プログラムチェンジで音色本来の設定に戻るので、ファイルでは音量と同じくプログラムチェンジの後に送ります：バンクセレクト、プログラムチェンジ、それから CC83 と CC85。0 音色本来（OWN）、1 DIRECT、2 ROTARY（Leslie 122 にならったもの）、3 SPINET（Hammond のスピネットのスピーカーにならったもの）、4 1x12（ギターのコンボアンプ）、5 4x12（密閉型）、6 2x12 CLEAN（Roland JC-120 にならったもの）、7 BASS 4x10、8 SUITCASE（ティーン式ピアノのもの）、9 LID PAIR（リード式ピアノの蓋のスピーカー）、10 CONE ROTOR（Wurlitzer Spectra-Tone にならったもの）、11 ROTOR CHORUS（そのコーラス、60年代オルガンの鍵盤用）。音色が対応していないものを指定すると、音色本来のままです。"
+},
+"piano/title": {
+"en": "Piano",
+"t": "ピアノ"
+},
+"piano/intro": {
+"en": "The selected part's pedals. They show what the keyboard, a file or this screen last sent, and act on the part's channel.",
+"t": "選択中のパートのペダルです。キーボード、ファイル、またはこの画面から最後に送られた状態を表示し、パートのチャンネルに対して働きます。"
+},
+"piano/terms/0/0": {
+"en": "Pedals",
+"t": "ペダル"
+},
+"piano/terms/0/1": {
+"en": "Soft, sostenuto and sustain, as on a grand piano.",
+"t": "グランドピアノと同じ、ソフト、ソステヌート、サステイン。"
+},
+"piano/terms/1/0": {
+"en": "Dampers",
+"t": "ダンパー"
+},
+"piano/terms/1/1": {
+"en": "Where each key's damper sits on its strings.",
+"t": "各鍵盤のダンパーが弦のどこにあるか。"
+},
+"piano/terms/2/0": {
+"en": "Pedal key",
+"t": "ペダル鍵盤"
+},
+"piano/terms/2/1": {
+"en": "A key on the keyboard that works as the sustain pedal.",
+"t": "サステインペダルとして働く、キーボード上の鍵盤です。"
+},
+"piano:pedals/title": {
+"en": "Pedals",
+"t": "ペダル"
+},
+"piano:pedals/intro": {
+"en": "Tap a pedal to press it; tap again to let it up.",
+"t": "ペダルをタップすると踏み込み、もう一度タップすると戻します。"
+},
+"piano:pedals/terms/0/0": {
+"en": "SOFT",
+"t": "ソフト"
+},
+"piano:pedals/terms/0/1": {
+"en": "Una corda: the hammers strike fewer strings, softer and darker.",
+"t": "ウナ・コルダ：ハンマーが打つ弦の数が減り、柔らかく暗い音になります。"
+},
+"piano:pedals/terms/1/0": {
+"en": "SOSTENUTO",
+"t": "ソステヌート"
+},
+"piano:pedals/terms/1/1": {
+"en": "Holds up the dampers of only the keys that are down as it goes down; keys played after it are damped as usual.",
+"t": "踏み込んだときに押さえている鍵盤のダンパーだけを上げたままにします。後から弾いた鍵盤は通常どおり止音されます。"
+},
+"piano:pedals/terms/2/0": {
+"en": "SUSTAIN",
+"t": "サステイン"
+},
+"piano:pedals/terms/2/1": {
+"en": "Drag the fader through its travel. Between up and down the dampers rest lightly on the strings (half pedal).",
+"t": "フェーダーを可動範囲いっぱいにドラッグします。上と下の間では、ダンパーが弦に軽く触れます（ハーフペダル）。"
+},
+"piano:pedals/terms/3/0": {
+"en": "DOWN / HALF / UP",
+"t": "下 / 半分 / 上"
+},
+"piano:pedals/terms/3/1": {
+"en": "Sets the sustain pedal straight to down, halfway or up.",
+"t": "サステインペダルを、直接 下・半分・上 に設定します。"
+},
+"piano:dampers/title": {
+"en": "Dampers",
+"t": "ダンパー"
+},
+"piano:dampers/intro": {
+"en": "Each key's damper as the sustain pedal leaves it.",
+"t": "サステインペダルの状態に応じた、各鍵盤のダンパーです。"
+},
+"piano:dampers/terms/0/0": {
+"en": "Lifted",
+"t": "上がっている"
+},
+"piano:dampers/terms/0/1": {
+"en": "Off the string: it rings on.",
+"t": "弦から離れていて、音が鳴り続けます。"
+},
+"piano:dampers/terms/1/0": {
+"en": "Resting lightly",
+"t": "軽く触れている"
+},
+"piano:dampers/terms/1/1": {
+"en": "Half pedal: loud notes are cut back, the quiet sound rings on.",
+"t": "ハーフペダル：大きな音は抑えられ、小さな響きは鳴り続けます。"
+},
+"piano:dampers/terms/2/0": {
+"en": "On the strings",
+"t": "弦の上"
+},
+"piano:dampers/terms/2/1": {
+"en": "Damped: the note stops when its key comes up.",
+"t": "止音：鍵盤を離すと音が止まります。"
+},
+"piano:dampers/terms/3/0": {
+"en": "The line below",
+"t": "下の行"
+},
+"piano:dampers/terms/3/1": {
+"en": "The pedal values where the dampers leave the strings, by register. The bass dampers are heavier and leave later. The top keys have no dampers.",
+"t": "ダンパーが弦から離れるペダルの値を、音域ごとに示します。低音のダンパーは重く、離れるのが遅くなります。最高音域の鍵盤にはダンパーがありません。"
+},
+"piano:key/title": {
+"en": "Pedal key",
+"t": "ペダル鍵盤"
+},
+"piano:key/intro": {
+"en": "For a keyboard with no pedal: a key held down works as the sustain pedal.",
+"t": "ペダルのないキーボード用：押さえた鍵盤がサステインペダルとして働きます。"
+},
+"piano:key/terms/0/0": {
+"en": "Held",
+"t": "押さえる"
+},
+"piano:key/terms/0/1": {
+"en": "Holding the key lifts the dampers.",
+"t": "鍵盤を押さえている間、ダンパーが上がります。"
+},
+"piano:key/terms/1/0": {
+"en": "Pushed into",
+"t": "押し込む"
+},
+"piano:key/terms/1/1": {
+"en": "Pressing harder into the held key (aftertouch) lowers the dampers back onto the strings, for half-pedalling.",
+"t": "押さえた鍵盤をさらに強く押し込む（アフタータッチ）と、ダンパーが弦の上に戻り、ハーフペダルになります。"
+},
+"piano:key/terms/2/0": {
+"en": "REMOVE",
+"t": "削除"
+},
+"piano:key/terms/2/1": {
+"en": "That key plays as a note again.",
+"t": "その鍵盤は再びノートとして鳴ります。"
+},
+"piano:key/terms/3/0": {
+"en": "LEARN A KEY",
+"t": "鍵盤を学習"
+},
+"piano:key/terms/3/1": {
+"en": "Tap it, then press the key you want. Tap again to stop waiting.",
+"t": "タップしてから、使いたい鍵盤を押します。もう一度タップすると待機をやめます。"
+},
+"piano:key/terms/4/0": {
+"en": "Sympathetic strings",
+"t": "共鳴弦"
+},
+"piano:key/terms/4/1": {
+"en": "With them on, the first part's undamped strings ring with what is played.",
+"t": "オンにすると、最初のパートの止音されていない弦が、演奏に共鳴して鳴ります。"
+},
+"drums/title": {
+"en": "Drums",
+"t": "ドラム"
+},
+"drums/intro": {
+"en": "The selected part's drum kit as pads, grouped by kind. A part that is not a drum kit can be given one from the list.",
+"t": "選択中のパートのドラムセットを、種類ごとにまとめたパッドで表示します。ドラムセットでないパートには、リストからドラムセットを設定できます。"
+},
+"drums/terms/0/0": {
+"en": "Kits (left)",
+"t": "ドラムセット（左）"
+},
+"drums/terms/0/1": {
+"en": "Tap a kit to put it on the selected part.",
+"t": "ドラムセットをタップすると、選択中のパートに設定します。"
+},
+"drums/terms/1/0": {
+"en": "A pad",
+"t": "パッド"
+},
+"drums/terms/1/1": {
+"en": "Strikes its sound: higher up the pad is harder. Several fingers can play at once. Pads light as the keyboard or a file plays them.",
+"t": "その音を鳴らします。パッドの上の方ほど強く鳴ります。複数の指で同時に演奏できます。キーボードやファイルが鳴らすとパッドが点灯します。"
+},
+"drums/terms/2/0": {
+"en": "The key",
+"t": "鍵盤"
+},
+"drums/terms/2/1": {
+"en": "Each pad's key name and MIDI number.",
+"t": "各パッドの鍵盤名と MIDI 番号です。"
+},
+"drums/terms/3/0": {
+"en": "The line",
+"t": "行"
+},
+"drums/terms/3/1": {
+"en": "Touch a pad for what it is, and the set it borrows from when it does.",
+"t": "パッドに触れると、その説明と、借りている場合は借り元のセットが表示されます。"
+},
+"drums/terms/4/0": {
+"en": "User Set 1 / 2",
+"t": "User Set 1 / 2"
+},
+"drums/terms/4/1": {
+"en": "Kits you build yourself: each key takes its sound from any key of any kit. Touch a pad to choose.",
+"t": "自分で組むドラムセットです。各鍵盤に、どのドラムセットのどの鍵盤の音でも割り当てられます。パッドに触れて選びます。"
+},
+"drums:user/title": {
+"en": "A user set's key",
+"t": "ユーザーセットの鍵盤"
+},
+"drums:user/intro": {
+"en": "Where the touched pad gets its sound.",
+"t": "触れたパッドの音をどこから取るか。"
+},
+"drums:user/terms/0/0": {
+"en": "The sets (left)",
+"t": "セット（左）"
+},
+"drums:user/terms/0/1": {
+"en": "Choose the kit to take the sound from.",
+"t": "音を取るドラムセットを選びます。"
+},
+"drums:user/terms/1/0": {
+"en": "The keys (right)",
+"t": "鍵盤（右）"
+},
+"drums:user/terms/1/1": {
+"en": "Tap the sound you want. It plays once and the pad keeps it.",
+"t": "使いたい音をタップします。一度鳴り、パッドがその音を保持します。"
+},
+"effects/title": {
+"en": "Effects",
+"t": "エフェクト"
+},
+"effects/intro": {
+"en": "The insertion effect (one effect, for the parts you put on it), and the system effects every part sends to.",
+"t": "インサーションエフェクト（設定したパートにかかる1つのエフェクト）と、全パートが送るシステムエフェクトです。"
+},
+"effects/terms/0/0": {
+"en": "Insertion effect",
+"t": "インサーションエフェクト"
+},
+"effects/terms/0/1": {
+"en": "Its type and knobs, and its sends.",
+"t": "タイプ、ノブ、センド。"
+},
+"effects/terms/1/0": {
+"en": "Reverb / Chorus / Delay / EQ",
+"t": "リバーブ / コーラス / ディレイ / EQ"
+},
+"effects/terms/1/1": {
+"en": "The system effects, on the right. Each part sends to them with its REVERB, CHORUS and DELAY fields.",
+"t": "右側のシステムエフェクトです。各パートは REVERB、CHORUS、DELAY のフィールドでこれらに送ります。"
+},
+"effects/terms/2/0": {
+"en": "The notes below",
+"t": "下の説明"
+},
+"effects/terms/2/1": {
+"en": "Touch a type or knob for what that effect is.",
+"t": "タイプやノブに触れると、そのエフェクトの説明が表示されます。"
+},
+"fx:ins/title": {
+"en": "Insertion effect",
+"t": "インサーションエフェクト"
+},
+"fx:ins/intro": {
+"en": "One effect at a time, used by the parts put on it: a distortion, a rotary speaker, a phaser and so on.",
+"t": "一度に1つのエフェクトで、設定したパートが使います。ディストーション、ロータリースピーカー、フェイザーなど。"
+},
+"fx:ins/terms/0/0": {
+"en": "THIS PART ON IT",
+"t": "このパートにかける"
+},
+"fx:ins/terms/0/1": {
+"en": "Puts the selected part through the effect (lit) or takes it off.",
+"t": "選択中のパートをエフェクトに通す（点灯）か、外します。"
+},
+"fx:ins/terms/1/0": {
+"en": "On it: channels…",
+"t": "対象：チャンネル…"
+},
+"fx:ins/terms/1/1": {
+"en": "Which channels go through it now. If it cannot play live, the reason is shown.",
+"t": "現在エフェクトを通っているチャンネルです。ライブで使えない場合は、その理由が表示されます。"
+},
+"fx:ins/terms/2/0": {
+"en": "The families",
+"t": "ファミリー"
+},
+"fx:ins/terms/2/1": {
+"en": "Groups of types: tap one to see its types.",
+"t": "タイプのグループです。タップするとそのタイプが表示されます。"
+},
+"fx:ins/terms/3/0": {
+"en": "A type",
+"t": "タイプ"
+},
+"fx:ins/terms/3/1": {
+"en": "Tap to use it. 00 Thru is no effect.",
+"t": "タップして使います。00 Thru はエフェクトなしです。"
+},
+"fx:ins/terms/4/0": {
+"en": "The knobs",
+"t": "ノブ"
+},
+"fx:ins/terms/4/1": {
+"en": "The type's settings, in the values its manual prints.",
+"t": "タイプの設定を、マニュアルに記載された値で表示します。"
+},
+"fx:sends/title": {
+"en": "Sends from it",
+"t": "センド"
+},
+"fx:sends/intro": {
+"en": "How much of the insertion effect's output also goes on to the system effects.",
+"t": "インサーションエフェクトの出力を、システムエフェクトにもどれだけ送るか。"
+},
+"fx:sends/terms/0/0": {
+"en": "to Reverb / to Chorus / to Delay",
+"t": "リバーブへ / コーラスへ / ディレイへ"
+},
+"fx:sends/terms/0/1": {
+"en": "0 to 127.",
+"t": "0〜127。"
+},
+"fx:rev/title": {
+"en": "Reverb",
+"t": "リバーブ"
+},
+"fx:rev/intro": {
+"en": "The room or hall every part sends to with its REVERB field (CC91).",
+"t": "全パートが REVERB フィールド（CC91）で送る、部屋やホールの響きです。"
+},
+"fx:rev/terms/0/0": {
+"en": "Room 1 … Pan Delay",
+"t": "Room 1 … Pan Delay"
+},
+"fx:rev/terms/0/1": {
+"en": "The reverb type. Delay and Pan Delay are echoes.",
+"t": "リバーブのタイプです。Delay と Pan Delay はエコーです。"
+},
+"fx:rev/terms/1/0": {
+"en": "Level",
+"t": "レベル"
+},
+"fx:rev/terms/1/1": {
+"en": "How loud the reverb is.",
+"t": "リバーブの音量です。"
+},
+"fx:rev/terms/2/0": {
+"en": "Time",
+"t": "タイム"
+},
+"fx:rev/terms/2/1": {
+"en": "How long it rings.",
+"t": "響きの長さです。"
+},
+"fx:rev/terms/3/0": {
+"en": "Feedback",
+"t": "フィードバック"
+},
+"fx:rev/terms/3/1": {
+"en": "For the echo types: how many repeats.",
+"t": "エコー系のタイプで、繰り返しの回数です。"
+},
+"fx:rev/terms/4/0": {
+"en": "No GS reverb set",
+"t": "GS リバーブ未設定"
+},
+"fx:rev/terms/4/1": {
+"en": "Until a file or this card sets one, the reverb is the room chosen on the Setup card.",
+"t": "ファイルかこのカードで設定するまでは、設定カードで選んだルームがリバーブになります。"
+},
+"fx:cho/title": {
+"en": "Chorus",
+"t": "コーラス"
+},
+"fx:cho/intro": {
+"en": "The shimmer every part sends to with its CHORUS field (CC93).",
+"t": "全パートが CHORUS フィールド（CC93）で送る、きらめくような揺れです。"
+},
+"fx:cho/terms/0/0": {
+"en": "Chorus 1 … Short Delay FB",
+"t": "Chorus 1 … Short Delay FB"
+},
+"fx:cho/terms/0/1": {
+"en": "The chorus type; Flanger and the short delays are stronger, jet-like or doubling sounds.",
+"t": "コーラスのタイプです。Flanger と短いディレイは、より強い、ジェット音のような、またはダブリングの音です。"
+},
+"fx:cho/terms/1/0": {
+"en": "Pre-LPF",
+"t": "Pre-LPF"
+},
+"fx:cho/terms/1/1": {
+"en": "Cuts the highs going in, 0 (none) to 7.",
+"t": "入力の高域をカットします。0（なし）〜7。"
+},
+"fx:cho/terms/2/0": {
+"en": "Level",
+"t": "レベル"
+},
+"fx:cho/terms/2/1": {
+"en": "How loud the chorus is.",
+"t": "コーラスの音量です。"
+},
+"fx:cho/terms/3/0": {
+"en": "Feedback",
+"t": "フィードバック"
+},
+"fx:cho/terms/3/1": {
+"en": "How much is fed back, for a stronger, ringing sweep.",
+"t": "戻す量です。上げると強く響くうねりになります。"
+},
+"fx:cho/terms/4/0": {
+"en": "Delay",
+"t": "ディレイ"
+},
+"fx:cho/terms/4/1": {
+"en": "Its delay time.",
+"t": "ディレイタイムです。"
+},
+"fx:cho/terms/5/0": {
+"en": "Rate",
+"t": "レート"
+},
+"fx:cho/terms/5/1": {
+"en": "How fast it sweeps.",
+"t": "うねりの速さです。"
+},
+"fx:cho/terms/6/0": {
+"en": "Depth",
+"t": "デプス"
+},
+"fx:cho/terms/6/1": {
+"en": "How far it sweeps.",
+"t": "うねりの深さです。"
+},
+"fx:dly/title": {
+"en": "Delay",
+"t": "ディレイ"
+},
+"fx:dly/intro": {
+"en": "The echo every part sends to with its DELAY field (CC94).",
+"t": "全パートが DELAY フィールド（CC94）で送るエコーです。"
+},
+"fx:dly/terms/0/0": {
+"en": "Delay 1 … Pan Repeat",
+"t": "Delay 1 … Pan Repeat"
+},
+"fx:dly/terms/0/1": {
+"en": "The delay type: plain echoes, echoes panned left and right, an echo into the reverb.",
+"t": "ディレイのタイプ：普通のエコー、左右に振ったエコー、リバーブに送るエコー。"
+},
+"fx:dly/terms/1/0": {
+"en": "Pre-LPF",
+"t": "Pre-LPF"
+},
+"fx:dly/terms/1/1": {
+"en": "Cuts the highs going in, 0 (none) to 7.",
+"t": "入力の高域をカットします。0（なし）〜7。"
+},
+"fx:dly/terms/2/0": {
+"en": "Time",
+"t": "タイム"
+},
+"fx:dly/terms/2/1": {
+"en": "The centre echo's time.",
+"t": "センターのエコーのタイムです。"
+},
+"fx:dly/terms/3/0": {
+"en": "Ratio L / Ratio R",
+"t": "Ratio L / Ratio R"
+},
+"fx:dly/terms/3/1": {
+"en": "The left and right echoes' times, as a share of the centre's.",
+"t": "左右のエコーのタイムを、センターに対する割合で表します。"
+},
+"fx:dly/terms/4/0": {
+"en": "Level C / L / R",
+"t": "Level C / L / R"
+},
+"fx:dly/terms/4/1": {
+"en": "Each echo's level.",
+"t": "各エコーのレベルです。"
+},
+"fx:dly/terms/5/0": {
+"en": "Level",
+"t": "レベル"
+},
+"fx:dly/terms/5/1": {
+"en": "The delay's overall level.",
+"t": "ディレイ全体のレベルです。"
+},
+"fx:dly/terms/6/0": {
+"en": "Feedback",
+"t": "フィードバック"
+},
+"fx:dly/terms/6/1": {
+"en": "How many repeats.",
+"t": "繰り返しの回数です。"
+},
+"fx:eq/title": {
+"en": "EQ",
+"t": "EQ"
+},
+"fx:eq/intro": {
+"en": "Bass and treble for the whole mix.",
+"t": "ミックス全体の低音と高音です。"
+},
+"fx:eq/terms/0/0": {
+"en": "Low",
+"t": "Low"
+},
+"fx:eq/terms/0/1": {
+"en": "The bass control's frequency: 200 or 400 Hz.",
+"t": "低音コントロールの周波数：200 または 400 Hz。"
+},
+"fx:eq/terms/1/0": {
+"en": "Low gain",
+"t": "Low ゲイン"
+},
+"fx:eq/terms/1/1": {
+"en": "Bass up or down, ±12 dB.",
+"t": "低音を上げ下げします。±12 dB。"
+},
+"fx:eq/terms/2/0": {
+"en": "High",
+"t": "High"
+},
+"fx:eq/terms/2/1": {
+"en": "The treble control's frequency: 3 or 6 kHz.",
+"t": "高音コントロールの周波数：3 または 6 kHz。"
+},
+"fx:eq/terms/3/0": {
+"en": "High gain",
+"t": "High ゲイン"
+},
+"fx:eq/terms/3/1": {
+"en": "Treble up or down, ±12 dB.",
+"t": "高音を上げ下げします。±12 dB。"
+},
+"matrix/title": {
+"en": "Matrix",
+"t": "マトリクス"
+},
+"matrix/intro": {
+"en": "What each controller moves on the selected part's channel. A row is a controller; a column is what it moves; the knob is how far, at full travel.",
+"t": "各コントローラーが、選択中のパートのチャンネルで何を動かすか。行がコントローラー、列が動かす対象、ノブが最大まで動かしたときの量です。"
+},
+"matrix/terms/0": {
+"en": "The rows (sources)",
+"t": "行（ソース）"
+},
+"matrix/terms/1/0": {
+"en": "Mod wheel / Pitch bend",
+"t": "モジュレーションホイール / ピッチベンド"
+},
+"matrix/terms/1/1": {
+"en": "The keyboard's wheels.",
+"t": "キーボードのホイールです。"
+},
+"matrix/terms/2/0": {
+"en": "Channel aftertouch",
+"t": "チャンネル・アフタータッチ"
+},
+"matrix/terms/2/1": {
+"en": "Pressing into a held key (the whole keyboard).",
+"t": "押さえた鍵盤をさらに押し込むこと（キーボード全体で1つ）。"
+},
+"matrix/terms/3/0": {
+"en": "Poly aftertouch",
+"t": "ポリ・アフタータッチ"
+},
+"matrix/terms/3/1": {
+"en": "Pressing into each key on its own, where the keyboard sends it.",
+"t": "鍵盤ごとの押し込み。キーボードが送信する場合に使えます。"
+},
+"matrix/terms/4/0": {
+"en": "CC1 / CC2",
+"t": "CC1 / CC2"
+},
+"matrix/terms/4/1": {
+"en": "Any two knobs or pedals you choose. Tap \"is CCn\" to type the controller number.",
+"t": "自由に選べる2つのノブまたはペダルです。「is CCn」をタップしてコントローラー番号を入力します。"
+},
+"matrix/terms/5/0": {
+"en": "LEARN",
+"t": "学習"
+},
+"matrix/terms/5/1": {
+"en": "Tap, then move the knob or pedal you want for CC1 or CC2.",
+"t": "タップしてから、CC1 または CC2 に使いたいノブやペダルを動かします。"
+},
+"matrix/terms/6": {
+"en": "The columns (destinations)",
+"t": "列（送り先）"
+},
+"matrix/terms/7/0": {
+"en": "Pitch / Cutoff / Amplitude",
+"t": "ピッチ / カットオフ / 音量"
+},
+"matrix/terms/7/1": {
+"en": "Bend the pitch, open the filter, change the level directly.",
+"t": "ピッチを曲げる、フィルターを開く、レベルを直接変える。"
+},
+"matrix/terms/8/0": {
+"en": "LFO 1 / LFO 2: Rate, Pitch, Filter, Amp",
+"t": "LFO 1 / LFO 2：レート、ピッチ、フィルター、アンプ"
+},
+"matrix/terms/8/1": {
+"en": "The two vibrato LFOs: their speed, and how much they move pitch (vibrato), filter (wah) and level (tremolo).",
+"t": "2つのビブラート用 LFO：その速さと、ピッチ（ビブラート）、フィルター（ワウ）、レベル（トレモロ）をどれだけ動かすか。"
+},
+"matrix/terms/9": {
+"en": "The knobs",
+"t": "ノブ"
+},
+"matrix/terms/10/0": {
+"en": "Lit",
+"t": "点灯"
+},
+"matrix/terms/10/1": {
+"en": "Changed from the power-on setting. Double-tap a knob to put it back.",
+"t": "電源投入時の設定から変更されています。ノブをダブルタップすると元に戻ります。"
+},
+"matrix/terms/11/0": {
+"en": "A lit row name",
+"t": "点灯した行の名前"
+},
+"matrix/terms/11/1": {
+"en": "That controller moves something.",
+"t": "そのコントローラーが何かを動かしています。"
+},
+"matrix/terms/12/0": {
+"en": "Set by a file's GM2 messages",
+"t": "ファイルの GM2 メッセージで設定"
+},
+"matrix/terms/12/1": {
+"en": "Settings a file made with GM2 messages: shown, not changed here.",
+"t": "ファイルが GM2 メッセージで設定した値です。表示のみで、ここでは変更できません。"
+},
+"tuning/title": {
+"en": "Tuning",
+"t": "チューニング"
+},
+"tuning/intro": {
+"en": "The tuning every part plays in. Tap one and every part's sounds are built again in it (the display shows BUILDING); notes already sounding keep the old tuning.",
+"t": "全パートが演奏する音律です。1つタップすると、全パートの音がその音律で構築し直されます（ディスプレイに BUILDING と表示されます）。すでに鳴っているノートは元の音律のままです。"
+},
+"tuning/terms/0/0": {
+"en": "Concert pitch, A=440",
+"t": "標準ピッチ、A=440"
+},
+"tuning/terms/0/1": {
+"en": "Modern pitch. gm2 is the default: equal temperament at A=440, and a file can retune it with its own tuning messages.",
+"t": "現代のピッチです。gm2 がデフォルトで、A=440 の平均律です。ファイルは独自のチューニングメッセージでこれを変更できます。"
+},
+"tuning/terms/1/0": {
+"en": "Baroque pitch, A=415",
+"t": "バロックピッチ、A=415"
+},
+"tuning/terms/1/1": {
+"en": "Half a step lower, with the old temperaments.",
+"t": "半音低いピッチで、古い音律を使います。"
+},
+"tuning/terms/2/0": {
+"en": "Pure octaves: pipes",
+"t": "純正オクターブ：パイプ"
+},
+"tuning/terms/2/1": {
+"en": "Tunings with unstretched octaves, for the pipe organ.",
+"t": "オクターブを広げない音律で、パイプオルガン用です。"
+},
+"tuning/terms/3/0": {
+"en": "Indian, every part",
+"t": "インド、全パート"
+},
+"tuning/terms/3/1": {
+"en": "Every part in a raga tuning.",
+"t": "全パートをラーガの音律にします。"
+},
+"tuning/terms/4/0": {
+"en": "Other systems",
+"t": "その他の音律"
+},
+"tuning/terms/4/1": {
+"en": "The rest.",
+"t": "残りの音律です。"
+},
+"tuning/terms/5/0": {
+"en": "Lit / blinking",
+"t": "点灯 / 点滅"
+},
+"tuning/terms/5/1": {
+"en": "Lit is playing now; blinking is being built.",
+"t": "点灯は現在使用中、点滅は構築中です。"
+},
+"tn:shape/title": {
+"en": "The tuning's shape",
+"t": "音律の形"
+},
+"tn:shape/intro": {
+"en": "How the chosen tuning differs from equal temperament.",
+"t": "選んだ音律が平均律とどう違うか。"
+},
+"tn:shape/terms/0/0": {
+"en": "C4 to B4",
+"t": "C4〜B4"
+},
+"tn:shape/terms/0/1": {
+"en": "Each note of the middle octave, in cents (hundredths of a semitone) above or below equal temperament.",
+"t": "中央のオクターブの各ノートが、平均律より何セント（半音の100分の1）高いか低いか。"
+},
+"tn:shape/terms/1/0": {
+"en": "A0 to C8",
+"t": "A0〜C8"
+},
+"tn:shape/terms/1/1": {
+"en": "How far each octave is stretched wider than a pure 2:1, across the keyboard, as a piano tuner stretches.",
+"t": "ピアノ調律師がするように、鍵盤全体で各オクターブを純正な 2:1 よりどれだけ広げているか。"
+},
+"tn:shape/terms/2/0": {
+"en": "A4 = n Hz",
+"t": "A4 = n Hz"
+},
+"tn:shape/terms/2/1": {
+"en": "The pitch of the A above middle C.",
+"t": "中央 C の上の A のピッチです。"
+},
+"tn:east/title": {
+"en": "Eastern tuning",
+"t": "東洋の音律"
+},
+"tn:east/intro": {
+"en": "The tuning the Indian instruments' parts play (sitar, shehnai and the rest), while the other parts keep the tuning above.",
+"t": "インドの楽器（シタール、シェーナイなど）のパートが演奏する音律です。他のパートは上の音律のままです。"
+},
+"tn:east/terms/0/0": {
+"en": "Off",
+"t": "オフ"
+},
+"tn:east/terms/0/1": {
+"en": "The Indian instruments play the tuning above.",
+"t": "インドの楽器も上の音律で演奏します。"
+},
+"tn:east/terms/1/0": {
+"en": "A system",
+"t": "体系"
+},
+"tn:east/terms/1/1": {
+"en": "The raga tuning system to use.",
+"t": "使用するラーガの音律体系です。"
+},
+"tn:east/terms/2/0": {
+"en": "No raga / a raga",
+"t": "ラーガなし / ラーガ"
+},
+"tn:east/terms/2/1": {
+"en": "The raga, which sets each note's exact tuning.",
+"t": "ラーガです。各ノートの正確なチューニングを決めます。"
+},
+"tn:east/terms/3/0": {
+"en": "Sa",
+"t": "Sa"
+},
+"tn:east/terms/3/1": {
+"en": "The key of Sa, the tonic.",
+"t": "主音 Sa の調です。"
+},
+"control/title": {
+"en": "Control",
+"t": "コントロール"
+},
+"control/intro": {
+"en": "Controls on the screen for what the keyboard lacks, and routes that change what the keyboard's own controls do.",
+"t": "キーボードにない操作を補う画面上のコントロールと、キーボード自身のコントロールの働きを変えるルートです。"
+},
+"control/terms/0/0": {
+"en": "On-screen controls",
+"t": "画面上のコントロール"
+},
+"control/terms/0/1": {
+"en": "Pedals, wheels and switches to play from the screen.",
+"t": "画面から操作するペダル、ホイール、スイッチ。"
+},
+"control/terms/1/0": {
+"en": "Routes",
+"t": "ルート"
+},
+"control/terms/1/1": {
+"en": "The keyboard's controls rewritten before the engine hears them.",
+"t": "キーボードのコントロールを、エンジンに届く前に書き換えます。"
+},
+"ct:strip/title": {
+"en": "On-screen controls",
+"t": "画面上のコントロール"
+},
+"ct:strip/intro": {
+"en": "Each sends straight to the engine on its channel.",
+"t": "それぞれ、そのチャンネルでエンジンに直接送ります。"
+},
+"ct:strip/terms/0/0": {
+"en": "A fader",
+"t": "フェーダー"
+},
+"ct:strip/terms/0/1": {
+"en": "A continuous control. Pitch bend and aftertouch spring back when you let go.",
+"t": "連続的なコントロールです。ピッチベンドとアフタータッチは指を離すと元に戻ります。"
+},
+"ct:strip/terms/1/0": {
+"en": "A switch",
+"t": "スイッチ"
+},
+"ct:strip/terms/1/1": {
+"en": "Tap down, tap up (a sustain pedal, for one).",
+"t": "タップでオン、タップでオフ（サステインペダルなど）。"
+},
+"ct:strip/terms/2/0": {
+"en": "A selector",
+"t": "セレクター"
+},
+"ct:strip/terms/2/1": {
+"en": "The tonewheel organ's vibrato and chorus: off, V1–V3, C1–C3.",
+"t": "トーンホイールオルガンのビブラートとコーラス：off、V1〜V3、C1〜C3。"
+},
+"ct:strip/terms/3/0": {
+"en": "every channel / channel n",
+"t": "全チャンネル / チャンネル n"
+},
+"ct:strip/terms/3/1": {
+"en": "Where it sends.",
+"t": "送り先です。"
+},
+"ct:strip/terms/4/0": {
+"en": "REMOVE",
+"t": "削除"
+},
+"ct:strip/terms/4/1": {
+"en": "Takes the control off the screen.",
+"t": "コントロールを画面から取り除きます。"
+},
+"ct:strip/terms/5/0": {
+"en": "+ ADD A CONTROL",
+"t": "+ コントロールを追加"
+},
+"ct:strip/terms/5/1": {
+"en": "Choose a control to add, on the selected part's channel. A lit choice is already there.",
+"t": "選択中のパートのチャンネルに追加するコントロールを選びます。点灯している項目はすでにあります。"
+},
+"ct:routes/title": {
+"en": "Routes",
+"t": "ルート"
+},
+"ct:routes/intro": {
+"en": "Each rewrites a control from the keyboard before the engine hears it, such as a key as the sustain pedal, or one knob as another.",
+"t": "それぞれ、キーボードからのコントロールをエンジンに届く前に書き換えます。たとえば鍵盤をサステインペダルに、あるノブを別のノブにします。"
+},
+"ct:routes/terms/0/0": {
+"en": "A route's line",
+"t": "ルートの行"
+},
+"ct:routes/terms/0/1": {
+"en": "What it takes and what it becomes.",
+"t": "何を受け取り、何に変えるか。"
+},
+"ct:routes/terms/1/0": {
+"en": "REMOVE",
+"t": "削除"
+},
+"ct:routes/terms/1/1": {
+"en": "Takes the route away: that control reaches the engine as it is.",
+"t": "ルートを取り除きます。そのコントロールはそのままエンジンに届きます。"
+},
+"ct:new/title": {
+"en": "A new route",
+"t": "新しいルート"
+},
+"ct:new/intro": {
+"en": "Choose where it comes from, what it becomes and how, then ADD THE ROUTE.",
+"t": "入力元、変換先、方法を選んでから、ADD THE ROUTE を押します。"
+},
+"ct:new/terms/0": {
+"en": "FROM",
+"t": "入力元"
+},
+"ct:new/terms/1/0": {
+"en": "A KEY (LEARN)",
+"t": "鍵盤（学習）"
+},
+"ct:new/terms/1/1": {
+"en": "Tap, then press the key on the keyboard.",
+"t": "タップしてから、キーボードの鍵盤を押します。"
+},
+"ct:new/terms/2/0": {
+"en": "A CONTROLLER (LEARN)",
+"t": "コントローラー（学習）"
+},
+"ct:new/terms/2/1": {
+"en": "Tap, then move the knob, slider or pedal.",
+"t": "タップしてから、ノブ、スライダー、ペダルを動かします。"
+},
+"ct:new/terms/3/0": {
+"en": "WHEEL UP / DOWN / EITHER",
+"t": "ホイール 上 / 下 / 両方"
+},
+"ct:new/terms/3/1": {
+"en": "The pitch wheel pushed up, pulled down, or either way.",
+"t": "ピッチホイールを上に押す、下に引く、またはどちらか。"
+},
+"ct:new/terms/4/0": {
+"en": "AFTERTOUCH",
+"t": "アフタータッチ"
+},
+"ct:new/terms/4/1": {
+"en": "Pressing into held keys.",
+"t": "押さえた鍵盤を押し込むこと。"
+},
+"ct:new/terms/5": {
+"en": "TO",
+"t": "変換先"
+},
+"ct:new/terms/6/0": {
+"en": "The controls",
+"t": "コントロール"
+},
+"ct:new/terms/6/1": {
+"en": "What it becomes.",
+"t": "何に変えるか。"
+},
+"ct:new/terms/7": {
+"en": "HOW",
+"t": "方法"
+},
+"ct:new/terms/8/0": {
+"en": "KEEP THE ORIGINAL TOO",
+"t": "元の働きも残す"
+},
+"ct:new/terms/8/1": {
+"en": "The original still does its own job as well.",
+"t": "元のコントロールも本来の働きを続けます。"
+},
+"ct:new/terms/9/0": {
+"en": "LATCH (PRESS ON, PRESS OFF)",
+"t": "ラッチ（押してオン、押してオフ）"
+},
+"ct:new/terms/9/1": {
+"en": "For a switch: one press turns it on, the next off.",
+"t": "スイッチ用：1回押すとオン、次に押すとオフ。"
+},
+"ct:new/terms/10/0": {
+"en": "PUSH INTO IT TO DAMP",
+"t": "押し込んで止音"
+},
+"ct:new/terms/10/1": {
+"en": "For a key as the sustain: pressing into it lowers the dampers.",
+"t": "鍵盤をサステインにする場合：押し込むとダンパーが下がります。"
+},
+"ct:new/terms/11/0": {
+"en": "EVERY CHANNEL / CHANNEL n",
+"t": "全チャンネル / チャンネル n"
+},
+"ct:new/terms/11/1": {
+"en": "Every part, or only the selected part's channel.",
+"t": "全パート、または選択中のパートのチャンネルだけ。"
+},
+"ct:new/terms/12/0": {
+"en": "ADD THE ROUTE",
+"t": "ルートを追加"
+},
+"ct:new/terms/12/1": {
+"en": "Adds it. The line beside it says what it will do.",
+"t": "ルートを追加します。横の行に、その働きが表示されます。"
+},
+"scenes/title": {
+"en": "Scenes",
+"t": "シーン"
+},
+"scenes/intro": {
+"en": "Save the setup and bring it back. Presets and scenes are kept beside the session.",
+"t": "設定を保存して呼び出します。プリセットとシーンはセッションと一緒に保存されます。"
+},
+"scenes/terms/0/0": {
+"en": "Presets",
+"t": "プリセット"
+},
+"scenes/terms/0/1": {
+"en": "The whole setup.",
+"t": "設定全体です。"
+},
+"scenes/terms/1/0": {
+"en": "Scenes",
+"t": "シーン"
+},
+"scenes/terms/1/1": {
+"en": "Only each channel's control settings.",
+"t": "各チャンネルのコントロール設定だけです。"
+},
+"scenes/terms/2/0": {
+"en": "Metronome, GS reset",
+"t": "メトロノーム、GS リセット"
+},
+"scenes/terms/2/1": {
+"en": "On the Control card.",
+"t": "コントロールカードにあります。"
+},
+"sc:presets/title": {
+"en": "Presets",
+"t": "プリセット"
+},
+"sc:presets/intro": {
+"en": "The whole setup: the parts and their patches, the routes, the tuning and the effects.",
+"t": "設定全体：パートとその音色、ルート、チューニング、エフェクト。"
+},
+"sc:presets/terms/0/0": {
+"en": "A preset",
+"t": "プリセット"
+},
+"sc:presets/terms/0/1": {
+"en": "Tap to choose it; its buttons come up. Tap again to put them away.",
+"t": "タップして選ぶと、ボタンが表示されます。もう一度タップすると閉じます。"
+},
+"sc:presets/terms/1/0": {
+"en": "LOAD",
+"t": "読み込み"
+},
+"sc:presets/terms/1/1": {
+"en": "Brings that setup back.",
+"t": "その設定を呼び出します。"
+},
+"sc:presets/terms/2/0": {
+"en": "SAVE OVER",
+"t": "上書き保存"
+},
+"sc:presets/terms/2/1": {
+"en": "Saves the setup now in its place.",
+"t": "現在の設定をその場所に保存します。"
+},
+"sc:presets/terms/3/0": {
+"en": "DELETE",
+"t": "削除"
+},
+"sc:presets/terms/3/1": {
+"en": "Takes it away.",
+"t": "取り除きます。"
+},
+"sc:presets/terms/4/0": {
+"en": "AS MIDI",
+"t": "MIDI として"
+},
+"sc:presets/terms/4/1": {
+"en": "Writes what a MIDI file can say of it as a one-bar MIDI file, setups/NAME.mid in the music folder (the Files card): a GS Reset, the scene, then each part on a channel -- its bank, program, speaker (CC83), pickup (CC85), an organ's drawn stops, a synth's whole panel (CC86's Messenger mode, then the Messenger's own CCs), level and pan. Paste it at the top of a song so the song plays on this setup. A part's key range, transpose, tuner and knobs have no MIDI word: the preset keeps them, and the file names each part's keys in a text event.",
+"t": "MIDI ファイルで表せる部分を、1小節の MIDI ファイルとして音楽フォルダー（ファイルカード）の setups/NAME.mid に書き出します。内容は GS Reset、シーン、そして各パートをチャンネルごとに：バンク、プログラム、スピーカー（CC83）、ピックアップ（CC85）、オルガンの引き出したストップ、シンセのパネル全体（CC86 の Messenger モード、続いて Messenger 独自の CC）、レベル、パン。曲の先頭に貼り付けると、その曲がこの設定で演奏されます。パートの鍵盤範囲、トランスポーズ、チューナー、ノブには対応する MIDI メッセージがありません。これらはプリセットが保持し、ファイルには各パートの鍵盤範囲がテキストイベントで記されます。"
+},
+"sc:presets/terms/5/0": {
+"en": "SAVE THIS SETUP AS…",
+"t": "この設定を名前を付けて保存…"
+},
+"sc:presets/terms/5/1": {
+"en": "Name a new preset on the screen's keys and save the setup now.",
+"t": "画面上のキーで新しいプリセットに名前を付け、現在の設定を保存します。"
+},
+"sc:scenes/title": {
+"en": "Scenes",
+"t": "シーン"
+},
+"sc:scenes/intro": {
+"en": "Each channel's control settings (levels, pans, sends, pedals), without changing the sounds.",
+"t": "各チャンネルのコントロール設定（レベル、パン、センド、ペダル）で、音は変えません。"
+},
+"sc:scenes/terms/0/0": {
+"en": "A scene",
+"t": "シーン"
+},
+"sc:scenes/terms/0/1": {
+"en": "Tap to choose it; its buttons come up.",
+"t": "タップして選ぶと、ボタンが表示されます。"
+},
+"sc:scenes/terms/1/0": {
+"en": "RECALL",
+"t": "呼び出し"
+},
+"sc:scenes/terms/1/1": {
+"en": "Sets the controls as the scene has them.",
+"t": "コントロールをシーンの設定にします。"
+},
+"sc:scenes/terms/2/0": {
+"en": "SAVE OVER",
+"t": "上書き保存"
+},
+"sc:scenes/terms/2/1": {
+"en": "Saves the controls now in its place.",
+"t": "現在のコントロールをその場所に保存します。"
+},
+"sc:scenes/terms/3/0": {
+"en": "DELETE",
+"t": "削除"
+},
+"sc:scenes/terms/3/1": {
+"en": "Takes it away.",
+"t": "取り除きます。"
+},
+"sc:scenes/terms/4/0": {
+"en": "SAVE THE CONTROLS AS…",
+"t": "コントロールを名前を付けて保存…"
+},
+"sc:scenes/terms/4/1": {
+"en": "Name a new scene and save the controls now.",
+"t": "新しいシーンに名前を付け、現在のコントロールを保存します。"
+},
+"sc:metro/title": {
+"en": "Metronome",
+"t": "メトロノーム"
+},
+"sc:metro/intro": {
+"en": "A click from a recorded metronome.",
+"t": "録音したメトロノームのクリックです。"
+},
+"sc:metro/terms/0/0": {
+"en": "ON",
+"t": "オン"
+},
+"sc:metro/terms/0/1": {
+"en": "Starts and stops it.",
+"t": "スタートとストップを切り替えます。"
+},
+"sc:metro/terms/1/0": {
+"en": "Tempo",
+"t": "テンポ"
+},
+"sc:metro/terms/1/1": {
+"en": "Beats a minute, 30 to 300.",
+"t": "1分あたりの拍数、30〜300。"
+},
+"sc:metro/terms/2/0": {
+"en": "Bell every",
+"t": "ベルの間隔"
+},
+"sc:metro/terms/2/1": {
+"en": "A bell on the first of every n beats, or none.",
+"t": "n 拍ごとの1拍目にベルを鳴らします。なしも選べます。"
+},
+"sc:metro/terms/3/0": {
+"en": "Level",
+"t": "レベル"
+},
+"sc:metro/terms/3/1": {
+"en": "How loud, in dB.",
+"t": "音量（dB）です。"
+},
+"sc:gs/title": {
+"en": "GS reset",
+"t": "GS リセット"
+},
+"sc:gs/intro": {
+"en": "As a sequencer's GS Reset.",
+"t": "シーケンサーの GS Reset と同じです。"
+},
+"sc:gs/terms/0/0": {
+"en": "GS RESET",
+"t": "GS リセット"
+},
+"sc:gs/terms/0/1": {
+"en": "Tap twice within 3 seconds: every part goes back to program 000, and the controllers, effects and receive settings to power-on.",
+"t": "3秒以内に2回タップします。全パートがプログラム 000 に戻り、コントローラー、エフェクト、受信設定が電源投入時の状態に戻ります。"
+},
+"setup/title": {
+"en": "Setup",
+"t": "設定"
+},
+"setup/intro": {
+"en": "The rig: inputs, the sound settings for every part, the room. The line at the top is the sample rate and the block size, the time the engine has for each block of sound.",
+"t": "機材構成：入力、全パート共通の音の設定、ルーム。上部の行はサンプルレートとブロックサイズ（エンジンが音の各ブロックに使える時間）です。"
+},
+"setup/terms/0/0": {
+"en": "QUIT CLAVITONE",
+"t": "CLAVITONE を終了"
+},
+"setup/terms/0/1": {
+"en": "Tap twice within 3 seconds: the engine saves the session and stops, and this window closes. Closing the window does the same.",
+"t": "3秒以内に2回タップします。エンジンがセッションを保存して停止し、このウィンドウが閉じます。ウィンドウを閉じても同じです。"
+},
+"su:midi/title": {
+"en": "MIDI in",
+"t": "MIDI 入力"
+},
+"su:midi/intro": {
+"en": "Every MIDI device plugged in. Several can be on at once; their notes are merged. The choice is kept in the session.",
+"t": "接続されているすべての MIDI 機器です。複数を同時にオンにでき、そのノートはまとめられます。選択はセッションに保存されます。"
+},
+"su:midi/terms/0/0": {
+"en": "A device",
+"t": "機器"
+},
+"su:midi/terms/0/1": {
+"en": "Tap to turn it on or off.",
+"t": "タップしてオン・オフを切り替えます。"
+},
+"su:midi/terms/1/0": {
+"en": "reading",
+"t": "受信中"
+},
+"su:midi/terms/1/1": {
+"en": "On and being read.",
+"t": "オンで、受信しています。"
+},
+"su:midi/terms/2/0": {
+"en": "wanted, not open",
+"t": "指定済み、未接続"
+},
+"su:midi/terms/2/1": {
+"en": "On, but it could not be opened (unplugged, or another program has it).",
+"t": "オンですが開けませんでした（抜かれているか、別のプログラムが使用中）。"
+},
+"su:midi/terms/3/0": {
+"en": "off",
+"t": "オフ"
+},
+"su:midi/terms/3/1": {
+"en": "Not read.",
+"t": "受信しません。"
+},
+"su:module/title": {
+"en": "Play as a module",
+"t": "音源モジュールとして演奏"
+},
+"su:module/intro": {
+"en": "For a sequencer or a DAW playing whole songs into Clavitone over MIDI, as into a Sound Canvas or an MT-32: each of the 16 channels its own part, and the input read as that module reads it. Your own parts are set aside meanwhile, and the session keeps them; OFF puts them back exactly.",
+"t": "シーケンサーや DAW から、Sound Canvas や MT-32 に送るように、MIDI で曲全体を Clavitone に送って演奏する場合に使います。16チャンネルそれぞれが独立したパートになり、入力はそのモジュールと同じように解釈されます。その間、自分のパートは脇に置かれてセッションに保たれ、OFF でそのまま元に戻ります。"
+},
+"su:module/terms/0/0": {
+"en": "OFF: MY PARTS",
+"t": "OFF：自分のパート"
+},
+"su:module/terms/0/1": {
+"en": "The input plays your own parts, as always.",
+"t": "いつもどおり、入力で自分のパートを演奏します。"
+},
+"su:module/terms/1/0": {
+"en": "AUTO",
+"t": "AUTO"
+},
+"su:module/terms/1/1": {
+"en": "Starts as GS and follows what the input sends: a GS Reset plays it as GS, GM System On as GM, MT-32 messages as an MT-32. The button shows what it is playing as.",
+"t": "GS として始まり、入力に従います。GS Reset で GS、GM System On で GM、MT-32 メッセージで MT-32 として演奏します。ボタンに現在の動作が表示されます。"
+},
+"su:module/terms/2/0": {
+"en": "GM",
+"t": "GM"
+},
+"su:module/terms/2/1": {
+"en": "A General MIDI module: bank selects ignored.",
+"t": "General MIDI 音源：バンクセレクトは無視されます。"
+},
+"su:module/terms/3/0": {
+"en": "GS: OURS … GS: SC-8850",
+"t": "GS: OURS … GS: SC-8850"
+},
+"su:module/terms/3/1": {
+"en": "A Sound Canvas, bank numbers in that map.",
+"t": "Sound Canvas で、バンク番号はそのマップに従います。"
+},
+"su:module/terms/4/0": {
+"en": "GS: INIT CM-64",
+"t": "GS: INIT CM-64"
+},
+"su:module/terms/4/1": {
+"en": "A Sound Canvas after its Init CM-64: the MT-32's sounds on parts 1 to 9, its drums on 10, the CM-32P's on 11 to 16, pans mirrored; the input's MT-32 messages ignored.",
+"t": "Init CM-64 を実行した後の Sound Canvas：パート 1〜9 に MT-32 の音、10 にそのドラム、11〜16 に CM-32P の音が入り、パンは左右反転します。入力の MT-32 メッセージは無視されます。"
+},
+"su:module/terms/5/0": {
+"en": "MT-32",
+"t": "MT-32"
+},
+"su:module/terms/5/1": {
+"en": "A real MT-32: parts on channels 2 to 9 and drums on 10, the input's MT-32 messages followed (which sound each program is, custom sounds by name, levels, pans, reverb). What it did with them is listed below the buttons.",
+"t": "本物の MT-32：パートはチャンネル 2〜9、ドラムは 10 で、入力の MT-32 メッセージ（各プログラムの音、名前付きのカスタム音、レベル、パン、リバーブ）に従います。その処理内容はボタンの下に一覧表示されます。"
+},
+"su:module/terms/6/0": {
+"en": "CM-64",
+"t": "CM-64"
+},
+"su:module/terms/6/1": {
+"en": "The same, with the CM-32P's parts on 11 to 16.",
+"t": "同様で、CM-32P のパートが 11〜16 に入ります。"
+},
+"su:module/terms/7/0": {
+"en": "MT-32 velocity",
+"t": "MT-32 ベロシティ"
+},
+"su:module/terms/7/1": {
+"en": "The Files card's MT-32 VELOCITY switch applies here too.",
+"t": "ファイルカードの MT-32 VELOCITY スイッチがここでも適用されます。"
+},
+"su:msgr/title": {
+"en": "The Messenger",
+"t": "Messenger"
+},
+"su:msgr/intro": {
+"en": "The Moog Messenger, when one is plugged in.",
+"t": "接続されている場合の Moog Messenger です。"
+},
+"su:msgr/terms/0/0": {
+"en": "On …",
+"t": "入力 …"
+},
+"su:msgr/terms/0/1": {
+"en": "Which MIDI input it is on.",
+"t": "どの MIDI 入力につながっているか。"
+},
+"su:msgr/terms/1/0": {
+"en": "READ ITS KNOBS",
+"t": "ノブを読む"
+},
+"su:msgr/terms/1/1": {
+"en": "On: turning the Messenger's own knobs turns the same knobs on the Synth card. On by itself when a Messenger is the MIDI input -- by its name, or, behind a USB MIDI interface, by its answer when asked who it is; switched off here, it stays off until the next start. Off, its knobs are read as General MIDI's: its SUB WAVE knob (CC71) turns a sound controller, not the sub wave.",
+"t": "オン：Messenger 本体のノブを回すと、シンセカードの同じノブが回ります。Messenger が MIDI 入力のときは自動でオンになります（名前で、または USB MIDI インターフェースの先にある場合は機器の問い合わせへの応答で判別）。ここでオフにすると、次に起動するまでオフのままです。オフのときは、ノブは General MIDI として読まれます。SUB WAVE ノブ（CC71）はサブ波形ではなく、サウンドコントローラーを動かします。"
+},
+"su:msgr/terms/2/0": {
+"en": "FIRMWARE BEFORE 1.0.7",
+"t": "ファームウェア 1.0.7 より前"
+},
+"su:msgr/terms/2/1": {
+"en": "Turn on if its firmware is older than 1.0.7, which sent the cutoff knob differently.",
+"t": "ファームウェアが 1.0.7 より古い場合にオンにします。古いファームウェアはカットオフノブを別の形式で送っていました。"
+},
+"su:sound/title": {
+"en": "Sound",
+"t": "サウンド"
+},
+"su:sound/intro": {
+"en": "Settings every part plays through.",
+"t": "全パートに共通の設定です。"
+},
+"su:sound/terms/0/0": {
+"en": "Master",
+"t": "マスター"
+},
+"su:sound/terms/0/1": {
+"en": "The overall output level.",
+"t": "全体の出力レベルです。"
+},
+"su:sound/terms/1/0": {
+"en": "Headroom",
+"t": "ヘッドルーム"
+},
+"su:sound/terms/1/1": {
+"en": "How much every note is turned down before the mix, so that big chords stay under the limiter.",
+"t": "ミックスの前に各ノートをどれだけ下げるかです。大きな和音でもリミッターを超えないようにします。"
+},
+"su:sound/terms/2/0": {
+"en": "Limiter knee",
+"t": "リミッターのニー"
+},
+"su:sound/terms/2/1": {
+"en": "Where the output limiter starts to hold the level back: lower is gentler and earlier.",
+"t": "出力リミッターがレベルを抑え始める位置です。低いほど穏やかに、早くかかります。"
+},
+"su:sound/terms/3/0": {
+"en": "Bend range",
+"t": "ベンド幅"
+},
+"su:sound/terms/3/1": {
+"en": "How far the pitch wheel bends, in semitones.",
+"t": "ピッチホイールで曲がる幅（半音単位）です。"
+},
+"su:sound/terms/4/0": {
+"en": "Mod depth",
+"t": "モッドの深さ"
+},
+"su:sound/terms/4/1": {
+"en": "How deep the mod wheel's vibrato is at full wheel, in cents.",
+"t": "モジュレーションホイールを最大にしたときのビブラートの深さ（セント）です。"
+},
+"su:sound/terms/5/0": {
+"en": "Mod rate",
+"t": "モッドの速さ"
+},
+"su:sound/terms/5/1": {
+"en": "How much faster the vibrato goes at full wheel.",
+"t": "ホイールを最大にしたとき、ビブラートがどれだけ速くなるか。"
+},
+"su:sound/terms/6/0": {
+"en": "Aftertouch",
+"t": "アフタータッチ"
+},
+"su:sound/terms/6/1": {
+"en": "How much louder (and brighter) a held note gets as you press into it, at full pressure.",
+"t": "押さえたノートを最大の圧力で押し込んだとき、どれだけ大きく（明るく）なるか。"
+},
+"su:sound/terms/7/0": {
+"en": "Stand-in",
+"t": "代役"
+},
+"su:sound/terms/7/1": {
+"en": "A note whose sound is not built yet waits while it is built, usually a few milliseconds. Past this time it plays the nearest built key's sound, tuned to its own pitch, and the display shows STAND-IN in red. OFF: it always waits for its own.",
+"t": "音がまだ構築されていないノートは、構築を待ちます（通常は数ミリ秒）。この時間を過ぎると、構築済みの最も近い鍵盤の音を自分のピッチに合わせて鳴らし、ディスプレイに STAND-IN と赤く表示されます。OFF：常に自分の音を待ちます。"
+},
+"su:sound/terms/8/0": {
+"en": "THE GPU",
+"t": "GPU"
+},
+"su:sound/terms/8/1": {
+"en": "On: the graphics chip helps render the sound, for more voices.",
+"t": "オン：グラフィックスチップが音の生成を手伝い、より多くのボイスを鳴らせます。"
+},
+"su:sound/terms/9/0": {
+"en": "THE ROOM'S TAIL",
+"t": "ルームの残響"
+},
+"su:sound/terms/9/1": {
+"en": "On: the room's reverb tail.",
+"t": "オン：ルームのリバーブの余韻を加えます。"
+},
+"su:sound/terms/10/0": {
+"en": "The room",
+"t": "ルーム"
+},
+"su:sound/terms/10/1": {
+"en": "The room the instruments play in, when a file or the Effects card has not set a GS reverb.",
+"t": "ファイルやエフェクトカードで GS リバーブが設定されていないときに、楽器が鳴る部屋です。"
+},
+"su:sound/terms/11/0": {
+"en": "Program changes read as",
+"t": "プログラムチェンジの解釈"
+},
+"su:sound/terms/11/1": {
+"en": "Which Sound Canvas a file's program and bank numbers are read for: ours, or the SC-55, SC-88, SC-88Pro or SC-8850's own map.",
+"t": "ファイルのプログラム番号とバンク番号を、どの Sound Canvas のものとして読むか：独自のもの、または SC-55、SC-88、SC-88Pro、SC-8850 のマップ。"
+},
+"su:rubato/title": {
+"en": "Borrowed time",
+"t": "借りた時間"
+},
+"su:rubato/intro": {
+"en": "With rubato on (the default), when a block of sound is late, the sound already playing is held on and the time is borrowed instead of dropping out. It is given back where no note falls.",
+"t": "ルバート（デフォルトでオン）では、音のブロックが遅れたとき、音を途切れさせる代わりに鳴っている音を引き延ばし、時間を借ります。借りた時間は、ノートのない箇所で返します。"
+},
+"su:rubato/terms/0/0": {
+"en": "BORROW TIME WHEN LATE",
+"t": "遅れたら時間を借りる"
+},
+"su:rubato/terms/0/1": {
+"en": "On: rubato, as above. Off: a late block drops out as a click. Kept in the session.",
+"t": "オン：上記のルバート。オフ：遅れたブロックはクリック音として途切れます。セッションに保存されます。"
+},
+"su:rubato/terms/1/0": {
+"en": "Callbacks that waited",
+"t": "待ったコールバック"
+},
+"su:rubato/terms/1/1": {
+"en": "How many times time was borrowed.",
+"t": "時間を借りた回数です。"
+},
+"su:rubato/terms/2/0": {
+"en": "Time held, ever",
+"t": "累計の保持時間"
+},
+"su:rubato/terms/2/1": {
+"en": "All the time borrowed since the start.",
+"t": "開始からこれまでに借りた時間の合計です。"
+},
+"su:rubato/terms/3/0": {
+"en": "Owed now",
+"t": "現在の借り"
+},
+"su:rubato/terms/3/1": {
+"en": "Time borrowed and not yet given back.",
+"t": "借りてまだ返していない時間です。"
+},
+"su:rubato/terms/4/0": {
+"en": "Time returned",
+"t": "返した時間"
+},
+"su:rubato/terms/4/1": {
+"en": "Time given back, and in how many cuts.",
+"t": "返した時間と、何回に分けて返したか。"
+},
+"su:rubato/terms/5/0": {
+"en": "Held by the partials ringing on",
+"t": "鳴り続ける部分音で保持"
+},
+"su:rubato/terms/5/1": {
+"en": "Time covered by holding the sound that was playing.",
+"t": "鳴っていた音を引き延ばしてまかなった時間です。"
+},
+"files/title": {
+"en": "Files",
+"t": "ファイル"
+},
+"files/intro": {
+"en": "A MIDI file on this machine, played live through the engine or rendered offline to a WAV.",
+"t": "このマシン上の MIDI ファイルを、エンジンでリアルタイムに演奏するか、オフラインで WAV に書き出します。"
+},
+"files/terms/0/0": {
+"en": "Folders",
+"t": "フォルダー"
+},
+"files/terms/0/1": {
+"en": "Find the file.",
+"t": "ファイルを探します。"
+},
+"files/terms/1/0": {
+"en": "The file",
+"t": "ファイル"
+},
+"files/terms/1/1": {
+"en": "What it is, the mode to read it in, and playing or rendering it.",
+"t": "ファイルの情報、読み込むモード、演奏や書き出し。"
+},
+"fl:browse/title": {
+"en": "Folders",
+"t": "フォルダー"
+},
+"fl:browse/intro": {
+"en": "The folders and MIDI files (.mid, .midi, .kar) on this machine. It opens where you were last.",
+"t": "このマシン上のフォルダーと MIDI ファイル（.mid、.midi、.kar）です。前回の場所から開きます。"
+},
+"fl:browse/terms/0/0": {
+"en": "▲ UP",
+"t": "▲ 上へ"
+},
+"fl:browse/terms/0/1": {
+"en": "The folder above.",
+"t": "1つ上のフォルダーです。"
+},
+"fl:browse/terms/1/0": {
+"en": "MUSIC",
+"t": "ミュージック"
+},
+"fl:browse/terms/1/1": {
+"en": "Your Music folder.",
+"t": "ミュージックフォルダーです。"
+},
+"fl:browse/terms/2/0": {
+"en": "▸ A folder",
+"t": "▸ フォルダー"
+},
+"fl:browse/terms/2/1": {
+"en": "Opens it.",
+"t": "それを開きます。"
+},
+"fl:browse/terms/3/0": {
+"en": "A file",
+"t": "ファイル"
+},
+"fl:browse/terms/3/1": {
+"en": "Chooses it: what it is shows on the right.",
+"t": "それを選びます。右側にファイルの情報が表示されます。"
+},
+"fl:file/title": {
+"en": "The file",
+"t": "ファイル"
+},
+"fl:file/intro": {
+"en": "Its length, the channels it plays, how many program changes it makes, and the mode it asks for.",
+"t": "長さ、使うチャンネル、プログラムチェンジの回数、要求するモード。"
+},
+"fl:file/terms/0/0": {
+"en": "The file check",
+"t": "ファイルチェック"
+},
+"fl:file/terms/0/1": {
+"en": "Problems in the file that would sound like a wrong instrument: two programs at the start where only the last counts, two instruments on one channel, a pitched part on the drum channel, two tracks fighting over one channel's volume, a volume so low it is silence, notes out of the instrument's range. Tap to open the list.",
+"t": "楽器が違って聞こえる原因になるファイルの問題：最後のものだけが有効なのに冒頭に2つあるプログラム、1つのチャンネルに2つの楽器、ドラムチャンネル上の音程楽器のパート、1つのチャンネルの音量を奪い合う2つのトラック、無音になるほど小さい音量、楽器の音域外のノート。タップすると一覧が開きます。"
+},
+"fl:file/terms/1/0": {
+"en": "Worth trying",
+"t": "試す価値あり"
+},
+"fl:file/terms/1/1": {
+"en": "A mode that suits the file better than the one chosen, and why.",
+"t": "選んだモードよりファイルに合うモードと、その理由です。"
+},
+"fl:mode/title": {
+"en": "Mode",
+"t": "モード"
+},
+"fl:mode/intro": {
+"en": "Which module the file was written for. It decides what its program and bank numbers mean, so the same file can sound quite different.",
+"t": "ファイルがどの音源モジュール向けに書かれたか。これによってプログラム番号とバンク番号の意味が決まるので、同じファイルでもかなり違って聞こえることがあります。"
+},
+"fl:mode/terms/0/0": {
+"en": "AUTO",
+"t": "AUTO"
+},
+"fl:mode/terms/0/1": {
+"en": "What the file says: a GS Reset reads it as GS, GM System On as GM, MT-32 messages as MT-32. A file that says nothing plays as GS in the Setup card's standard. The button shows what it found.",
+"t": "ファイルの指定に従います。GS Reset で GS、GM System On で GM、MT-32 メッセージで MT-32 として読みます。何も指定のないファイルは、設定カードの規格の GS として演奏します。ボタンに検出結果が表示されます。"
+},
+"fl:mode/terms/1/0": {
+"en": "GM",
+"t": "GM"
+},
+"fl:mode/terms/1/1": {
+"en": "A General MIDI module: bank selects are ignored, every program plays its plain sound.",
+"t": "General MIDI 音源：バンクセレクトは無視され、各プログラムは基本の音で鳴ります。"
+},
+"fl:mode/terms/2/0": {
+"en": "GS: OURS",
+"t": "GS: OURS"
+},
+"fl:mode/terms/2/1": {
+"en": "Sound Canvas files, bank numbers in our own library's numbering.",
+"t": "Sound Canvas 用のファイルで、バンク番号は独自のライブラリの番号付けに従います。"
+},
+"fl:mode/terms/3/0": {
+"en": "GS: SC-55 … SC-8850",
+"t": "GS: SC-55 … SC-8850"
+},
+"fl:mode/terms/3/1": {
+"en": "Sound Canvas files, bank numbers as that module laid them out (a file that names its own map with CC32 keeps it).",
+"t": "Sound Canvas 用のファイルで、バンク番号はそのモジュールの配置に従います（CC32 で自分のマップを指定するファイルはそれを保ちます）。"
+},
+"fl:mode/terms/4/0": {
+"en": "GS: INIT CM-64",
+"t": "GS: INIT CM-64"
+},
+"fl:mode/terms/4/1": {
+"en": "Files for the MT-32 or CM-64, as a Sound Canvas plays them after its Init CM-64 (Roland's name for its MT-32 setting): parts 1 to 9 the MT-32's sounds, 10 its drums, 11 to 16 the CM-32P's, every pan mirrored. The file's own MT-32 messages are ignored, as a Sound Canvas ignores them, and channel 1 plays a piano.",
+"t": "MT-32 や CM-64 用のファイルを、Init CM-64（MT-32 用設定に対する Roland の名称）を実行した後の Sound Canvas のように演奏します。パート 1〜9 が MT-32 の音、10 がそのドラム、11〜16 が CM-32P の音で、パンはすべて左右反転します。Sound Canvas と同じくファイル自体の MT-32 メッセージは無視され、チャンネル 1 はピアノを鳴らします。"
+},
+"fl:mode/terms/5/0": {
+"en": "MT-32",
+"t": "MT-32"
+},
+"fl:mode/terms/5/1": {
+"en": "As a real MT-32 plays the file: its parts on channels 2 to 9 and the drums on 10 (channel 1 and 11 to 16 silent unless the file moves them), and the file's MT-32 messages followed: which sound each program number selects, key shift, fine tune, bend range, each part's level and pan, the drums' levels and pans, master volume and tune, the reverb. A custom sound the file builds plays as our voice nearest its name. What it cannot follow is listed under the modes. AUTO chooses this for a file that sends MT-32 messages.",
+"t": "本物の MT-32 と同じように演奏します。パートはチャンネル 2〜9、ドラムは 10 で（ファイルが移さない限りチャンネル 1 と 11〜16 は鳴りません）、ファイルの MT-32 メッセージに従います：各プログラム番号で選ばれる音、キーシフト、ファインチューン、ベンド幅、各パートのレベルとパン、ドラムのレベルとパン、マスター音量とチューン、リバーブ。ファイルが作るカスタム音は、名前が最も近い当方の音色で鳴ります。対応できない内容はモードの下に一覧表示されます。AUTO は MT-32 メッセージを送るファイルにこのモードを選びます。"
+},
+"fl:mode/terms/6/0": {
+"en": "CM-64",
+"t": "CM-64"
+},
+"fl:mode/terms/6/1": {
+"en": "As a real CM-64 plays it: the same as the MT-32, with the CM-64's CM-32P parts on channels 11 to 16 and its sound effects on drum keys 76 to 108.",
+"t": "本物の CM-64 と同じように演奏します。MT-32 と同じで、CM-64 の CM-32P パートがチャンネル 11〜16 に、効果音がドラム鍵盤 76〜108 に入ります。"
+},
+"fl:mode/terms/7/0": {
+"en": "ORCHESTRA BY NAMES",
+"t": "名前でオーケストラ"
+},
+"fl:mode/terms/7/1": {
+"en": "For an orchestral file of the MT-32 years that names its parts on its tracks (Flutes, Horns, Timpani…): each part plays the instrument its name says, whatever program number it sends, and parts that shared a channel get one each, or share one only where they never play the same note at once. Suggested above the modes when a file looks like one. The parts it found are listed under the modes.",
+"t": "MT-32 時代のオーケストラ曲で、トラックにパート名（Flutes、Horns、Timpani…）が付いたファイル用です。各パートは送られるプログラム番号にかかわらず、名前が示す楽器で鳴ります。チャンネルを共有していたパートはそれぞれ別のチャンネルを得るか、同時に同じノートを弾かない場合だけ共有します。ファイルがこれに該当しそうなときは、モードの上に提案が表示されます。見つかったパートはモードの下に一覧表示されます。"
+},
+"fl:vel/title": {
+"en": "MT-32 velocity",
+"t": "MT-32 ベロシティ"
+},
+"fl:vel/intro": {
+"en": "An MT-32 spans about 30 dB from its softest note to its loudest; our instruments span far more. Files written for one come out far too dynamic unless their velocities are compressed to match. The switch shows only in the MT-32's modes (AUTO's when it finds an MT-32 file); a GS or GM file always plays its velocities as written.",
+"t": "MT-32 は最も弱い音から最も強い音まで約 30 dB の幅しかありませんが、当方の楽器ははるかに広い幅を持っています。MT-32 用に書かれたファイルは、ベロシティを圧縮して合わせないとダイナミクスが大きくなりすぎます。このスイッチは MT-32 のモード（MT-32 ファイルを検出したときの AUTO を含む）でのみ表示されます。GS や GM のファイルは常に書かれたとおりのベロシティで演奏します。"
+},
+"fl:vel/terms/0/0": {
+"en": "ON",
+"t": "オン"
+},
+"fl:vel/terms/0/1": {
+"en": "In GS: INIT CM-64, MT-32, CM-64 and ORCHESTRA BY NAMES, each velocity v plays as 3/4 v + 32 (set as each part's velocity sense, so the Parts card shows it). Leave it on for MT-32 files.",
+"t": "GS: INIT CM-64、MT-32、CM-64、ORCHESTRA BY NAMES では、各ベロシティ v を 3/4 v + 32 として演奏します（各パートのベロシティ感度として設定されるので、パートカードに表示されます）。MT-32 ファイルではオンのままにしてください。"
+},
+"fl:vel/terms/1/0": {
+"en": "OFF",
+"t": "オフ"
+},
+"fl:vel/terms/1/1": {
+"en": "The file's velocities as written.",
+"t": "ファイルに書かれたとおりのベロシティです。"
+},
+"fl:play/title": {
+"en": "Play live",
+"t": "ライブ再生"
+},
+"fl:play/intro": {
+"en": "The file plays through the engine in real time, as a sequencer drives a Sound Canvas.",
+"t": "シーケンサーが Sound Canvas を鳴らすように、ファイルをエンジンでリアルタイムに演奏します。"
+},
+"fl:play/terms/0/0": {
+"en": "PLAY LIVE",
+"t": "ライブ再生"
+},
+"fl:play/terms/0/1": {
+"en": "Takes the parts over: one part per channel (16), every key, channel 10 the drums. Then it builds the sounds the file asks for, so its notes do not fall on a build, sends a reset, and plays.",
+"t": "パートを引き継ぎます：チャンネルごとに1パート（16）、全鍵盤、チャンネル 10 はドラム。次に、ノートが構築中に当たらないようにファイルが必要とする音を構築し、リセットを送ってから演奏します。"
+},
+"fl:play/terms/1/0": {
+"en": "STOP",
+"t": "停止"
+},
+"fl:play/terms/1/1": {
+"en": "Stops it: the notes let go, every pedal up. The parts stay as the file left them; load a preset (Scenes card) to have yours back.",
+"t": "停止します：ノートを離し、ペダルはすべて上がります。パートはファイルが残した状態のままです。自分の設定に戻すには、プリセットを読み込んでください（シーンカード）。"
+},
+"fl:play/terms/2/0": {
+"en": "The bar",
+"t": "バー"
+},
+"fl:play/terms/2/1": {
+"en": "How far through the file it is.",
+"t": "ファイルのどこまで進んだかを示します。"
+},
+"fl:render/title": {
+"en": "Render offline",
+"t": "オフライン書き出し"
+},
+"fl:render/intro": {
+"en": "The file rendered to a WAV in ~/Music/renders, named after it, which then plays here.",
+"t": "ファイルを ~/Music/renders にファイル名にちなんだ名前の WAV として書き出し、ここで再生します。"
+},
+"fl:render/terms/0/0": {
+"en": "RENDER AS HEARD",
+"t": "聞こえたまま書き出し"
+},
+"fl:render/terms/0/1": {
+"en": "The live engine renders it, on the CPU: your tuning, room and effects, the parts as PLAY LIVE sets them. Saved as NAME.heard.wav.",
+"t": "ライブエンジンが CPU で書き出します。チューニング、ルーム、エフェクトは現在の設定で、パートは PLAY LIVE が設定するとおりです。NAME.heard.wav として保存されます。"
+},
+"fl:render/terms/1/0": {
+"en": "RENDER BEST QUALITY",
+"t": "最高品質で書き出し"
+},
+"fl:render/terms/1/1": {
+"en": "The file renderer, streamed on the GPU, then the room's tail: the full renderer, not the live engine's shortcuts. Saved as NAME.best.wav. It checks first: what it cannot render yet, it says, and offers the as-heard render instead.",
+"t": "ファイル用レンダラーが GPU でストリーミング処理し、その後ルームの残響を加えます。ライブエンジンの簡略化を使わない完全なレンダラーです。NAME.best.wav として保存されます。最初にチェックを行い、まだ書き出せない内容があればそれを伝え、代わりに聞こえたままの書き出しを提案します。"
+},
+"fl:render/terms/2/0": {
+"en": "STOP THE RENDER",
+"t": "書き出しを停止"
+},
+"fl:render/terms/2/1": {
+"en": "Stops it.",
+"t": "停止します。"
+},
+"fl:render/terms/3/0": {
+"en": "While playing",
+"t": "演奏中は"
+},
+"fl:render/terms/3/1": {
+"en": "A render shares the processors with the engine you are playing, so it can cause dropouts. One that would need more memory than is free beside the engine is stopped rather than slowing the machine down.",
+"t": "書き出しは演奏中のエンジンとプロセッサーを共有するので、音切れの原因になることがあります。エンジンの横で使える空きメモリーより多くのメモリーが必要な書き出しは、マシンを遅くする代わりに停止されます。"
+},
+"how:file/title": {
+"en": "Play or render a MIDI file",
+"t": "MIDI ファイルを演奏・書き出しする"
+},
+"how:file/intro": {
+"en": "Hear a file through the engine, or make a WAV of it.",
+"t": "ファイルをエンジンで聞くか、WAV にします。"
+},
+"how:layer/title": {
+"en": "Play two sounds at once",
+"t": "2つの音を同時に鳴らす"
+},
+"how:layer/intro": {
+"en": "Layer a second part on the same keys, such as strings under a piano.",
+"t": "ピアノの下にストリングスを重ねるように、同じ鍵盤に2つ目のパートをレイヤーします。"
+},
+"how:split/title": {
+"en": "Split the keyboard",
+"t": "キーボードをスプリットする"
+},
+"how:split/intro": {
+"en": "A different sound under each hand, such as a bass on the left and a piano on the right.",
+"t": "左手にベース、右手にピアノのように、左右の手で別の音を鳴らします。"
+},
+"how:keyboard/title": {
+"en": "Play from a keyboard",
+"t": "キーボードから演奏する"
+},
+"how:keyboard/intro": {
+"en": "Choose which MIDI devices are read.",
+"t": "受信する MIDI 機器を選びます。"
+},
+"how:pedal/title": {
+"en": "Use a key as the sustain pedal",
+"t": "鍵盤をサステインペダルとして使う"
+},
+"how:pedal/intro": {
+"en": "For a keyboard with no pedal: one key held down lifts the dampers.",
+"t": "ペダルのないキーボード用：1つの鍵盤を押さえている間、ダンパーが上がります。"
+},
+"how:organ/title": {
+"en": "Register the organ",
+"t": "オルガンのレジストレーション"
+},
+"how:organ/intro": {
+"en": "Choose an organ's stops or drawbars.",
+"t": "オルガンのストップやドローバーを選びます。"
+},
+"how:save/title": {
+"en": "Save a setup and bring it back",
+"t": "設定を保存して呼び出す"
+},
+"how:save/intro": {
+"en": "A preset keeps the whole setup: the parts, their sounds, the routes, the tuning and the effects.",
+"t": "プリセットは設定全体を保持します：パート、その音、ルート、チューニング、エフェクト。"
+},
+"how:tuning/title": {
+"en": "Change the tuning",
+"t": "チューニングを変える"
+},
+"how:tuning/intro": {
+"en": "Every part plays in the chosen tuning.",
+"t": "全パートが選んだ音律で演奏します。"
+},
+"how:stuck/title": {
+"en": "A note will not stop",
+"t": "ノートが止まらない"
+},
+"how:stuck/intro": {
+"en": "A note can hang if its key-up was lost, for example when a cable is pulled mid-note.",
+"t": "演奏中にケーブルが抜けたときなど、鍵盤を離した情報が失われると、ノートが鳴りっぱなしになることがあります。"
+},
+"how:breakup/title": {
+"en": "The sound breaks up or clicks",
+"t": "音が途切れる、クリック音がする"
+},
+"how:breakup/intro": {
+"en": "The engine has a fixed time for each block of sound; when a block is late, the sound drops out.",
+"t": "エンジンは音の各ブロックを決まった時間内に処理します。ブロックが遅れると、音が途切れます。"
+},
+"how:quit/title": {
+"en": "Quit",
+"t": "終了"
+},
+"how:quit/intro": {
+"en": "The session is saved as you go, and once more as the engine stops.",
+"t": "セッションは作業中に随時保存され、エンジン停止時にももう一度保存されます。"
+},
+"credits/title": {
+"en": "Credits",
+"t": "クレジット"
+},
+"credits/intro": {
+"en": "No recordings are included in Clavitone. Its instruments are models, and many of them were fitted to recordings that musicians, sound recordists, libraries and researchers shared. These are those sources, by kind of instrument, each with its licence and the voices it shaped. Our thanks to all of them; the CC BY and CC BY-SA licences ask that they be named, and the CC0 and public domain sources are named with gratitude. Last come the references: the books, papers, standards, patents and service documents the models were built from, each with what it shaped. All product names, trademarks and registered trademarks are the property of their respective owners, who are in no way associated or affiliated with Clavitone. They are used solely to identify the instruments whose sounds were studied in building our models, and the named sounds of the MIDI standards a file asks for.",
+"t": "Clavitone には録音は含まれていません。楽器はモデルであり、その多くは音楽家、録音技術者、ライブラリ、研究者が公開した録音に合わせて調整されています。以下はその提供元を楽器の種類ごとに挙げたもので、それぞれのライセンスと、形づくった音色を記しています。すべての方々に感謝します。CC BY と CC BY-SA のライセンスでは名前の表示が求められており、CC0 とパブリックドメインの提供元も感謝を込めて名前を記しています。最後に参考文献として、モデルの構築に用いた書籍、論文、規格、特許、サービス資料を、それぞれ何を形づくったかとともに挙げています。すべての製品名、商標、登録商標はそれぞれの所有者に帰属し、所有者は Clavitone とは一切関係がありません。これらは、モデル構築の際に音を研究した楽器と、ファイルが要求する MIDI 規格の名前付きの音を示すためだけに使用しています。"
+},
+"fl:audio/title": {
+"en": "Player",
+"t": "プレーヤー"
+},
+"fl:audio/intro": {
+"en": "An audio file -- MP3, WAV or FLAC, your renders among them -- chosen on the left plays here, beside what you play, through the same output.",
+"t": "左で選んだオーディオファイル（MP3、WAV、FLAC。書き出したファイルも含む）を、演奏している音と一緒に、同じ出力でここで再生します。"
+},
+"fl:audio/terms/0/0": {
+"en": "PLAY / PAUSE",
+"t": "再生 / 一時停止"
+},
+"fl:audio/terms/0/1": {
+"en": "Plays the file from where it is, or holds it there.",
+"t": "現在の位置から再生するか、その位置で止めます。"
+},
+"fl:audio/terms/1/0": {
+"en": "STOP",
+"t": "停止"
+},
+"fl:audio/terms/1/1": {
+"en": "Stops it and goes back to the start.",
+"t": "停止して先頭に戻ります。"
+},
+"fl:audio/terms/2/0": {
+"en": "The bar",
+"t": "バー"
+},
+"fl:audio/terms/2/1": {
+"en": "Where it is in the file. Drag along it and let go to play from there.",
+"t": "ファイル内の現在位置です。ドラッグして離すと、その位置から再生します。"
+},
+"fl:audio/terms/3/0": {
+"en": "LEVEL",
+"t": "レベル"
+},
+"fl:audio/terms/3/1": {
+"en": "The file's level beside the keyboard's, -30 to +6 dB; 0 dB as the file is.",
+"t": "キーボードの音に対するファイルのレベル、-30〜+6 dB。0 dB でファイルそのままです。"
+},
+"fl:audio/terms/4/0": {
+"en": "PLAY IT",
+"t": "再生する"
+},
+"fl:audio/terms/4/1": {
+"en": "Under a finished render: chooses that render here, ready to play.",
+"t": "書き出し完了後に表示されます。その書き出しをここで選び、再生できる状態にします。"
+},
+"toc/0": {
+"en": "Start here",
+"t": "はじめに"
+},
+"toc/1": {
+"en": "How to…",
+"t": "操作ガイド"
+},
+"toc/2": {
+"en": "Front panel",
+"t": "フロントパネル"
+},
+"toc/3": {
+"en": "Parts",
+"t": "パート"
+},
+"toc/4": {
+"en": "Scenes",
+"t": "シーン"
+},
+"toc/5": {
+"en": "Library",
+"t": "ライブラリ"
+},
+"toc/6": {
+"en": "Synth",
+"t": "シンセ"
+},
+"toc/7": {
+"en": "Stops",
+"t": "ストップ"
+},
+"toc/8": {
+"en": "Amp",
+"t": "アンプ"
+},
+"toc/9": {
+"en": "Piano",
+"t": "ピアノ"
+},
+"toc/10": {
+"en": "Drums",
+"t": "ドラム"
+},
+"toc/11": {
+"en": "Effects",
+"t": "エフェクト"
+},
+"toc/12": {
+"en": "Matrix",
+"t": "マトリクス"
+},
+"toc/13": {
+"en": "Tuning",
+"t": "チューニング"
+},
+"toc/14": {
+"en": "Control",
+"t": "コントロール"
+},
+"toc/15": {
+"en": "Files",
+"t": "ファイル"
+},
+"toc/16": {
+"en": "Setup",
+"t": "設定"
+},
+"toc/17": {
+"en": "About",
+"t": "情報"
+}
+}
