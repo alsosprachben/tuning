@@ -2210,10 +2210,11 @@ def class_tree_md():
 # SC-55's SFX and CM-64/32L sets from its own manual, p.70-71).
 KIT_STD = {"GM1": {0}, "GM2": {0, 8, 16, 24, 25, 32, 40, 48, 56},
            "GS1": {0, 8, 16, 24, 25, 32, 40, 48, 56, 127},
-           "GS2": {1, 26, 49, 50, 57},
            # (64, 65: the two USER drum sets, a kit built key by key from the others' --
-           # the SC-88 Pro's manual, p.102; the SC-88's is a scan not yet read for them)
-           "GS3": {2, 9, 10, 11, 27, 28, 29, 30, 52, 53, 58, 64, 65},
+           # the SC-88's own: "stored in Drum Set numbers 65 and 66 of the SC-88 map",
+           # its owner's manual p.4-5)
+           "GS2": {1, 26, 49, 50, 57, 64, 65},
+           "GS3": {2, 9, 10, 11, 27, 28, 29, 30, 52, 53, 58},
            "GS4": {12, 13, 33, 41, 42, 51, 54, 55, 59, 60, 61, 62}}
 
 
