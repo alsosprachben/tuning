@@ -186,7 +186,7 @@ def main(argv):
     machos = ([exe] + glob.glob(os.path.join(mac, "*.dylib")) + [os.path.join(mac, h) for h in HELPERS]
               + glob.glob(os.path.join(fw, "*")))
     for p in machos:
-        if not os.path.exists(p):
+        if not os.path.isfile(p):       # (Frameworks/ui is the default presets' folder)
             continue
         for ln in links(p):
             if not (ln.startswith("@rpath/") or ln.startswith("/usr/lib/") or ln.startswith("/System/")):
@@ -196,7 +196,8 @@ def main(argv):
                 bad.append("%s searches %s" % (os.path.relpath(p, app), rp))
 
     # SIGNED (ad hoc: the rewrites broke the build's signatures)
-    for p in glob.glob(os.path.join(fw, "*")) + [os.path.join(mac, h) for h in HELPERS if os.path.exists(os.path.join(mac, h))]:
+    for p in [q for q in glob.glob(os.path.join(fw, "*")) if os.path.isfile(q)] + \
+             [os.path.join(mac, h) for h in HELPERS if os.path.exists(os.path.join(mac, h))]:
         run(["codesign", "--force", "--sign", "-", p])
     run(["codesign", "--force", "--sign", "-", app])
 
