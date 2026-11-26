@@ -2199,6 +2199,54 @@ def class_tree_md():
     return "\n".join(L)
 
 
+# THE STANDARDS A PATCH ANSWERS TO (Ben 2026-11-25: the library's filters):
+# the earliest of each branch that has it -- GM1 under both, then GM2 on one
+# branch and the Sound Canvas maps on the other (GS1 the SC-55's, GS2 the
+# SC-88's, GS3 the SC-88 Pro's, GS4 the SC-8850's, each keeping the one before)
+# -- or CT1, ours alone. GS came first and GM2 took most of its variations
+# from it under its own numbers, so a tone may carry both (GM2 and GS2).
+# The drum sets' maps from the manuals' lists (~/Documents/refs/roland:
+# sc88pro_drumsets.tsv's three maps side by side, sc8850_drumsets.tsv; the
+# SC-55's SFX and CM-64/32L sets from its own manual, p.70-71).
+KIT_STD = {"GM1": {0}, "GM2": {0, 8, 16, 24, 25, 32, 40, 48, 56},
+           "GS1": {0, 8, 16, 24, 25, 32, 40, 48, 56, 127},
+           "GS2": {1, 26, 49, 50, 57},
+           "GS3": {2, 9, 10, 11, 27, 28, 29, 30, 52, 53, 58},
+           "GS4": {12, 13, 33, 41, 42, 51, 54, 55, 59, 60, 61, 62}}
+
+
+def patch_standards(program, variation):
+    """The standards (GM1, GM2, GS1..GS4, CT1) whose files can select this patch:
+    the earliest of each branch, or CT1 for a tone of ours alone."""
+    import patch_map as PMC
+    from gm2_names import GM2_NAMES
+    p, v = int(program), int(variation)
+    if v == 0:
+        return ["GM1"]
+    if v in (126, 127):                     # (the SC-55 map's CM-64 banks: the CM-32P's, the MT-32's)
+        return ["GS1"]
+    out = []
+    if any(pp == p and lsb and PMC.gm2_bank(pp, lsb) == v for (pp, lsb) in GM2_NAMES):
+        out.append("GM2")
+    for m in (1, 2, 3, 4):                  # (the first map whose bank selects it)
+        if any(pp == p and PMC.map_bank(pp, b, m) == v for (pp, b) in PMC.MAP_NAMES[m]):
+            out.append("GS%d" % m)
+            break
+    return out or ["CT1"]
+
+
+def kit_standards(program):
+    out = [s for s in ("GM1",) if program in KIT_STD[s]]
+    if not out and program in KIT_STD["GM2"]:
+        out.append("GM2")
+    for m in (1, 2, 3, 4):
+        if program in KIT_STD["GS%d" % m]:
+            if not out or out[0] != "GM1":
+                out.append("GS%d" % m)
+            break
+    return out or ["CT1"]
+
+
 def about_json(path):
     """THE INTERFACES' WORDS (ui/about.json, read by the touch and native
     interfaces): each patch's and drum set's few words (variation_desc), each
@@ -2279,7 +2327,10 @@ def about_json(path):
     # ...the tunings', their systems' and the rooms' names (the engine keeps its keys)
     tuners = {k: list(v) for k, v in UW.TUNERS.items()}
     desc = {k: referential(v) for k, v in desc.items()}
-    doc = {"desc": desc, "kit_desc": kit_desc, "tuners": tuners, "cabinets": cabs, "cab_own": own, "pickups": pickups,
+    # ...THE STANDARDS each answers to (patch_standards: the library's filters)
+    std = {"%d.%d" % (p, v): patch_standards(p, v) for p, v in keys}
+    kit_std = {str(k): kit_standards(k) for k in range(128)}
+    doc = {"desc": desc, "kit_desc": kit_desc, "std": std, "kit_std": kit_std, "tuners": tuners, "cabinets": cabs, "cab_own": own, "pickups": pickups,
            "pk_own": pk_own, "stops": stop_notes, "perc": perc, "kits": kits,
            "kit_only": sorted(k for k in getattr(PM, "KIT_ONLY", ()) if k < 128), "efx": efx, "effects": effects}
     # THE CHECKS: every patch said, and nothing that says where a sound came from

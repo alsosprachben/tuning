@@ -405,32 +405,49 @@ famList.forEach(([id, label]) => {
   Kit.press(b, () => { S.fam = id; $('q').value = ''; drawTiles(true); });
   $('fams').appendChild(b);
 });
+// THE STANDARDS (about.json's std, kit_std): what a file of each can select -- GM1
+// its own; GM2 GM1's and its own; a Sound Canvas map GM1's and its maps' up to it;
+// CT1 ours alone (nui/library.h's std_shows)
+const LIB_STDS = ['all', 'GM1', 'GM2', 'GS1', 'GS2', 'GS3', 'GS4', 'CT1'];
+S.stdf = 'all';
+const stdsOf = p => (S.about && (p.drums ? S.about.kit_std && S.about.kit_std[p.program]
+  : S.about.std && S.about.std[p.program + '.' + p.variation])) || [];
+const stdShows = (f, p) => f === 'all' || stdsOf(p).some(s => s === f || (s === 'GM1' && f !== 'CT1')
+  || (f.startsWith('GS') && s.startsWith('GS') && s <= f));
+LIB_STDS.forEach(id => {
+  const b = document.createElement('button'); b.className = 'fam'; b.dataset.id = id; b.dataset.kit = '1';
+  b.textContent = id === 'all' ? 'ALL' : id;
+  Kit.press(b, () => { S.stdf = id; drawTiles(true); });
+  $('stds').appendChild(b);
+});
 const favKey = p => `${p.drums ? 1 : 0}:${p.program}.${p.variation}`;
 const isCur = (p, q) => q && !!q.drums === !!p.drums && q.program === p.program && (q.drums || q.variation === p.variation);
 function shown() {
   const words = $('q').value.toLowerCase().split(/\s+/).filter(Boolean);
+  const pool = S.patches.filter(p => stdShows(S.stdf, p));
   if (words.length) {
-    return S.patches.filter(p => {
-      const t = `${pad(p.program, 3)} ${p.name} ${patchDesc(p)} ${famLabel(p)}`.toLowerCase();
+    return pool.filter(p => {
+      const t = `${pad(p.program, 3)} ${p.name} ${patchDesc(p)} ${famLabel(p)} ${stdsOf(p).join(' ')}`.toLowerCase();
       return words.every(w => t.includes(w));
     });
   }
-  if (S.fam === 'all') return S.patches;
-  if (S.fam === 'fav') return S.patches.filter(p => S.favs.has(favKey(p)));
-  return S.patches.filter(p => famOf(p) === S.fam);
+  if (S.fam === 'all') return pool;
+  if (S.fam === 'fav') return pool.filter(p => S.favs.has(favKey(p)));
+  return pool.filter(p => famOf(p) === S.fam);
 }
 let tilesSig = '';
 function drawTiles(force) {
   if (card !== 'library') return;
   const searching = $('q').value.trim() !== '';
   document.querySelectorAll('#fams .fam').forEach(b => b.classList.toggle('on', !searching && b.dataset.id === S.fam));
+  document.querySelectorAll('#stds .fam').forEach(b => b.classList.toggle('on', b.dataset.id === S.stdf));
   const list = shown(), p0 = cur();
-  const sig = list.length + '|' + $('q').value + '|' + S.fam + '|' + [...S.favs].join();
+  const sig = list.length + '|' + $('q').value + '|' + S.fam + '|' + S.stdf + '|' + [...S.favs].join();
   if (force || sig !== tilesSig) {
     tilesSig = sig;
     $('tiles').innerHTML = list.length ? list.map(p =>
       `<button class="tile" data-kit="1" data-pick="${p.pick}"><span class="pn">${p.drums ? '<i>KIT </i>' + p.program : pad(p.program, 3) + (p.variation ? '<i>.' + p.variation + '</i>' : '')}</span>` +
-      `<span class="nm">${esc(p.name)}${patchDesc(p) ? `<small>${esc(patchDesc(p))}</small>` : ''}</span><span class="star${S.favs.has(favKey(p)) ? ' on' : ''}" data-fav="${favKey(p)}">★</span></button>`).join('')
+      `<span class="nm">${esc(p.name)}${patchDesc(p) ? `<small>${esc(patchDesc(p))}</small>` : ''}</span><span class="std">${stdsOf(p).join(' ')}</span><span class="star${S.favs.has(favKey(p)) ? ' on' : ''}" data-fav="${favKey(p)}">★</span></button>`).join('')
       : `<p class="empty">${S.fam === 'fav' && !searching ? 'No favourites yet: tap a patch\'s star to keep it here.' : 'Nothing matches.'}</p>`;
   }
   const byPick = new Map(S.patches.map(p => [String(p.pick), p]));

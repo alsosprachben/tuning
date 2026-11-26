@@ -23,13 +23,33 @@ struct Patch {
     int pick = 0, program = 0, variation = 0;
     bool drums = false;
     std::string name, desc, search;     // (desc: its few words, about.json's; search: its number, name, words and family, lower case)
+    std::vector<std::string> stds;      // (the standards it answers to: about.json's std -- GM1, GM2, GS1..GS4, CT1)
+    std::string tag;                    // (...said on its tile: "GS3", "GM2 GS1")
 };
+
+// THE STANDARDS' FILTERS (Ben 2026-11-25): a standard shows what a file of it can
+// select -- GM1 its own; GM2 GM1's and its own; a Sound Canvas map GM1's and its
+// maps' up to it (GS3: GS1, GS2, GS3); CT1 ours alone
+static const char *STD_CHIPS[8] = {"all", "GM1", "GM2", "GS1", "GS2", "GS3", "GS4", "CT1"};
+inline bool std_shows(const std::string &f, const Patch &p)
+{
+    if (f == "all")
+        return true;
+    for (const auto &s : p.stds) {
+        if (s == f || (s == "GM1" && f != "CT1"))
+            return true;
+        if (f.rfind("GS", 0) == 0 && s.rfind("GS", 0) == 0 && s <= f)
+            return true;
+    }
+    return false;
+}
 
 struct LibUi {
     bool loaded = false, favs_kept = false;
     std::vector<Patch> patches;
     std::set<std::string> favs;
     std::string fam = "all", q, last_q;
+    std::string stdf = "all";           // (the standard's filter: STD_CHIPS)
     bool typing = false;                // (the search's keys up)
     float scroll = 0;
     int picking = -1;
@@ -68,6 +88,7 @@ inline void lib_load(App &a)
     L.loaded = true;
     sess::load(a.ui_dir + "/about.json", L.about);
     const J *descs = L.about.get("desc");
+    const J *stdm = L.about.get("std"), *kstd = L.about.get("kit_std");
     J r = call(a, "{\"call\":\"patches\"}");
     if (const J *ps = r.get("patches"); ps && ps->is(J::ARR))
         for (const J &x : ps->a) {
@@ -80,9 +101,17 @@ inline void lib_load(App &a)
             if (const J *d = descs && !p.drums ? descs->get(std::to_string(p.program) + "." + std::to_string(p.variation)) : nullptr;
                 d && d->is(J::STR))
                 p.desc = d->s;
+            if (const J *sd = p.drums ? (kstd ? kstd->get(std::to_string(p.program)) : nullptr)
+                                      : (stdm ? stdm->get(std::to_string(p.program) + "." + std::to_string(p.variation)) : nullptr);
+                sd && sd->is(J::ARR))
+                for (const J &e : sd->a)
+                    if (e.is(J::STR)) {
+                        p.stds.push_back(e.s);
+                        p.tag += (p.tag.empty() ? "" : " ") + e.s;
+                    }
             char b[16];
             snprintf(b, sizeof b, "%03d ", p.program);
-            p.search = lower(b + p.name + " " + p.desc + " " + fam_label(p));
+            p.search = lower(b + p.name + " " + p.desc + " " + fam_label(p) + " " + p.tag);
             L.patches.push_back(p);
         }
     J f = call(a, "{\"call\":\"favourites\"}");
@@ -129,6 +158,8 @@ inline std::vector<const Patch *> lib_shown()
                 w += c;
     }
     for (const Patch &p : L.patches) {
+        if (!std_shows(L.stdf, p))
+            continue;
         if (!words.empty()) {
             bool all = true;
             for (const auto &w : words)
@@ -261,8 +292,20 @@ inline void draw_library(App &a)
     text(a, a.font, 14, MX + SW + 16, SY + 16, SILK_DIM, info_);
     heading(a, MX + SW + 16 + text_w(a, a.font, 14, info_) + 4, SY + 16, "", "library");   // (the card's ?)
 
+    // THE STANDARDS: a chip each under the search (what a file of it can select)
+    {
+        const float CY = SY + SH + 8, CH = T ? 40 : 40, cg = 6, cw = (MW - 7 * cg) / 8;
+        for (int i = 0; i < 8; i++) {
+            const std::string id = std::string("std") + STD_CHIPS[i];
+            if (button(a, id.c_str(), MX + i * (cw + cg), CY, cw, CH, i ? STD_CHIPS[i] : "ALL", L.stdf == STD_CHIPS[i],
+                       true, T ? 21 : 14)) {
+                L.stdf = STD_CHIPS[i];
+                L.scroll = 0;
+            }
+        }
+    }
     // (the patch's words are on its tile and on the display: the grid takes the card)
-    const float TY = T ? 270 : 410, TB = L.typing ? Y1 - 5 * 56 - 24 : Y1;
+    const float TY = T ? 322 : 462, TB = L.typing ? Y1 - 5 * 56 - 24 : Y1;
 
     // THE TILES: a grid that scrolls under a finger
     // (three across, a line taller than the names alone: each patch's few words, whole, on two lines under its name)
@@ -338,15 +381,24 @@ inline void draw_library(App &a)
                     name_x = std::max(name_x, 10 + text_w(a, a.font, 21, pn) + text_w(a, a.font, 14, vs) + 8);
                 }
             }
+            // (its standards, small, beside the star)
+            const float tagw = p.tag.empty() ? 0 : text_w(a, a.font, 14, p.tag) + 8;
+            if (!p.tag.empty())
+                text(a, a.font, 14, x + tw - star - tagw,
+                     y + (p.desc.empty() ? (th - a.lh(14)) / 2
+                                         : (th - (1 + wrap_max(a, a.font, 14, p.desc, tw - name_x - star - 4, 2).size()) * a.lh(14)
+                                            - 2 * wrap_max(a, a.font, 14, p.desc, tw - name_x - star - 4, 2).size()) / 2),
+                     isc ? LCD_BG : SILK_DIM, p.tag);
             // (the name; under it, the patch's few words -- "Hammond", "Moog: two saws, ladder")
+            // (the tag shares the name's line only: the words under it keep the width)
             const float nw = tw - name_x - star - 4;
             if (p.desc.empty())
-                text(a, a.font, 14, x + name_x, y + (th - h14) / 2, isc ? LCD_BG : SILK, fit(a, a.font, 14, p.name, nw));
+                text(a, a.font, 14, x + name_x, y + (th - h14) / 2, isc ? LCD_BG : SILK, fit(a, a.font, 14, p.name, nw - tagw));
             else {
                 const auto dl2 = wrap_max(a, a.font, 14, p.desc, nw, 2);
                 const size_t n = dl2.size();
                 const float y0 = y + (th - (1 + n) * h14 - 2 * n) / 2;
-                text(a, a.font, 14, x + name_x, y0, isc ? LCD_BG : SILK, fit(a, a.font, 14, p.name, nw));
+                text(a, a.font, 14, x + name_x, y0, isc ? LCD_BG : SILK, fit(a, a.font, 14, p.name, nw - tagw));
                 for (size_t i = 0; i < n; i++)
                     text(a, a.font, 14, x + name_x, y0 + (h14 + 2) * (i + 1), isc ? LCD_BG : SILK_DIM,
                          dl2[i]);
