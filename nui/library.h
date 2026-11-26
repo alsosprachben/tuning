@@ -318,22 +318,32 @@ inline void draw_library(App &a)
     const int cols = std::max(1, (int)((MW + gap) / (tw_min + gap)));
     const float tw = (MW - gap * (cols - 1)) / cols;
     const int rows = ((int)list.size() + cols - 1) / cols;
-    const float content = rows * (th + gap), view = TB - TY;
+    // (the phone's keys leave no room for a row: the tiles wait for DONE, the count says what matches --
+    //  and no item of theirs, which at no height ImGui would stretch to the foot, over the keys)
+    const bool tiles = TB - TY >= th;
+    const float content = rows * (th + gap), view = tiles ? TB - TY : 0;
     L.scroll = std::max(0.0f, std::min(L.scroll, std::max(0.0f, content - view)));
     // (the touch: a drag scrolls; a still tap picks the tile, or its star)
-    ImGui::SetCursorScreenPos(P(a, MX, TY));
-    ImGui::InvisibleButton("tiles", ImVec2(MW * a.k, view * a.k));
+    bool hov = false, act = false, actd = false, deact = false;
+    if (tiles) {
+        ImGui::SetCursorScreenPos(P(a, MX, TY));
+        ImGui::InvisibleButton("tiles", ImVec2(MW * a.k, view * a.k));
+        hov = ImGui::IsItemHovered();
+        act = ImGui::IsItemActive();
+        actd = ImGui::IsItemActivated();
+        deact = ImGui::IsItemDeactivated();
+    }
     const ImVec2 m = ImGui::GetIO().MousePos;
     const float mx = (m.x - a.org.x) / a.k, my = (m.y - a.org.y) / a.k;
-    if (ImGui::IsItemHovered() && ImGui::GetIO().MouseWheel != 0)
+    if (hov && ImGui::GetIO().MouseWheel != 0)
         L.scroll -= ImGui::GetIO().MouseWheel * 3 * (th + gap);
-    if (ImGui::IsItemActivated()) {
+    if (actd) {
         L.down = true;
         L.moved = false;
         L.p0 = ImVec2(mx, my);
         L.s0 = L.scroll;
     }
-    if (ImGui::IsItemActive() && L.down) {
+    if (act && L.down) {
         if (!L.moved && std::fabs(my - L.p0.y) * a.k > SLOP)
             L.moved = true;
         if (L.moved)
@@ -341,9 +351,9 @@ inline void draw_library(App &a)
     }
     int tap_i = -1;
     bool tap_star = false;
-    if (ImGui::IsItemDeactivated() && L.down) {
+    if ((deact || !tiles) && L.down) {
         L.down = false;
-        if (!L.moved) {
+        if (!L.moved && tiles) {
             const int c = (int)((L.p0.x - MX) / (tw + gap)), r = (int)((L.p0.y - TY + L.scroll) / (th + gap));
             if (c >= 0 && c < cols && r >= 0 && r * cols + c < (int)list.size()) {
                 tap_i = r * cols + c;
@@ -352,7 +362,7 @@ inline void draw_library(App &a)
         }
     }
     dl()->PushClipRect(P(a, MX, TY), P(a, MX + MW, TB), true);
-    const int r0 = std::max(0, (int)(L.scroll / (th + gap))), r1 = std::min(rows, (int)((L.scroll + view) / (th + gap)) + 1);
+    const int r0 = std::max(0, (int)(L.scroll / (th + gap))), r1 = tiles ? std::min(rows, (int)((L.scroll + view) / (th + gap)) + 1) : 0;
     if (L.picking >= 0 && ImGui::GetTime() - L.pick_t > 15)
         L.picking = -1;
     for (int r = r0; r < r1; r++)
@@ -405,12 +415,12 @@ inline void draw_library(App &a)
             }
             look::star(a, x + tw - star / 2, y + th / 2 + (p.tag.empty() ? 0 : 5), h21 * 0.5f, fav ? (isc ? LCD_BG : LCD) : (isc ? LCD_DIM : SILK_DIM), fav);
         }
-    if (list.empty())
+    if (list.empty() && tiles)
         text(a, a.font, 21, MX, TY + 10, SILK_DIM,
              L.fam == "fav" && !searching ? nui::T("No favourites yet: tap a patch's star to keep it here.") : nui::T("Nothing matches."));
     dl()->PopClipRect();
     // (the scroll's place, at the right)
-    if (content > view) {
+    if (tiles && content > view) {
         const float bh = std::max(30.0f, view * view / content), by = TY + (view - bh) * L.scroll / (content - view);
         rect(a, MX + MW + 6, by, 5, bh, SILK_DIM, 2);
     }
