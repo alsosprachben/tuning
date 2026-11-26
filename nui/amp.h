@@ -229,8 +229,9 @@ inline void pk_string(App &a, float x, float y, float w, const std::vector<doubl
 inline void draw_amp(App &a)
 {
     AmpUi &M = g_amp;
-    const bool IP = a.tab;
-    const float X0 = IP ? 20 : 34, X1 = IP ? (a.ph ? 818 : 1113) : 1886, HY = IP ? 224 : 356, Y0 = IP ? 266 : 394, Y1 = card_y1(a);
+    const bool IP = a.tab, PH = a.ph;   // (the phone's: its own card from 106, a page a column)
+    const float X0 = PH ? 14 : IP ? 20 : 34, X1 = IP ? (PH ? 818 : 1113) : 1886, HY = PH ? 120 : IP ? 224 : 356,
+                Y0 = PH ? 160 : IP ? 266 : 394, Y1 = card_y1(a);
     const float LH = a.lh(14) + (IP ? 3 : 4);
     amp_open(a, true);                  // (the engine pushes it as it moves: nui.cpp's poll, amp_take)
     if (M.for_row != a.row) {           // (another part: its amp asked at once)
@@ -241,7 +242,7 @@ inline void draw_amp(App &a)
     }
     const float TX = heading(a, X0, HY, "AMP", "amp");
     const J *p = part(a, a.row);
-    if (p)
+    if (p && !PH)
         text(a, a.font, 14, TX, HY + 1, OWN, fit(a, a.font, 14, "part " + pad2(a.row + 1) + " \xc2\xb7 " + str(p, "name"), IP ? 600 : 900));
     const int kind = (int)num(&M.st, "kind", 0);
     // (its pickup: [chosen (-1 none), now (0 its own), [the choices offered]] -- the parts push's)
@@ -273,11 +274,42 @@ inline void draw_amp(App &a)
     // (the Leslie's column an organ's alone: the speaker takes its width otherwise)
     const float PW = has_pk ? (kind == 0 ? W : (IP ? 330 : 520)) : 0;
     const float VW = kind == 0 ? 0 : IP ? 300 : 460, LW = organ ? (IP ? 300 : 460) : 0;
-    const float SW = kind == 0 ? 0 : W - PW - VW - LW - (organ ? 2 : 1) * G - (has_pk ? G : 0);
+    float SW = kind == 0 ? 0 : W - PW - VW - LW - (organ ? 2 : 1) * G - (has_pk ? G : 0);
     const float H = Y1 - Y0;
+    // THE PHONE's PAGES: a column each, the card's width -- PICKUP, VALVE, SPEAKER, the organ's rotor
+    static int apage = 0;
+    int ap = -1;                        // (the phone's column shown: 0 pickup, 1 valve, 2 speaker, 3 the rotor's)
+    if (PH) {
+        bool st = false;
+        if (const J *cv = p->get("cabinet"))
+            if (cv->is(J::ARR) && cv->a.size() >= 3 && cv->a[2].is(J::ARR))
+                for (const J &o : cv->a[2].a)
+                    st = st || (int)o.d() == 10 || (int)o.d() == 11;
+        std::vector<std::pair<int, std::string>> pages;
+        if (has_pk)
+            pages.push_back({0, "PICKUP"});
+        if (kind != 0) {
+            pages.push_back({1, "VALVE"});
+            pages.push_back({2, "SPEAKER"});
+        }
+        if (organ)
+            pages.push_back({3, st ? "CONE ROTOR" : "ROTARY"});
+        apage = std::max(0, std::min(apage, (int)pages.size() - 1));
+        float px_ = TX + 6;
+        for (size_t i = 0; i < pages.size() && pages.size() > 1; i++) {
+            const float w = text_w(a, a.font, 21, pages[i].second) + 28;
+            const std::string id = "amppage" + std::to_string(i);
+            if (button(a, id.c_str(), px_, 112, w, 40, pages[i].second, apage == (int)i, true, 21))
+                apage = (int)i;
+            px_ += w + 4;
+        }
+        ap = pages.empty() ? -1 : pages[(size_t)apage].first;
+    }
+    const float PWd = PH ? W : PW, VWd = PH ? W : VW, SWd = PH ? W : SW, LWd = PH ? W : LW;   // (as drawn)
 
     // THE PICKUP: the switch as the instrument has it, the string under its coils, what it is
-    if (has_pk) {
+    if (has_pk && (!PH || ap == 0)) {
+        const float PW = PWd;
         const float x = X0, y = Y0;
         look::tray(a, x, y, PW, H, 10);
         heading(a, x + 14, y + 12, "PICKUP", "pickup");
@@ -330,10 +362,12 @@ inline void draw_amp(App &a)
             labels.push_back(lab(c));
         if (F)
             text(a, a.bold, 14, x + 14, y + (IP ? 40 : 48), SILK, str(F, "name"));
-        const float sy = y + (IP ? 70 : 84), sh = IP ? 130 : 170;
+        const float sy = y + (PH ? 64 : IP ? 70 : 84), sh = PH ? 108 : IP ? 130 : 170;
+        // (the phone's page short and wide: the switch and string at its left, the way back and words at its right)
+        const float SWW = PH ? PW * 0.58f : PW, RX = PH ? x + PW * 0.6f : x + 14, RW = PH ? PW * 0.4f - 14 : PW - 28;
         a.lab_x0 = x + 8;               // (the end positions' names kept inside the panel)
-        a.lab_x1 = x + PW - 8;
-        const int c = pk_switch(a, F ? str(F, "switch") : "blade5", x + 20, sy, PW - 40, sh, order, labels, lit);
+        a.lab_x1 = x + SWW - 8;
+        const int c = pk_switch(a, F ? str(F, "switch") : "blade5", x + 20, sy, SWW - 40, sh, order, labels, lit);
         a.lab_x0 = a.lab_x1 = 0;
         if (c > 0) {
             a.hold["pickup"] = {(double)c, ImGui::GetTime() + 0.8};
@@ -347,11 +381,13 @@ inline void draw_amp(App &a)
                 if (std::find_if(all.begin(), all.end(), [&](double z) { return std::fabs(z - q) < 1e-6; }) == all.end())
                     all.push_back(q);
         if (!all.empty()) {
-            pk_string(a, x + 20, ty + 14, PW - 40, all, pts(lit));
+            pk_string(a, x + 20, ty + 14, SWW - 40, all, pts(lit));
             ty += IP ? 50 : 60;
         }
+        if (PH)
+            ty = y + 40;
         const bool mine = pk_chosen > 0 && pk_chosen != own;
-        if (button(a, "amppkown", x + 14, ty, PW - 28, IP ? 40 : 40,
+        if (button(a, "amppkown", RX, ty, RW, IP ? 40 : 40,
                    mine ? "BACK TO THE PATCH'S " + lab(own) : "AS THE PATCH \xc2\xb7 " + lab(own), false, mine)) {
             a.hold["pickup"] = {(double)own, ImGui::GetTime() + 0.8};
             call(a, "{\"call\":\"pickup_set\",\"row\":" + std::to_string(a.row) + ",\"choice\":-1}");
@@ -361,16 +397,17 @@ inline void draw_amp(App &a)
         std::string ab = e && e->is(J::ARR) && e->a.size() >= 2 ? e->a[1].s : "";
         if (kind == 0)
             ab += " No amplifier of its own: it is heard straight from its pickups.";
-        const auto ls = wrap(a, a.font, 14, ab, PW - 28);
+        const auto ls = wrap(a, a.font, 14, ab, RW);
         for (size_t i = 0; i < ls.size(); i++)
-            text(a, a.font, 14, x + 14, ty + i * LH, SILK_DIM, ls[i]);
+            text(a, a.font, 14, RX, ty + i * LH, SILK_DIM, ls[i]);
     }
     if (kind == 0)
         return;
 
     // THE VALVE: tubeamp's triode, driven -- 0 clean, 1 the edge of breakup, past it the clip
-    {
-        const float x = X0 + (has_pk ? PW + G : 0), y = Y0;
+    if (!PH || ap == 1) {
+        const float VW = VWd;
+        const float x = PH ? X0 : X0 + (has_pk ? PW + G : 0), y = Y0;
         look::tray(a, x, y, VW, H, 10);
         heading(a, x + 14, y + 12, "VALVE", "drive");
         const J *dv = M.st.get("drive");
@@ -392,9 +429,10 @@ inline void draw_amp(App &a)
         char vt[16], st_[16];
         snprintf(vt, sizeof vt, "%.2f", base);
         snprintf(st_, sizeof st_, "%.2f", sounds);
-        const float KS = IP ? 80 : 120, ky = y + (IP ? 110 : 150);
-        const int f = knob(a, "ampdrive", x + VW * 0.28f, ky, KS, v01, "DRIVE", vt, false, {}, 0, own);
-        knob(a, "ampsounds", x + VW * 0.72f, ky, KS, s01, "WITH THE WHEEL", st_, false, {}, 0, false);    // (display only)
+        // (the phone's: the knobs at the page's left, the way back and words at its right)
+        const float KS = IP ? 80 : 120, ky = y + (PH ? 100 : IP ? 110 : 150);
+        const int f = knob(a, "ampdrive", x + VW * (PH ? 0.14f : 0.28f), ky, KS, v01, "DRIVE", vt, false, {}, 0, own);
+        knob(a, "ampsounds", x + VW * (PH ? 0.38f : 0.72f), ky, KS, s01, "WITH THE WHEEL", st_, false, {}, 0, false);    // (display only)
         if (f & K_CHANGED) {
             const double d = std::round(v01 * top * 100) / 100;
             a.hold["drive"] = {d, ImGui::GetTime() + 0.6};
@@ -408,8 +446,8 @@ inline void draw_amp(App &a)
             back();
         char bt[48];
         snprintf(bt, sizeof bt, own ? "BACK TO THE PATCH'S %.2f" : "AS THE PATCH (%.2f)", voice);
-        const float by = ky + KS / 2 + (IP ? 44 : 58);
-        if (button(a, "ampdriveback", x + 14, by, VW - 28, IP ? 44 : 40, bt, false, own))
+        const float by = PH ? y + 40 : ky + KS / 2 + (IP ? 44 : 58), bx = PH ? x + VW * 0.54f : x + 14, bw = PH ? VW * 0.46f - 14 : VW - 28;
+        if (button(a, "ampdriveback", bx, by, bw, IP ? 44 : 40, bt, false, own))
             back();
         const std::string note = voice > 0.0 || now > 0.0
                                      ? "A triode stage before the speaker: clean at 0, the edge of breakup at 1, "
@@ -419,14 +457,15 @@ inline void draw_amp(App &a)
                                        "the speaker, the edge of breakup at 1.";
         char wn[96];
         snprintf(wn, sizeof wn, " WITH THE WHEEL is the drive as the mod wheel scales it (now x%.2f).", wheel);
-        const auto ls = wrap(a, a.font, 14, note + (organ ? " The mod wheel is the swell." : std::string(wn)), VW - 28);
+        const auto ls = wrap(a, a.font, 14, note + (organ ? " The mod wheel is the swell." : std::string(wn)), bw);
         for (size_t i = 0; i < ls.size(); i++)
-            text(a, a.font, 14, x + 14, by + (IP ? 56 : 54) + i * LH, SILK_DIM, ls[i]);
+            text(a, a.font, 14, bx, by + (IP ? 56 : 54) + i * LH, SILK_DIM, ls[i]);
     }
 
     // THE SPEAKER: the voice's own, or one it offers -- each what it is, and how we know it
-    {
-        const float x = X0 + (has_pk ? PW + G : 0) + VW + G, y = Y0;
+    if (!PH || ap == 2) {
+        const float SW = SWd;
+        const float x = PH ? X0 : X0 + (has_pk ? PW + G : 0) + VW + G, y = Y0;
         look::tray(a, x, y, SW, H, 10);
         heading(a, x + 14, y + 12, "SPEAKER", "cabinet");
         LibUi &L = g_lib;
@@ -465,7 +504,7 @@ inline void draw_amp(App &a)
         for (int c : offer)
             if (c != own)
                 ring.push_back(c);
-        const int cols = IP ? (a.ph ? 1 : 2) : 3;      // (the phone's a column: its speaker names whole)
+        const int cols = IP && !a.ph ? 2 : 3;      // (the phone's page the card's width: three across)
         const float bg = IP ? 6 : 8, bw = (SW - 28 - bg * (cols - 1)) / cols, bh = IP ? 44 : 46;
         for (size_t i = 0; i < ring.size(); i++) {
             const int c = ring[i];
@@ -524,7 +563,8 @@ inline void draw_amp(App &a)
             k++;
         }
     };
-    if (organ && offers_st) {
+    if (organ && offers_st && (!PH || ap == 3)) {
+        const float LW = LWd;
         const float x = X1 - LW, y = Y0;
         look::tray(a, x, y, LW, H, 10);
         heading(a, x + 14, y + 12, "CONE ROTOR", "spectra");
@@ -557,7 +597,8 @@ inline void draw_amp(App &a)
             text(a, a.font, 14, x + 14, sy + bh + 8 + i * LH, SILK_DIM, sn[i]);
         return;
     }
-    if (organ) {
+    if (organ && (!PH || ap == 3)) {
+        const float LW = LWd;
         const float x = X1 - LW, y = Y0;
         look::tray(a, x, y, LW, H, 10);
         heading(a, x + 14, y + 12, "ROTARY", "rotary");

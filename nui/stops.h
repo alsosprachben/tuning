@@ -88,12 +88,14 @@ inline void draw_stops(App &a)
             T.organs = *o;
         T.for_row = a.row;
     }
-    const bool IP = a.tab;              // (the iPad's: its card from y 210 to card_y1 + 6)
-    const float X0 = IP ? 20 : 34, X1 = IP ? (a.ph ? 818 : 1113) : 1886, HY = IP ? 224 : 356, Y0_ = IP ? 260 : 394, Y1_ = card_y1(a);
+    const bool IP = a.tab, PH = a.ph;   // (the iPad's: its card from y 210 to card_y1 + 6; the phone's from 106, paged)
+    const float X0 = PH ? 14 : IP ? 20 : 34, X1 = IP ? (PH ? 818 : 1113) : 1886, HY = PH ? 120 : IP ? 224 : 356,
+                Y0_ = PH ? 160 : IP ? 260 : 394, Y1_ = card_y1(a);
     const float TX = heading(a, X0, HY, "STOPS", "stops");
     const int prog = (int)num(&T.st, "program", -1);
     const std::string part_name = str(&T.st, "part");
-    text(a, a.font, 14, TX, HY + 1, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + part_name);
+    if (!PH || prog < 0)                // (the phone's display names the part; its row the pages')
+        text(a, a.font, 14, TX, HY + 1, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + part_name);
 
     // NO ORGAN: the organs, a tap puts one on the part
     if (prog < 0) {
@@ -157,15 +159,37 @@ inline void draw_stops(App &a)
     for (int d : drawn)
         k += d;
     const std::string info = std::to_string(k) + " of " + std::to_string(names.size()) + " drawn";
-    text(a, a.font, 14, X1 - text_w(a, a.font, 14, info), HY + 1, SILK_DIM, info);
-
     const J *drive = T.st.get("drive");
     const bool has_drive = drive && drive->is(J::ARR) && drive->a.size() >= 3;
-    const float aboutH = IP ? 30 : 44, DW = IP ? 220 : 350, JX1 = has_drive ? X1 - DW - 14 : X1, JY0 = Y0_, JY1 = Y1_ - aboutH - (IP ? 8 : 14);
-    const float LH = a.lh(14) + (IP ? 3 : 4);
     const J *rows = T.st.get("rows");
     const int nrows = rows && rows->is(J::ARR) ? (int)rows->a.size() : 0;
-    const float rgap = a.tab ? 8 : 12, rh = nrows ? std::min(140.0f, (JY1 - JY0 - rgap * (nrows - 1)) / nrows) : 0;
+    // (the phone's pages: the jamb's rows two at a time, then a tonewheel organ's drive and rotary)
+    static int spage = 0;
+    const int rpp = 2, nrp = (nrows + rpp - 1) / rpp, npages = nrp + (has_drive ? 1 : 0);
+    if (PH) {
+        spage = std::max(0, std::min(spage, npages - 1));
+        float px_ = TX + 6;
+        for (int pg = 0; pg < npages && npages > 1; pg++) {
+            const bool dp = has_drive && pg == nrp;
+            const std::string lb = dp ? std::string("DRIVE \xc2\xb7 ROTARY")
+                                 : nrows <= 2 ? std::string("STOPS")
+                                 : "ROWS " + std::to_string(pg * rpp + 1) +
+                                       (std::min(nrows, pg * rpp + rpp) > pg * rpp + 1 ? "\xe2\x80\x93" + std::to_string(std::min(nrows, pg * rpp + rpp)) : "");
+            const float w = text_w(a, a.font, 21, lb) + 28;
+            const std::string id = "stpage" + std::to_string(pg);
+            if (button(a, id.c_str(), px_, 112, w, 40, lb, spage == pg, true, 21))
+                spage = pg;
+            px_ += w + 4;
+        }
+        text(a, a.font, 14, X1 - text_w(a, a.font, 14, info), 147, SILK_DIM, info);
+    } else
+        text(a, a.font, 14, X1 - text_w(a, a.font, 14, info), HY + 1, SILK_DIM, info);
+    const bool drive_page = PH && has_drive && spage == nrp;
+    const int r0 = PH ? spage * rpp : 0, r1 = PH ? std::min(nrows, r0 + rpp) : nrows;      // (the rows shown)
+
+    const float aboutH = IP ? 30 : 44, DW = IP ? 220 : 350, JX1 = has_drive && !PH ? X1 - DW - 14 : X1, JY0 = Y0_, JY1 = Y1_ - aboutH - (IP ? 8 : 14);
+    const float LH = a.lh(14) + (IP ? 3 : 4);
+    const float rgap = a.tab ? 8 : 12, rh = nrows ? std::min(140.0f, (JY1 - JY0 - rgap * ((PH ? rpp : nrows) - 1)) / (PH ? rpp : nrows)) : 0;
     // (the tabs as wide as the widest row lets them, 150 the most)
     const float tg = IP ? 6 : 10, gg = IP ? 16 : 26, rp = IP ? 8 : 12;
     float tw = 150;
@@ -179,9 +203,9 @@ inline void draw_stops(App &a)
             tw = std::min(tw, (JX1 - X0 - 2 * 14 - (ng - 1) * gg - (nt - ng) * tg) / nt);
     }
     const float th = rh - 2 * rp;
-    for (int ri = 0; ri < nrows; ri++) {
+    for (int ri = r0; ri < r1 && !drive_page; ri++) {
         const J &row = rows->a[(size_t)ri];
-        const float y = JY0 + ri * (rh + rgap);
+        const float y = JY0 + (ri - r0) * (rh + rgap);
         look::tray(a, X0, y, JX1 - X0, rh, 10);
         float x = X0 + 14;
         for (size_t gi = 0; gi < row.a.size(); gi++) {
@@ -230,8 +254,9 @@ inline void draw_stops(App &a)
     // A TONEWHEEL ORGAN's DRIVE (the wheel is its swell): the valve before the rotors, 0 to 3
     const float RH = IP ? 170 : 250, RG = IP ? 8 : 14;    // (the rotary's tray under it: room for its SPREAD knob)
     const float CH = 0;                                    // (the cabinet: the AMP card's)
-    if (has_drive) {
-        const float dx = X1 - DW, dy = JY0, dw = DW, dh = JY1 - JY0 - RH - RG - CH;
+    if (has_drive && (!PH || drive_page)) {
+        // (the phone's: the two side by side, the page's height)
+        const float dx = PH ? X0 : X1 - DW, dy = JY0, dw = PH ? (X1 - X0 - 8) / 2 : DW, dh = PH ? JY1 - JY0 : JY1 - JY0 - RH - RG - CH;
         look::tray(a, dx, dy, dw, dh, 10);
         heading(a, dx + 14, dy + 12, "DRIVE", "drive");
         const double now = drive->a[0].d(), voice = drive->a[1].d(), mine = drive->a[2].d();
@@ -258,18 +283,18 @@ inline void draw_stops(App &a)
             back();
         const float bx_ = dx + KS + 36, bw_ = dw - KS - 46, bh_ = IP ? 44 : 38;
         const auto note = wrap(a, a.font, 14, "Clean at 0, a growl as it turns up.", bw_);
-        for (size_t i = 0; !IP && i < note.size() && i < 2; i++)     // (the iPad's: no room)
+        for (size_t i = 0; (!IP || PH) && i < note.size() && i < 2; i++)     // (the iPad's: no room)
             text(a, a.font, 14, bx_, ky - KS / 2 - 4 + i * LH, SILK_DIM, note[i]);
         char bt[48];
         snprintf(bt, sizeof bt, own ? "BACK TO THE PATCH'S %.2f" : "AS THE PATCH (%.2f)", voice);
-        if (button(a, "driveback", bx_, IP ? ky - bh_ / 2 : ky + KS / 2 - bh_ + 6, bw_, bh_, bt, false, own))
+        if (button(a, "driveback", bx_, IP && !PH ? ky - bh_ / 2 : ky + KS / 2 - bh_ + 6, bw_, bh_, bt, false, own))
             back();
         // THE ROTARY HEARD: the cabinet in the room (an organ's way: its
         // direction turning) or two mics round it (a recording's: wide), and
         // the mics' spread -- the part's, kept across its program changes
-        const float ry = dy + dh + RG;
-        look::tray(a, dx, ry, dw, RH, 10);
-        heading(a, dx + 14, ry + 12, "ROTARY", "rotary");
+        const float ry = PH ? dy : dy + dh + RG, rx = PH ? dx + dw + 8 : dx, rh_ = PH ? dh : RH;
+        look::tray(a, rx, ry, dw, rh_, 10);
+        heading(a, rx + 14, ry + 12, "ROTARY", "rotary");
         const J *pr = part(a, a.row);
         const J *rv = pr ? pr->get("rotary") : nullptr;
         int mode = rv && rv->is(J::ARR) && rv->a.size() >= 2 ? (int)rv->a[0].d() : -1;
@@ -287,15 +312,15 @@ inline void draw_stops(App &a)
                         + ",\"spread\":" + jnum(sd) + "}");
         };
         const float bw = (dw - 34) / 2, by = ry + (IP ? 36 : 44), bh = IP ? 44 : 38;
-        if (button(a, "rotroom", dx + 12, by, bw, bh, "IN THE ROOM", !mics))
+        if (button(a, "rotroom", rx + 12, by, bw, bh, "IN THE ROOM", !mics))
             set(0, spread);
-        if (button(a, "rotmics", dx + 22 + bw, by, bw, bh, "TWO MICS", mics))
+        if (button(a, "rotmics", rx + 22 + bw, by, bw, bh, "TWO MICS", mics))
             set(1, spread);
         if (mics) {
             float v01 = (float)(sp / 180.0);
             char vt[16];
             snprintf(vt, sizeof vt, "%.0f\xc2\xb0", sp);
-            const int f = knob(a, "rotspread", dx + dw / 2, by + bh + (IP ? 34 : 58), IP ? 40 : 60, v01, "SPREAD", vt, false, {},
+            const int f = knob(a, "rotspread", rx + dw / 2, by + bh + (IP ? 34 : 58), IP ? 40 : 60, v01, "SPREAD", vt, false, {},
                                0, spread >= 0.0);
             if (f & K_CHANGED)
                 set(1, std::round(v01 * 180.0));
@@ -305,7 +330,7 @@ inline void draw_stops(App &a)
             const auto rn = wrap(a, a.font, 14, "The cabinet heard where it stands: its horn and drum turning toward you and away.",
                                  dw - 28);
             for (size_t i = 0; i < rn.size(); i++)
-                text(a, a.font, 14, dx + 14, by + bh + (IP ? 10 : 16) + i * LH, SILK_DIM, rn[i]);
+                text(a, a.font, 14, rx + 14, by + bh + (IP ? 10 : 16) + i * LH, SILK_DIM, rn[i]);
         }
     }
 

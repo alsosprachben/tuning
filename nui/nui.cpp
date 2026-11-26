@@ -190,7 +190,7 @@ static void draw(App &a)
     static const std::set<std::string> TAB_READY = {"parts", "library", "synth", "stops", "piano", "drums", "amp", "effects", "matrix", "tuning", "control", "scenes", "files", "setup"};
     // (on the phone, a card not laid out for its height: the iPad's height, the
     //  phone's width, scrolled -- a drag on the card's empty ground, or the wheel)
-    static const std::set<std::string> PHONE_READY = {"parts", "library", "synth"};
+    static const std::set<std::string> PHONE_READY = {"parts", "library", "synth", "stops", "amp", "piano", "matrix", "tuning"};
     static std::map<std::string, float> card_scroll, card_foot;     // (the foot: as drawn last frame, in iPad units)
     const bool virt = a.ph && !PHONE_READY.count(a.card);
     const ImVec2 org0 = a.org;
@@ -256,6 +256,16 @@ static void draw(App &a)
             draw_library(a);
         else if (a.card == "synth")
             draw_synth(a);
+        else if (a.card == "stops")
+            draw_stops(a);
+        else if (a.card == "amp")
+            draw_amp(a);
+        else if (a.card == "piano")
+            draw_piano(a);
+        else if (a.card == "matrix")
+            draw_matrix(a);
+        else if (a.card == "tuning")
+            draw_tuning(a);
     }
     if (virt) {                         // (the scrolled card's place: a rail at its right edge)
         // (its scroll: a touch on the card that no control took, dragged; or the wheel off a control --

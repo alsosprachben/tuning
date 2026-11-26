@@ -186,12 +186,25 @@ inline void draw_tuning(App &a)
     if (!T.t.is(J::OBJ))
         tn_take(call(a, "{\"call\":\"tuning\",\"open\":1,\"lists\":1}"));
     // (the iPad's: its card from y 210 to card_y1 + 6, two pages -- the tuners and their shape; the Eastern tuning)
-    const bool IP = a.tab;
-    static int page = 0;
-    const float X0 = IP ? 20 : 34, X1 = IP ? (a.ph ? 818 : 1113) : 1886, Y0 = IP ? 266 : 394, Y1 = card_y1(a), HY = IP ? 224 : 356;
+    const bool IP = a.tab, PH = a.ph;   // (the phone's: its card from 106, three pages -- the tuners, their shape, the Eastern)
+    static int page = 0, tpage = 0;
+    const float X0 = PH ? 14 : IP ? 20 : 34, X1 = IP ? (PH ? 818 : 1113) : 1886, Y0 = PH ? 160 : IP ? 266 : 394, Y1 = card_y1(a),
+                HY = PH ? 120 : IP ? 224 : 356;
     const float LH = a.lh(14) + (IP ? 3 : 4);
-    text(a, a.font, 14, heading(a, X0, HY, "TUNING", "tuning"), HY + 1, OWN, "every part");
-    if (IP)
+    const float TX = heading(a, X0, HY, "TUNING", "tuning");
+    if (PH) {
+        static const char *PN[3] = {"TUNERS", "SHAPE", "EASTERN"};
+        float px_ = TX + 6;
+        for (int pg = 0; pg < 3; pg++) {
+            const float w = text_w(a, a.font, 21, PN[pg]) + 28;
+            const std::string id = "tnppage" + std::to_string(pg);
+            if (button(a, id.c_str(), px_, 112, w, 40, PN[pg], tpage == pg, true, 21))
+                tpage = pg;
+            px_ += w + 4;
+        }
+    } else
+        text(a, a.font, 14, TX, HY + 1, OWN, "every part");
+    if (IP && !PH)
         for (int pg = 0; pg < 2; pg++) {
             const std::string id = "tnpage" + std::to_string(pg);
             if (button(a, id.c_str(), page_kx(a, 2, pg, 300), 216, page_kw(a, 2), 44, pg ? "EASTERN" : "TUNERS", page == pg, true, 21))
@@ -206,8 +219,7 @@ inline void draw_tuning(App &a)
     const std::string info = building ? "building the patches in " + tuner_words(tuner, "").first + "\xe2\x80\xa6"
                                       : "playing " + tuner_words(now, "").first;
     const std::string info_ = fit(a, a.font, 14, info, IP ? 300 : 900);
-    if (!a.ph || building)          // (the phone's: only while building, under the pages' line)
-        text(a, a.font, 14, a.ph ? X0 : X1 - text_w(a, a.font, 14, info_), a.ph ? HY + 22 : HY + 1, building ? OWN : SILK_DIM, info_);
+    text(a, a.font, 14, X1 - text_w(a, a.font, 14, info_), PH ? 147 : HY + 1, building ? OWN : SILK_DIM, info_);
     if (building)
         a.animate = true;
 
@@ -236,7 +248,7 @@ inline void draw_tuning(App &a)
             other.push_back(&t);
     groups.push_back({"Indian, every part", raga});
     groups.push_back({"Other systems", other});
-    const float LW = IP ? (a.ph ? 470 : 600) : 1070, cols = IP ? 2 : 3, gap = 8, tw = (LW - 10 - gap * (cols - 1)) / cols, th = 64, hh = 30;
+    const float LW = PH ? X1 - X0 : IP ? 600 : 1070, cols = IP && !PH ? 2 : 3, gap = 8, tw = (LW - 10 - gap * (cols - 1)) / cols, th = 64, hh = 30;
     // (the layout, then the touch, then the drawing)
     struct Tile {
         const std::pair<std::string, std::string> *t;
@@ -255,7 +267,7 @@ inline void draw_tuning(App &a)
         cy += ((g.second.size() + (int)cols - 1) / (int)cols) * (th + gap) + 6;
     }
     ImVec2 tap;
-    if (!IP || page == 0) {
+    if (PH ? tpage == 0 : (!IP || page == 0)) {
     if (scroll_area(a, "tnlist", X0, Y0, LW, Y1 - Y0, cy, T.scroll, tap))
         for (const Tile &t : tiles)
             if (tap.x >= t.x && tap.x < t.x + tw && tap.y >= t.y && tap.y < t.y + th) {
@@ -287,8 +299,8 @@ inline void draw_tuning(App &a)
 
     // THE SHAPE: an octave in cents from equal temperament; each octave's stretch across the keyboard
     }
-    const float SX = X0 + LW + 12, SW = X1 - SX, SH = IP ? Y1 - Y0 : 330;
-    if (!IP || page == 0) {
+    const float SX = PH ? X0 : X0 + LW + 12, SW = X1 - SX, SH = IP ? Y1 - Y0 : 330;
+    if (PH ? tpage == 1 : (!IP || page == 0)) {
     look::tray(a, SX, Y0, SW, SH, 9);
     const float tsx = heading(a, SX + 12, Y0 + 10, "THE TUNING", "tn:shape");
     const J *shape = T.t.get("shape");
@@ -301,7 +313,8 @@ inline void draw_tuning(App &a)
         v = cents->a[(size_t)n].d();
         return true;
     };
-    const float gx = SX + 14, gw = SW - 28;
+    // (the phone's two graphs side by side: its page is wide, not tall)
+    const float gx = SX + 14, gw = PH ? SW / 2 - 28 : SW - 28, gxb = PH ? SX + SW / 2 + 14 : gx;
     if (!cents || !cents->is(J::ARR)) {
         text(a, a.font, 14, gx, Y0 + 150, SILK_DIM, "this tuner has no fixed table (it follows the file or the music)");
     } else {
@@ -322,27 +335,27 @@ inline void draw_tuning(App &a)
             text_c(a, a.font, 14, x + bw / 2, top + h1 + 4, SILK_DIM, NN[i]);
         }
         // (the stretch's scale in a margin of its own at the right, clear of the octaves' names)
-        const float top2 = top + h1 + 50, h2 = 90, mid2 = top2 + h2 / 2, sc2 = (h2 / 2) / 40, gw2 = gw - text_w(a, a.font, 14, "+40") - 12;
-        text(a, a.font, 14, gx, top2 - 22, SILK_DIM, "A0 to C8: each octave's stretch from 2:1, in cents");
-        rect(a, gx, mid2, gw2, 1, IM_COL32(0x3a, 0x3f, 0x45, 255), 0);
+        const float top2 = PH ? top : top + h1 + 50, h2 = 90, mid2 = top2 + h2 / 2, sc2 = (h2 / 2) / 40, gw2 = gw - text_w(a, a.font, 14, "+40") - 12;
+        text(a, a.font, 14, gxb, top2 - (PH ? 18 : 22), SILK_DIM, fit(a, a.font, 14, "A0 to C8: each octave's stretch from 2:1, in cents", gw));
+        rect(a, gxb, mid2, gw2, 1, IM_COL32(0x3a, 0x3f, 0x45, 255), 0);
         dl()->PathClear();
         for (int n = 21; n <= 108; n++) {
             double v, b;
             if (!cv(n, v) || !cv(60 + n % 12, b))
                 continue;
-            const float x = gx + (n - 21) / 87.0f * gw2, yy = mid2 - std::max(-h2 / 2, std::min(h2 / 2, (float)(v - b) * sc2));
+            const float x = gxb + (n - 21) / 87.0f * gw2, yy = mid2 - std::max(-h2 / 2, std::min(h2 / 2, (float)(v - b) * sc2));
             dl()->PathLineTo(P(a, x, yy));
             if (n % 12 == 0)
                 text_c(a, a.font, 14, x, top2 + h2 + 2, SILK_DIM, "C" + std::to_string(n / 12 - 1));
         }
         dl()->PathStroke(LCD, 0, 2.0f * a.k);
-        text(a, a.font, 14, gx + gw - text_w(a, a.font, 14, "+40"), top2, SILK_DIM, "+40");
-        text(a, a.font, 14, gx + gw - text_w(a, a.font, 14, "-40"), top2 + h2 - 14, SILK_DIM, "-40");
+        text(a, a.font, 14, gxb + gw - text_w(a, a.font, 14, "+40"), top2, SILK_DIM, "+40");
+        text(a, a.font, 14, gxb + gw - text_w(a, a.font, 14, "-40"), top2 + h2 - 14, SILK_DIM, "-40");
     }
 
     // THE EASTERN TUNING the Indian voices' parts play
     }
-    if (IP && page == 0)
+    if (PH ? tpage != 2 : IP && page == 0)
         return;
     // (the iPad's Eastern tuning a page across the card)
     const float EX = IP ? X0 : SX, EW = IP ? X1 - X0 : SW, EY = IP ? Y0 : Y0 + SH + 10;

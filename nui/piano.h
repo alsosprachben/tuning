@@ -124,33 +124,48 @@ inline void draw_piano(App &a)
             piano_take(a, *p);
     }
     pedal_flush(a);
-    const bool IP = a.tab;              // (the iPad's: its card from y 210 to card_y1 + 6)
-    const float X0 = IP ? 20 : 34, X1 = IP ? (a.ph ? 818 : 1113) : 1886, HY = IP ? 224 : 356, LH = a.lh(14) + (IP ? 3 : 4);
+    const bool IP = a.tab, PH = a.ph;   // (the iPad's: its card from y 210 to card_y1 + 6; the phone's from 106, two pages)
+    const float X0 = PH ? 14 : IP ? 20 : 34, X1 = IP ? (PH ? 818 : 1113) : 1886, HY = PH ? 120 : IP ? 224 : 356, LH = a.lh(14) + (IP ? 3 : 4);
     const float TX = heading(a, X0, HY, "PIANO", "piano");
     if (!N.pn.is(J::OBJ))
         return;
-    text(a, a.font, 14, TX, HY + 1, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + str(&N.pn, "part"));
+    static int ppage = 0;               // (the phone's: 0 the pedals and the pedal key, 1 the dampers)
+    if (PH) {
+        static const char *PN[2] = {"PEDALS", "DAMPERS"};
+        float px_ = TX + 6;
+        for (int pg = 0; pg < 2; pg++) {
+            const float w = text_w(a, a.font, 21, PN[pg]) + 28;
+            const std::string id = "pnpage" + std::to_string(pg);
+            if (button(a, id.c_str(), px_, 112, w, 40, PN[pg], ppage == pg, true, 21))
+                ppage = pg;
+            px_ += w + 4;
+        }
+    } else
+        text(a, a.font, 14, TX, HY + 1, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + str(&N.pn, "part"));
     const int ch = (int)num(&N.pn, "channel", -1);
     const std::string info = ch < 0 ? "pedals on every channel" : "pedals on channel " + std::to_string(ch + 1);
-    text(a, a.font, 14, X1 - text_w(a, a.font, 14, info), HY + 1, SILK_DIM, info);
+    text(a, a.font, 14, X1 - text_w(a, a.font, 14, info), PH ? 147 : HY + 1, SILK_DIM, info);
 
-    const float aboutH = 0, Y0 = IP ? 260 : 394, Y1 = (card_y1(a)) - aboutH - (IP ? 8 : 10);
-    const float c1 = IP ? 300 : 430, c3 = IP ? 280 : 400, gap = IP ? 6 : 8, c2 = X1 - X0 - c1 - c3 - 2 * gap;
+    const float aboutH = 0, Y0 = PH ? 160 : IP ? 260 : 394, Y1 = (card_y1(a)) - aboutH - (IP ? 8 : 10);
+    // (the phone's: the pedals and the pedal key side by side; the dampers a page the card's width)
+    const float c1 = PH ? 400 : IP ? 300 : 430, gap = IP ? 6 : 8, c3 = PH ? X1 - X0 - c1 - gap : IP ? 280 : 400,
+                c2 = PH ? X1 - X0 : X1 - X0 - c1 - c3 - 2 * gap;
     auto col = [&](float x, float w, const char *title, const char *key) {
         look::tray(a, x, Y0, w, Y1 - Y0, 9);
         return heading(a, x + 12, Y0 + 10, title, key);
     };
 
     // THE PEDALS: soft and sostenuto; the sustain a fader with its quick values
+    if (!PH || ppage == 0) {
     col(X0, c1, "PEDALS", "piano:pedals");
     const bool soft = flag(&N.pn, "soft"), sost = flag(&N.pn, "sostenuto");
-    const float py = IP ? Y1 - 200 : Y1 - 290;
+    const float py = PH ? Y0 + 50 : IP ? Y1 - 200 : Y1 - 290;
     if (pedal_btn(a, "pdsoft", X0 + (IP ? 52 : 76), py, soft, "SOFT", "una corda"))
         pedal(a, 67, soft ? 0 : 127);
     if (pedal_btn(a, "pdsost", X0 + (IP ? 146 : 206), py, sost, "SOSTENUTO", "holds the keys down as it goes down"))
         pedal(a, 66, sost ? 0 : 127);
     float sus = (float)num(&N.pn, "sustain");
-    const float fx = X0 + (IP ? 246 : 350), fy0 = Y0 + (IP ? 44 : 50), fh = Y1 - Y0 - (IP ? 258 : 270);   // (its value and name clear of DOWN)
+    const float fx = X0 + (IP ? 246 : 350), fy0 = Y0 + (IP ? 44 : 50), fh = PH ? Y1 - Y0 - 90 : Y1 - Y0 - (IP ? 258 : 270);   // (its value and name clear of DOWN)
     {
         const int f = fader(a, "pdsus", fx, fy0, fh, sus, 0, 127, 1, {64}, "SUSTAIN", pedal_say((int)std::lround(sus)));
         if (f & K_CHANGED)
@@ -163,13 +178,16 @@ inline void draw_piano(App &a)
     for (int i = 0; i < 3; i++) {
         const bool on = Q[i].v == 64 ? si > 0 && si < 127 : si == Q[i].v;
         const std::string id = std::string("pq") + Q[i].n;
-        if (button(a, id.c_str(), fx - (IP ? 46 : 50), Y1 - (IP ? 150 : 150) + i * (IP ? 48 : 46), IP ? 92 : 100, IP ? 44 : 38, Q[i].n, on, true,
-                   IP ? 21 : 14))
+        // (the phone's beside the fader: under it there is no room)
+        if (button(a, id.c_str(), PH ? fx + 36 : fx - (IP ? 46 : 50), PH ? Y0 + 44 + i * 50 : Y1 - (IP ? 150 : 150) + i * (IP ? 48 : 46),
+                   IP ? 92 : 100, IP ? 44 : 38, Q[i].n, on, true, IP ? 21 : 14))
             pedal(a, 64, Q[i].v);
+    }
     }
 
     // THE DAMPERS: each one's rest on its strings, over the keyboard (88 keys, A0 to C8)
-    const float dx = X0 + c1 + gap;
+    if (!PH || ppage == 1) {
+    const float dx = PH ? X0 : X0 + c1 + gap;
     const float dsx = col(dx, c2, "DAMPERS", "piano:dampers");
     // (a part that is not a piano: its pedals still reach its channel; no strings to show)
     const J *pp = part(a, a.row);
@@ -198,7 +216,9 @@ inline void draw_piano(App &a)
         : std::to_string(n - on_ - off_) + " resting lightly, " + std::to_string(on_) + " on the strings, " + std::to_string(off_) + " lifted";
     text(a, a.font, 14, dsx, Y0 + 11, LCD, say);
     {
-        const float W = c2 - 24, sx = dx + 12, s = W / 880.0f, top = Y0 + (IP ? 40 : 50);
+        // (the phone's drawing as tall as its page lets it, its words beside it)
+        const float W = PH ? std::min(c2 - 24, (Y1 - Y0 - 60) / 330.0f * 880.0f) : c2 - 24, sx = dx + 12, s = W / 880.0f,
+                    top = Y0 + (IP ? 40 : 50);
         const float kw = W / 52, lift = 110 * s, strY = top + 190 * s, kbY = top + 230 * s;
         dl()->AddLine(P(a, sx, strY), P(a, sx + W, strY), SILK_DIM, 1.5f * a.k);
         int wi = 0;
@@ -237,15 +257,18 @@ inline void draw_piano(App &a)
                     band += (band.empty() ? "" : " \xc2\xb7 ") + note_name_sharp((int)e.a[0].d()) + " " +
                             std::to_string((int)e.a[1].d()) + "\xe2\x80\x93" + std::to_string((int)e.a[2].d());
         const auto ls = wrap(a, a.font, 14, "Where the dampers leave the strings, by the pedal's value: " + band +
-                                                 ". The bass dampers are heavier and leave later.", W);
+                                                 ". The bass dampers are heavier and leave later.", PH ? c2 - W - 60 : W);
         for (size_t i = 0; i < ls.size(); i++)
-            text(a, a.font, 14, sx, kbY + 96 * s + (IP ? 14 : 16) + (i + 1) * LH, SILK_DIM, ls[i]);
+            text(a, a.font, 14, PH ? sx + W + 24 : sx, PH ? top + i * LH : kbY + 96 * s + (IP ? 14 : 16) + (i + 1) * LH, SILK_DIM, ls[i]);
     }
 
     }
+    }
+    if (PH && ppage != 0)
+        return;
 
     // THE PEDAL KEY: keys held as the sustain pedal
-    const float kx = X1 - c3;
+    const float kx = X1 - c3;           // (the phone's beside the pedals)
     col(kx, c3, "PEDAL KEY", "piano:key");
     float ky = Y0 + (IP ? 32 : 36);
     for (const auto &l : wrap(a, a.font, 14, "A key held as the sustain pedal: held, the dampers lift; push into it and they come down to the strings.", c3 - 24)) {

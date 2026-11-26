@@ -64,15 +64,29 @@ inline void draw_matrix(App &a)
         lib_load(a);
     if ((int)num(&M.m, "row", -1) != a.row)
         mx_take(a, call(a, "{\"call\":\"matrix\"}"));
-    const bool IP = a.tab;              // (the iPad's: its card from y 210 to card_y1 + 6, no notes box: the ? has them)
-    const float X0 = IP ? 20 : 34, X1 = IP ? (a.ph ? 818 : 1113) : 1886, Y0 = IP ? 262 : 394, HY = IP ? 224 : 356;
+    const bool IP = a.tab, PH = a.ph;   // (the iPad's: its card from y 210 to card_y1 + 6, no notes box: the ? has them;
+                                        //  the phone's from 106, two sources a page)
+    const float X0 = PH ? 14 : IP ? 20 : 34, X1 = IP ? (PH ? 818 : 1113) : 1886, Y0 = PH ? 160 : IP ? 262 : 394, HY = PH ? 120 : IP ? 224 : 356;
     const float TX = heading(a, X0, HY, "MATRIX", "matrix");
     if (!M.m.is(J::OBJ) || M.t.size() < 11)
         return;
-    text(a, a.font, 14, TX, HY + 1, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + str(&M.m, "part"));
+    static int mpage = 0;
+    if (PH) {
+        static const char *PN[3] = {"WHEEL \xc2\xb7 BEND", "AFTERTOUCH", "CC1 \xc2\xb7 CC2"};
+        float px_ = TX + 6;
+        for (int pg = 0; pg < 3; pg++) {
+            const float w = text_w(a, a.font, 21, PN[pg]) + 28;
+            const std::string id = "mxpage" + std::to_string(pg);
+            if (button(a, id.c_str(), px_, 112, w, 40, PN[pg], mpage == pg, true, 21))
+                mpage = pg;
+            px_ += w + 4;
+        }
+    } else
+        text(a, a.font, 14, TX, HY + 1, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + str(&M.m, "part"));
     const int ch = (int)num(&M.m, "channel", -1);
     const std::string info = ch < 0 ? "every channel" : "channel " + std::to_string(ch + 1);
-    text(a, a.font, 14, X1 - text_w(a, a.font, 14, info), HY + 1, SILK_DIM, info);
+    text(a, a.font, 14, X1 - text_w(a, a.font, 14, info), PH ? 147 : HY + 1, SILK_DIM, info);
+    const int i0 = PH ? 2 * mpage : 0, i1 = PH ? i0 + 2 : 6;     // (the sources shown)
     if (!M.m.get("raw")) {
         text(a, a.font, 21, X0, Y0 + 10, SILK_DIM, "Reading the matrix\xe2\x80\xa6");
         return;
@@ -81,7 +95,7 @@ inline void draw_matrix(App &a)
     static const char *DG[11] = {"", "", "", "LFO 1", "LFO 1", "LFO 1", "LFO 1", "LFO 2", "LFO 2", "LFO 2", "LFO 2"};
     static const char *DN[11] = {"Pitch", "Cutoff", "Amplitude", "Rate", "Pitch", "Filter", "Amp", "Rate", "Pitch", "Filter", "Amp"};
     const float aboutH = 0, SW = IP ? 156 : 252, gy = Y0 + (IP ? 30 : 40), YB = (card_y1(a)) - aboutH - (IP ? 20 : 34);
-    const float cw = (X1 - X0 - SW) / 11, rh = (YB - gy) / 6;
+    const float cw = (X1 - X0 - SW) / 11, rh = (YB - gy) / (i1 - i0);
     look::tray(a, X0, Y0, X1 - X0, YB - Y0, 9);
     // the destinations across (the LFOs' groups apart)
     for (int j = 0; j < 11; j++) {
@@ -96,8 +110,8 @@ inline void draw_matrix(App &a)
             rect(a, X0 + SW + j * cw, Y0 + 4, 1, YB - Y0 - 8, IM_COL32(0x3a, 0x3f, 0x45, 255), 0);
     }
     const int learning = (int)num(&M.m, "learning");
-    for (int i = 0; i < 6; i++) {
-        const float ry = gy + i * rh;
+    for (int i = i0; i < i1; i++) {
+        const float ry = gy + (i - i0) * rh;
         rect(a, X0 + 8, ry, X1 - X0 - 16, 1, IM_COL32(0x2c, 0x30, 0x35, 255), 0);
         // the source: lit where it moves anything
         bool used = false;
