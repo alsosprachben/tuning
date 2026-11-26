@@ -19,6 +19,9 @@
 // and its events, each queued at its time as the keyboard's are. STOP: the
 // notes let go, the pedals up.
 #pragma once
+#ifndef N_
+#define N_(s) s   // (a text the interface translates where it shows it: nui/i18n.h)
+#endif
 #include <condition_variable>
 #include <dirent.h>
 #include <fcntl.h>
@@ -93,6 +96,7 @@ static std::string tmp_root()
 // (no helper programs where the system runs none: iOS)
 #if defined(__APPLE__)
 #include <TargetConditionals.h>
+
 #endif
 #if defined(TARGET_OS_IPHONE) && TARGET_OS_IPHONE
 static const bool HELPERS = false;
@@ -239,7 +243,7 @@ static Info inspect(const std::string &path, const std::string &mode = "")
     Info I;
     std::vector<uint8_t> b;
     if (!slurp(path, b)) {
-        I.err = "cannot read the file";
+        I.err = N_("cannot read the file");
         return I;
     }
     int err = 0;
@@ -301,7 +305,7 @@ static Info inspect(const std::string &path, const std::string &mode = "")
     // named tracks than channels -- an MT-32 era orchestral file's shape
     if (!I.muxed && (fights > 0 || named > 16) && named >= 4) {
         I.suggest = "names";
-        I.suggest_why = fights ? "its named parts share channels" : "it names more parts than there are channels";
+        I.suggest_why = fights ? N_("its named parts share channels") : N_("it names more parts than there are channels");
     }
     // ...and what the mode asked for would do with it (the mux's parts, the unit's report)
     if (mode == "names" || mode == "mt32" || mode == "cm64u") {
@@ -318,16 +322,16 @@ static Info inspect(const std::string &path, const std::string &mode = "")
     I.programs = (int)progs.size();
     if (gsr) {
         I.detected = "gs";
-        I.why = "it sends a GS Reset";
+        I.why = N_("it sends a GS Reset");
     } else if (mt && nmt > 0) {
         I.detected = "mt32";            // (its own exclusives: written for the unit, which reads them)
-        I.why = "it sends MT-32 messages, which a real MT-32 reads";
+        I.why = N_("it sends MT-32 messages, which a real MT-32 reads");
     } else if (mt) {
         I.detected = "cm64";
-        I.why = "its 'Master Parameters' track: an MT-32 sequencer's";
+        I.why = N_("its 'Master Parameters' track: an MT-32 sequencer's");
     } else if (gm) {
         I.detected = "gm";
-        I.why = "it sends GM System On";
+        I.why = N_("it sends GM System On");
     } else {
         I.detected = "gs";
         I.why = banked ? "it selects banks, with no reset" : "it says nothing: plain General MIDI";
@@ -433,7 +437,7 @@ struct Player {
             name = p.substr(p.rfind('/') + 1);
             msg.clear();
             if (!I.ok || !slurp(p, b)) {
-                msg = I.ok ? "cannot read the file" : I.err;
+                msg = I.ok ? N_("cannot read the file") : I.err;
                 return;
             }
             if (md == "auto" || md.empty())
@@ -558,7 +562,7 @@ struct Player {
             wait_built(h, stop, 60.0);
             std::this_thread::sleep_for(std::chrono::milliseconds(150));
         }
-        say("playing");
+        say(N_("playing"));
         // ITS STAMPED CHANNELS: a part's CC7, CC11 and pan stamped before
         // each of its notes set that note's, not the other parts' sounding
         // on the channel (the file render's onset rule), until it stops
@@ -598,7 +602,7 @@ struct Player {
         nv_host_stamped(h, 0);
         {
             std::lock_guard<std::mutex> lk(mu);
-            stage = stop ? "stopped" : "played to the end";
+            stage = stop ? N_("stopped") : N_("played to the end");
         }
         busy = false;
     }
@@ -625,11 +629,11 @@ struct Render {
         // renders it, adds the room; a whole one renders, adds the room)
         std::string sg = stage;
         if (busy && inproc_on && stage == "rendering, streamed on the GPU")
-            sg = nv_render_pass() == 1 ? "1/3 reading the song" : "2/3 rendering, streamed on the GPU";
+            sg = nv_render_pass() == 1 ? N_("1/3 reading the song") : N_("2/3 rendering, streamed on the GPU");
         else if (stage == "adding the room")
-            sg = kind == "best" && whole_ ? "2/2 adding the room" : "3/3 adding the room";
+            sg = kind == "best" && whole_ ? N_("2/2 adding the room") : N_("3/3 adding the room");
         else if (stage == "rendering whole (the file renderer)")
-            sg = "1/2 rendering whole (the file renderer)";
+            sg = N_("1/2 rendering whole (the file renderer)");
         o.o["stage"] = sess::str(sg);
         o.o["last"] = sess::str(last);
         o.o["out"] = sess::str(out);
@@ -874,7 +878,7 @@ struct Render {
             }
             if (k == "heard" && !HELPERS && !NV_HEARD_INPROC) {
                 clean();
-                return finish("rendering as heard is not on this device yet: use best quality");
+                return finish(N_("rendering as heard is not on this device yet: use best quality"));
             }
             if (k == "heard") {
                 const std::string sp = tmp + "/session.json";
@@ -882,7 +886,7 @@ struct Render {
                     fwrite(sjs.data(), 1, sjs.size(), f);
                     fclose(f);
                 }
-                say("rendering as heard (the live engine, on the CPU)");
+                say(N_("rendering as heard (the live engine, on the CPU)"));
                 const std::vector<std::string> args = {exe + "nvlive", live_export, "--test", in, o, "--session=" + sp,
                                                        "--programs", "--cpu"};
                 int r;
@@ -909,7 +913,7 @@ struct Render {
                     std::lock_guard<std::mutex> lk(mu);
                     l = last;
                 }
-                return finish(r == -2 ? "render stopped" : r == 0 ? "rendered" : r == 137 || r == 128 + 9 ? "stopped: not enough memory beside the engine playing" : "the render failed: " + l);
+                return finish(r == -2 ? N_("render stopped") : r == 0 ? N_("rendered") : r == 137 || r == 128 + 9 ? N_("stopped: not enough memory beside the engine playing") : "the render failed: " + l);
             }
             // BEST: will it stream? (what the stream cannot reproduce yet asks first)
             if (file_export.empty()) {
@@ -929,7 +933,7 @@ struct Render {
                 std::lock_guard<std::mutex> lk(mu);
                 whole_ = whole;
             }
-            say(whole ? "rendering whole (the file renderer)" : "rendering, streamed on the GPU");
+            say(whole ? N_("rendering whole (the file renderer)") : N_("rendering, streamed on the GPU"));
             auto a = common;
             if (!whole) {
                 a.push_back("--stream-only");
@@ -959,11 +963,11 @@ struct Render {
                     l = last;
                 }
                 clean();
-                return finish(r == -2 ? "render stopped" : r == 2 ? "best quality refused: " + l
-                                                    : r == 137 ? "stopped: not enough memory beside the engine playing"
+                return finish(r == -2 ? N_("render stopped") : r == 2 ? "best quality refused: " + l
+                                                    : r == 137 ? N_("stopped: not enough memory beside the engine playing")
                                                                : "the render failed: " + l);
             }
-            say("adding the room");
+            say(N_("adding the room"));
             // (in this process, not a helper program: iOS runs none -- nvroomtail's whole is the library's)
             {
                 std::vector<std::string> a = {"nvroomtail", dry, o, "--export=" + file_export};
@@ -974,7 +978,7 @@ struct Render {
                 r = stopped ? -2 : nv_roomtail_main((int)a.size(), av.data());
             }
             clean();
-            finish(r == -2 ? "render stopped" : r == 0 ? "rendered" : "the room failed (" + std::to_string(r) + ")");
+            finish(r == -2 ? N_("render stopped") : r == 0 ? N_("rendered") : "the room failed (" + std::to_string(r) + ")");
         });
     }
 };

@@ -1,0 +1,547 @@
+# The interface's English texts (examples/i18n_strings.py --write): one a line, JSON-quoted,
+# then where it is used. A table, ui/lang/<code>.json, maps each to its translation.
+" · (no session: stars are not kept)"	library.h:293
+"%.0f Hz · %.0f frames"	setup.h:75
+"%.0f Hz · %.0f frames a block (%.2f ms)"	setup.h:72
+"%d patch · tap to play on part %02d%s"	library.h:292
+"%d patches · tap to play on part %02d%s"	library.h:292
+"%s %d%% · %d V"	panel.h:368
+"+ ADD A CONTROL"	control.h:189 control.h:189
+"..."	i18n.h:5 i18n.h:8
+"... {0} ..."	i18n.h:6
+"1/2 rendering whole (the file renderer)"	fileplay.h:636
+"1/3 reading the song"	fileplay.h:632
+"2/2 adding the room"	fileplay.h:634
+"2/3 rendering, streamed on the GPU"	fileplay.h:632
+"3/3 adding the room"	fileplay.h:634
+"8' OFF"	amp.h:547
+"A CONTROLLER (LEARN)"	control.h:250
+"A KEY (LEARN)"	control.h:249
+"A NEW ROUTE"	control.h:241
+"A drum set has no amplifier: its drums are heard as they are."	amp.h:263
+"A key held as the sustain pedal: held, the dampers lift; push into it and they come down to the strings."	piano.h:273
+"A triode stage before the speaker: clean at 0, the edge of breakup at 1, a clip past it. Its distortion is mostly the notes mixing: a chord thickens where one note barely would."	amp.h:453
+"A user set: touch a pad to choose its sound."	drums.h:313
+"A0 to C8: each octave's stretch from 2:1, in cents"	tuning.h:339
+"ADD THE ROUTE"	control.h:328
+"AFTERTOUCH"	control.h:251 matrix.h:75
+"AGAIN"	panel.h:422 panel.h:480
+"ALL"	library.h:303 panel.h:80 parts.h:231
+"ALL CH"	panel.h:184 panel.h:290 panel.h:360
+"AMP"	amp.h:243 nui.cpp:75
+"AMPLIFIER"	synth.h:297 synth.h:515
+"AS HEARD"	files.h:474
+"AS MIDI"	scenes.h:186
+"AS THE PATCH"	synth.h:428
+"AS THE PATCH (%.2f)"	amp.h:448 stops.h:290
+"AS THE PATCH · {0}"	amp.h:391
+"AUTO"	files.h:31 setup.h:142 setup.h:290
+"Add a control on {0}:"	control.h:195
+"Aftertouch"	setup.h:208
+"All"	library.h:219
+"Amp"	matrix.h:96 matrix.h:96
+"Amplitude"	matrix.h:96
+"Audio, {0} long · {1} · {2}. It plays beside what you play, at its own level, on the right."	files.h:279
+"Audio, {0} long · {1} · {2}. It plays beside what you play, at its own level: on the PLAY page."	files.h:277
+"BACK TO THE PATCH'S %.2f"	amp.h:448 stops.h:290
+"BACK TO THE PATCH'S {0}"	amp.h:391
+"BASS"	panel.h:34
+"BEST QUALITY"	files.h:476
+"BORROW TIME WHEN LATE"	setup.h:317
+"BORROWED TIME"	setup.h:307
+"BRASS"	panel.h:35
+"BRIDGE"	amp.h:161
+"BUILDING"	panel.h:151
+"BUILDING {0}%"	panel.h:149
+"Baroque pitch, A=415"	tuning.h:229
+"Bass"	library.h:18
+"Bell every"	scenes.h:251
+"Bend range"	setup.h:207
+"Best quality cannot render it"	files.h:502
+"Best quality needs the file render's data (file-export.nvx beside the live data); see Help: Files."	files.h:78
+"Best quality needs the file render's data: file-export.nvx in Clavitone's Documents."	files.h:76
+"Brass"	library.h:19
+"C4 to B4, cents from equal temperament"	tuning.h:323
+"CANCEL"	scenes.h:145
+"CATHEDRAL"	amp.h:585
+"CH"	panel.h:46 parts.h:231 parts.h:330
+"CH {0}"	panel.h:184 panel.h:290 panel.h:360
+"CHANNEL {0}"	control.h:307
+"CHOOSE"	files.h:190
+"CHORUS"	effects.h:413 panel.h:45
+"CHROMATIC PERC."	panel.h:34
+"CLEAR"	library.h:196
+"CLOSE"	help.h:138
+"CONE ROTOR"	amp.h:296 amp.h:570
+"CONTROL"	control.h:96 nui.cpp:76
+"CONTROLS"	control.h:99
+"COUPLERS"	amp.h:552
+"Callbacks that waited"	setup.h:326
+"Channel aftertouch"	matrix.h:94
+"Choose a MIDI or audio file on the left."	files.h:266
+"Choose a set."	drums.h:368
+"Chorus"	effects.h:379 effects.h:508
+"Chromatic Perc."	library.h:18
+"Clean at 0, a growl as it turns up."	stops.h:286
+"Concert pitch, A=440"	tuning.h:228
+"Cutoff"	matrix.h:96
+"Cuts"	setup.h:330
+"Cymbals"	drums.h:91 drums.h:189
+"DAMPERS"	piano.h:134 piano.h:191
+"DELAY"	effects.h:416 panel.h:45 synth.h:403
+"DELETE"	scenes.h:186 scenes.h:200
+"DONE"	library.h:205
+"DOWN"	piano.h:74 piano.h:177
+"DRIVE"	amp.h:434 stops.h:262 stops.h:273
+"DRIVE · ROTARY"	stops.h:174
+"DRUM SET %d"	panel.h:180 panel.h:286 panel.h:356
+"DRUMS"	drums.h:129 nui.cpp:75
+"Delay"	effects.h:379 effects.h:509 synth.h:292
+"Delay, reverb"	effects.h:19
+"Drum kits"	library.h:76 library.h:222
+"EASTERN"	tuning.h:196 tuning.h:210
+"EASTERN TUNING"	tuning.h:363
+"EFFECTS"	effects.h:204 nui.cpp:75
+"ENSEMBLE"	panel.h:35
+"ENV"	synth.h:403
+"ENVELOPE"	synth.h:518
+"ETHNIC"	panel.h:36
+"EVERY CHANNEL"	control.h:303
+"Ensemble"	library.h:18
+"Envelopes"	synth.h:290 synth.h:460 synth.h:463
+"Equal"	tuning.h:37
+"Ethnic"	library.h:19
+"Every part back to program 000, the controllers, effects and receive settings to power-on, as a sequencer's GS Reset."	scenes.h:268
+"FAST"	amp.h:618
+"FILES"	files.h:186 nui.cpp:77
+"FILES…"	files.h:216
+"FILL {0}"	panel.h:155
+"FILTER"	synth.h:297 synth.h:515
+"FIRMWARE BEFORE 1.0.7"	setup.h:185
+"FIXED"	parts.h:253 parts.h:342 parts.h:423
+"FOLDERS"	files.h:205
+"FROM"	control.h:248
+"Favourites"	library.h:219
+"Filter"	matrix.h:96 matrix.h:96 synth.h:289
+"GS (Init CM-64: an MT-32 file on a Sound Canvas)"	files.h:297
+"GS RESET"	scenes.h:266 scenes.h:275
+"GS reset sent"	scenes.h:280
+"GS, the Setup card's standard"	files.h:453
+"GS: INIT CM-64"	files.h:32 setup.h:144
+"GS: OURS"	files.h:31 setup.h:142
+"GUITAR"	panel.h:34
+"Guitar"	library.h:18
+"HALF"	piano.h:177
+"HALF {0}"	piano.h:74
+"HEARD"	amp.h:634 effects.h:365
+"HELP"	help.h:110 nui.cpp:166
+"HOW"	control.h:289
+"Headroom"	setup.h:206
+"Held by ringing notes"	setup.h:331
+"Hi-hats"	drums.h:90 drums.h:189
+"High"	effects.h:443
+"High gain"	effects.h:444
+"IN THE ROOM"	amp.h:651 stops.h:316
+"INPUT"	setup.h:65
+"INSERTION EFFECT"	effects.h:232
+"IS"	matrix.h:126 matrix.h:127
+"In parallel"	effects.h:20
+"In series"	effects.h:19
+"Indian, every part"	tuning.h:249
+"It cannot be played: {0}."	files.h:275
+"It cannot be read: {0}."	files.h:285
+"It cannot be streamed yet"	files.h:502
+"It plays through the same output as the keyboard, mixed beside it: play along, or listen back to a render."	files.h:425
+"Its parts, by their names"	files.h:43
+"Just"	tuning.h:37
+"KEEP THE ORIGINAL TOO"	control.h:290
+"KEY"	panel.h:45 parts.h:225 parts.h:324
+"KEY {0}"	drums.h:330
+"KIT"	library.h:375 library.h:376 library.h:377
+"Kicks"	drums.h:87 drums.h:189
+"LANGUAGE"	setup.h:285
+"LATCH (PRESS ON, PRESS OFF)"	control.h:294
+"LATE NOTE"	panel.h:132
+"LATE x{0}"	panel.h:132
+"LAYER"	parts.h:100
+"LAYER A"	synth.h:439
+"LAYER B"	synth.h:439
+"LEARN"	matrix.h:135 matrix.h:136
+"LEARN A KEY"	piano.h:312
+"LEVEL"	files.h:417 panel.h:44 parts.h:239
+"LFO"	synth.h:403
+"LFO 1"	matrix.h:95 matrix.h:95 matrix.h:95
+"LFO 2"	matrix.h:95 matrix.h:95 matrix.h:95
+"LFO · ENV · DELAY"	synth.h:416
+"LIBRARY"	nui.cpp:73
+"LOAD"	scenes.h:186
+"Left hand"	synth.h:291 synth.h:463 synth.h:486
+"Level"	scenes.h:258
+"Limiter knee"	setup.h:206
+"Looked for when the program is a Messenger patch."	setup.h:182
+"Low"	effects.h:441
+"Low gain"	effects.h:442
+"MATRIX"	matrix.h:70 nui.cpp:76
+"METRONOME"	control.h:99 scenes.h:220
+"MICS"	effects.h:373
+"MIDI IN"	setup.h:110
+"MISSED NOTE"	panel.h:124
+"MISSED x{0}"	panel.h:124
+"MIX · FILTER"	synth.h:403
+"MODE"	files.h:316
+"MOVE A CONTROL…"	control.h:250
+"MOVE ONE…"	matrix.h:136
+"MOVE…"	matrix.h:135
+"MT-32 VELOCITY {0}"	files.h:334
+"MUSIC"	files.h:209
+"MUTE"	panel.h:246 panel.h:394 panel.h:470
+"Master"	setup.h:206
+"Mixer"	synth.h:289 synth.h:459 synth.h:462
+"Mod depth"	setup.h:207
+"Mod rate"	setup.h:207
+"Mod wheel"	matrix.h:94
+"Multi-effects"	effects.h:20
+"NECK"	amp.h:161
+"No GS reverb set: the room is the panel's, {0}."	effects.h:470
+"No MIDI devices plugged in."	setup.h:113
+"No amplifier of its own: it is heard straight from its pickups."	amp.h:399
+"No cone rotor on it now: choose CONE ROTOR or ROTOR CHORUS under SPEAKER for its two speakers turning."	amp.h:573
+"No favourites yet: tap a patch's star to keep it here."	library.h:409
+"No file chosen: choose one on the CHOOSE page."	files.h:379
+"No folders, MIDI or audio files here."	files.h:245
+"No key is the pedal yet."	piano.h:307
+"No part is on it yet."	effects.h:268
+"No presets yet."	scenes.h:98
+"No raga"	tuning.h:417
+"No rotary on it now: choose ROTARY under SPEAKER for the horn and drum turning."	amp.h:606
+"No routes: the keyboard's controls reach the engine as they are."	control.h:223
+"No scenes yet."	scenes.h:98
+"No session file: presets and scenes cannot be kept."	scenes.h:117
+"No sound yet."	drums.h:333
+"No valve of its own: turned up, it gains one, a triode stage before the speaker, the edge of breakup at 1."	amp.h:456
+"None set."	setup.h:182
+"Not built in the native interface yet: the web interface has it (nvlive --ui)."	nui.cpp:274
+"Not played live: {0}."	effects.h:271
+"Not set"	drums.h:189 drums.h:192
+"Nothing matches."	library.h:409
+"OFF"	files.h:334 setup.h:228
+"OFF: MY PARTS"	setup.h:142
+"ON"	files.h:334 scenes.h:239
+"ON-SCREEN CONTROLS"	control.h:127
+"ORCHESTRA BY NAMES"	files.h:33
+"ORGAN"	panel.h:34
+"OSC"	synth.h:403
+"OSC 1"	synth.h:295
+"OSC 2"	synth.h:295
+"OSC · MIX · FILTER"	synth.h:416
+"OURS"	setup.h:273
+"Off"	tuning.h:371
+"Off: a block that is late drops out, a click."	setup.h:340
+"Off: the Indian instruments play the tuner above."	tuning.h:451
+"Off: the input plays your own parts."	setup.h:161
+"On it: channel {0}."	effects.h:269
+"On it: channels {0}."	effects.h:269
+"On {0}."	setup.h:182
+"Opening it…"	files.h:276
+"Organ"	library.h:18
+"Oscillators"	synth.h:288 synth.h:459 synth.h:462
+"Other systems"	tuning.h:250
+"Owed now"	setup.h:328
+"PAN"	panel.h:44 parts.h:216 parts.h:308
+"PANIC"	panel.h:250 panel.h:416 panel.h:474
+"PARAMETERS"	effects.h:210
+"PART"	panel.h:174 panel.h:293 panel.h:362
+"PART ▶"	panel.h:243 panel.h:391 panel.h:467
+"PARTS"	i18n.h:2 nui.cpp:73 parts.h:89
+"PATCH'S OWN · {0}"	amp.h:513 amp.h:523
+"PAUSE"	files.h:388
+"PEDAL KEY"	piano.h:271
+"PEDALS"	piano.h:134 piano.h:160
+"PERCUSSIVE"	panel.h:36
+"PIANO"	nui.cpp:74 panel.h:34 piano.h:129
+"PICKUP"	amp.h:290 amp.h:315
+"PIPE"	panel.h:35
+"PLAY"	files.h:190 files.h:388
+"PLAY AS A MODULE"	setup.h:139
+"PLAY IT"	files.h:525
+"PLAY LIVE"	files.h:432 files.h:434
+"PLAYER"	files.h:384
+"PRESETS"	scenes.h:166
+"PRESS A KEY…"	control.h:249
+"PRESS THE KEY NOW… (TAP TO STOP)"	piano.h:312
+"PROGRAM %03d%s · %s"	panel.h:182 panel.h:288 panel.h:358
+"PROGRAM CHANGES READ AS"	setup.h:270
+"PUSH INTO IT TO DAMP"	control.h:299
+"Percussion"	drums.h:95 drums.h:189
+"Percussive"	library.h:20
+"Piano"	library.h:18
+"Pipe"	library.h:19
+"Pitch"	matrix.h:96 matrix.h:96 matrix.h:96
+"Pitch bend"	matrix.h:94
+"Plays {0} from {1}."	drums.h:333
+"Poly aftertouch"	matrix.h:94
+"Position"	widgets.h:42
+"Pure octaves: pipes"	tuning.h:230
+"QUIT"	panel.h:422 panel.h:480
+"QUIT CLAVITONE"	panel.h:255
+"READ ITS KNOBS"	setup.h:185
+"RECALL"	scenes.h:200
+"REED"	panel.h:35
+"REMOVE"	control.h:182 control.h:230 parts.h:104
+"RENDER AS HEARD INSTEAD"	files.h:514
+"RENDER OFFLINE"	files.h:466
+"RENDER WHOLE ANYWAY"	files.h:510
+"REVERB"	effects.h:412 panel.h:44
+"ROOM"	effects.h:371
+"ROTARY"	amp.h:296 amp.h:604 stops.h:298
+"ROUTES"	control.h:99 control.h:220
+"ROWS {0}"	stops.h:178
+"ROWS {0}–{1}"	stops.h:177
+"RT DROPPED"	panel.h:160
+"Rate"	matrix.h:96 matrix.h:96
+"Reading it…"	files.h:283
+"Reading the matrix…"	matrix.h:91
+"Reading the part…"	synth.h:392
+"Reed"	library.h:19
+"Rendering while you play can cause dropouts: both use the processors. A render that needs more memory than is free is stopped."	files.h:533
+"Reverb"	effects.h:379 effects.h:508
+"SA"	tuning.h:439
+"SAVE"	scenes.h:144 scenes.h:154
+"SAVE OVER"	scenes.h:186 scenes.h:200
+"SAVE THE CONTROLS AS"	scenes.h:127
+"SAVE THE CONTROLS AS…"	scenes.h:201
+"SAVE THE CONTROLS…"	scenes.h:201
+"SAVE THIS SETUP AS"	scenes.h:127
+"SAVE THIS SETUP AS…"	scenes.h:187
+"SCENES"	nui.cpp:73 scenes.h:112 scenes.h:194
+"SEE ALSO"	help.h:302
+"SENDS"	effects.h:378
+"SETUP"	nui.cpp:77 setup.h:61
+"SHAPE"	tuning.h:196
+"SHOW THE {0} CARD"	help.h:322
+"SLOW"	amp.h:618
+"SOFT"	piano.h:163
+"SOLO"	panel.h:248 panel.h:396 panel.h:472
+"SOSTENUTO"	piano.h:165
+"SOUND"	setup.h:65 setup.h:199
+"SOUND EFFECTS"	panel.h:37
+"SPACE"	library.h:198
+"SPEAKER"	amp.h:293 amp.h:470
+"SPEED"	amp.h:584 amp.h:617
+"SPLIT"	parts.h:102
+"SPREAD"	amp.h:659 stops.h:324
+"STAND-IN"	panel.h:128
+"STAND-IN x{0}"	panel.h:128
+"STOP"	amp.h:618 files.h:390 files.h:436
+"STOP RENDER"	files.h:478
+"STOPS"	nui.cpp:74 stops.h:94 stops.h:175
+"STRINGS"	panel.h:35
+"SUSTAIN"	piano.h:170
+"SYNTH"	nui.cpp:74 synth.h:389
+"SYNTH EFFECTS"	panel.h:36
+"SYNTH LEAD"	panel.h:35
+"SYNTH PAD"	panel.h:36
+"SYSTEM"	effects.h:210
+"Saved to {0}"	files.h:521
+"Search help"	help.h:117
+"Search patches"	library.h:267
+"Set by a file's GM2 messages (shown, not changed here): "	matrix.h:165
+"Sixteen parts, one per channel; OFF puts your parts back."	setup.h:163
+"Snares"	drums.h:88 drums.h:189
+"Sound Effects"	library.h:20
+"Sounds"	drums.h:189 drums.h:192
+"Stand-in"	setup.h:208
+"Strings"	library.h:18
+"Sympathetic strings: off (nvlive was started without them)."	piano.h:321
+"Sympathetic strings: on. The first part's undamped strings ring with what is played."	piano.h:320
+"Synth Effects"	library.h:19
+"Synth Lead"	library.h:19
+"Synth Pad"	library.h:19
+"TAP AGAIN TO QUIT"	panel.h:255
+"TAP AGAIN TO RESET"	scenes.h:275
+"THE FILE"	files.h:260
+"THE GPU"	setup.h:245
+"THE MESSENGER"	setup.h:177
+"THE ROOM"	setup.h:252
+"THE ROOM'S TAIL"	setup.h:245
+"THE TUNING"	tuning.h:305
+"THEATER"	amp.h:585
+"THIS PART ON IT"	effects.h:248
+"TO"	control.h:269
+"TOO BIG: MIDDLE FIRST"	panel.h:150
+"TUNERS"	tuning.h:196 tuning.h:210
+"TUNING"	nui.cpp:76 tuning.h:194
+"TWO MICS"	amp.h:653 stops.h:318
+"TYPE"	effects.h:210
+"Tempo"	scenes.h:241
+"The Indian instruments' parts play {0}, Sa on {1} (unless the tuner above is itself Indian)."	tuning.h:459
+"The Indian instruments' parts play {0}, raga {1}, Sa on {2} (unless the tuner above is itself Indian)."	tuning.h:460
+"The cabinet heard where it stands: its horn and drum turning toward you and away."	amp.h:666 stops.h:331
+"The console's rocker: Cathedral slow, Theater fast. The rotor takes several seconds to climb to Theater and drops back to Cathedral in about one."	amp.h:594
+"The file check: {0} thing to know"	files.h:348
+"The file check: {0} things to know"	files.h:349
+"The knob's position, 0 to 1 (0.5 the centre)."	widgets.h:42
+"The knob's position, 0 to 1."	widgets.h:42
+"The mod wheel is the swell."	amp.h:460
+"The number the module stores for it; the nearest one is taken."	effects.h:140
+"The pedals still go to its channel; the dampers are drawn for a piano's strings."	piano.h:201
+"The rotors spin up and down between speeds as a real rotary speaker's do; a flick of the pitch wheel steps them too."	amp.h:628
+"The synth programs (Synth Lead, Synth Pad, the synth basses, brass and strings) bring their knobs here."	synth.h:395
+"The whole render holds the entire song in memory, which a long song may not fit in."	files.h:503
+"This card's iPad layout is still to come; the laptop's has it."	nui.cpp:239
+"This part"	drums.h:177 piano.h:197 stops.h:103
+"This voice plays through no amplifier or speaker of its own -- an acoustic instrument is heard as it is. The electric pianos, the organs, the electric guitars and basses have one."	amp.h:264
+"Thru: the parts on it play dry. Choose a type."	effects.h:329
+"Time held, ever"	setup.h:327
+"Time returned"	setup.h:329
+"Toms"	drums.h:89 drums.h:189
+"Tone colour"	effects.h:19
+"Touch a pad for what it is."	drums.h:374
+"Touch a stop for what it is."	stops.h:353
+"Touch a type for what it is."	effects.h:500
+"UNDERRUNS {0}"	panel.h:158
+"UP"	piano.h:74 piano.h:177
+"VALVE"	amp.h:292 amp.h:412
+"VEL"	parts.h:253 parts.h:342 parts.h:423
+"VOICES"	panel.h:204 panel.h:310
+"Value"	effects.h:139 effects.h:139 widgets.h:97
+"WHEEL DOWN"	control.h:251
+"WHEEL EITHER"	control.h:251
+"WHEEL UP"	control.h:250
+"WHEEL · BEND"	matrix.h:75
+"WITH THE WHEEL"	amp.h:435
+"WITH THE WHEEL is the drive as the mod wheel scales it (now x%.2f)."	amp.h:459
+"What the CM-64 does with it"	files.h:43
+"What the MT-32 did with the input"	setup.h:169
+"What the MT-32 does with it"	files.h:43
+"When a block is late, the sound already playing is held on and the time is borrowed; it is given back where no note falls."	setup.h:338
+"Where the dampers leave the strings, by the pedal's value: {0}. The bass dampers are heavier and leave later."	piano.h:259
+"Worth trying {0}: {1}."	files.h:311
+"a controller"	control.h:323
+"a key"	control.h:322
+"a sequencer or DAW sending whole songs"	setup.h:139
+"adding the room"	fileplay.h:970
+"aftertouch"	control.h:325
+"all lifted: every string rings"	piano.h:215
+"all on the strings"	piano.h:215
+"an orchestra by track names"	files.h:298
+"an organ that bends"	engine.cpp:1369
+"booth"	setup.h:15
+"bridge"	amp.h:225
+"building the patches in {0}…"	tuning.h:219
+"cannot read the file"	fileplay.h:246 fileplay.h:440
+"ch {0}"	control.h:180 piano.h:286
+"chamber"	setup.h:15
+"channel {0}"	matrix.h:87
+"channel {0} (part {1}'s)"	control.h:195
+"chapel"	setup.h:16
+"church"	setup.h:16
+"controller on a choice"	efxchain.cpp:904
+"delay"	setup.h:17
+"drum map"	partmux.h:419 partmux.h:491
+"drums"	parts.h:211 parts.h:302
+"dry"	setup.h:15
+"each channel's levels, pans and sends"	scenes.h:194
+"every ch"	control.h:180
+"every channel"	control.h:195 matrix.h:87
+"every part"	setup.h:199 tuning.h:206
+"fine"	widgets.h:18
+"grand hall"	setup.h:16
+"hall"	setup.h:16
+"held: dampers up"	piano.h:284
+"held: up · pushed: down"	piano.h:284
+"holds the keys down as it goes down"	piano.h:165
+"it names more parts than there are channels"	fileplay.h:308
+"it sends GM System On"	fileplay.h:334
+"it sends MT-32 messages, which a real MT-32 reads"	fileplay.h:328
+"it sends a GS Reset"	fileplay.h:325
+"its 'Master Parameters' track: an MT-32 sequencer's"	fileplay.h:331
+"its named parts share channels"	fileplay.h:308
+"its own sound"	drums.h:398
+"key {0}"	control.h:322
+"kit {0}"	scenes.h:174
+"large chamber"	setup.h:15
+"leaving"	setup.h:152
+"measured ragas…"	tuning.h:384
+"mono"	files.h:273
+"no class"	engine.cpp:1262
+"no organ of its family on its channel"	engine.cpp:1369
+"no such mode"	module.h:309
+"none"	scenes.h:247
+"off"	control.h:131 setup.h:131
+"outdoors"	setup.h:16
+"pan delay"	setup.h:17
+"part {0}"	amp.h:246 control.h:112 effects.h:207
+"part {0} · {1}"	drums.h:133 matrix.h:85 stops.h:98
+"pedals on channel {0}"	piano.h:146
+"pedals on every channel"	piano.h:146
+"plate"	setup.h:17
+"played to the end"	fileplay.h:605
+"playing"	fileplay.h:565
+"playing {0}"	files.h:199 tuning.h:220
+"prog %03d%s"	parts.h:209 parts.h:300
+"program {0}"	scenes.h:174
+"putting your setup back"	module.h:275
+"raga {0} as measured"	tuning.h:457
+"reading"	setup.h:131
+"render stopped"	fileplay.h:916 fileplay.h:966 fileplay.h:981
+"rendered"	fileplay.h:916 fileplay.h:981
+"rendering as heard (the live engine, on the CPU)"	fileplay.h:889
+"rendering as heard is not on this device yet: use best quality"	fileplay.h:881
+"rendering whole (the file renderer)"	fileplay.h:936
+"rendering, streamed on the GPU"	fileplay.h:936
+"rubato"	setup.h:307
+"sent straight to the engine"	control.h:127
+"set when nvlive started"	piano.h:303
+"set {0}"	drums.h:323
+"several at once, merged; kept in the session"	setup.h:110
+"stereo"	files.h:273
+"still changing modes"	module.h:313
+"stopped"	fileplay.h:605
+"stopped: not enough memory beside the engine playing"	fileplay.h:916 fileplay.h:967
+"studio"	setup.h:15
+"the Indian voices' parts"	tuning.h:363
+"the keyboard's controls, rewritten first"	control.h:220
+"the pitch wheel down"	control.h:324
+"the pitch wheel up"	control.h:324
+"the pitch wheel, either way"	control.h:324
+"the voice refused it"	engine.cpp:1519
+"the whole mix"	effects.h:432
+"the whole setup: parts, routes, tuning, effects"	scenes.h:167
+"this tuner has no fixed table (it follows the file or the music)"	tuning.h:319
+"type"	efxchain.cpp:52 efxchain.cpp:421
+"una corda"	piano.h:163
+"wanted, not open"	setup.h:131
+"{0} CHANGED · BACK"	synth.h:426
+"{0} CHANGED · BACK TO THE PATCH"	synth.h:427
+"{0} beats"	scenes.h:249
+"{0} channel ({1})"	files.h:299
+"{0} channels (the first two played)"	files.h:274
+"{0} channels ({1})"	files.h:299
+"{0} control"	control.h:115
+"{0} controls"	control.h:115
+"{0} found"	help.h:176
+"{0} has no stops. Pick one with stops for part {1}:"	stops.h:102
+"{0} in {1}"	files.h:491
+"{0} is not a drum set. Pick a kit for part {1} from the list."	drums.h:176
+"{0} is not a piano."	piano.h:197
+"{0} is not a synth."	synth.h:393
+"{0} key · channel {1}"	drums.h:141
+"{0} keys · channel {1}"	drums.h:142
+"{0} long · {1} · {2}. It reads as {3}: {4}."	files.h:301
+"{0} of {1} drawn"	stops.h:161
+"{0} program change"	files.h:300
+"{0} program changes"	files.h:300
+"{0} resting lightly, {1} on the strings, {2} lifted"	piano.h:216
+"{0} route"	control.h:116
+"{0} routes"	control.h:116
+"{0} setting"	scenes.h:198
+"{0} settings"	scenes.h:198
+"{0} to {1}"	parts.h:137
+"{0} · BACK"	synth.h:425
+"{0}: nothing to report"	files.h:360
+"{0}–{1} of {2}"	parts.h:276
+"← neck"	amp.h:224
+"▲ UP"	files.h:207
+"◀ BACK"	help.h:111
+"◀ PART"	panel.h:241 panel.h:389 panel.h:465

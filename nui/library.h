@@ -15,9 +15,9 @@
 
 namespace nui {
 
-static const char *FAMILY_NAMES[16] = {"Piano", "Chromatic Perc.", "Organ", "Guitar", "Bass", "Strings", "Ensemble",
-                                       "Brass", "Reed", "Pipe", "Synth Lead", "Synth Pad", "Synth Effects", "Ethnic",
-                                       "Percussive", "Sound Effects"};
+static const char *FAMILY_NAMES[16] = {N_("Piano"), N_("Chromatic Perc."), N_("Organ"), N_("Guitar"), N_("Bass"), N_("Strings"), N_("Ensemble"),
+                                       N_("Brass"), N_("Reed"), N_("Pipe"), N_("Synth Lead"), N_("Synth Pad"), N_("Synth Effects"), N_("Ethnic"),
+                                       N_("Percussive"), N_("Sound Effects")};
 
 struct Patch {
     int pick = 0, program = 0, variation = 0;
@@ -30,13 +30,13 @@ struct Patch {
 // THE STANDARDS' FILTERS (Ben 2026-11-25): a standard shows what a file of it can
 // select -- GM1 its own; GM2 GM1's and its own; a Sound Canvas map GM1's and its
 // maps' up to it (GS3: GS1, GS2, GS3); CVT1 ours alone
-static const char *STD_CHIPS[8] = {"all", "GM1", "GM2", "GS1", "GS2", "GS3", "GS4", "CVT1"};
+static const char *STD_CHIPS[8] = {"all", "GM1", "GM2", "GS1", "GS2", "GS3", "GS4", "CVT1"};   // i18n-skip (the standards' names)
 inline bool std_shows(const std::string &f, const Patch &p)
 {
     if (f == "all")
         return true;
     for (const auto &s : p.stds) {
-        if (s == f || (s == "GM1" && f != "CVT1"))
+        if (s == f || (s == "GM1" && f != "CVT1"))   // i18n-skip
             return true;
         if (f.rfind("GS", 0) == 0 && s.rfind("GS", 0) == 0 && s <= f)
             return true;
@@ -72,7 +72,8 @@ inline std::string fam_of(const Patch &p)
 }
 inline std::string fam_label(const Patch &p)
 {
-    return p.drums ? "Drum kits" : p.variation == 127 ? "MT-32" : p.variation == 126 ? "CM-64 PCM"
+    // (English: the search's words, kept as they are; translated where drawn)
+    return p.drums ? N_("Drum kits") : p.variation == 127 ? "MT-32" : p.variation == 126 ? "CM-64 PCM"   // i18n-skip (a product's name)
                                                                                        : FAMILY_NAMES[(p.program >> 3) & 15];
 }
 inline std::string lower(std::string s)
@@ -175,7 +176,7 @@ inline std::vector<const Patch *> lib_shown()
 
 // THE ON-SCREEN KEYS (the web's osk): true when DONE
 // THE SCREEN's OWN KEYS typing into q (a name's: with - and _); true on DONE
-inline bool osk(App &a, std::string &q, float x, float y, float w, bool name = false, const char *done = "DONE")
+inline bool osk(App &a, std::string &q, float x, float y, float w, bool name = false, const char *done = nullptr)
 {
     static const char *ROWS[4] = {"1234567890", "qwertyuiop", "asdfghjkl", "zxcvbnm"};
     static const char *NROWS[4] = {"1234567890", "qwertyuiop", "asdfghjkl-", "zxcvbnm_"};
@@ -192,16 +193,16 @@ inline bool osk(App &a, std::string &q, float x, float y, float w, bool name = f
         }
     }
     const float ry = y + 4 * (kh + gap), bw = (w - 3 * gap) / 6, ws = a.tab ? 21 : 14;   // (the word keys 3x on the iPad, as its letters)
-    if (button(a, "oskclear", x, ry, bw, kh, "CLEAR", false, true, ws))
+    if (button(a, "oskclear", x, ry, bw, kh, T("CLEAR"), false, true, ws))
         q.clear();
-    if (button(a, "oskspace", x + bw + gap, ry, bw * 3 - gap, kh, "SPACE", false, true, ws))
+    if (button(a, "oskspace", x + bw + gap, ry, bw * 3 - gap, kh, T("SPACE"), false, true, ws))
         q += " ";
     if (button(a, "oskback", x + 4 * bw + gap, ry, bw - gap, kh, "\xe2\x86\x90", false, true, ws) && !q.empty()) {
         q.pop_back();
         while (!q.empty() && ((unsigned char)q.back() & 0xC0) == 0x80)
             q.pop_back();
     }
-    return button(a, "oskdone", x + 5 * bw + 2 * gap, ry, bw - gap, kh, done, false, true, ws);
+    return button(a, "oskdone", x + 5 * bw + 2 * gap, ry, bw - gap, kh, done ? done : T("DONE"), false, true, ws);   // (done: the caller's, translated)
 }
 inline bool lib_keys(App &a, float x, float y, float w) { return osk(a, g_lib.q, x, y, w); }
 
@@ -215,13 +216,13 @@ inline void draw_library(App &a)
     struct Fam {
         std::string id, label;
     };
-    std::vector<Fam> fams = {{"fav", "   Favourites"}, {"all", "All"}};   // (the spaces: its star, drawn)
+    std::vector<Fam> fams = {{"fav", std::string("   ") + T("Favourites")}, {"all", T("All")}};   // (the spaces: its star, drawn)
     for (int i = 0; i < 16; i++)
-        fams.push_back({std::to_string(i), FAMILY_NAMES[i]});
-    fams.push_back({"drums", "Drum kits"});
+        fams.push_back({std::to_string(i), T(FAMILY_NAMES[i])});
+    fams.push_back({"drums", T("Drum kits")});
     fams.push_back({"mt32", "MT-32"});
-    fams.push_back({"cm32p", "CM-64 PCM"});
-    const bool T = a.tab, PH = a.ph;    // (the iPad's: its card from y 210 to card_y1 + 6; the phone's from 106)
+    fams.push_back({"cm32p", "CM-64 PCM"});   // i18n-skip (a product's name)
+    const bool T = a.tab, PH = a.ph;    // (the iPad's: its card from y 210 to card_y1 + 6; the phone's from 106; nui::T below, past it)
     const float FX = PH ? 14 : T ? 20 : 34, FY = PH ? 112 : T ? 218 : 356, fw = PH ? 140 : 196, fh = PH ? 40 : 44, fg = 6,
                 Y1 = card_y1(a);
     const bool searching = !L.q.empty();
@@ -263,7 +264,7 @@ inline void draw_library(App &a)
                 SW = PH ? 250 : T ? 330 : 560;
     look::lcd_window(a, MX, SY, SW, SH, L.typing);
     look::lcd_text(a, 21, MX + 12, SY + (SH - a.lh(21)) / 2, L.q.empty() ? LCD_DIM : LCD,
-                   L.q.empty() ? std::string("Search patches") : L.q + (L.typing ? "_" : ""), !L.q.empty());
+                   L.q.empty() ? std::string(nui::T("Search patches")) : L.q + (L.typing ? "_" : ""), !L.q.empty());
     look::glass(a, MX, SY, SW, SH);
     ImGui::SetCursorScreenPos(P(a, MX, SY));
     if (ImGui::InvisibleButton("search", ImVec2(SW * a.k, SH * a.k)))
@@ -288,8 +289,8 @@ inline void draw_library(App &a)
     }
     const std::vector<const Patch *> list = lib_shown();
     char info[160];
-    snprintf(info, sizeof info, "%d patch%s \xc2\xb7 tap to play on part %02d%s", (int)list.size(),
-             list.size() == 1 ? "" : "es", a.row + 1, L.favs_kept ? "" : " \xc2\xb7 (no session: stars are not kept)");
+    snprintf(info, sizeof info, list.size() == 1 ? nui::T("%d patch \xc2\xb7 tap to play on part %02d%s") : nui::T("%d patches \xc2\xb7 tap to play on part %02d%s"),
+             (int)list.size(), a.row + 1, L.favs_kept ? "" : nui::T(" \xc2\xb7 (no session: stars are not kept)"));
     const std::string info_ = fit(a, a.font, 14, info, MW - SW - 60);
     text(a, a.font, 14, MX + SW + 16, SY + (PH ? 14 : 16), SILK_DIM, info_);
     heading(a, MX + SW + 16 + text_w(a, a.font, 14, info_) + 4, SY + (PH ? 14 : 16), "", "library");   // (the card's ?)
@@ -299,7 +300,7 @@ inline void draw_library(App &a)
         const float CY = SY + SH + (PH ? 6 : 8), CH = PH ? 34 : 40, cg = 6, cw = (MW - 7 * cg) / 8;
         for (int i = 0; i < 8; i++) {
             const std::string id = std::string("std") + STD_CHIPS[i];
-            if (button(a, id.c_str(), MX + i * (cw + cg), CY, cw, CH, i ? STD_CHIPS[i] : "ALL", L.stdf == STD_CHIPS[i],
+            if (button(a, id.c_str(), MX + i * (cw + cg), CY, cw, CH, i ? STD_CHIPS[i] : nui::T("ALL"), L.stdf == STD_CHIPS[i],
                        true, T ? 21 : 14)) {
                 L.stdf = STD_CHIPS[i];
                 L.scroll = 0;
@@ -371,9 +372,9 @@ inline void draw_library(App &a)
             const float h21 = a.lh(21), h14 = a.lh(14);
             float name_x = T ? 10 + text_w(a, a.font, 21, "000") + 8 : 112;
             if (p.drums) {
-                text(a, a.font, 14, x + 10, y + (th - h14) / 2, nc, "KIT");
-                text(a, a.font, 21, x + 14 + text_w(a, a.font, 14, "KIT"), y + (th - h21) / 2, nc, std::to_string(p.program));
-                name_x = std::max(name_x, 18 + text_w(a, a.font, 14, "KIT") + text_w(a, a.font, 21, std::to_string(p.program)));
+                text(a, a.font, 14, x + 10, y + (th - h14) / 2, nc, nui::T("KIT"));
+                text(a, a.font, 21, x + 14 + text_w(a, a.font, 14, nui::T("KIT")), y + (th - h21) / 2, nc, std::to_string(p.program));
+                name_x = std::max(name_x, 18 + text_w(a, a.font, 14, nui::T("KIT")) + text_w(a, a.font, 21, std::to_string(p.program)));
             } else {
                 char pn[8];
                 snprintf(pn, sizeof pn, "%03d", p.program);
@@ -405,7 +406,7 @@ inline void draw_library(App &a)
         }
     if (list.empty())
         text(a, a.font, 21, MX, TY + 10, SILK_DIM,
-             L.fam == "fav" && !searching ? "No favourites yet: tap a patch's star to keep it here." : "Nothing matches.");
+             L.fam == "fav" && !searching ? nui::T("No favourites yet: tap a patch's star to keep it here.") : nui::T("Nothing matches."));
     dl()->PopClipRect();
     // (the scroll's place, at the right)
     if (content > view) {

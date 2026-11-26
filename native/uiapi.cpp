@@ -1258,6 +1258,10 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
     const int row = (int)arg_i(q, "row", w ? w->row : 0);
     bool ok = true;
     if (call == "hello") {
+        {
+            std::lock_guard<std::mutex> lk(h->lang_mu);
+            r.o["language"] = sess::str(h->lang);
+        }
         r.o["rate"] = sess::integer(nv_host_rate(h));
         r.o["block"] = sess::integer(nv_host_block(h));
         r.o["globals"] = globals_of(h);
@@ -1387,6 +1391,9 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         } else {
             nv_host_synth_forget(h, row, layer, knob);
         }
+    } else if (call == "language_set") {     // the interface's language: a code (ja, de ...), or "auto"
+        std::lock_guard<std::mutex> lk(h->lang_mu);
+        h->lang = arg_s(q, "language");
     } else if (call == "rubato_set") {         // on: rubato (borrowed time) wanted -- the live loop switches between callbacks
         h->rub_wish = arg_i(q, "on", 1) != 0;
     } else if (call == "global_set") {

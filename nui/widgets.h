@@ -15,7 +15,7 @@ inline void bubble(App &a, const std::string &s)
     if (!a.K.moved || a.K.active == 0)
         return;
     const ImVec2 m = a.K.bubble_at;
-    std::string t = shape(s + (a.K.fine() ? "  \xc2\xb7 fine" : ""));
+    std::string t = shape(s + (a.K.fine() ? "  \xc2\xb7 " + std::string(T("fine")) : ""));
     const float sz = px(a, 21), w = a.font->CalcTextSizeA(sz, FLT_MAX, 0, t.c_str()).x + 24 * a.k,
                 h = sz + 16 * a.k;
     const ImVec2 p0(std::floor(m.x - w / 2), std::floor(m.y - 90 * a.k - h));
@@ -39,7 +39,7 @@ inline int knob(App &a, const char *id, float cx, float cy, float size, float &v
     g.detents = detents;
     int f = gesture(a.K, id, P(a, cx - r, cy - r), P(a, cx + r, cy + r + 34), v01, g);
     if (sheet && (f & K_LONG))
-        open_sheet(a, id, label, value, v01, 0, 1, 3, "Position", centred ? "The knob's position, 0 to 1 (0.5 the centre)." : "The knob's position, 0 to 1.");
+        open_sheet(a, id, label, value, v01, 0, 1, 3, T("Position"), centred ? T("The knob's position, 0 to 1 (0.5 the centre).") : T("The knob's position, 0 to 1."));
     {
         double t = v01;
         f |= take_sheet(a, id, t);
@@ -94,7 +94,7 @@ inline int fader(App &a, const char *id, float cx, float y, float h, float &v, f
     g.detents = detents;
     int f = gesture(a.K, id, P(a, cx - 30, y), P(a, cx + 30, y + h), v, g, 1);
     if (f & K_LONG)
-        open_sheet(a, id, label, value, v, lo, hi, step >= 1 ? 0 : step >= 0.1f ? 1 : 2, "Value", "");
+        open_sheet(a, id, label, value, v, lo, hi, step >= 1 ? 0 : step >= 0.1f ? 1 : 2, T("Value"), "");
     {
         double t = v;
         f |= take_sheet(a, id, t);
@@ -129,7 +129,7 @@ inline int lcd_field(App &a, const char *id, float x, float y, float w, float h,
     int f = gesture(a.K, id, P(a, x, y), P(a, x + w, y + h), v, g);
     // (its sheet in the field's own unit: the LEVEL's steps are half dB)
     if (f & K_LONG)
-        open_sheet(a, id, label, value, v * unit, lo * unit, hi * unit, unit < 1 ? 1 : 0, "Value", "");
+        open_sheet(a, id, label, value, v * unit, lo * unit, hi * unit, unit < 1 ? 1 : 0, T("Value"), "");
     {
         double t = v * unit;
         if (take_sheet(a, id, t) & K_CHANGED) {

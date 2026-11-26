@@ -16,8 +16,8 @@ namespace nui {
 inline std::string fam_label(const std::string &n)
 {
     static const std::map<std::string, std::string> M = {
-        {"Tone colour (filters)", "Tone colour"}, {"Delay and reverb", "Delay, reverb"}, {"Two in series", "In series"},
-        {"Three or more in series", "Multi-effects"}, {"Two in parallel", "In parallel"}};
+        {"Tone colour (filters)", N_("Tone colour")}, {"Delay and reverb", N_("Delay, reverb")}, {"Two in series", N_("In series")},   // i18n-skip (an old export's names, compared)
+        {"Three or more in series", N_("Multi-effects")}, {"Two in parallel", N_("In parallel")}};   // i18n-skip (an old export's names, compared)
     const auto it = M.find(n);
     return it == M.end() ? n : it->second;
 }
@@ -136,8 +136,8 @@ inline int list_knob(App &a, const std::string &id, float cx, float cy, float si
     // (a long-press: the value as its list numbers it, typed; the nearest taken)
     const std::string sk = id + "#list";
     if ((f & K_LONG) && n)
-        open_sheet(a, sk, label.empty() ? std::string("Value") : label, say, vals[(size_t)idx], vals.front(), vals.back(), 0, "Value",
-                   shown.empty() ? "" : "The number the module stores for it; the nearest one is taken.");
+        open_sheet(a, sk, label.empty() ? std::string(T("Value")) : label, say, vals[(size_t)idx], vals.front(), vals.back(), 0, T("Value"),
+                   shown.empty() ? "" : T("The number the module stores for it; the nearest one is taken."));
     double t;
     const int sf = take_sheet(a, sk, t);
     if ((sf & K_CHANGED) && n) {
@@ -201,15 +201,15 @@ inline void draw_effects(App &a)
     const bool show_type = !IP || page == 0, show_par = !IP || page == 1, show_sys = !IP || page == 2;
     const float X0 = IP ? 20 : 34, X1 = IP ? (a.ph ? 818 : 1113) : 1886, Y0 = IP ? 266 : 394, HY = IP ? 224 : 356, Y1 = card_y1(a);
     const float GH = IP ? 44 : 28, GR = GH + 4, LH = a.lh(14) + (IP ? 3 : 4);    // (a choice's height, its row)
-    const float TX = heading(a, X0, HY, "EFFECTS", "effects");
+    const float TX = heading(a, X0, HY, T("EFFECTS"), "effects");
     const J *p = part(a, a.row);
     if (p)
-        text(a, a.font, 14, TX, HY + 1, OWN, fit(a, a.font, 14, "part " + pad2(a.row + 1) + " \xc2\xb7 " + str(p, "name"), IP ? 160 : 900));
+        text(a, a.font, 14, TX, HY + 1, OWN, fit(a, a.font, 14, TF("part {0}", {pad2(a.row + 1)}) + " \xc2\xb7 " + str(p, "name"), IP ? 160 : 900));
     if (IP)
         for (int pg = 0; pg < 3; pg++) {
-            static const char *PN[3] = {"TYPE", "PARAMETERS", "SYSTEM"};
+            static const char *PN[3] = {N_("TYPE"), N_("PARAMETERS"), N_("SYSTEM")};
             const std::string id = "fxpage" + std::to_string(pg);
-            if (button(a, id.c_str(), page_kx(a, 3, pg, 340), 216, page_kw(a, 3), 44, PN[pg], page == pg, true, 21))
+            if (button(a, id.c_str(), page_kx(a, 3, pg, 340), 216, page_kw(a, 3), 44, T(PN[pg]), page == pg, true, 21))
                 page = pg;
         }
     const J *x = F.e.get("efx"), *y = F.e.get("sys");
@@ -229,7 +229,7 @@ inline void draw_effects(App &a)
         if (t.msb == msb && t.lsb == lsb)
             type = &t;
     if (show_type || show_par) {
-    const float ix = heading(a, IX + 12, Y0 + 12, "INSERTION EFFECT", "fx:ins");
+    const float ix = heading(a, IX + 12, Y0 + 12, T("INSERTION EFFECT"), "fx:ins");   // i18n-skip (the help key)
     text(a, a.font, 21, ix, Y0 + (IP ? 10 : 8), LCD, type ? pad2(type->num) + " " + type->name : "00 Thru");
     // this part on it (every channel the part plays)
     std::vector<int> chans;
@@ -245,7 +245,7 @@ inline void draw_effects(App &a)
     bool on = true;
     for (int c : chans)
         on = on && std::find(on_it.begin(), on_it.end(), c) != on_it.end();
-    if (button(a, "fxon", IX + IW - 222, Y0 + 6, 210, IP ? 44 : 34, "THIS PART ON IT", on, true, IP ? 21 : 14)) {
+    if (button(a, "fxon", IX + IW - 222, Y0 + 6, 210, IP ? 44 : 34, T("THIS PART ON IT"), on, true, IP ? 21 : 14)) {
         for (int c : chans)
             efx_send(a, "c", c, on ? 0 : 1);
         std::vector<int> nv;
@@ -265,9 +265,10 @@ inline void draw_effects(App &a)
     for (int c : on_it)
         if (c < 16)
             pl += (pl.empty() ? "" : ", ") + std::to_string(c + 1);
-    std::string pt = pl.empty() ? "No part is on it yet." : "On it: channel" + std::string(pl.find(',') != std::string::npos ? "s " : " ") + pl + ".";
+    std::string pt = pl.empty() ? std::string(T("No part is on it yet."))
+                                 : pl.find(',') != std::string::npos ? TF("On it: channels {0}.", {pl}) : TF("On it: channel {0}.", {pl});
     if (!str(x, "why").empty())
-        pt += " Not played live: " + str(x, "why") + ".";
+        pt += " " + TF("Not played live: {0}.", {str(x, "why")});
     text(a, a.font, 14, IX + 12, Y0 + (IP ? 32 : 46), SILK_DIM, fit(a, a.font, 14, pt, IW - (IP ? 260 : 24)));
     }
     // the families, then the family's types
@@ -280,7 +281,7 @@ inline void draw_effects(App &a)
     }
     std::vector<std::string> fn;
     for (const auto &f : F.fams)
-        fn.push_back(f.second);
+        fn.push_back(T(f.second));
     const float fy = Y0 + (IP ? 60 : 72);
     const int fcols = grid_cols(a, fn, IW - 24, IP ? 6 : 4);
     const int hf = show_type ? choice_grid(a, "fxfam", IX + 12, fy, IW - 24, fcols, GH, fn, F.fam) : -1;
@@ -325,7 +326,7 @@ inline void draw_effects(App &a)
     if (!show_par) {
     } else if (pit == F.params.end() || pit->second.empty()) {
         rect(a, IX + 12, ky0 - 8, IW - 24, 1, IM_COL32(0x33, 0x36, 0x3a, 255), 0);
-        text(a, a.font, 14, IX + 12, ky0 + 6, SILK_DIM, "Thru: the parts on it play dry. Choose a type.");
+        text(a, a.font, 14, IX + 12, ky0 + 6, SILK_DIM, T("Thru: the parts on it play dry. Choose a type."));
     } else {
         rect(a, IX + 12, ky0 - 8, IW - 24, 1, IM_COL32(0x33, 0x36, 0x3a, 255), 0);
         const auto &ps = pit->second;
@@ -361,28 +362,28 @@ inline void draw_effects(App &a)
                 mode = (int)std::floor(ht->second.first / 1000.0);
             const bool room = mode == 0;    // (a Rotary type's own way: two mics)
             const float bw = std::min(cw - 8, IP ? 110.0f : 88.0f), bh = IP ? 40 : 32;
-            text_c(a, a.font, 14, cx, cy - 2, SILK_DIM, "HEARD");
+            text_c(a, a.font, 14, cx, cy - 2, SILK_DIM, T("HEARD"));
             auto set = [&](int m) {
                 a.hold["rotary"] = {m * 1000.0 + (spread < 0 ? 0.0 : spread + 1.0), ImGui::GetTime() + 0.6};
                 call(a, "{\"call\":\"rotary_set\",\"row\":" + std::to_string(a.row) + ",\"mode\":" + std::to_string(m)
                             + ",\"spread\":" + jnum(spread) + "}");
             };
-            if (button(a, "fxrroom", cx - bw / 2, cy + 16, bw, bh, "ROOM", room))
+            if (button(a, "fxrroom", cx - bw / 2, cy + 16, bw, bh, T("ROOM"), room))
                 set(0);
-            if (button(a, "fxrmics", cx - bw / 2, cy + 20 + bh, bw, bh, "MICS", !room))
+            if (button(a, "fxrmics", cx - bw / 2, cy + 20 + bh, bw, bh, T("MICS"), !room))
                 set(1);
         }
         const float sx = IX + IW - 12 - SW_;
         rect(a, sx, ky0 - 4, 1, kh, IM_COL32(0x33, 0x36, 0x3a, 255), 0);
-        heading(a, sx + SW_ / 2 - 40, ky0 - 2, "SENDS", "fx:sends");
-        static const char *SN[3] = {"Reverb", "Chorus", "Delay"};   // (under SENDS: to each)
+        heading(a, sx + SW_ / 2 - 40, ky0 - 2, T("SENDS"), "fx:sends");   // i18n-skip (the help key)
+        static const char *SN[3] = {N_("Reverb"), N_("Chorus"), N_("Delay")};   // (under SENDS: to each)
         const J *sd = x->get("send");
         const float sh = (kh - 20) / 3;
         for (int i = 0; i < 3; i++) {
             const int ev = sd && sd->is(J::ARR) && i < (int)sd->a.size() ? (int)sd->a[(size_t)i].d() : 0;
             const int v = fx_val(a, "s" + std::to_string(i), ev);
             int picked;
-            list_knob(a, "fxs" + std::to_string(i), sx + SW_ / 2, ky0 + 20 + i * sh + 22, IP ? 44 : 36, irange(0, 127), {}, v, SN[i], false, SW_ - 6, picked);
+            list_knob(a, "fxs" + std::to_string(i), sx + SW_ / 2, ky0 + 20 + i * sh + 22, IP ? 44 : 36, irange(0, 127), {}, v, T(SN[i]), false, SW_ - 6, picked);
             if (picked != v)
                 efx_send(a, "s", 0x17 + i, picked, "s" + std::to_string(i));
         }
@@ -390,9 +391,9 @@ inline void draw_effects(App &a)
 
     // THE SYSTEM EFFECTS: reverb, chorus, delay, EQ (GS 40 01 3x/5x, 40 02 0x), two by two
     if (y && show_sys) {
-        static const std::vector<std::string> REV = {"Room 1", "Room 2", "Room 3", "Hall 1", "Hall 2", "Plate", "Delay", "Pan Delay"};
-        static const std::vector<std::string> CHO = {"Chorus 1", "Chorus 2", "Chorus 3", "Chorus 4", "FB Chorus", "Flanger", "Short Delay", "Short Delay FB"};
-        static const std::vector<std::string> DLY = {"Delay 1", "Delay 2", "Delay 3", "Delay 4", "Pan Delay 1", "Pan Delay 2", "Pan Delay 3", "Pan Delay 4", "Delay to Rev", "Pan Repeat"};
+        static const std::vector<std::string> REV = {"Room 1", "Room 2", "Room 3", "Hall 1", "Hall 2", "Plate", "Delay", "Pan Delay"};   // i18n-skip (Roland's type names)
+        static const std::vector<std::string> CHO = {"Chorus 1", "Chorus 2", "Chorus 3", "Chorus 4", "FB Chorus", "Flanger", "Short Delay", "Short Delay FB"};   // i18n-skip (Roland's type names)
+        static const std::vector<std::string> DLY = {"Delay 1", "Delay 2", "Delay 3", "Delay 4", "Pan Delay 1", "Pan Delay 2", "Pan Delay 3", "Pan Delay 4", "Delay to Rev", "Pan Repeat"};   // i18n-skip (Roland's type names)
         struct Kn {
             const char *name;
             int lo, v, a, z;
@@ -408,14 +409,14 @@ inline void draw_effects(App &a)
             return v && v->is(J::ARR) && i < v->a.size() ? (int)v->a[i].d() : 0;
         };
         std::vector<Box> boxes = {
-            {"rev", "REVERB", "CC91", &REV, at("rev", 0), 0x30, {{"Level", 0x33, at("rev", 1), 0, 127}, {"Time", 0x34, at("rev", 2), 0, 127}}},
-            {"cho", "CHORUS", "CC93", &CHO, at("cho", 0), 0x38,
-             {{"Pre-LPF", 0x39, at("cho", 1), 0, 7}, {"Level", 0x3A, at("cho", 2), 0, 127}, {"Feedback", 0x3B, at("cho", 3), 0, 127},
+            {"rev", N_("REVERB"), "CC91", &REV, at("rev", 0), 0x30, {{"Level", 0x33, at("rev", 1), 0, 127}, {"Time", 0x34, at("rev", 2), 0, 127}}},
+            {"cho", N_("CHORUS"), "CC93", &CHO, at("cho", 0), 0x38,
+             {{"Pre-LPF", 0x39, at("cho", 1), 0, 7}, {"Level", 0x3A, at("cho", 2), 0, 127}, {"Feedback", 0x3B, at("cho", 3), 0, 127},   // i18n-skip (Roland's parameter names)
               {"Delay", 0x3C, at("cho", 4), 0, 127}, {"Rate", 0x3D, at("cho", 5), 0, 127}, {"Depth", 0x3E, at("cho", 6), 0, 127}}},
-            {"dly", "DELAY", "CC94", &DLY, at("dly", 0), 0x50,
-             {{"Pre-LPF", 0x51, at("dly", 1), 0, 7}, {"Time", 0x52, at("dly", 2), 1, 0x73}, {"Ratio L", 0x53, at("dly", 3), 1, 0x78},
-              {"Ratio R", 0x54, at("dly", 4), 1, 0x78}, {"Level C", 0x55, at("dly", 5), 0, 127}, {"Level L", 0x56, at("dly", 6), 0, 127},
-              {"Level R", 0x57, at("dly", 7), 0, 127}, {"Level", 0x58, at("dly", 8), 0, 127}, {"Feedback", 0x59, at("dly", 9), 0, 127}}},
+            {"dly", N_("DELAY"), "CC94", &DLY, at("dly", 0), 0x50,
+             {{"Pre-LPF", 0x51, at("dly", 1), 0, 7}, {"Time", 0x52, at("dly", 2), 1, 0x73}, {"Ratio L", 0x53, at("dly", 3), 1, 0x78},   // i18n-skip (Roland's parameter names)
+              {"Ratio R", 0x54, at("dly", 4), 1, 0x78}, {"Level C", 0x55, at("dly", 5), 0, 127}, {"Level L", 0x56, at("dly", 6), 0, 127},   // i18n-skip (Roland's parameter names)
+              {"Level R", 0x57, at("dly", 7), 0, 127}, {"Level", 0x58, at("dly", 8), 0, 127}, {"Feedback", 0x59, at("dly", 9), 0, 127}}},   // i18n-skip (Roland's parameter names)
         };
         if (at("rev", 3) >= 0)
             boxes[0].knobs.push_back({"Feedback", 0x35, at("rev", 3), 0, 127});
@@ -428,7 +429,7 @@ inline void draw_effects(App &a)
                         BH = bi < 2 ? top_h : YB - by;
             look::tray(a, bx, by, BW, BH, 9);
             if (bi == 3) {   // THE EQ, of the whole mix
-                text(a, a.font, 14, heading(a, bx + 12, by + 10, "EQ", "fx:eq"), by + 11, LCD, "the whole mix");
+                text(a, a.font, 14, heading(a, bx + 12, by + 10, "EQ", "fx:eq"), by + 11, LCD, T("the whole mix"));   // i18n-skip (the help key)
                 std::vector<std::string> gsh;
                 for (int g = 0x34; g <= 0x4C; g++)
                     gsh.push_back((g - 0x40 > 0 ? "+" : "") + std::to_string(g - 0x40) + " dB");
@@ -437,16 +438,16 @@ inline void draw_effects(App &a)
                     std::vector<int> vals;
                     std::vector<std::string> shown;
                     bool centred;
-                } EQ[4] = {{"Low", {0, 1}, {"200 Hz", "400 Hz"}, false},
-                           {"Low gain", irange(0x34, 0x4C), gsh, true},
-                           {"High", {0, 1}, {"3 kHz", "6 kHz"}, false},
-                           {"High gain", irange(0x34, 0x4C), gsh, true}};
+                } EQ[4] = {{N_("Low"), {0, 1}, {"200 Hz", "400 Hz"}, false},
+                           {N_("Low gain"), irange(0x34, 0x4C), gsh, true},
+                           {N_("High"), {0, 1}, {"3 kHz", "6 kHz"}, false},
+                           {N_("High gain"), irange(0x34, 0x4C), gsh, true}};
                 const float cw = (BW - 24) / 4;
                 for (int k = 0; k < 4; k++) {
                     const int v = fx_val(a, "eq" + std::to_string(k), at("eq", (size_t)k));
                     int picked;
                     const int f = list_knob(a, "eq" + std::to_string(k), bx + 12 + (k + 0.5f) * cw, by + (IP ? 80 : 90), 52, EQ[k].vals,
-                                            EQ[k].shown, v, EQ[k].name, EQ[k].centred, cw - 6, picked);
+                                            EQ[k].shown, v, T(EQ[k].name), EQ[k].centred, cw - 6, picked);
                     if (f & K_ACTIVE)
                         F.about_of = "eq";
                     if (picked != v)
@@ -455,7 +456,7 @@ inline void draw_effects(App &a)
                 continue;
             }
             const Box &b = boxes[(size_t)bi];
-            text(a, a.font, 14, heading(a, bx + 12, by + 10, b.name, std::string("fx:") + b.id), by + 11, LCD, b.cc);
+            text(a, a.font, 14, heading(a, bx + 12, by + 10, T(b.name), std::string("fx:") + b.id), by + 11, LCD, b.cc);
             const int tv = fx_val(a, std::string(b.id) + "type", b.type);
             const int tcols = IP ? (bi == 2 ? 5 : 4) : bi == 0 ? 4 : bi == 1 ? 2 : 3;     // (the chorus's and delay's names are longer)
             const int th = choice_grid(a, std::string("st") + b.id, bx + 12, by + 34, BW - 24, tcols, IP ? GH : 26, *b.types, tv);
@@ -466,7 +467,7 @@ inline void draw_effects(App &a)
             const int trows = ((int)b.types->size() + tcols - 1) / tcols;
             float ky = by + 34 + trows * (IP ? GR : 30) + 6;
             if (bi == 0 && b.type < 0) {
-                for (const auto &l : wrap(a, a.font, 14, "No GS reverb set: the room is the panel's, " + str(y, "room") + ".", BW - 24)) {
+                for (const auto &l : wrap(a, a.font, 14, TF("No GS reverb set: the room is the panel's, {0}.", {str(y, "room")}), BW - 24)) {
                     text(a, a.font, 14, bx + 12, ky, SILK_DIM, l);
                     ky += LH;
                 }
@@ -496,7 +497,7 @@ inline void draw_effects(App &a)
     std::string title, body;
     if (F.about_of == "efx") {
         if (!type) {
-            text(a, a.font, 14, X0 + 12, ay + (aboutH - a.lh(14)) / 2, LCD_DIM, "Touch a type for what it is.");
+            text(a, a.font, 14, X0 + 12, ay + (aboutH - a.lh(14)) / 2, LCD_DIM, T("Touch a type for what it is."));
             return;
         }
         title = type->name;
@@ -504,10 +505,10 @@ inline void draw_effects(App &a)
             body = str(ef, type->name.c_str());
     } else {
         static const std::map<std::string, std::pair<const char *, const char *>> N = {
-            {"rev", {"Reverb", "Reverb (system)"}}, {"cho", {"Chorus", "Chorus (system)"}},
-            {"dly", {"Delay", "Delay (system)"}}, {"eq", {"EQ", "EQ (system)"}}};
+            {"rev", {N_("Reverb"), "Reverb (system)"}}, {"cho", {N_("Chorus"), "Chorus (system)"}},
+            {"dly", {N_("Delay"), "Delay (system)"}}, {"eq", {"EQ", "EQ (system)"}}};
         const auto &nn = N.at(F.about_of);
-        title = nn.first;
+        title = T(nn.first);
         if (const J *ef = L.about.get("effects"))
             body = str(ef, nn.second);
     }

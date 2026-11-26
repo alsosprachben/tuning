@@ -15,6 +15,7 @@ namespace nui {
 
 struct HelpUi {
     bool loaded = false, typing = false;
+    unsigned gen = 0;                   // (the language it was loaded in: i18n().gen; a new language loads it again)
     J help, toc;
     std::string cur, q;
     std::vector<std::string> hist;
@@ -26,8 +27,11 @@ inline void help_load(App &a)
 {
     HelpUi &H = g_help;
     H.loaded = true;
+    H.gen = i18n().gen;
+    // (the language's own help, ui/help.<code>.json -- help_json.py's, English where untranslated -- else English)
     J j;
-    if (sess::load(a.ui_dir + "/help.json", j)) {
+    const std::string code = i18n().code;
+    if ((code != "en" && sess::load(a.ui_dir + "/help." + code + ".json", j)) || sess::load(a.ui_dir + "/help.json", j)) {
         if (const J *h = j.get("help"))
             H.help = *h;
         if (const J *t = j.get("toc"))
@@ -75,7 +79,7 @@ inline std::string card_of(const std::string &k)
 inline void help_open(App &a, const std::string &key)
 {
     HelpUi &H = g_help;
-    if (!H.loaded)
+    if (!H.loaded || H.gen != i18n().gen)
         help_load(a);
     H.hist.clear();
     H.cur = topic(key) ? key : "basics";
@@ -97,7 +101,7 @@ inline void help_show(const std::string &key, bool push)
 inline void draw_help(App &a)
 {
     HelpUi &H = g_help;
-    if (!H.loaded)
+    if (!H.loaded || H.gen != i18n().gen)
         help_load(a);
     if (H.cur.empty())
         H.cur = "basics";
@@ -107,14 +111,14 @@ inline void draw_help(App &a)
     look::grain(a, 0, 0, a.W, a.H, 0.02f, 0.05f);
     look::module(a, 14, 14, a.W - 28, a.H - 28, 10);
     // THE TOP: its name, BACK, the search, CLOSE
-    text(a, a.bold, 14, 34, 40, LCD, "HELP");
-    if (button(a, "hvback", 110, 28, 130, a.tab ? 44 : 42, "\xe2\x97\x80 BACK", false, !H.hist.empty(), a.tab ? 21 : 14) && !H.hist.empty()) {
+    text(a, a.bold, 14, 34, 40, LCD, T("HELP"));
+    if (button(a, "hvback", 110, 28, 130, a.tab ? 44 : 42, T("\xe2\x97\x80 BACK"), false, !H.hist.empty(), a.tab ? 21 : 14) && !H.hist.empty()) {
         H.cur = H.hist.back();
         H.hist.pop_back();
         H.scroll_page = 0;
     }
     look::lcd_window(a, 256, 28, 520, 42, H.typing);
-    look::lcd_text(a, 21, 268, 38, H.q.empty() ? LCD_DIM : LCD, H.q.empty() ? std::string("Search help") : H.q + (H.typing ? "_" : ""), !H.q.empty());
+    look::lcd_text(a, 21, 268, 38, H.q.empty() ? LCD_DIM : LCD, H.q.empty() ? std::string(T("Search help")) : H.q + (H.typing ? "_" : ""), !H.q.empty());
     look::glass(a, 256, 28, 520, 42);
     ImGui::SetCursorScreenPos(P(a, 256, 28));
     if (ImGui::InvisibleButton("hvsearch", ImVec2(520 * a.k, 42 * a.k)))
@@ -135,7 +139,7 @@ inline void draw_help(App &a)
         else
             a.help.clear();
     }
-    if (button(a, "hvclose", R - 150, 28, 150, a.tab ? 44 : 42, "CLOSE", false, true, a.tab ? 21 : 14)) {
+    if (button(a, "hvclose", R - 150, 28, 150, a.tab ? 44 : 42, T("CLOSE"), false, true, a.tab ? 21 : 14)) {
         a.help.clear();
         H.typing = false;
         return;
@@ -173,7 +177,7 @@ inline void draw_help(App &a)
                 if (all)
                     hits.push_back({k.s, str(h, "title"), g.a[0].s});
             }
-        rows.push_back({"", std::to_string(hits.size()) + " found", "", true});
+        rows.push_back({"", TF("{0} found", {std::to_string(hits.size())}), "", true});
         rows.insert(rows.end(), hits.begin(), hits.end());
     } else
         for (const J &g : H.toc.a) {
@@ -299,7 +303,7 @@ inline void draw_help(App &a)
             links.push_back(k);
     if (!links.empty()) {
         y += 14;
-        para(a.bold, 14, 0, TW, SILK_DIM, "SEE ALSO", 26);
+        para(a.bold, 14, 0, TW, SILK_DIM, T("SEE ALSO"), 26);
         float lx = 0;
         for (const auto &k : links) {
             const std::string t = str(topic(k), "title");
@@ -319,7 +323,7 @@ inline void draw_help(App &a)
         std::string up = card;
         for (char &c : up)
             c = (char)toupper((unsigned char)c);
-        ops.push_back({2, a.bold, 14, 0, y, 300, 42, SILK, "SHOW THE " + up + " CARD", card});
+        ops.push_back({2, a.bold, 14, 0, y, 300, 42, SILK, TF("SHOW THE {0} CARD", {T(up)}), card});
         y += 54;
     }
     if (scroll_area(a, "hvpage", PX, PY, PW, PH, y + 20, H.scroll_page, tap))

@@ -529,6 +529,10 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
         }
     if ((x = session.get("rubato")) && x->is(sess::J::BOOL))
         rub_wish = x->d() != 0.0;               // (borrowed time: on unless the session turned it off)
+    if ((x = session.get("language")) && x->is(sess::J::STR)) {
+        std::lock_guard<std::mutex> lk(lang_mu);
+        lang = x->s;
+    }
     if ((x = session.get("spectra_fast")) && x->is(sess::J::BOOL)) {   // (the Spectra-Tone's rocker, as left)
         const int sf = x->d() != 0.0 ? 1 : 0;
         post([this, sf](long long) { nv_part_set_spectra_fast(part, sf); });
@@ -821,6 +825,11 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
     rotary_refresh();
     j.o["stand_in_ms"] = sess::real(gval[NV_G_STAND_IN]);
     j.o["rubato"] = sess::boolean(rub_wish.load());
+    {
+        std::lock_guard<std::mutex> lk(lang_mu);
+        if (!lang.empty())
+            j.o["language"] = sess::str(lang);
+    }
     {                                           // the Spectra-Tone's rocker (live's preset "spectra_fast")
         const int sf = part ? nv_part_spectra_fast(part) : -1;
         if (sf >= 0)

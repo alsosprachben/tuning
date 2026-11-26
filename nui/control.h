@@ -93,12 +93,12 @@ inline void draw_control(App &a)
     const bool IP = a.tab;
     static int page = 0;
     const float X0 = IP ? 20 : 34, X1 = IP ? (a.ph ? 818 : 1113) : 1886, Y0 = IP ? 266 : 394, Y1 = card_y1(a), HY = IP ? 224 : 356;
-    const float TX = heading(a, X0, HY, "CONTROL", "control");
+    const float TX = heading(a, X0, HY, T("CONTROL"), "control");
     if (IP)
         for (int pg = 0; pg < 3; pg++) {
-            static const char *PG[3] = {"CONTROLS", "ROUTES", "METRONOME"};
+            static const char *PG[3] = {N_("CONTROLS"), N_("ROUTES"), N_("METRONOME")};
             const std::string id = "ctpage" + std::to_string(pg);
-            if (button(a, id.c_str(), page_kx(a, 3, pg, 300), 216, page_kw(a, 3), 44, PG[pg], page == pg, true, 21))
+            if (button(a, id.c_str(), page_kx(a, 3, pg, 300), 216, page_kw(a, 3), 44, T(PG[pg]), page == pg, true, 21))
                 page = pg;
         }
     // THE METRONOME AND THE GS RESET: under the on-screen controls (the iPad's a page of its own)
@@ -109,10 +109,11 @@ inline void draw_control(App &a)
     }
     const J *p = part(a, a.row);
     if (p)
-        text(a, a.font, 14, TX, HY + 1, OWN, fit(a, a.font, 14, "part " + pad2(a.row + 1) + " \xc2\xb7 " + str(p, "name"), IP ? 160 : 900));
+        text(a, a.font, 14, TX, HY + 1, OWN, fit(a, a.font, 14, TF("part {0}", {pad2(a.row + 1)}) + " \xc2\xb7 " + str(p, "name"), IP ? 160 : 900));
     const J *ctls = C.c.get("controls"), *routes = C.c.get("routes");
     const int nc = ctls && ctls->is(J::ARR) ? (int)ctls->a.size() : 0, nr = routes && routes->is(J::ARR) ? (int)routes->a.size() : 0;
-    const std::string info = std::to_string(nc) + " control" + (nc == 1 ? "" : "s") + " \xc2\xb7 " + std::to_string(nr) + " route" + (nr == 1 ? "" : "s");
+    const std::string info = (nc == 1 ? TF("{0} control", {std::to_string(nc)}) : TF("{0} controls", {std::to_string(nc)})) + " \xc2\xb7 " +
+                             (nr == 1 ? TF("{0} route", {std::to_string(nr)}) : TF("{0} routes", {std::to_string(nr)}));
     if (!a.ph)
         text(a, a.font, 14, X1 - text_w(a, a.font, 14, info), HY + 1, SILK_DIM, info);
     const int pch = p ? (int)num(p, "channel", -1) : -1;
@@ -123,11 +124,11 @@ inline void draw_control(App &a)
     if (!IP)
         draw_metro_gs(a, X0, Y1 - MH, LW, Y1);
     look::tray(a, X0, Y0, LW, Y1 - MH - 10 - Y0, 9);
-    text(a, a.font, 14, heading(a, X0 + 12, Y0 + 10, "ON-SCREEN CONTROLS", "ct:strip"), Y0 + 11, LCD, "sent straight to the engine");
+    text(a, a.font, 14, heading(a, X0 + 12, Y0 + 10, T("ON-SCREEN CONTROLS"), "ct:strip"), Y0 + 11, LCD, T("sent straight to the engine"));   // i18n-skip (the help key)
     const float cw = IP ? 124 : 136, cy0 = Y0 + 40, ch_ = C.adding ? (IP ? 214 : 250) : Y1 - MH - 10 - Y0 - 52;
     float x = X0 + 12;
     static const int SCAN_V[7] = {0, 18, 37, 55, 73, 91, 110};
-    static const std::vector<std::string> SCAN_N = {"off", "V1", "V2", "V3", "C1", "C2", "C3"};
+    static const std::vector<std::string> SCAN_N = {N_("off"), "V1", "V2", "V3", "C1", "C2", "C3"};
     for (int n = 0; n < nc; n++) {
         const J &c = ctls->a[(size_t)n];
         const int i = (int)num(&c, "i"), key = (int)num(&c, "key"), chn = (int)num(&c, "channel", -1);
@@ -154,7 +155,10 @@ inline void draw_control(App &a)
                 if (v >= SCAN_V[j])
                     sel = j;
             int picked;
-            segments(a, id, bx, cy0 + 110, SCAN_N, sel, label, false, picked, cw - 14);
+            std::vector<std::string> scan_n;
+            for (const std::string &s : SCAN_N)
+                scan_n.push_back(T(s));
+            segments(a, id, bx, cy0 + 110, scan_n, sel, label, false, picked, cw - 14);
             if (picked >= 0 && picked != sel)
                 call(a, "{\"call\":\"control_set\",\"i\":" + std::to_string(i) + ",\"v\":" + std::to_string(SCAN_V[picked]) + "}");
         } else {
@@ -173,22 +177,22 @@ inline void draw_control(App &a)
             if ((f & K_ENDED) && spring)     // (the wheel and aftertouch spring back)
                 ct_send(i, 0);
         }
-        text_c(a, a.font, 14, bx, bottom - (IP ? 62 : 66), SILK_DIM, chn < 0 ? "every ch" : "ch " + std::to_string(chn + 1));
+        text_c(a, a.font, 14, bx, bottom - (IP ? 62 : 66), SILK_DIM, chn < 0 ? std::string(T("every ch")) : TF("ch {0}", {std::to_string(chn + 1)}));
         const std::string rid = "ctrm" + std::to_string(i);
-        if (button(a, rid.c_str(), x + 6, bottom - (IP ? 50 : 44), cw - 20, IP ? 44 : 34, "REMOVE")) {
+        if (button(a, rid.c_str(), x + 6, bottom - (IP ? 50 : 44), cw - 20, IP ? 44 : 34, T("REMOVE"))) {
             call(a, "{\"call\":\"control_remove\",\"i\":" + std::to_string(i) + "}");
             ct_refresh(a);
             return;
         }
         x += cw;
     }
-    if (button(a, "ctadd", x, cy0, text_w(a, a.bold, IP ? 21 : 14, "+ ADD A CONTROL") + 30, IP ? 54 : 60, "+ ADD A CONTROL", C.adding, true,
+    if (button(a, "ctadd", x, cy0, text_w(a, a.bold, IP ? 21 : 14, T("+ ADD A CONTROL")) + 30, IP ? 54 : 60, T("+ ADD A CONTROL"), C.adding, true,
                IP ? 21 : 14))
         C.adding = !C.adding;
     if (C.adding) {     // the kinds, on the part's channel (else every channel)
         float y = cy0 + ch_ + 14;
         text(a, a.font, 14, X0 + 12, y, SILK_DIM,
-             "Add a control on " + (pch < 0 ? std::string("every channel") : "channel " + std::to_string(pch + 1) + " (part " + pad2(a.row + 1) + "'s)") + ":");
+             TF("Add a control on {0}:", {pch < 0 ? std::string(T("every channel")) : TF("channel {0} (part {1}'s)", {std::to_string(pch + 1), pad2(a.row + 1)})}));
         y += IP ? 20 : 26;
         std::vector<std::string> w;
         std::vector<bool> lit;
@@ -213,17 +217,17 @@ inline void draw_control(App &a)
         return;
     const float RX = IP ? X0 : X0 + LW + 10, RW = X1 - RX, RB = IP ? 44 : 32, LB = IP ? 44 : 30;
     look::tray(a, RX, Y0, RW, Y1 - Y0, 9);
-    text(a, a.font, 14, heading(a, RX + 12, Y0 + 10, "ROUTES", "ct:routes"), Y0 + 11, LCD, "the keyboard's controls, rewritten first");
+    text(a, a.font, 14, heading(a, RX + 12, Y0 + 10, T("ROUTES"), "ct:routes"), Y0 + 11, LCD, T("the keyboard's controls, rewritten first"));   // i18n-skip (the help key)
     float ry = Y0 + 40;
     if (!nr) {
-        text(a, a.font, 14, RX + 12, ry, SILK_DIM, "No routes: the keyboard's controls reach the engine as they are.");
+        text(a, a.font, 14, RX + 12, ry, SILK_DIM, T("No routes: the keyboard's controls reach the engine as they are."));
         ry += 30;
     }
     for (int n = 0; n < nr; n++) {
         const J &r = routes->a[(size_t)n];
         text(a, a.font, 14, RX + 12, ry + (RB - a.lh(14)) / 2, SILK, fit(a, a.font, 14, str(&r, "text"), RW - 140));
         const std::string id = "rtrm" + std::to_string((int)num(&r, "i"));
-        if (button(a, id.c_str(), RX + RW - 118, ry, 106, RB, "REMOVE")) {
+        if (button(a, id.c_str(), RX + RW - 118, ry, 106, RB, T("REMOVE"))) {
             call(a, "{\"call\":\"route_remove\",\"i\":" + std::to_string((int)num(&r, "i")) + "}");
             ct_refresh(a);
             return;
@@ -234,17 +238,17 @@ inline void draw_control(App &a)
     ry += 10;
     rect(a, RX + 12, ry, RW - 24, 1, IM_COL32(0x33, 0x36, 0x3a, 255), 0);
     ry += 10;
-    heading(a, RX + 12, ry, "A NEW ROUTE", "ct:new");
+    heading(a, RX + 12, ry, T("A NEW ROUTE"), "ct:new");   // i18n-skip (the help key)
     ry += IP ? 22 : 26;
     const int learning = (int)num(&C.c, "learning");
     const bool blink = std::fmod(ImGui::GetTime(), 0.8) < 0.4;
     if (learning)
         a.animate = true;
     {
-        text(a, a.bold, 14, RX + 12, ry + (LB - a.lh(14)) / 2, SILK_DIM, "FROM");
-        std::vector<std::string> w = {learning == 1 ? "PRESS A KEY\xe2\x80\xa6" : "A KEY (LEARN)",
-                                      learning == 2 ? "MOVE A CONTROL\xe2\x80\xa6" : "A CONTROLLER (LEARN)", "WHEEL UP",
-                                      "WHEEL DOWN", "WHEEL EITHER", "AFTERTOUCH"};
+        text(a, a.bold, 14, RX + 12, ry + (LB - a.lh(14)) / 2, SILK_DIM, T("FROM"));
+        std::vector<std::string> w = {learning == 1 ? T("PRESS A KEY\xe2\x80\xa6") : T("A KEY (LEARN)"),
+                                      learning == 2 ? T("MOVE A CONTROL\xe2\x80\xa6") : T("A CONTROLLER (LEARN)"), T("WHEEL UP"),
+                                      T("WHEEL DOWN"), T("WHEEL EITHER"), T("AFTERTOUCH")};
         std::vector<bool> lit = {learning == 1 ? blink : C.src == 3, learning == 2 ? blink : C.src == 0,
                                  C.src == 1 && C.arg == 0, C.src == 1 && C.arg == 1, C.src == 1 && C.arg == 2, C.src == 2};
         const int h = flow_buttons(a, "rtfrom", RX + 70, ry, RW - 82, w, lit);
@@ -262,7 +266,7 @@ inline void draw_control(App &a)
         }
     }
     {
-        text(a, a.bold, 14, RX + 12, ry + (LB - a.lh(14)) / 2, SILK_DIM, "TO");
+        text(a, a.bold, 14, RX + 12, ry + (LB - a.lh(14)) / 2, SILK_DIM, T("TO"));
         std::vector<std::string> w;
         std::vector<bool> lit;
         std::vector<int> keys;
@@ -282,25 +286,25 @@ inline void draw_control(App &a)
     const CtKind dk = ct_kind(C.dst);
     const bool sw = C.dst != -999 && dk.kind == "switch";
     {
-        text(a, a.bold, 14, RX + 12, ry + (LB - a.lh(14)) / 2, SILK_DIM, "HOW");
-        std::vector<std::string> w = {"KEEP THE ORIGINAL TOO"};
+        text(a, a.bold, 14, RX + 12, ry + (LB - a.lh(14)) / 2, SILK_DIM, T("HOW"));
+        std::vector<std::string> w = {T("KEEP THE ORIGINAL TOO")};
         std::vector<bool> lit = {C.keep != 0};
         std::vector<int> what = {0};
         if (sw) {
-            w.push_back("LATCH (PRESS ON, PRESS OFF)");
+            w.push_back(T("LATCH (PRESS ON, PRESS OFF)"));
             lit.push_back(C.latch != 0);
             what.push_back(1);
         }
         if (C.src == 3 && C.dst == 64) {
-            w.push_back("PUSH INTO IT TO DAMP");
+            w.push_back(T("PUSH INTO IT TO DAMP"));
             lit.push_back(C.press != 0);
             what.push_back(2);
         }
-        w.push_back("EVERY CHANNEL");
+        w.push_back(T("EVERY CHANNEL"));
         lit.push_back(C.ch < 0);
         what.push_back(3);
         if (pch >= 0) {
-            w.push_back("CHANNEL " + std::to_string(pch + 1));
+            w.push_back(TF("CHANNEL {0}", {std::to_string(pch + 1)}));
             lit.push_back(C.ch == pch);
             what.push_back(4);
         }
@@ -315,13 +319,13 @@ inline void draw_control(App &a)
             }
     }
     static const char *KN[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
-    const std::string src_name = C.src == 3 ? (C.arg >= 0 ? "key " + std::string(KN[C.arg % 12]) + std::to_string(C.arg / 12 - 1) : "a key")
-                                 : C.src == 0 ? (C.arg >= 0 ? "CC" + std::to_string(C.arg) : "a controller")
-                                 : C.src == 1 ? std::string(C.arg == 0 ? "the pitch wheel up" : C.arg == 1 ? "the pitch wheel down" : "the pitch wheel, either way")
-                                 : C.src == 2 ? "aftertouch" : "\xe2\x80\x94";
+    const std::string src_name = C.src == 3 ? (C.arg >= 0 ? TF("key {0}", {std::string(KN[C.arg % 12]) + std::to_string(C.arg / 12 - 1)}) : std::string(T("a key")))
+                                 : C.src == 0 ? (C.arg >= 0 ? "CC" + std::to_string(C.arg) : std::string(T("a controller")))
+                                 : C.src == 1 ? std::string(C.arg == 0 ? T("the pitch wheel up") : C.arg == 1 ? T("the pitch wheel down") : T("the pitch wheel, either way"))
+                                 : C.src == 2 ? T("aftertouch") : "\xe2\x80\x94";
     const bool ready = C.src >= 0 && (C.src == 1 || C.src == 2 || C.arg >= 0) && C.dst != -999;
     text(a, a.font, 21, RX + 12, ry + ((IP ? 44 : 40) - a.lh(21)) / 2, LCD, fit(a, a.font, 21, src_name + " \xe2\x86\x92 " + (C.dst != -999 ? dk.label : std::string("\xe2\x80\xa6")), RW - 260));
-    if (button(a, "rtadd", RX + RW - 232, ry, 220, IP ? 44 : 40, "ADD THE ROUTE", false, ready, IP ? 21 : 14) && ready) {
+    if (button(a, "rtadd", RX + RW - 232, ry, 220, IP ? 44 : 40, T("ADD THE ROUTE"), false, ready, IP ? 21 : 14) && ready) {
         const int r7[7] = {C.src, C.src == 2 ? 0 : C.arg, C.dst, C.keep, C.ch, sw ? C.latch : 0, C.src == 3 && C.dst == 64 ? C.press : 0};
         std::string rs = "[";
         for (int j = 0; j < 7; j++)

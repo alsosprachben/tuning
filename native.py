@@ -16,6 +16,7 @@ TUNING_NATIVE=0: never use it.
 import ctypes
 import toolchain as _TC
 import math
+import glob
 import os
 import shutil
 import subprocess
@@ -5256,7 +5257,9 @@ def _build_nvlive_exe(exe, extra_srcs=(), extra_flags=(), extra_libs=()):
         # (its help: help_text.py's topics and credits.json's sources as ui/help.json,
         # made again when either is newer -- examples/help_json.py)
         hjson = os.path.join(HERE, 'ui', 'help.json')
-        srcs = [os.path.join(HERE, 'help_text.py'), os.path.join(HERE, 'ui', 'credits.json')]
+        # (and each language's, ui/help.<code>.json, from ui/lang/help_<code>.json and the interface's table)
+        srcs = [os.path.join(HERE, 'help_text.py'), os.path.join(HERE, 'ui', 'credits.json')] + \
+            glob.glob(os.path.join(HERE, 'ui', 'lang', '*.json'))
         if not os.path.exists(hjson) or any(os.path.getmtime(s) > os.path.getmtime(hjson) for s in srcs if os.path.exists(s)):
             subprocess.run([sys.executable, os.path.join(HERE, 'examples', 'help_json.py'), os.path.join(HERE, 'ui')],
                            check=True)

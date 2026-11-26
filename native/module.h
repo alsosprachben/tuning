@@ -20,6 +20,9 @@
 //
 // Included by uiapi.cpp after fileplay.h.
 #pragma once
+#ifndef N_
+#define N_(s) s   // (a text the interface translates where it shows it: nui/i18n.h)
+#endif
 
 #include <atomic>
 #include <memory>
@@ -30,6 +33,7 @@
 
 #include "partmux.h"
 #include "mt32.h"
+
 
 namespace module {
 
@@ -268,7 +272,7 @@ static void leave(nv_host *h)
         std::lock_guard<std::mutex> lk(g.mu);
         g.eff = "leaving";
         g.unit.reset();
-        g.stage = "putting your setup back";
+        g.stage = N_("putting your setup back");
     }
     h->panic();
     Midi r{6, -1, 0, 0, {}};
@@ -302,11 +306,11 @@ static bool set(nv_host *h, const std::string &mode, std::string &why)
     for (const char *m : MODES)
         known = known || mode == m;
     if (!known) {
-        why = "no such mode";
+        why = N_("no such mode");
         return false;
     }
     if (g.busy) {
-        why = "still changing modes";
+        why = N_("still changing modes");
         return false;
     }
     join();

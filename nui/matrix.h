@@ -67,33 +67,33 @@ inline void draw_matrix(App &a)
     const bool IP = a.tab, PH = a.ph;   // (the iPad's: its card from y 210 to card_y1 + 6, no notes box: the ? has them;
                                         //  the phone's from 106, two sources a page)
     const float X0 = PH ? 14 : IP ? 20 : 34, X1 = IP ? (PH ? 818 : 1113) : 1886, Y0 = PH ? 160 : IP ? 262 : 394, HY = PH ? 120 : IP ? 224 : 356;
-    const float TX = heading(a, X0, HY, "MATRIX", "matrix");
+    const float TX = heading(a, X0, HY, T("MATRIX"), "matrix");
     if (!M.m.is(J::OBJ) || M.t.size() < 11)
         return;
     static int mpage = 0;
     if (PH) {
-        static const char *PN[3] = {"WHEEL \xc2\xb7 BEND", "AFTERTOUCH", "CC1 \xc2\xb7 CC2"};
+        static const char *PN[3] = {N_("WHEEL \xc2\xb7 BEND"), N_("AFTERTOUCH"), "CC1 \xc2\xb7 CC2"};   // (CC1 · CC2: controller numbers, as they are)
         float px_ = TX + 6;
         for (int pg = 0; pg < 3; pg++) {
-            const float w = text_w(a, a.font, 21, PN[pg]) + 28;
+            const float w = text_w(a, a.font, 21, T(PN[pg])) + 28;
             const std::string id = "mxpage" + std::to_string(pg);
-            if (button(a, id.c_str(), px_, 112, w, 40, PN[pg], mpage == pg, true, 21))
+            if (button(a, id.c_str(), px_, 112, w, 40, T(PN[pg]), mpage == pg, true, 21))
                 mpage = pg;
             px_ += w + 4;
         }
     } else
-        text(a, a.font, 14, TX, HY + 1, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + str(&M.m, "part"));
+        text(a, a.font, 14, TX, HY + 1, OWN, TF("part {0} \xc2\xb7 {1}", {pad2(a.row + 1), str(&M.m, "part")}));
     const int ch = (int)num(&M.m, "channel", -1);
-    const std::string info = ch < 0 ? "every channel" : "channel " + std::to_string(ch + 1);
+    const std::string info = ch < 0 ? std::string(T("every channel")) : TF("channel {0}", {std::to_string(ch + 1)});
     text(a, a.font, 14, X1 - text_w(a, a.font, 14, info), PH ? 147 : HY + 1, SILK_DIM, info);
     const int i0 = PH ? 2 * mpage : 0, i1 = PH ? i0 + 2 : 6;     // (the sources shown)
     if (!M.m.get("raw")) {
-        text(a, a.font, 21, X0, Y0 + 10, SILK_DIM, "Reading the matrix\xe2\x80\xa6");
+        text(a, a.font, 21, X0, Y0 + 10, SILK_DIM, T("Reading the matrix\xe2\x80\xa6"));
         return;
     }
-    static const char *SRC[6] = {"Mod wheel", "Pitch bend", "Channel aftertouch", "Poly aftertouch", "CC1", "CC2"};
-    static const char *DG[11] = {"", "", "", "LFO 1", "LFO 1", "LFO 1", "LFO 1", "LFO 2", "LFO 2", "LFO 2", "LFO 2"};
-    static const char *DN[11] = {"Pitch", "Cutoff", "Amplitude", "Rate", "Pitch", "Filter", "Amp", "Rate", "Pitch", "Filter", "Amp"};
+    static const char *SRC[6] = {N_("Mod wheel"), N_("Pitch bend"), N_("Channel aftertouch"), N_("Poly aftertouch"), "CC1", "CC2"};
+    static const char *DG[11] = {"", "", "", N_("LFO 1"), N_("LFO 1"), N_("LFO 1"), N_("LFO 1"), N_("LFO 2"), N_("LFO 2"), N_("LFO 2"), N_("LFO 2")};
+    static const char *DN[11] = {N_("Pitch"), N_("Cutoff"), N_("Amplitude"), N_("Rate"), N_("Pitch"), N_("Filter"), N_("Amp"), N_("Rate"), N_("Pitch"), N_("Filter"), N_("Amp")};
     const float aboutH = 0, SW = IP ? 156 : 252, gy = Y0 + (IP ? 30 : 40), YB = (card_y1(a)) - aboutH - (IP ? 20 : 34);
     const float cw = (X1 - X0 - SW) / 11, rh = (YB - gy) / (i1 - i0);
     look::tray(a, X0, Y0, X1 - X0, YB - Y0, 9);
@@ -101,8 +101,8 @@ inline void draw_matrix(App &a)
     for (int j = 0; j < 11; j++) {
         const float cx = X0 + SW + (j + 0.5f) * cw;
         if (*DG[j])
-            text_c(a, a.font, 14, cx, Y0 + (IP ? 3 : 4), SILK_DIM, DG[j]);
-        std::string d = DN[j];
+            text_c(a, a.font, 14, cx, Y0 + (IP ? 3 : 4), SILK_DIM, T(DG[j]));
+        std::string d = T(DN[j]);
         for (char &c : d)
             c = (char)toupper((unsigned char)c);
         text_c(a, a.bold, 14, cx, Y0 + (IP ? 14 : 20), SILK, d);
@@ -118,13 +118,13 @@ inline void draw_matrix(App &a)
         for (int j = 0; j < 11; j++)
             used = used || fx_val(a, "mx" + std::to_string(i) + "." + std::to_string(j), mx_at(M.m, "raw", i, j)) != M.t[(size_t)j].zero;
         text(a, a.bold, 14, X0 + (IP ? 8 : 12), ry + (i >= 4 ? (IP ? 4 : 10) : (rh - a.lh(14)) / 2), used ? LCD : SILK_DIM,
-             fit(a, a.bold, 14, SRC[i], SW - 16));
+             fit(a, a.bold, 14, T(SRC[i]), SW - 16));
         if (i >= 4) {   // CC1/CC2: which controller (dragged, as the display's fields), or LEARN it
             const char *key = i == 4 ? "cc1" : "cc2";
             float cc = (float)fx_val(a, key, (int)num(&M.m, key));
             const std::string fid = std::string("mxcc") + key;
-            const int f = IP ? lcd_field(a, fid.c_str(), X0 + 6, ry + 16, 72, 44, cc, 0, 95, "IS", "CC" + std::to_string((int)cc), false, 21)
-                             : lcd_field(a, fid.c_str(), X0 + 12, ry + 26, 96, 50, cc, 0, 95, "IS", "CC" + std::to_string((int)cc), false, 14);
+            const int f = IP ? lcd_field(a, fid.c_str(), X0 + 6, ry + 16, 72, 44, cc, 0, 95, T("IS"), "CC" + std::to_string((int)cc), false, 21)
+                             : lcd_field(a, fid.c_str(), X0 + 12, ry + 26, 96, 50, cc, 0, 95, T("IS"), "CC" + std::to_string((int)cc), false, 14);
             if (f & K_CHANGED) {
                 fx_mine(a, key, (int)cc);
                 call(a, "{\"call\":\"cmx_assign\",\"which\":" + std::to_string(i) + ",\"cc\":" + std::to_string((int)cc) + "}");
@@ -132,8 +132,8 @@ inline void draw_matrix(App &a)
             const bool on = learning == i;
             const bool blink = on && std::fmod(ImGui::GetTime(), 0.8) < 0.4;
             const std::string bid = "mxlearn" + std::to_string(i);
-            if (IP ? button(a, bid.c_str(), X0 + 82, ry + 16, SW - 90, 44, on ? "MOVE\xe2\x80\xa6" : "LEARN", blink)
-                   : button(a, bid.c_str(), X0 + 116, ry + 26, SW - 128, 50, on ? "MOVE ONE\xe2\x80\xa6" : "LEARN", blink)) {
+            if (IP ? button(a, bid.c_str(), X0 + 82, ry + 16, SW - 90, 44, on ? T("MOVE\xe2\x80\xa6") : T("LEARN"), blink)
+                   : button(a, bid.c_str(), X0 + 116, ry + 26, SW - 128, 50, on ? T("MOVE ONE\xe2\x80\xa6") : T("LEARN"), blink)) {
                 call(a, "{\"call\":\"cmx_learn\",\"which\":" + std::to_string(on ? 0 : i) + "}");
                 mx_take(a, call(a, "{\"call\":\"matrix\"}"));
             }
@@ -162,12 +162,12 @@ inline void draw_matrix(App &a)
     }
     // what a file's GM2 messages set (shown, not changed here)
     if (const J *g = M.m.get("gm2"); g && g->is(J::ARR) && !g->a.empty()) {
-        std::string s = "Set by a file's GM2 messages (shown, not changed here): ";
+        std::string s = T("Set by a file's GM2 messages (shown, not changed here): ");
         for (size_t i = 0; i < g->a.size(); i++) {
             const J &e = g->a[i];
             const int dj = (int)e.a[1].d();
             s += (i ? " \xc2\xb7 " : "") + std::string("CC") + std::to_string((int)e.a[0].d()) + " \xe2\x86\x92 " +
-                 (dj >= 0 && dj < 11 ? std::string(*DG[dj] ? std::string(DG[dj]) + " " : "") + DN[dj] : "") + " " +
+                 (dj >= 0 && dj < 11 ? std::string(*DG[dj] ? std::string(T(DG[dj])) + " " : "") + T(DN[dj]) : "") + " " +
                  (e.a[2].is(J::STR) ? e.a[2].s : "");
         }
         text(a, a.font, 14, X0, YB + 8, SILK_DIM, fit(a, a.font, 14, s, X1 - X0));

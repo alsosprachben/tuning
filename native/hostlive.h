@@ -1786,6 +1786,10 @@ struct nv_host {
     // (rubato wished for: on by default, the Setup card's switch, the session's
     // "rubato"; nvlive's live loop turns it on and off between callbacks)
     std::atomic<bool> rub_wish{true};
+    // (the interface's language, the session's "language": "" or "auto" follows the system; the
+    //  interface reads and sets it, the session save reads it -- under lang_mu)
+    std::string lang;
+    std::mutex lang_mu;
     double rub_frac = 0.75;                 // (of a callback's length: how long it waits)
     std::thread rub_thread;
     std::atomic<bool> rub_stop{false};

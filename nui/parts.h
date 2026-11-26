@@ -86,7 +86,7 @@ inline void draw_parts(App &a)
     const float X0 = PH ? 14 : T ? 22 : 34, X1 = PH ? 818 : T ? 1111 : 1886, HY = PH ? 120 : T ? 224 : 356,
                 BH = PH ? 40 : T ? 44 : 38, BY = PH ? 112 : T ? 216 : 346;
     // THE HEAD: the card's name, its message, LAYER, SPLIT, REMOVE
-    const float TX = heading(a, X0, HY, "PARTS", "parts");
+    const float TX = heading(a, X0, HY, nui::T("PARTS"), "parts");   // (nui::T: the bool T here is the iPad's)
     if (!a.msg.empty())
         text(a, a.font, 14, TX, HY, BAD, fit(a, a.font, 14, a.msg, PH ? 300 : T ? 500 : 1200));
     auto act = [&](const char *name) {
@@ -97,11 +97,11 @@ inline void draw_parts(App &a)
         a.row = std::min(a.row, std::max(0, nparts(a) - 1));
     };
     const float bs = T ? 21 : 14;
-    if (button(a, "layer", X1 - 372, BY, 116, BH, "LAYER", false, true, bs))
+    if (button(a, "layer", X1 - 372, BY, 116, BH, nui::T("LAYER"), false, true, bs))
         act("part_layer");
-    if (button(a, "split", X1 - 248, BY, 116, BH, "SPLIT", false, true, bs))
+    if (button(a, "split", X1 - 248, BY, 116, BH, nui::T("SPLIT"), false, true, bs))
         act("part_split");
-    if (button(a, "remove", X1 - 124, BY, 124, BH, "REMOVE", false, true, bs))
+    if (button(a, "remove", X1 - 124, BY, 124, BH, nui::T("REMOVE"), false, true, bs))
         act("part_delete");
 
     // THE KEYBOARD: 128 keys, the octaves named under them
@@ -134,7 +134,7 @@ inline void draw_parts(App &a)
         rect(a, x1 - 5, y + 1, 5, lane - 3, LCD, 0);
         if (lane >= (PH ? 12 : T ? 10 : 14))
             text(a, a.font, 14, x0 + 9, y + (lane - 14) / 2, dim ? SILK_DIM : LCD,
-                 lane_label(a, pad2(i + 1) + " " + str(part(a, i), "name"), note_name(lo) + " to " + note_name(hi),
+                 lane_label(a, pad2(i + 1) + " " + str(part(a, i), "name"), TF("{0} to {1}", {note_name(lo), note_name(hi)}),
                             std::max(30.0f, x1 - x0 - 14)));
         // a lane's touch: near an end, that end follows the finger by key; else a tap selects
         ImGui::SetCursorScreenPos(P(a, X0, y));
@@ -206,14 +206,14 @@ inline void draw_parts(App &a)
         // (its name whole: beside the number, its rest on a second line)
         strip_name(a, str(p, "name"), x + 8 + nw + 8, sy + 13, x + 8, sw - nw - 24, a.lh(14) + 3, dim);
         char pr[32];
-        snprintf(pr, sizeof pr, "prog %03d%s", (int)num(p, "program"),
+        snprintf(pr, sizeof pr, nui::T("prog %03d%s"), (int)num(p, "program"),
                  num(p, "variation") ? ("." + std::to_string((int)num(p, "variation"))).c_str() : "");
-        text(a, a.font, 14, x + 8, sy + 52, SILK_DIM, std::string(flag(p, "drums") ? "drums" : pr));
+        text(a, a.font, 14, x + 8, sy + 52, SILK_DIM, std::string(flag(p, "drums") ? nui::T("drums") : pr));
         // the pan knob
         const int pan = (int)pv(a, i, "pan", 64);
         float pv01 = pan / 127.0f;
         const std::string pid = "pan" + std::to_string(i);
-        int f = knob(a, pid.c_str(), cx, sy + 104, 56, pv01, "PAN", pan_text(pan), true, {64 / 127.0f});
+        int f = knob(a, pid.c_str(), cx, sy + 104, 56, pv01, nui::T("PAN"), pan_text(pan), true, {64 / 127.0f});
         if (f & K_CHANGED)
             part_cc(a, i, 10, "pan", (int)std::lround(pv01 * 127));
         if (f & K_RESET)
@@ -222,13 +222,13 @@ inline void draw_parts(App &a)
         const float fy = sy + 170, fw = (sw - 20) / 2;
         float key = (float)pv(a, i, "transpose");
         const std::string kid = "key" + std::to_string(i), cid = "ch" + std::to_string(i);
-        f = lcd_field(a, kid.c_str(), x + 6, fy, fw, 44, key, -24, 24, "KEY", signed_text((int)key), false, 14);
+        f = lcd_field(a, kid.c_str(), x + 6, fy, fw, 44, key, -24, 24, nui::T("KEY"), signed_text((int)key), false, 14);
         if (f & K_CHANGED)
             part_set(a, i, "transpose", key);
         if (f & K_RESET)
             part_set(a, i, "transpose", 0);
         float ch = (float)pv(a, i, "channel", -1) + 1;
-        f = lcd_field(a, cid.c_str(), x + 14 + fw, fy, fw, 44, ch, 0, 16, "CH", ch ? std::to_string((int)ch) : "ALL",
+        f = lcd_field(a, cid.c_str(), x + 14 + fw, fy, fw, 44, ch, 0, 16, nui::T("CH"), ch ? std::to_string((int)ch) : nui::T("ALL"),
                       false, 14);
         if (f & K_CHANGED)
             part_set(a, i, "channel", ch - 1);
@@ -236,7 +236,7 @@ inline void draw_parts(App &a)
         const float fy0 = fy + 60, fh = std::max(60.0f, sh - (fy0 - sy) - 150);
         float lv = (float)pv(a, i, "level_db");
         const std::string lid = "lvl" + std::to_string(i);
-        f = fader(a, lid.c_str(), cx, fy0, fh, lv, -30, 10, 0.5f, {0.0f}, "LEVEL", db_text(lv) + " dB");
+        f = fader(a, lid.c_str(), cx, fy0, fh, lv, -30, 10, 0.5f, {0.0f}, nui::T("LEVEL"), db_text(lv) + " dB");
         if (f & K_CHANGED)
             part_set(a, i, "level_db", lv);
         if (f & K_RESET)
@@ -245,12 +245,12 @@ inline void draw_parts(App &a)
         const float by = sy + sh - 92, bw = (sw - 18) / 2;
         const std::string mid = "m" + std::to_string(i), oid = "s" + std::to_string(i), tid = "t" + std::to_string(i);
         const bool muted = pv(a, i, "muted") != 0;
-        if (button(a, mid.c_str(), x + 6, by, bw, 38, "MUTE", muted))
+        if (button(a, mid.c_str(), x + 6, by, bw, 38, nui::T("MUTE"), muted))
             part_set(a, i, "muted", muted ? 0 : 1);
-        if (button(a, oid.c_str(), x + 12 + bw, by, bw, 38, "SOLO", num(p, "solo") == 1))
+        if (button(a, oid.c_str(), x + 12 + bw, by, bw, 38, nui::T("SOLO"), num(p, "solo") == 1))
             take_parts(a, call(a, "{\"call\":\"part_solo\",\"row\":" + std::to_string(i) + "}"));
         const bool fixed = pv(a, i, "touch_fixed") != 0;
-        if (button(a, tid.c_str(), x + 6, by + 46, sw - 12, 38, fixed ? "FIXED" : "VEL", fixed)) {
+        if (button(a, tid.c_str(), x + 6, by + 46, sw - 12, 38, fixed ? nui::T("FIXED") : nui::T("VEL"), fixed)) {
             keep(a, i, "touch_fixed", fixed ? 0 : 1, 1.0);
             call(a, "{\"call\":\"part_touch\",\"row\":" + std::to_string(i) + ",\"fixed\":" + (fixed ? "0" : "1") + "}");
         }
@@ -273,7 +273,7 @@ inline void draw_strips_tab(App &a, float X0, float X1, float sy, float Y1)
         U.first = a.row - fit_ + 1;
     U.first = std::max(0, std::min(U.first, std::max(0, n - fit_)));
     if (n > fit_) {
-        const std::string pg = std::to_string(U.first + 1) + "\xe2\x80\x93" + std::to_string(std::min(n, U.first + fit_)) + " of " + std::to_string(n);
+        const std::string pg = TF("{0}\xe2\x80\x93{1} of {2}", {std::to_string(U.first + 1), std::to_string(std::min(n, U.first + fit_)), std::to_string(n)});
         text(a, a.font, 14, X1 - 372 - 150 - text_w(a, a.font, 14, pg) - 8, 232, SILK_DIM, pg);
         if (button(a, "spl", X1 - 372 - 150, 216, 70, 44, "\xe2\x97\x80", false, U.first > 0, 21) && U.first > 0)
             U.first = std::max(0, U.first - fit_);
@@ -297,22 +297,22 @@ inline void draw_strips_tab(App &a, float X0, float X1, float sy, float Y1)
         const float nw = text_w(a, a.font, 21, pad2(i + 1));
         strip_name(a, str(p, "name"), x + 10 + nw, sy + 8, x + 6, sw - nw - 16, a.lh(14) + 2, dim);
         char pr[32];
-        snprintf(pr, sizeof pr, "prog %03d%s", (int)num(p, "program"),
+        snprintf(pr, sizeof pr, T("prog %03d%s"), (int)num(p, "program"),
                  num(p, "variation") ? ("." + std::to_string((int)num(p, "variation"))).c_str() : "");
-        text(a, a.font, 14, x + 6, sy + 8 + 2 * (a.lh(14) + 2), SILK_DIM, std::string(flag(p, "drums") ? "drums" : pr));
+        text(a, a.font, 14, x + 6, sy + 8 + 2 * (a.lh(14) + 2), SILK_DIM, std::string(flag(p, "drums") ? T("drums") : pr));
         // pan and level, knobs side by side
         const float ky = sy + 74;
         const int pan = (int)pv(a, i, "pan", 64);
         float pv01 = pan / 127.0f;
         const std::string pid = "pan" + std::to_string(i), lid = "lvl" + std::to_string(i);
-        int f = knob(a, pid.c_str(), x + sw * 0.27f, ky, 46, pv01, "PAN", pan_text(pan), true, {64 / 127.0f});
+        int f = knob(a, pid.c_str(), x + sw * 0.27f, ky, 46, pv01, T("PAN"), pan_text(pan), true, {64 / 127.0f});
         if (f & K_CHANGED)
             part_cc(a, i, 10, "pan", (int)std::lround(pv01 * 127));
         if (f & K_RESET)
             part_cc(a, i, 10, "pan", 64);
         const float lv = (float)pv(a, i, "level_db");
         float lv01 = (lv + 30) / 40.0f;
-        f = knob(a, lid.c_str(), x + sw * 0.73f, ky, 46, lv01, "LEVEL", db_text(lv), false, {30 / 40.0f});
+        f = knob(a, lid.c_str(), x + sw * 0.73f, ky, 46, lv01, T("LEVEL"), db_text(lv), false, {30 / 40.0f});
         if (f & K_CHANGED)
             part_set(a, i, "level_db", std::round((lv01 * 40 - 30) * 2) / 2);
         if (f & K_RESET)
@@ -321,25 +321,25 @@ inline void draw_strips_tab(App &a, float X0, float X1, float sy, float Y1)
         const float fy = ky + 58, fw = (sw - 16) / 2;
         float key = (float)pv(a, i, "transpose");
         const std::string kid = "key" + std::to_string(i), cid = "ch" + std::to_string(i);
-        f = lcd_field(a, kid.c_str(), x + 5, fy, fw, 44, key, -24, 24, "KEY", signed_text((int)key), false, 21);
+        f = lcd_field(a, kid.c_str(), x + 5, fy, fw, 44, key, -24, 24, T("KEY"), signed_text((int)key), false, 21);
         if (f & K_CHANGED)
             part_set(a, i, "transpose", key);
         if (f & K_RESET)
             part_set(a, i, "transpose", 0);
         float ch = (float)pv(a, i, "channel", -1) + 1;
-        f = lcd_field(a, cid.c_str(), x + 11 + fw, fy, fw, 44, ch, 0, 16, "CH", ch ? std::to_string((int)ch) : "ALL", false, 21);
+        f = lcd_field(a, cid.c_str(), x + 11 + fw, fy, fw, 44, ch, 0, 16, T("CH"), ch ? std::to_string((int)ch) : T("ALL"), false, 21);
         if (f & K_CHANGED)
             part_set(a, i, "channel", ch - 1);
         // MUTE, SOLO, and the touch, at the foot
         const float by = sy + sh - 2 * 44 - 10, bw = (sw - 16) / 2;
         const std::string mid = "m" + std::to_string(i), oid = "s" + std::to_string(i), tid = "t" + std::to_string(i);
         const bool muted = pv(a, i, "muted") != 0;
-        if (button(a, mid.c_str(), x + 5, by, bw, 44, "MUTE", muted, true, 21))
+        if (button(a, mid.c_str(), x + 5, by, bw, 44, T("MUTE"), muted, true, 21))
             part_set(a, i, "muted", muted ? 0 : 1);
-        if (button(a, oid.c_str(), x + 11 + bw, by, bw, 44, "SOLO", num(p, "solo") == 1, true, 21))
+        if (button(a, oid.c_str(), x + 11 + bw, by, bw, 44, T("SOLO"), num(p, "solo") == 1, true, 21))
             take_parts(a, call(a, "{\"call\":\"part_solo\",\"row\":" + std::to_string(i) + "}"));
         const bool fixed = pv(a, i, "touch_fixed") != 0;
-        if (button(a, tid.c_str(), x + 5, by + 48, sw - 10, 44, fixed ? "FIXED" : "VEL", fixed, true, 21)) {
+        if (button(a, tid.c_str(), x + 5, by + 48, sw - 10, 44, fixed ? T("FIXED") : T("VEL"), fixed, true, 21)) {
             keep(a, i, "touch_fixed", fixed ? 0 : 1, 1.0);
             call(a, "{\"call\":\"part_touch\",\"row\":" + std::to_string(i) + ",\"fixed\":" + (fixed ? "0" : "1") + "}");
         }
@@ -387,14 +387,14 @@ inline void draw_strips_phone(App &a, float X0, float X1, float sy, float Y1, fl
         const int pan = (int)pv(a, i, "pan", 64);
         float pv01 = pan / 127.0f;
         const std::string pid = "pan" + std::to_string(i), lid = "lvl" + std::to_string(i);
-        int f = knob(a, pid.c_str(), x + sw * 0.27f, ky, 30, pv01, "PAN", pan_text(pan), true, {64 / 127.0f});
+        int f = knob(a, pid.c_str(), x + sw * 0.27f, ky, 30, pv01, T("PAN"), pan_text(pan), true, {64 / 127.0f});
         if (f & K_CHANGED)
             part_cc(a, i, 10, "pan", (int)std::lround(pv01 * 127));
         if (f & K_RESET)
             part_cc(a, i, 10, "pan", 64);
         const float lv = (float)pv(a, i, "level_db");
         float lv01 = (lv + 30) / 40.0f;
-        f = knob(a, lid.c_str(), x + sw * 0.73f, ky, 30, lv01, "LEVEL", db_text(lv), false, {30 / 40.0f});
+        f = knob(a, lid.c_str(), x + sw * 0.73f, ky, 30, lv01, T("LEVEL"), db_text(lv), false, {30 / 40.0f});
         if (f & K_CHANGED)
             part_set(a, i, "level_db", std::round((lv01 * 40 - 30) * 2) / 2);
         if (f & K_RESET)
@@ -403,24 +403,24 @@ inline void draw_strips_phone(App &a, float X0, float X1, float sy, float Y1, fl
         const float by = sy + sh - 34 - 5, fy = by - 4 - 36, fw = (sw - 14) / 2;
         float key = (float)pv(a, i, "transpose");
         const std::string kid = "key" + std::to_string(i), cid = "ch" + std::to_string(i);
-        f = lcd_field(a, kid.c_str(), x + 5, fy, fw, 36, key, -24, 24, "KEY", signed_text((int)key), false, 21);
+        f = lcd_field(a, kid.c_str(), x + 5, fy, fw, 36, key, -24, 24, T("KEY"), signed_text((int)key), false, 21);
         if (f & K_CHANGED)
             part_set(a, i, "transpose", key);
         if (f & K_RESET)
             part_set(a, i, "transpose", 0);
         float ch = (float)pv(a, i, "channel", -1) + 1;
-        f = lcd_field(a, cid.c_str(), x + 9 + fw, fy, fw, 36, ch, 0, 16, "CH", ch ? std::to_string((int)ch) : "ALL", false, 21);
+        f = lcd_field(a, cid.c_str(), x + 9 + fw, fy, fw, 36, ch, 0, 16, T("CH"), ch ? std::to_string((int)ch) : T("ALL"), false, 21);
         if (f & K_CHANGED)
             part_set(a, i, "channel", ch - 1);
         const float bw = (sw - 18) / 3;
         const std::string mid = "m" + std::to_string(i), oid = "s" + std::to_string(i), tid = "t" + std::to_string(i);
         const bool muted = pv(a, i, "muted") != 0;
-        if (button(a, mid.c_str(), x + 5, by, bw, 34, "MUTE", muted, true, 14))
+        if (button(a, mid.c_str(), x + 5, by, bw, 34, T("MUTE"), muted, true, 14))
             part_set(a, i, "muted", muted ? 0 : 1);
-        if (button(a, oid.c_str(), x + 9 + bw, by, bw, 34, "SOLO", num(p, "solo") == 1, true, 14))
+        if (button(a, oid.c_str(), x + 9 + bw, by, bw, 34, T("SOLO"), num(p, "solo") == 1, true, 14))
             take_parts(a, call(a, "{\"call\":\"part_solo\",\"row\":" + std::to_string(i) + "}"));
         const bool fixed = pv(a, i, "touch_fixed") != 0;
-        if (button(a, tid.c_str(), x + 13 + 2 * bw, by, bw, 34, fixed ? "FIXED" : "VEL", fixed, true, 14)) {
+        if (button(a, tid.c_str(), x + 13 + 2 * bw, by, bw, 34, fixed ? T("FIXED") : T("VEL"), fixed, true, 14)) {
             keep(a, i, "touch_fixed", fixed ? 0 : 1, 1.0);
             call(a, "{\"call\":\"part_touch\",\"row\":" + std::to_string(i) + ",\"fixed\":" + (fixed ? "0" : "1") + "}");
         }

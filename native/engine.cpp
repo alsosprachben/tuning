@@ -18,6 +18,9 @@
 // (no fused multiply-adds, no builtins), with Python's tie order for
 // max/min (pymax/pymin below) and its ** as libm's pow.
 
+#ifndef N_
+#define N_(s) s   // (a text the interface translates where it shows it: nui/i18n.h)
+#endif
 #include <algorithm>
 #include <array>
 #include <cmath>
@@ -30,6 +33,7 @@
 #include "nv.h"
 #include "pycompat.h"          // a flam's random.Random
 #include "nvenv.h"
+
 
 namespace nv {
 
@@ -1255,7 +1259,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         nv_song_get_note(song, i, &ch, iv, dv);
         const NoteClass *k = (iv[2] < 0 || (iv[2] > 127 && !iv[3])) ? nullptr : K[nv_song_kidx(song, i)];
         if (!k) {
-            g_why = "no class";
+            g_why = N_("no class");
             return -(1 + i);
         }
         if (!nv_song_received(song, i))
@@ -1362,7 +1366,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
             // ranks ride its rotor's rows)
             bool bends = k->bendable && !k->tmpl.hit_n && !n.siren_set;
             if (bends || !nv_song_organ_note(song, i, k->organ->family, &n)) {
-                g_why = bends ? "an organ that bends" : "no organ of its family on its channel";
+                g_why = bends ? N_("an organ that bends") : N_("no organ of its family on its channel");
                 return -(1 + i);
             }
             if (n.siren_set && sir[2] >= 0.0)   // (a double siren: each row of holes on its own disc's row)
@@ -1512,7 +1516,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         if (r == -1)
             return NV_TOO_SMALL;
         if (r < 0) {
-            g_why = "the voice refused it";
+            g_why = N_("the voice refused it");
             return -(1 + i);
         }
         carry_radius = out.radius;

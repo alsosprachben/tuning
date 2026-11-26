@@ -91,16 +91,16 @@ inline void draw_stops(App &a)
     const bool IP = a.tab, PH = a.ph;   // (the iPad's: its card from y 210 to card_y1 + 6; the phone's from 106, paged)
     const float X0 = PH ? 14 : IP ? 20 : 34, X1 = IP ? (PH ? 818 : 1113) : 1886, HY = PH ? 120 : IP ? 224 : 356,
                 Y0_ = PH ? 160 : IP ? 260 : 394, Y1_ = card_y1(a);
-    const float TX = heading(a, X0, HY, "STOPS", "stops");
+    const float TX = heading(a, X0, HY, nui::T("STOPS"), "stops");   // (nui::T: the card's T is its state)
     const int prog = (int)num(&T.st, "program", -1);
     const std::string part_name = str(&T.st, "part");
     if (!PH || prog < 0)                // (the phone's display names the part; its row the pages')
-        text(a, a.font, 14, TX, HY + 1, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + part_name);
+        text(a, a.font, 14, TX, HY + 1, OWN, TF("part {0} \xc2\xb7 {1}", {pad2(a.row + 1), part_name}));
 
     // NO ORGAN: the organs, a tap puts one on the part
     if (prog < 0) {
-        text(a, a.font, 21, X0, Y0_ + 6, SILK_DIM, (part_name.empty() ? std::string("This part") : part_name) +
-                                                    " has no stops. Pick one with stops for part " + pad2(a.row + 1) + ":");
+        text(a, a.font, 21, X0, Y0_ + 6, SILK_DIM, TF("{0} has no stops. Pick one with stops for part {1}:",
+                                                      {part_name.empty() ? std::string(nui::T("This part")) : part_name, pad2(a.row + 1)}));
         int i = 0;
         if (T.organs.is(J::ARR))
             for (const J &pg : T.organs.a)
@@ -158,7 +158,7 @@ inline void draw_stops(App &a)
     int k = 0;
     for (int d : drawn)
         k += d;
-    const std::string info = std::to_string(k) + " of " + std::to_string(names.size()) + " drawn";
+    const std::string info = TF("{0} of {1} drawn", {std::to_string(k), std::to_string(names.size())});
     const J *drive = T.st.get("drive");
     const bool has_drive = drive && drive->is(J::ARR) && drive->a.size() >= 3;
     const J *rows = T.st.get("rows");
@@ -171,10 +171,11 @@ inline void draw_stops(App &a)
         float px_ = TX + 6;
         for (int pg = 0; pg < npages && npages > 1; pg++) {
             const bool dp = has_drive && pg == nrp;
-            const std::string lb = dp ? std::string("DRIVE \xc2\xb7 ROTARY")
-                                 : nrows <= 2 ? std::string("STOPS")
-                                 : "ROWS " + std::to_string(pg * rpp + 1) +
-                                       (std::min(nrows, pg * rpp + rpp) > pg * rpp + 1 ? "\xe2\x80\x93" + std::to_string(std::min(nrows, pg * rpp + rpp)) : "");
+            const std::string lb = dp ? std::string(nui::T("DRIVE \xc2\xb7 ROTARY"))
+                                 : nrows <= 2 ? std::string(nui::T("STOPS"))
+                                 : std::min(nrows, pg * rpp + rpp) > pg * rpp + 1
+                                       ? TF("ROWS {0}\xe2\x80\x93{1}", {std::to_string(pg * rpp + 1), std::to_string(std::min(nrows, pg * rpp + rpp))})
+                                       : TF("ROWS {0}", {std::to_string(pg * rpp + 1)});
             const float w = text_w(a, a.font, 21, lb) + 28;
             const std::string id = "stpage" + std::to_string(pg);
             if (button(a, id.c_str(), px_, 112, w, 40, lb, spage == pg, true, 21))
@@ -258,7 +259,7 @@ inline void draw_stops(App &a)
         // (the phone's: the two side by side, the page's height)
         const float dx = PH ? X0 : X1 - DW, dy = JY0, dw = PH ? (X1 - X0 - 8) / 2 : DW, dh = PH ? JY1 - JY0 : JY1 - JY0 - RH - RG - CH;
         look::tray(a, dx, dy, dw, dh, 10);
-        heading(a, dx + 14, dy + 12, "DRIVE", "drive");
+        heading(a, dx + 14, dy + 12, nui::T("DRIVE"), "drive");
         const double now = drive->a[0].d(), voice = drive->a[1].d(), mine = drive->a[2].d();
         auto it = a.hold.find("drive");
         const bool held = it != a.hold.end() && ImGui::GetTime() < it->second.second;
@@ -269,7 +270,7 @@ inline void draw_stops(App &a)
         snprintf(vt, sizeof vt, "%.2f", v);
         // (the knob at the left, the way back beside it: the tray shares the column with the cabinet's)
         const float KS = IP ? 56 : 76, kx = dx + 18 + KS / 2, ky = dy + 34 + (dh - 34) / 2 - (IP ? 12 : 14);
-        const int f = knob(a, "drive", kx, ky, KS, v01, "DRIVE", vt, false, {}, 0, own);
+        const int f = knob(a, "drive", kx, ky, KS, v01, nui::T("DRIVE"), vt, false, {}, 0, own);
         if (f & K_CHANGED) {
             const double d = std::round(v01 * 3.0 * 100) / 100;
             a.hold["drive"] = {d, ImGui::GetTime() + 0.6};
@@ -282,11 +283,11 @@ inline void draw_stops(App &a)
         if (f & K_RESET)
             back();
         const float bx_ = dx + KS + 36, bw_ = dw - KS - 46, bh_ = IP ? 44 : 38;
-        const auto note = wrap(a, a.font, 14, "Clean at 0, a growl as it turns up.", bw_);
+        const auto note = wrap(a, a.font, 14, nui::T("Clean at 0, a growl as it turns up."), bw_);
         for (size_t i = 0; (!IP || PH) && i < note.size() && i < 2; i++)     // (the iPad's: no room)
             text(a, a.font, 14, bx_, ky - KS / 2 - 4 + i * LH, SILK_DIM, note[i]);
         char bt[48];
-        snprintf(bt, sizeof bt, own ? "BACK TO THE PATCH'S %.2f" : "AS THE PATCH (%.2f)", voice);
+        snprintf(bt, sizeof bt, own ? nui::T("BACK TO THE PATCH'S %.2f") : nui::T("AS THE PATCH (%.2f)"), voice);
         if (button(a, "driveback", bx_, IP && !PH ? ky - bh_ / 2 : ky + KS / 2 - bh_ + 6, bw_, bh_, bt, false, own))
             back();
         // THE ROTARY HEARD: the cabinet in the room (an organ's way: its
@@ -294,7 +295,7 @@ inline void draw_stops(App &a)
         // the mics' spread -- the part's, kept across its program changes
         const float ry = PH ? dy : dy + dh + RG, rx = PH ? dx + dw + 8 : dx, rh_ = PH ? dh : RH;
         look::tray(a, rx, ry, dw, rh_, 10);
-        heading(a, rx + 14, ry + 12, "ROTARY", "rotary");
+        heading(a, rx + 14, ry + 12, nui::T("ROTARY"), "rotary");
         const J *pr = part(a, a.row);
         const J *rv = pr ? pr->get("rotary") : nullptr;
         int mode = rv && rv->is(J::ARR) && rv->a.size() >= 2 ? (int)rv->a[0].d() : -1;
@@ -312,22 +313,22 @@ inline void draw_stops(App &a)
                         + ",\"spread\":" + jnum(sd) + "}");
         };
         const float bw = (dw - 34) / 2, by = ry + (IP ? 36 : 44), bh = IP ? 44 : 38;
-        if (button(a, "rotroom", rx + 12, by, bw, bh, "IN THE ROOM", !mics))
+        if (button(a, "rotroom", rx + 12, by, bw, bh, nui::T("IN THE ROOM"), !mics))
             set(0, spread);
-        if (button(a, "rotmics", rx + 22 + bw, by, bw, bh, "TWO MICS", mics))
+        if (button(a, "rotmics", rx + 22 + bw, by, bw, bh, nui::T("TWO MICS"), mics))
             set(1, spread);
         if (mics) {
             float v01 = (float)(sp / 180.0);
             char vt[16];
             snprintf(vt, sizeof vt, "%.0f\xc2\xb0", sp);
-            const int f = knob(a, "rotspread", rx + dw / 2, by + bh + (IP ? 34 : 58), IP ? 40 : 60, v01, "SPREAD", vt, false, {},
+            const int f = knob(a, "rotspread", rx + dw / 2, by + bh + (IP ? 34 : 58), IP ? 40 : 60, v01, nui::T("SPREAD"), vt, false, {},
                                0, spread >= 0.0);
             if (f & K_CHANGED)
                 set(1, std::round(v01 * 180.0));
             if (f & K_RESET)
                 set(1, -1.0);
         } else {
-            const auto rn = wrap(a, a.font, 14, "The cabinet heard where it stands: its horn and drum turning toward you and away.",
+            const auto rn = wrap(a, a.font, 14, nui::T("The cabinet heard where it stands: its horn and drum turning toward you and away."),
                                  dw - 28);
             for (size_t i = 0; i < rn.size(); i++)
                 text(a, a.font, 14, rx + 14, by + bh + (IP ? 10 : 16) + i * LH, SILK_DIM, rn[i]);
@@ -349,7 +350,7 @@ inline void draw_stops(App &a)
         title = part_name;
         body = patch_desc(a, part(a, a.row));
         if (org)
-            body += (body.empty() ? "" : ". ") + std::string("Touch a stop for what it is.");
+            body += (body.empty() ? "" : ". ") + std::string(nui::T("Touch a stop for what it is."));
     }
     const float tx = X0 + 12 + text_w(a, a.bold, 14, title) + 14;
     text(a, a.bold, 14, X0 + 12, ay + (aboutH - a.lh(14)) / 2, SILK, title);

@@ -14,6 +14,9 @@
 // messages as read_track left them (absolute ticks) and returns the tracks of
 // the file mt32mux would write -- a meta track, then one track per part.
 #pragma once
+#ifndef N_
+#define N_(s) s   // (a text the interface translates where it shows it: nui/i18n.h)
+#endif
 
 #include <algorithm>
 #include <cctype>
@@ -24,6 +27,7 @@
 #include <string>
 #include <utility>
 #include <vector>
+
 
 namespace partmux {
 
@@ -412,7 +416,7 @@ static std::vector<std::vector<MsgT>> mux(const std::vector<std::vector<const Ms
             p.percussive = p.percussive || low.find(w) != std::string::npos;
         if (p.percussive && p.was_drum) {
             p.program = -1;
-            p.why = "drum map";
+            p.why = N_("drum map");
         } else {
             auto pf = program_for(p.name, p.progs);
             p.program = pf.first;
@@ -484,7 +488,7 @@ static std::vector<std::vector<MsgT>> mux(const std::vector<std::vector<const Ms
             hi = std::max(hi, x.note);
         }
         char b[256];
-        const std::string what = p.program < 0 ? "drum map" : std::to_string(p.program) + " (" + p.why + ")";
+        const std::string what = p.program < 0 ? N_("drum map") : std::to_string(p.program) + " (" + p.why + ")";
         snprintf(b, sizeof b, "ch%-3d %-22.22s %-11s %5d notes  %3d-%-3d", ch, p.name.c_str(), what.c_str(),
                  (int)p.notes.size(), lo, hi);
         R.report.push_back(b);

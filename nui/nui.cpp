@@ -54,11 +54,27 @@
 
 namespace nui {
 
+// (the system's languages, most wanted first: the first that has a table)
+std::string lang_system()
+{
+    int n = 0;
+    SDL_Locale **ls = SDL_GetPreferredLocales(&n);
+    std::string r = "en";
+    for (int i = 0; ls && i < n; i++)
+        if (ls[i] && ls[i]->language && lang_known(ls[i]->language)) {
+            r = ls[i]->language;
+            break;
+        }
+    SDL_free(ls);
+    return r;
+}
+
 // (SCENES after PARTS: a setup's parts arranged, then saved and brought back -- Ben 2026-11-25)
-static const char *CARDS[][2] = {{"parts", "PARTS"}, {"scenes", "SCENES"}, {"library", "LIBRARY"}, {"synth", "SYNTH"},
-                                 {"stops", "STOPS"}, {"piano", "PIANO"}, {"drums", "DRUMS"}, {"amp", "AMP"},
-                                 {"effects", "EFFECTS"}, {"matrix", "MATRIX"}, {"tuning", "TUNING"}, {"control", "CONTROL"},
-                                 {"files", "FILES"}, {"setup", "SETUP"}};
+static const char *CARDS[][2] = {{"parts", N_("PARTS")}, {"scenes", N_("SCENES")}, {"library", N_("LIBRARY")},
+                                 {"synth", N_("SYNTH")}, {"stops", N_("STOPS")}, {"piano", N_("PIANO")},
+                                 {"drums", N_("DRUMS")}, {"amp", N_("AMP")}, {"effects", N_("EFFECTS")},
+                                 {"matrix", N_("MATRIX")}, {"tuning", N_("TUNING")}, {"control", N_("CONTROL")},
+                                 {"files", N_("FILES")}, {"setup", N_("SETUP")}};
 
 
 static void draw(App &a)
@@ -138,7 +154,7 @@ static void draw(App &a)
         std::string title;
         for (int i = 0; i < nc; i++)
             if (a.card == CARDS[i][0])
-                title = CARDS[i][1];
+                title = T(CARDS[i][1]);
         if (button(a, "cards", 6, 56, 150, 44, title + " \xe2\x96\xbe", a.cards_open, true, 21))
             a.cards_open = !a.cards_open;
         look::module(a, 6, 106, 820, a.H - 112, 6.0f);
@@ -147,11 +163,11 @@ static void draw(App &a)
             for (int i = 0; i <= nc; i++) {
                 const float x = gx + (i % 5) * (cw + 8), y = gy + (i / 5) * (ch + 8);
                 if (i == nc) {
-                    if (button(a, "help", x, y, cw, ch, "HELP", false, true, 21)) {
+                    if (button(a, "help", x, y, cw, ch, T("HELP"), false, true, 21)) {
                         a.cards_open = false;
                         help_open(a, "basics");
                     }
-                } else if (button(a, CARDS[i][0], x, y, cw, ch, CARDS[i][1], a.card == CARDS[i][0], true, 21)) {
+                } else if (button(a, CARDS[i][0], x, y, cw, ch, T(CARDS[i][1]), a.card == CARDS[i][0], true, 21)) {
                     a.card = CARDS[i][0];
                     a.cards_open = false;
                 }
@@ -166,7 +182,7 @@ static void draw(App &a)
         draw_keys_tab(a);
         const float X = 10, Y = 160, gap = 4, w = (1113 - gap * nc - 44) / nc;
         for (int i = 0; i < nc; i++)
-            if (button(a, CARDS[i][0], X + i * (w + gap), Y, w, 44, CARDS[i][1], a.card == CARDS[i][0], true, 21))
+            if (button(a, CARDS[i][0], X + i * (w + gap), Y, w, 44, T(CARDS[i][1]), a.card == CARDS[i][0], true, 21))
                 a.card = CARDS[i][0];
         if (button(a, "help", X + nc * (w + gap), Y, 44, 44, "?", false, true, 21))
             help_open(a, "basics");
@@ -177,7 +193,7 @@ static void draw(App &a)
         // THE CARD TABS, and the card (each built from the web's in turn)
         const float X = 14, Y = 276, gap = 8, w = (1892 - gap * nc - 56) / nc;
         for (int i = 0; i < nc; i++)
-            if (button(a, CARDS[i][0], X + i * (w + gap), Y, w, 46, CARDS[i][1], a.card == CARDS[i][0]))
+            if (button(a, CARDS[i][0], X + i * (w + gap), Y, w, 46, T(CARDS[i][1]), a.card == CARDS[i][0]))
                 a.card = CARDS[i][0];
         if (button(a, "help", X + nc * (w + gap), Y, 56, 46, "?"))
             help_open(a, "basics");
@@ -220,7 +236,7 @@ static void draw(App &a)
     const int vtx0 = dl()->VtxBuffer.Size;  // (what the card draws: its lowest point, for its scroll's reach)
     if (a.ph && !virt) {
     } else if (a.tab && !TAB_READY.count(a.card)) {
-        text(a, a.font, 21, 24, 226, SILK_DIM, "This card's iPad layout is still to come; the laptop's has it.");
+        text(a, a.font, 21, 24, 226, SILK_DIM, T("This card's iPad layout is still to come; the laptop's has it."));
     } else if (a.card == "parts") {
         draw_parts(a);
     } else if (a.card == "library") {
@@ -253,9 +269,9 @@ static void draw(App &a)
         std::string title;
         for (int i = 0; i < nc; i++)
             if (a.card == CARDS[i][0])
-                title = CARDS[i][1];
+                title = T(CARDS[i][1]);
         text(a, a.bold, 14, 34, 356, SILK, title);
-        text(a, a.font, 21, 34, 400, SILK_DIM, "Not built in the native interface yet: the web interface has it (nvlive --ui).");
+        text(a, a.font, 21, 34, 400, SILK_DIM, T("Not built in the native interface yet: the web interface has it (nvlive --ui)."));
     }
     if (a.ph && !virt) {                // (the phone's own cards)
         if (a.card == "parts")
@@ -605,7 +621,13 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
     io.FontDefault = a.font;
 
     // the engine's state, as the web page asks it at its start
-    call(a, "{\"call\":\"hello\"}");
+    {
+        const J hello = call(a, "{\"call\":\"hello\"}");
+        // THE LANGUAGE: NUI_LANG (the tours'), else the session's, else (auto) the system's first with a table
+        std::string lc = getenv("NUI_LANG") ? getenv("NUI_LANG") : str(&hello, "language");
+        a.lang_pref = lc.empty() ? "auto" : lc;
+        lang_apply(a);
+    }
     if (const J *ps = call(a, "{\"call\":\"parts\"}").get("parts"))
         a.parts = *ps;
 

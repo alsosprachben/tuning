@@ -71,7 +71,7 @@ inline void pedal_flush(App &a)
     N.sent_t = ImGui::GetTime();
     N.want_cc = -1;
 }
-inline std::string pedal_say(int v) { return v <= 0 ? "UP" : v >= 127 ? "DOWN" : "HALF " + std::to_string(v); }
+inline std::string pedal_say(int v) { return v <= 0 ? std::string(T("UP")) : v >= 127 ? std::string(T("DOWN")) : TF("HALF {0}", {std::to_string(v)}); }
 inline std::string note_name_sharp(int n)
 {
     static const char *N[12] = {"C", "C\xe2\x99\xaf", "D", "D\xe2\x99\xaf", "E", "F", "F\xe2\x99\xaf", "G",
@@ -126,24 +126,24 @@ inline void draw_piano(App &a)
     pedal_flush(a);
     const bool IP = a.tab, PH = a.ph;   // (the iPad's: its card from y 210 to card_y1 + 6; the phone's from 106, two pages)
     const float X0 = PH ? 14 : IP ? 20 : 34, X1 = IP ? (PH ? 818 : 1113) : 1886, HY = PH ? 120 : IP ? 224 : 356, LH = a.lh(14) + (IP ? 3 : 4);
-    const float TX = heading(a, X0, HY, "PIANO", "piano");
+    const float TX = heading(a, X0, HY, T("PIANO"), "piano");
     if (!N.pn.is(J::OBJ))
         return;
     static int ppage = 0;               // (the phone's: 0 the pedals and the pedal key, 1 the dampers)
     if (PH) {
-        static const char *PN[2] = {"PEDALS", "DAMPERS"};
+        static const char *PN[2] = {N_("PEDALS"), N_("DAMPERS")};
         float px_ = TX + 6;
         for (int pg = 0; pg < 2; pg++) {
-            const float w = text_w(a, a.font, 21, PN[pg]) + 28;
+            const float w = text_w(a, a.font, 21, T(PN[pg])) + 28;
             const std::string id = "pnpage" + std::to_string(pg);
-            if (button(a, id.c_str(), px_, 112, w, 40, PN[pg], ppage == pg, true, 21))
+            if (button(a, id.c_str(), px_, 112, w, 40, T(PN[pg]), ppage == pg, true, 21))
                 ppage = pg;
             px_ += w + 4;
         }
     } else
-        text(a, a.font, 14, TX, HY + 1, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + str(&N.pn, "part"));
+        text(a, a.font, 14, TX, HY + 1, OWN, TF("part {0}", {pad2(a.row + 1)}) + " \xc2\xb7 " + str(&N.pn, "part"));
     const int ch = (int)num(&N.pn, "channel", -1);
-    const std::string info = ch < 0 ? "pedals on every channel" : "pedals on channel " + std::to_string(ch + 1);
+    const std::string info = ch < 0 ? std::string(T("pedals on every channel")) : TF("pedals on channel {0}", {std::to_string(ch + 1)});
     text(a, a.font, 14, X1 - text_w(a, a.font, 14, info), PH ? 147 : HY + 1, SILK_DIM, info);
 
     const float aboutH = 0, Y0 = PH ? 160 : IP ? 260 : 394, Y1 = (card_y1(a)) - aboutH - (IP ? 8 : 10);
@@ -157,30 +157,30 @@ inline void draw_piano(App &a)
 
     // THE PEDALS: soft and sostenuto; the sustain a fader with its quick values
     if (!PH || ppage == 0) {
-    col(X0, c1, "PEDALS", "piano:pedals");
+    col(X0, c1, T("PEDALS"), "piano:pedals");   // i18n-skip (the help key)
     const bool soft = flag(&N.pn, "soft"), sost = flag(&N.pn, "sostenuto");
     const float py = PH ? Y0 + 50 : IP ? Y1 - 200 : Y1 - 290;
-    if (pedal_btn(a, "pdsoft", X0 + (IP ? 52 : 76), py, soft, "SOFT", "una corda"))
+    if (pedal_btn(a, "pdsoft", X0 + (IP ? 52 : 76), py, soft, T("SOFT"), T("una corda")))
         pedal(a, 67, soft ? 0 : 127);
-    if (pedal_btn(a, "pdsost", X0 + (IP ? 146 : 206), py, sost, "SOSTENUTO", "holds the keys down as it goes down"))
+    if (pedal_btn(a, "pdsost", X0 + (IP ? 146 : 206), py, sost, T("SOSTENUTO"), T("holds the keys down as it goes down")))
         pedal(a, 66, sost ? 0 : 127);
     float sus = (float)num(&N.pn, "sustain");
     const float fx = X0 + (IP ? 246 : 350), fy0 = Y0 + (IP ? 44 : 50), fh = PH ? Y1 - Y0 - 90 : Y1 - Y0 - (IP ? 258 : 270);   // (its value and name clear of DOWN)
     {
-        const int f = fader(a, "pdsus", fx, fy0, fh, sus, 0, 127, 1, {64}, "SUSTAIN", pedal_say((int)std::lround(sus)));
+        const int f = fader(a, "pdsus", fx, fy0, fh, sus, 0, 127, 1, {64}, T("SUSTAIN"), pedal_say((int)std::lround(sus)));
         if (f & K_CHANGED)
             pedal(a, 64, (int)std::lround(sus));
         if (f & K_RESET)
             pedal(a, 64, 0);
     }
     const int si = (int)num(&N.pn, "sustain");
-    static const struct { const char *n; int v; } Q[3] = {{"DOWN", 127}, {"HALF", 64}, {"UP", 0}};
+    static const struct { const char *n; int v; } Q[3] = {{N_("DOWN"), 127}, {N_("HALF"), 64}, {N_("UP"), 0}};
     for (int i = 0; i < 3; i++) {
         const bool on = Q[i].v == 64 ? si > 0 && si < 127 : si == Q[i].v;
         const std::string id = std::string("pq") + Q[i].n;
         // (the phone's beside the fader: under it there is no room)
         if (button(a, id.c_str(), PH ? fx + 36 : fx - (IP ? 46 : 50), PH ? Y0 + 44 + i * 50 : Y1 - (IP ? 150 : 150) + i * (IP ? 48 : 46),
-                   IP ? 92 : 100, IP ? 44 : 38, Q[i].n, on, true, IP ? 21 : 14))
+                   IP ? 92 : 100, IP ? 44 : 38, T(Q[i].n), on, true, IP ? 21 : 14))
             pedal(a, 64, Q[i].v);
     }
     }
@@ -188,17 +188,17 @@ inline void draw_piano(App &a)
     // THE DAMPERS: each one's rest on its strings, over the keyboard (88 keys, A0 to C8)
     if (!PH || ppage == 1) {
     const float dx = PH ? X0 : X0 + c1 + gap;
-    const float dsx = col(dx, c2, "DAMPERS", "piano:dampers");
+    const float dsx = col(dx, c2, T("DAMPERS"), "piano:dampers");   // i18n-skip (the help key)
     // (a part that is not a piano: its pedals still reach its channel; no strings to show)
     const J *pp = part(a, a.row);
     const bool is_piano = pp && !flag(pp, "drums") && (int)num(pp, "program") < 8;
     if (!is_piano) {
         float my = Y0 + (IP ? 40 : 50);
-        for (const auto &l : wrap(a, a.font, 21, (pp ? str(pp, "name") : std::string("This part")) + " is not a piano.", c2 - 24)) {
+        for (const auto &l : wrap(a, a.font, 21, TF("{0} is not a piano.", {pp ? str(pp, "name") : std::string(T("This part"))}), c2 - 24)) {
             text(a, a.font, 21, dx + 12, my, SILK_DIM, l);
             my += a.lh(21) + 4;
         }
-        for (const auto &l : wrap(a, a.font, 14, "The pedals still go to its channel; the dampers are drawn for a piano's strings.", c2 - 24)) {
+        for (const auto &l : wrap(a, a.font, 14, T("The pedals still go to its channel; the dampers are drawn for a piano's strings."), c2 - 24)) {
             text(a, a.font, 14, dx + 12, my + 6, SILK_DIM, l);
             my += LH;
         }
@@ -212,8 +212,8 @@ inline void draw_piano(App &a)
         on_ += c > 0.98;
         off_ += c < 0.02;
     }
-    const std::string say = n && off_ == n ? "all lifted: every string rings" : on_ == n ? "all on the strings"
-        : std::to_string(n - on_ - off_) + " resting lightly, " + std::to_string(on_) + " on the strings, " + std::to_string(off_) + " lifted";
+    const std::string say = n && off_ == n ? std::string(T("all lifted: every string rings")) : on_ == n ? std::string(T("all on the strings"))
+        : TF("{0} resting lightly, {1} on the strings, {2} lifted", {std::to_string(n - on_ - off_), std::to_string(on_), std::to_string(off_)});
     text(a, a.font, 14, dsx, Y0 + 11, LCD, say);
     {
         // (the phone's drawing as tall as its page lets it, its words beside it)
@@ -256,8 +256,7 @@ inline void draw_piano(App &a)
                 if (e.is(J::ARR) && e.a.size() >= 3)
                     band += (band.empty() ? "" : " \xc2\xb7 ") + note_name_sharp((int)e.a[0].d()) + " " +
                             std::to_string((int)e.a[1].d()) + "\xe2\x80\x93" + std::to_string((int)e.a[2].d());
-        const auto ls = wrap(a, a.font, 14, "Where the dampers leave the strings, by the pedal's value: " + band +
-                                                 ". The bass dampers are heavier and leave later.", PH ? c2 - W - 60 : W);
+        const auto ls = wrap(a, a.font, 14, TF("Where the dampers leave the strings, by the pedal's value: {0}. The bass dampers are heavier and leave later.", {band}), PH ? c2 - W - 60 : W);
         for (size_t i = 0; i < ls.size(); i++)
             text(a, a.font, 14, PH ? sx + W + 24 : sx, PH ? top + i * LH : kbY + 96 * s + (IP ? 14 : 16) + (i + 1) * LH, SILK_DIM, ls[i]);
     }
@@ -269,9 +268,9 @@ inline void draw_piano(App &a)
 
     // THE PEDAL KEY: keys held as the sustain pedal
     const float kx = X1 - c3;           // (the phone's beside the pedals)
-    col(kx, c3, "PEDAL KEY", "piano:key");
+    col(kx, c3, T("PEDAL KEY"), "piano:key");   // i18n-skip (the help key)
     float ky = Y0 + (IP ? 32 : 36);
-    for (const auto &l : wrap(a, a.font, 14, "A key held as the sustain pedal: held, the dampers lift; push into it and they come down to the strings.", c3 - 24)) {
+    for (const auto &l : wrap(a, a.font, 14, T("A key held as the sustain pedal: held, the dampers lift; push into it and they come down to the strings."), c3 - 24)) {
         text(a, a.font, 14, kx + 12, ky, SILK_DIM, l);
         ky += LH;
     }
@@ -282,12 +281,12 @@ inline void draw_piano(App &a)
             nk++;
             text(a, a.font, 21, kx + 12, ky + 8, LCD, note_name_sharp((int)num(&k, "key")));
             const int kc = (int)num(&k, "channel", -1);
-            std::string t = flag(&k, "press") ? "held: up \xc2\xb7 pushed: down" : "held: dampers up";
+            std::string t = flag(&k, "press") ? T("held: up \xc2\xb7 pushed: down") : T("held: dampers up");
             if (kc >= 0)
-                t += " \xc2\xb7 ch " + std::to_string(kc + 1);
+                t += " \xc2\xb7 " + TF("ch {0}", {std::to_string(kc + 1)});
             text(a, a.font, 14, kx + 70, ky + 12, SILK_DIM, fit(a, a.font, 14, t, c3 - 190));
             const std::string id = "pkrm" + std::to_string((int)num(&k, "i"));
-            if (button(a, id.c_str(), X1 - 110, ky, 98, IP ? 44 : 34, "REMOVE")) {
+            if (button(a, id.c_str(), X1 - 110, ky, 98, IP ? 44 : 34, T("REMOVE"))) {
                 J r = call(a, "{\"call\":\"pedal_key_remove\",\"i\":" + std::to_string((int)num(&k, "i")) + "}");
                 if (flag(&r, "ok")) {
                     J p = call(a, "{\"call\":\"piano\"}");
@@ -301,16 +300,16 @@ inline void draw_piano(App &a)
     if (fk >= 0) {
         nk++;
         text(a, a.font, 21, kx + 12, ky + 8, LCD, note_name_sharp(fk));
-        text(a, a.font, 14, kx + 70, ky + 12, SILK_DIM, "set when nvlive started");
+        text(a, a.font, 14, kx + 70, ky + 12, SILK_DIM, T("set when nvlive started"));
         ky += 44;
     }
     if (!nk) {
-        text(a, a.font, 14, kx + 12, ky, SILK_DIM, "No key is the pedal yet.");
+        text(a, a.font, 14, kx + 12, ky, SILK_DIM, T("No key is the pedal yet."));
         ky += 28;
     }
     const bool learning = flag(&N.pn, "learning");
     const bool blink = learning && std::fmod(ImGui::GetTime(), 1.0) < 0.5;
-    if (button(a, "pklearn", kx + 12, ky + 6, c3 - 24, IP ? 44 : 40, learning ? "PRESS THE KEY NOW\xe2\x80\xa6 (TAP TO STOP)" : "LEARN A KEY", blink)) {
+    if (button(a, "pklearn", kx + 12, ky + 6, c3 - 24, IP ? 44 : 40, learning ? T("PRESS THE KEY NOW\xe2\x80\xa6 (TAP TO STOP)") : T("LEARN A KEY"), blink)) {
         call(a, std::string("{\"call\":\"pedal_key_learn\",\"on\":") + (learning ? "0" : "1") + "}");
         N.pn.o["learning"] = sess::boolean(!learning);
     }
@@ -318,8 +317,8 @@ inline void draw_piano(App &a)
         a.animate = true;               // (the blink; a pedal's last value still to go)
     ky += IP ? 62 : 66;
     for (const auto &l : wrap(a, a.font, 14, flag(&N.pn, "strings")
-                                                 ? "Sympathetic strings: on. The first part's undamped strings ring with what is played."
-                                                 : "Sympathetic strings: off (nvlive was started without them).", c3 - 24)) {
+                                                 ? T("Sympathetic strings: on. The first part's undamped strings ring with what is played.")
+                                                 : T("Sympathetic strings: off (nvlive was started without them)."), c3 - 24)) {
         text(a, a.font, 14, kx + 12, ky, SILK_DIM, l);
         ky += LH;
     }

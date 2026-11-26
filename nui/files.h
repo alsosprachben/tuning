@@ -28,18 +28,19 @@ struct FilesUi {
 static FilesUi g_fl;
 
 static const std::vector<std::pair<std::string, std::string>> FL_MODES = {
-    {"auto", "AUTO"}, {"gm", "GM"}, {"ours", "GS: OURS"}, {"sc55", "GS: SC-55"}, {"sc88", "GS: SC-88"}, {"sc88pro", "GS: SC-88Pro"},
-    {"sc8850", "GS: SC-8850"}, {"cm64", "GS: INIT CM-64"}, {"mt32", "MT-32"}, {"cm64u", "CM-64"}, {"names", "ORCHESTRA BY NAMES"}};
+    {"auto", N_("AUTO")}, {"gm", "GM"}, {"ours", N_("GS: OURS")}, {"sc55", "GS: SC-55"}, {"sc88", "GS: SC-88"},  // i18n-skip
+    {"sc88pro", "GS: SC-88Pro"}, {"sc8850", "GS: SC-8850"}, {"cm64", N_("GS: INIT CM-64")}, {"mt32", "MT-32"},  // i18n-skip
+    {"cm64u", "CM-64"}, {"names", N_("ORCHESTRA BY NAMES")}};
 inline std::string fl_mode_label(const std::string &k)
 {
     for (const auto &m : FL_MODES)
         if (m.first == k)
-            return m.second;
+            return T(m.second);
     return k == "gs" ? "GS" : k;
 }
 inline std::string fl_report_title(const std::string &m)
 {
-    return m == "names" ? "Its parts, by their names" : m == "mt32" ? "What the MT-32 does with it" : m == "cm64u" ? "What the CM-64 does with it" : "";
+    return m == "names" ? T("Its parts, by their names") : m == "mt32" ? T("What the MT-32 does with it") : m == "cm64u" ? T("What the CM-64 does with it") : "";
 }
 // (the check's and the mux's lines count channels from 0: shown from 1)
 inline std::string fl_ch(const std::string &x)
@@ -72,9 +73,9 @@ extern "C" void nui_pick_midi(void);
 extern "C" int nui_pick_take(char *path, int cap);
 // (Best Quality's file export, missing: where it goes -- iOS's Documents, beside the sound data)
 #if defined(__APPLE__) && TARGET_OS_IPHONE
-static const char *FL_NO_EXPORT = "Best quality needs the file render's data: file-export.nvx in Clavitone's Documents.";
+static const char *FL_NO_EXPORT = N_("Best quality needs the file render's data: file-export.nvx in Clavitone's Documents.");
 #else
-static const char *FL_NO_EXPORT = "Best quality needs the file render's data (file-export.nvx beside the live data); see Help: Files.";
+static const char *FL_NO_EXPORT = N_("Best quality needs the file render's data (file-export.nvx beside the live data); see Help: Files.");
 #endif
 inline void fl_take(const J &r)
 {
@@ -182,11 +183,11 @@ inline void draw_files(App &a)
     static int page = 0;
     const float X0 = IP ? 20 : 34, X1 = IP ? (a.ph ? 818 : 1113) : 1886, Y0 = IP ? 266 : 394, Y1 = card_y1(a), HY = IP ? 224 : 356;
     const float LH = a.lh(14) + (IP ? 3 : 4), B21 = IP ? 21 : 14, BB = IP ? 44 : 34;
-    const float TX = heading(a, X0, HY, "FILES", "files");
+    const float TX = heading(a, X0, HY, T("FILES"), "files");
     if (IP)
         for (int pg = 0; pg < 2; pg++) {
             const std::string id = "flpage" + std::to_string(pg);
-            if (button(a, id.c_str(), page_kx(a, 2, pg, 300), 216, page_kw(a, 2), 44, pg ? "PLAY" : "CHOOSE", page == pg, true, 21))
+            if (button(a, id.c_str(), page_kx(a, 2, pg, 300), 216, page_kw(a, 2), 44, pg ? T("PLAY") : T("CHOOSE"), page == pg, true, 21))
                 page = pg;
         }
     const bool ok = flag(&F.info, "ok");
@@ -195,24 +196,24 @@ inline void draw_files(App &a)
     const J *pl = F.f.get("player"), *rd = F.f.get("render");
     const bool playing = flag(pl, "busy"), rendering = flag(rd, "busy");
     if (playing)
-        text(a, a.font, 14, IP ? 700 : TX, HY + 1, OWN, fit(a, a.font, 14, "playing " + str(pl, "name"), IP ? 400 : 900));
+        text(a, a.font, 14, IP ? 700 : TX, HY + 1, OWN, fit(a, a.font, 14, TF("playing {0}", {str(pl, "name")}), IP ? 400 : 900));
 
     // THE FOLDERS
     const float BW = IP ? 360 : 560, FR = IP ? 48 : 36, FB = IP ? 44 : 32;
     if (!IP || page == 0) {
     look::tray(a, X0, Y0, BW, Y1 - Y0, 9);
-    heading(a, X0 + 12, Y0 + 10, "FOLDERS", "fl:browse");
+    heading(a, X0 + 12, Y0 + 10, T("FOLDERS"), "fl:browse");   // i18n-skip (the help key)
     const std::string parent = str(&F.list, "parent"), home = str(&F.list, "home");
-    if (button(a, "flup", X0 + 12, Y0 + 34, 90, IP ? 44 : 36, "\xe2\x96\xb2 UP", false, !parent.empty(), B21) && !parent.empty())
+    if (button(a, "flup", X0 + 12, Y0 + 34, 90, IP ? 44 : 36, T("\xe2\x96\xb2 UP"), false, !parent.empty(), B21) && !parent.empty())
         fl_go(a, parent);
-    if (button(a, "flhome", X0 + 108, Y0 + 34, 100, IP ? 44 : 36, "MUSIC", false, true, B21)) {
+    if (button(a, "flhome", X0 + 108, Y0 + 34, 100, IP ? 44 : 36, T("MUSIC"), false, true, B21)) {
         const std::string m = str(&F.list, "music");
         fl_go(a, m.empty() ? home + "/Music" : m);
     }
     // THE SYSTEM's PICKER (iOS: iCloud Drive, On My iPad, a USB drive): a MIDI
     // file copied in (Documents/MIDI) and chosen here, its folder shown
     const bool picker = nui_pick_available() != 0;
-    if (picker && button(a, "flpick", X0 + BW - 112, Y0 + 34, 100, IP ? 44 : 36, "FILES\xe2\x80\xa6", false, true, B21))
+    if (picker && button(a, "flpick", X0 + BW - 112, Y0 + 34, 100, IP ? 44 : 36, T("FILES\xe2\x80\xa6"), false, true, B21))
         nui_pick_midi();
     {
         char pk[2048];
@@ -241,7 +242,7 @@ inline void draw_files(App &a)
              fit(a, a.font, 14, (dir ? "\xe2\x96\xb8 " : flag(&e, "audio") ? "\xe2\x99\xaa " : "") + str(&e, "name"), BW - 56));
     });
     if (!ne)
-        text(a, a.font, 14, X0 + 12, Y0 + 86, SILK_DIM, "No folders, MIDI or audio files here.");
+        text(a, a.font, 14, X0 + 12, Y0 + 86, SILK_DIM, T("No folders, MIDI or audio files here."));
     if (tap >= 0) {
         const J &e = es->a[(size_t)tap];
         const std::string p = F.dir + "/" + str(&e, "name");
@@ -256,29 +257,32 @@ inline void draw_files(App &a)
     const float FX = X0 + BW + 10, FW = IP ? X1 - FX : 740, PX = IP ? X0 : FX + FW + 10, PW = X1 - PX;
     if (!IP || page == 0) {
     look::tray(a, FX, Y0, X1 - FX, Y1 - Y0, 9);
-    const float fx_ = heading(a, FX + 12, Y0 + 10, "THE FILE", "fl:file");
+    const float fx_ = heading(a, FX + 12, Y0 + 10, T("THE FILE"), "fl:file");   // i18n-skip (the help key)
     if (!F.sel.empty())
         text(a, a.font, 14, fx_, Y0 + 11, LCD,
              fit(a, a.font, 14, F.sel.substr(F.sel.rfind('/') + 1), FW - 140));
     std::string about;
     if (F.sel.empty())
-        about = "Choose a MIDI or audio file on the left.";
+        about = T("Choose a MIDI or audio file on the left.");
     else if (aud) {
         const std::string ae = str(&F.info, "audio_err");
         const double sr = num(au, "sr");
         const int ch = (int)num(au, "ch");
         char hz[32];
         snprintf(hz, sizeof hz, "%.1f kHz", sr / 1000.0);
-        about = !ae.empty() ? "It cannot be played: " + ae + "."
-              : str(au, "path") != F.sel ? std::string("Opening it\xe2\x80\xa6")
-              : "Audio, " + mmss(num(au, "len")) + " long \xc2\xb7 " + hz + " \xc2\xb7 " +
-                    (ch == 1 ? "mono" : ch == 2 ? "stereo" : std::to_string(ch) + " channels (the first two played)") +
-                    ". It plays beside what you play, at its own level" + (IP ? ": on the PLAY page." : ", on the right.");
+        const std::string chn = ch == 1 ? std::string(T("mono")) : ch == 2 ? std::string(T("stereo"))
+                                : TF("{0} channels (the first two played)", {std::to_string(ch)});
+        about = !ae.empty() ? TF("It cannot be played: {0}.", {ae})
+              : str(au, "path") != F.sel ? std::string(T("Opening it\xe2\x80\xa6"))
+              : IP ? TF("Audio, {0} long \xc2\xb7 {1} \xc2\xb7 {2}. It plays beside what you play, at its own level: on the PLAY page.",
+                        {mmss(num(au, "len")), std::string(hz), chn})
+                   : TF("Audio, {0} long \xc2\xb7 {1} \xc2\xb7 {2}. It plays beside what you play, at its own level, on the right.",
+                        {mmss(num(au, "len")), std::string(hz), chn});
     }
     else if (!F.info.is(J::OBJ))
-        about = "Reading it\xe2\x80\xa6";
+        about = T("Reading it\xe2\x80\xa6");
     else if (!ok)
-        about = "It cannot be read: " + str(&F.info, "err") + ".";
+        about = TF("It cannot be read: {0}.", {str(&F.info, "err")});
     else {
         const J *chs = F.info.get("channels");
         std::string cl;
@@ -290,10 +294,11 @@ inline void draw_files(App &a)
             }
         const int np = (int)num(&F.info, "programs");
         const std::string det = str(&F.info, "detected");
-        const std::string say = det == "gs" ? "GS" : det == "gm" ? "GM" : det == "cm64" ? "GS (Init CM-64: an MT-32 file on a Sound Canvas)"
-                              : det == "mt32" ? "MT-32" : det == "names" ? "an orchestra by track names" : det;
-        about = mmss(num(&F.info, "total")) + " long \xc2\xb7 " + std::to_string(nch) + " channel" + (nch == 1 ? "" : "s") + " (" + cl + ") \xc2\xb7 " +
-                std::to_string(np) + " program change" + (np == 1 ? "" : "s") + ". It reads as " + say + ": " + str(&F.info, "why") + ".";
+        const std::string say = det == "gs" ? "GS" : det == "gm" ? "GM" : det == "cm64" ? T("GS (Init CM-64: an MT-32 file on a Sound Canvas)")
+                              : det == "mt32" ? "MT-32" : det == "names" ? T("an orchestra by track names") : det;
+        const std::string chs_ = nch == 1 ? TF("{0} channel ({1})", {std::to_string(nch), cl}) : TF("{0} channels ({1})", {std::to_string(nch), cl});
+        const std::string pcs_ = np == 1 ? TF("{0} program change", {std::to_string(np)}) : TF("{0} program changes", {std::to_string(np)});
+        about = TF("{0} long \xc2\xb7 {1} \xc2\xb7 {2}. It reads as {3}: {4}.", {mmss(num(&F.info, "total")), chs_, pcs_, say, str(&F.info, "why")});
     }
     float y = Y0 + 36;
     for (const auto &l : wrap(a, a.font, 14, about, FW - 24)) {
@@ -303,18 +308,18 @@ inline void draw_files(App &a)
     if (!aud) {                         // (an audio file: no mode, no check)
     const std::string sug = str(&F.info, "suggest");
     if (ok && !sug.empty() && fl_eff() != sug)
-        for (const auto &l : wrap(a, a.font, 14, "Worth trying " + fl_mode_label(sug) + ": " + str(&F.info, "suggest_why") + ".", FW - 24)) {
+        for (const auto &l : wrap(a, a.font, 14, TF("Worth trying {0}: {1}.", {fl_mode_label(sug), str(&F.info, "suggest_why")}), FW - 24)) {
             text(a, a.font, 14, FX + 12, y, OWN, l);
             y += LH;
         }
     y += 8;
-    heading(a, FX + 12, y, "MODE", "fl:mode");
+    heading(a, FX + 12, y, T("MODE"), "fl:mode");   // i18n-skip (the help key)
     y += 22;
     {
         std::vector<std::string> w;
         std::vector<bool> lit;
         for (const auto &m : FL_MODES) {
-            w.push_back(m.second + (m.first == "auto" && ok ? ": " + fl_mode_label(str(&F.info, "detected")) : ""));
+            w.push_back(T(m.second) + (m.first == "auto" && ok ? ": " + fl_mode_label(str(&F.info, "detected")) : ""));
             lit.push_back(F.mode == m.first);
         }
         const int h = flow_buttons(a, "flmode", FX + 12, y, FW - 24, w, lit);
@@ -326,7 +331,7 @@ inline void draw_files(App &a)
         const std::string em_ = fl_eff();
         const bool mt = em_ == "cm64" || em_ == "mt32" || em_ == "cm64u" || em_ == "names";
         const bool vel = !F.f.get("mt32_vel") || flag(&F.f, "mt32_vel");
-        const int hv = mt ? flow_buttons(a, "flvel", FX + 12, y, FW - 24, {std::string("MT-32 VELOCITY ") + (vel ? "ON" : "OFF")}, {vel}) : -1;
+        const int hv = mt ? flow_buttons(a, "flvel", FX + 12, y, FW - 24, {TF("MT-32 VELOCITY {0}", {vel ? T("ON") : T("OFF")})}, {vel}) : -1;
         if (hv == 0)
             fl_take(call(a, std::string("{\"call\":\"file_opts\",\"mt32_vel\":") + (vel ? "0" : "1") + "}"));
     }
@@ -339,8 +344,9 @@ inline void draw_files(App &a)
     const int opened = (nf && F.find_open) + (has_rep && F.rep_open);
     const float bh = opened ? std::max(60.0f, avail / opened) : 0;
     if (nf) {
-        const std::string t = std::string(F.find_open ? "\xe2\x96\xbe " : "\xe2\x96\xb8 ") + "The file check: " + std::to_string(nf) +
-                              " thing" + (nf == 1 ? "" : "s") + " to know";
+        const std::string t = std::string(F.find_open ? "\xe2\x96\xbe " : "\xe2\x96\xb8 ") +
+                              (nf == 1 ? TF("The file check: {0} thing to know", {std::to_string(nf)})
+                                       : TF("The file check: {0} things to know", {std::to_string(nf)}));
         if (button(a, "flfind", FX + 12, y, FW - 24, BB, t))
             F.find_open = !F.find_open;
         y += 40;
@@ -351,7 +357,7 @@ inline void draw_files(App &a)
     }
     if (has_rep) {
         const int nr = F.rep.is(J::ARR) ? (int)F.rep.a.size() : 0;
-        const std::string t = std::string(F.rep_open ? "\xe2\x96\xbe " : "\xe2\x96\xb8 ") + rt + (nr ? "" : ": nothing to report");
+        const std::string t = std::string(F.rep_open ? "\xe2\x96\xbe " : "\xe2\x96\xb8 ") + (nr ? rt : TF("{0}: nothing to report", {rt}));
         if (button(a, "flrep", FX + 12, y, FW - 24, BB, t))
             F.rep_open = !F.rep_open;
         y += 40;
@@ -370,18 +376,18 @@ inline void draw_files(App &a)
         rect(a, PX - 6, Y0 + 12, 1, Y1 - Y0 - 24, IM_COL32(0x33, 0x36, 0x3a, 255), 0);
     float py = Y0 + 10;
     if (IP) {
-        text(a, a.font, 21, PX + 8, py, LCD, F.sel.empty() ? std::string("No file chosen: choose one on the CHOOSE page.")
+        text(a, a.font, 21, PX + 8, py, LCD, F.sel.empty() ? std::string(T("No file chosen: choose one on the CHOOSE page."))
                                                          : fit(a, a.font, 21, F.sel.substr(F.sel.rfind('/') + 1), PW - 24));
         py += a.lh(21) + 14;
     }
     if (aud) {                          // THE PLAYER: an audio file, beside what is played
-        heading(a, PX + 8, py, "PLAYER", "fl:audio");
+        heading(a, PX + 8, py, T("PLAYER"), "fl:audio");   // i18n-skip (the help key)
         py += 26;
         const bool here = str(au, "path") == F.sel, pl = here && flag(au, "playing");
         const double len = num(au, "len"), at = F.seek_drag >= 0 ? F.seek_drag : num(au, "at");
-        if (button(a, "flaplay", PX + 8, py, 160, 44, pl ? "PAUSE" : "PLAY", pl, here && len > 0, B21) && here)
+        if (button(a, "flaplay", PX + 8, py, 160, 44, pl ? T("PAUSE") : T("PLAY"), pl, here && len > 0, B21) && here)
             fl_take(call(a, std::string("{\"call\":\"audio_play\",\"on\":") + (pl ? "0" : "1") + "}"));
-        if (button(a, "flastop", PX + 176, py, 110, 44, "STOP", false, here && (pl || at > 0), B21)) {
+        if (button(a, "flastop", PX + 176, py, 110, 44, T("STOP"), false, here && (pl || at > 0), B21)) {
             fl_take(call(a, "{\"call\":\"audio_play\",\"on\":0}"));
             fl_take(call(a, "{\"call\":\"audio_seek\",\"at\":0}"));
         }
@@ -408,7 +414,7 @@ inline void draw_files(App &a)
             static float lv = 0;
             static bool held = false;
             const int fl_ = fader(a, "flalevel", PX + PW - 70, Y0 + (IP ? 90 : 130), IP ? 240 : 170, lv, -30, 6, 0.5f, {0.0f},
-                                  "LEVEL", (lv > 0 ? "+" : "") + std::to_string((int)std::lround(lv)) + " dB");
+                                  T("LEVEL"), (lv > 0 ? "+" : "") + std::to_string((int)std::lround(lv)) + " dB");
             if (fl_ & K_CHANGED)
                 fl_take(call(a, "{\"call\":\"audio_level\",\"db\":" + std::to_string(lv) + "}"));
             held = (fl_ & K_ACTIVE) != 0;
@@ -416,18 +422,18 @@ inline void draw_files(App &a)
                 lv = (float)num(au, "level_db");
         }
         py += bh + 20;
-        for (const auto &l : wrap(a, a.font, 14, "It plays through the same output as the keyboard, mixed beside it: "
-                                                 "play along, or listen back to a render.", PW - 170)) {
+        for (const auto &l : wrap(a, a.font, 14, T("It plays through the same output as the keyboard, mixed beside it: "
+                                                   "play along, or listen back to a render."), PW - 170)) {
             text(a, a.font, 14, PX + 8, py, SILK_DIM, l);
             py += LH;
         }
         return;
     }
-    heading(a, PX + 8, py, "PLAY LIVE", "fl:play");
+    heading(a, PX + 8, py, T("PLAY LIVE"), "fl:play");   // i18n-skip (the help key)
     py += 26;
-    if (button(a, "flplay", PX + 8, py, 160, 44, "PLAY LIVE", false, ok && !playing, B21) && ok && !playing)
+    if (button(a, "flplay", PX + 8, py, 160, 44, T("PLAY LIVE"), false, ok && !playing, B21) && ok && !playing)
         fl_take(call(a, "{\"call\":\"file_play\",\"path\":" + jstr(F.sel) + ",\"mode\":" + jstr(F.mode) + "}"));
-    if (button(a, "flstop", PX + 176, py, 110, 44, "STOP", false, playing, B21) && playing)
+    if (button(a, "flstop", PX + 176, py, 110, 44, T("STOP"), false, playing, B21) && playing)
         fl_take(call(a, "{\"call\":\"file_stop\"}"));
     {
         const double pos = num(pl, "pos"), tot = num(pl, "total") > 0 ? num(pl, "total") : num(&F.info, "total");
@@ -444,7 +450,7 @@ inline void draw_files(App &a)
         if (pl) {
             const std::string msg = str(pl, "msg"), stage = str(pl, "stage"), md = str(pl, "mode");
             st = !msg.empty() ? msg
-                 : playing ? stage + " (" + (md == "gs" ? std::string("GS, the Setup card's standard") : fl_mode_label(md)) + ")"
+                 : playing ? stage + " (" + (md == "gs" ? std::string(T("GS, the Setup card's standard")) : fl_mode_label(md)) + ")"
                  : !stage.empty() ? str(pl, "name") + ": " + stage + "." : "";
         }
         for (const auto &l : wrap(a, a.font, 14, st, PW - 24)) {
@@ -457,7 +463,7 @@ inline void draw_files(App &a)
 
     // RENDER OFFLINE
     py += 16;
-    heading(a, PX + 8, py, "RENDER OFFLINE", "fl:render");
+    heading(a, PX + 8, py, T("RENDER OFFLINE"), "fl:render");   // i18n-skip (the help key)
     py += 26;
     const bool fx_ok = flag(&F.f, "file_export");
     auto render = [&](const char *kind, bool whole) {
@@ -465,11 +471,11 @@ inline void draw_files(App &a)
                             "\",\"whole\":" + (whole ? "1" : "0") + "}"));
     };
     const float rbw = (PW - 24 - 16) / 3;
-    if (button(a, "flheard", PX + 8, py, rbw, 44, "AS HEARD", false, ok && !rendering, B21) && ok && !rendering)
+    if (button(a, "flheard", PX + 8, py, rbw, 44, T("AS HEARD"), false, ok && !rendering, B21) && ok && !rendering)
         render("heard", false);
-    if (button(a, "flbest", PX + 16 + rbw, py, rbw, 44, "BEST QUALITY", false, ok && !rendering && fx_ok, B21) && ok && !rendering && fx_ok)
+    if (button(a, "flbest", PX + 16 + rbw, py, rbw, 44, T("BEST QUALITY"), false, ok && !rendering && fx_ok, B21) && ok && !rendering && fx_ok)
         render("best", false);
-    if (button(a, "flrstop", PX + 24 + 2 * rbw, py, rbw, 44, "STOP RENDER", false, rendering, B21) && rendering)
+    if (button(a, "flrstop", PX + 24 + 2 * rbw, py, rbw, 44, T("STOP RENDER"), false, rendering, B21) && rendering)
         fl_take(call(a, "{\"call\":\"file_render_stop\"}"));
     py += 56;
     {
@@ -482,8 +488,8 @@ inline void draw_files(App &a)
                                                  mmss(at_) + " / " + mmss(len_) : "";
             st = rendering ? str(rd, "name") + ": " + str(rd, "stage") + "\xe2\x80\xa6 " + mmss(num(rd, "secs")) + where +
                                  (last.empty() ? "" : " \xc2\xb7 " + last)
-                 : !msg.empty() ? str(rd, "name") + ": " + msg + (msg == "rendered" ? " in " + mmss(num(rd, "secs")) : "") + "."
-                 : !fx_ok ? FL_NO_EXPORT : "";
+                 : !msg.empty() ? str(rd, "name") + ": " + (msg == "rendered" ? TF("{0} in {1}", {msg, mmss(num(rd, "secs"))}) : msg) + "."
+                 : !fx_ok ? T(FL_NO_EXPORT) : "";
         }
         for (const auto &l : wrap(a, a.font, 14, st, PW - 24)) {
             text(a, a.font, 14, PX + 8, py, SILK_DIM, l);
@@ -493,30 +499,30 @@ inline void draw_files(App &a)
         const std::string ask = str(rd, "ask");
         if (rd && !rendering && !ask.empty()) {
             py += 6;
-            std::string q = (ask == "refused" ? "Best quality cannot render it" : "It cannot be streamed yet") + std::string(": ") + str(rd, "ask_why") + "." +
-                            (ask == "whole" ? " The whole render holds the entire song in memory, which a long song may not fit in." : "");
+            std::string q = (ask == "refused" ? T("Best quality cannot render it") : T("It cannot be streamed yet")) + std::string(": ") + str(rd, "ask_why") + "." +
+                            (ask == "whole" ? " " + std::string(T("The whole render holds the entire song in memory, which a long song may not fit in.")) : std::string());
             for (const auto &l : wrap(a, a.font, 14, q, PW - 24)) {
                 text(a, a.font, 14, PX + 8, py, OWN, l);
                 py += LH;
             }
             float bx = PX + 8;
             if (ask == "whole") {
-                if (button(a, "flwhole", bx, py + 4, IP ? 330 : 260, IP ? 44 : 40, "RENDER WHOLE ANYWAY", false, true, B21))
+                if (button(a, "flwhole", bx, py + 4, IP ? 330 : 260, IP ? 44 : 40, T("RENDER WHOLE ANYWAY"), false, true, B21))
                     render("best", true);
                 bx += IP ? 338 : 268;
             }
-            if (button(a, "flinstead", bx, py + 4, IP ? 380 : 300, IP ? 44 : 40, "RENDER AS HEARD INSTEAD", false, true, B21))
+            if (button(a, "flinstead", bx, py + 4, IP ? 380 : 300, IP ? 44 : 40, T("RENDER AS HEARD INSTEAD"), false, true, B21))
                 render("heard", false);
             py += 52;
         }
         const std::string out = str(rd, "out");
         if (rd && !rendering && str(rd, "msg") == "rendered" && !out.empty()) {
             py += 6;
-            for (const auto &l : wrap(a, a.font, 14, "Saved to " + out, PW - 24)) {
+            for (const auto &l : wrap(a, a.font, 14, TF("Saved to {0}", {out}), PW - 24)) {
                 text(a, a.font, 14, PX + 8, py, LCD, l);
                 py += LH;
             }
-            if (button(a, "flplayit", PX + 8, py + 6, IP ? 200 : 160, IP ? 44 : 40, "PLAY IT", false, true, B21)) {
+            if (button(a, "flplayit", PX + 8, py + 6, IP ? 200 : 160, IP ? 44 : 40, T("PLAY IT"), false, true, B21)) {
                 fl_go(a, out.substr(0, out.rfind('/')));        // (its folder, and the player)
                 fl_select(a, out);
             }
@@ -524,7 +530,7 @@ inline void draw_files(App &a)
         }
     }
     // (the caution under the render buttons and what they said, not at the card's foot)
-    const auto warn = wrap(a, a.font, 14, "Rendering while you play can cause dropouts: both use the processors. A render that needs more memory than is free is stopped.", PW - 24);
+    const auto warn = wrap(a, a.font, 14, T("Rendering while you play can cause dropouts: both use the processors. A render that needs more memory than is free is stopped."), PW - 24);
     float wy = std::min(py + 12, Y1 - 12 - warn.size() * LH);
     for (const auto &l : warn) {
         text(a, a.font, 14, PX + 8, wy, LCD_DIM, l);

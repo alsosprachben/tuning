@@ -34,9 +34,9 @@ inline std::pair<std::string, std::string> tuner_words(const std::string &key, c
 // an Eastern system's name: "Todi", "Yaman Kalyan" (its measured raga's)
 inline std::string eastern_name(const std::string &k)
 {
-    static const std::map<std::string, std::string> M = {{"bel_todi", "Todi"}, {"et", "Equal"}, {"just5", "Just"}, {"pythagorean", "Pythagorean"}};
+    static const std::map<std::string, std::string> M = {{"bel_todi", "Todi"}, {"et", N_("Equal")}, {"just5", N_("Just")}, {"pythagorean", "Pythagorean"}};
     if (auto it = M.find(k); it != M.end())
-        return it->second;
+        return T(it->second);
     std::string s = k.rfind("sung_", 0) == 0 ? k.substr(5) : k;
     bool up = true;
     for (char &c : s) {
@@ -191,23 +191,23 @@ inline void draw_tuning(App &a)
     const float X0 = PH ? 14 : IP ? 20 : 34, X1 = IP ? (PH ? 818 : 1113) : 1886, Y0 = PH ? 160 : IP ? 266 : 394, Y1 = card_y1(a),
                 HY = PH ? 120 : IP ? 224 : 356;
     const float LH = a.lh(14) + (IP ? 3 : 4);
-    const float TX = heading(a, X0, HY, "TUNING", "tuning");
+    const float TX = heading(a, X0, HY, nui::T("TUNING"), "tuning");   // (nui::T: the card's T is its state)
     if (PH) {
-        static const char *PN[3] = {"TUNERS", "SHAPE", "EASTERN"};
+        static const char *PN[3] = {N_("TUNERS"), N_("SHAPE"), N_("EASTERN")};
         float px_ = TX + 6;
         for (int pg = 0; pg < 3; pg++) {
-            const float w = text_w(a, a.font, 21, PN[pg]) + 28;
+            const float w = text_w(a, a.font, 21, nui::T(PN[pg])) + 28;
             const std::string id = "tnppage" + std::to_string(pg);
-            if (button(a, id.c_str(), px_, 112, w, 40, PN[pg], tpage == pg, true, 21))
+            if (button(a, id.c_str(), px_, 112, w, 40, nui::T(PN[pg]), tpage == pg, true, 21))
                 tpage = pg;
             px_ += w + 4;
         }
     } else
-        text(a, a.font, 14, TX, HY + 1, OWN, "every part");
+        text(a, a.font, 14, TX, HY + 1, OWN, nui::T("every part"));
     if (IP && !PH)
         for (int pg = 0; pg < 2; pg++) {
             const std::string id = "tnpage" + std::to_string(pg);
-            if (button(a, id.c_str(), page_kx(a, 2, pg, 300), 216, page_kw(a, 2), 44, pg ? "EASTERN" : "TUNERS", page == pg, true, 21))
+            if (button(a, id.c_str(), page_kx(a, 2, pg, 300), 216, page_kw(a, 2), 44, pg ? nui::T("EASTERN") : nui::T("TUNERS"), page == pg, true, 21))
                 page = pg;
         }
     if (!T.t.is(J::OBJ) || !T.lists)
@@ -216,8 +216,8 @@ inline void draw_tuning(App &a)
     if (T.pending == tuner)
         T.pending.clear();
     const bool building = tuner != now;
-    const std::string info = building ? "building the patches in " + tuner_words(tuner, "").first + "\xe2\x80\xa6"
-                                      : "playing " + tuner_words(now, "").first;
+    const std::string info = building ? TF("building the patches in {0}\xe2\x80\xa6", {tuner_words(tuner, "").first})
+                                      : TF("playing {0}", {tuner_words(now, "").first});
     const std::string info_ = fit(a, a.font, 14, info, IP ? 300 : 900);
     text(a, a.font, 14, X1 - text_w(a, a.font, 14, info_), PH ? 147 : HY + 1, building ? OWN : SILK_DIM, info_);
     if (building)
@@ -225,9 +225,9 @@ inline void draw_tuning(App &a)
 
     // THE TUNERS, grouped by what they are for
     static const std::vector<std::pair<const char *, std::vector<std::string>>> GROUPS = {
-        {"Concert pitch, A=440", {"gm2", "hybrid440", "hybridmeanpiano", "stretchedhelmholtz", "even"}},
-        {"Baroque pitch, A=415", {"hybrid", "stretch", "werckmeister", "sankey", "meantone"}},
-        {"Pure octaves: pipes", {"hybridharm", "hybridharm440", "hybridmean"}}};
+        {N_("Concert pitch, A=440"), {"gm2", "hybrid440", "hybridmeanpiano", "stretchedhelmholtz", "even"}},
+        {N_("Baroque pitch, A=415"), {"hybrid", "stretch", "werckmeister", "sankey", "meantone"}},
+        {N_("Pure octaves: pipes"), {"hybridharm", "hybridharm440", "hybridmean"}}};
     std::vector<std::pair<std::string, std::vector<const std::pair<std::string, std::string> *>>> groups;
     std::set<std::string> named;
     for (const auto &g : GROUPS) {
@@ -246,8 +246,8 @@ inline void draw_tuning(App &a)
             raga.push_back(&t);
         else if (!named.count(t.first))
             other.push_back(&t);
-    groups.push_back({"Indian, every part", raga});
-    groups.push_back({"Other systems", other});
+    groups.push_back({N_("Indian, every part"), raga});
+    groups.push_back({N_("Other systems"), other});
     const float LW = PH ? X1 - X0 : IP ? 600 : 1070, cols = IP && !PH ? 2 : 3, gap = 8, tw = (LW - 10 - gap * (cols - 1)) / cols, th = 64, hh = 30;
     // (the layout, then the touch, then the drawing)
     struct Tile {
@@ -276,7 +276,7 @@ inline void draw_tuning(App &a)
             }
     dl()->PushClipRect(P(a, X0, Y0), P(a, X0 + LW, Y1), true);
     for (const auto &h : heads) {
-        std::string up = h.first;
+        std::string up = nui::T(h.first);
         for (char &c : up)
             c = (char)toupper((unsigned char)c);
         text(a, a.bold, 14, X0, Y0 + h.second - T.scroll + 8, SILK, up);
@@ -302,7 +302,7 @@ inline void draw_tuning(App &a)
     const float SX = PH ? X0 : X0 + LW + 12, SW = X1 - SX, SH = IP ? Y1 - Y0 : 330;
     if (PH ? tpage == 1 : (!IP || page == 0)) {
     look::tray(a, SX, Y0, SW, SH, 9);
-    const float tsx = heading(a, SX + 12, Y0 + 10, "THE TUNING", "tn:shape");
+    const float tsx = heading(a, SX + 12, Y0 + 10, nui::T("THE TUNING"), "tn:shape");   // i18n-skip (a help key)
     const J *shape = T.t.get("shape");
     const double a4 = num(shape, "a4");
     text(a, a.font, 14, tsx, Y0 + 11, LCD, tuner_words(tuner, "").first + (a4 > 0 ? " \xc2\xb7 A4 = " + jnum(a4) + " Hz" : ""));
@@ -316,11 +316,11 @@ inline void draw_tuning(App &a)
     // (the phone's two graphs side by side: its page is wide, not tall)
     const float gx = SX + 14, gw = PH ? SW / 2 - 28 : SW - 28, gxb = PH ? SX + SW / 2 + 14 : gx;
     if (!cents || !cents->is(J::ARR)) {
-        text(a, a.font, 14, gx, Y0 + 150, SILK_DIM, "this tuner has no fixed table (it follows the file or the music)");
+        text(a, a.font, 14, gx, Y0 + 150, SILK_DIM, nui::T("this tuner has no fixed table (it follows the file or the music)"));
     } else {
         static const char *NN[12] = {"C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"};
         const float top = Y0 + 50, h1 = 96, mid = top + h1 / 2, sc = (h1 / 2) / 30, bw = gw / 12;
-        text(a, a.font, 14, gx, Y0 + 32, SILK_DIM, "C4 to B4, cents from equal temperament");
+        text(a, a.font, 14, gx, Y0 + 32, SILK_DIM, nui::T("C4 to B4, cents from equal temperament"));
         rect(a, gx, mid, gw, 1, IM_COL32(0x3a, 0x3f, 0x45, 255), 0);
         for (int i = 0; i < 12; i++) {
             const float x = gx + i * bw;
@@ -336,7 +336,7 @@ inline void draw_tuning(App &a)
         }
         // (the stretch's scale in a margin of its own at the right, clear of the octaves' names)
         const float top2 = PH ? top : top + h1 + 50, h2 = 90, mid2 = top2 + h2 / 2, sc2 = (h2 / 2) / 40, gw2 = gw - text_w(a, a.font, 14, "+40") - 12;
-        text(a, a.font, 14, gxb, top2 - (PH ? 18 : 22), SILK_DIM, fit(a, a.font, 14, "A0 to C8: each octave's stretch from 2:1, in cents", gw));
+        text(a, a.font, 14, gxb, top2 - (PH ? 18 : 22), SILK_DIM, fit(a, a.font, 14, nui::T("A0 to C8: each octave's stretch from 2:1, in cents"), gw));
         rect(a, gxb, mid2, gw2, 1, IM_COL32(0x3a, 0x3f, 0x45, 255), 0);
         dl()->PathClear();
         for (int n = 21; n <= 108; n++) {
@@ -360,7 +360,7 @@ inline void draw_tuning(App &a)
     // (the iPad's Eastern tuning a page across the card)
     const float EX = IP ? X0 : SX, EW = IP ? X1 - X0 : SW, EY = IP ? Y0 : Y0 + SH + 10;
     look::tray(a, EX, EY, EW, Y1 - EY, 9);
-    text(a, a.font, 14, heading(a, EX + 12, EY + 10, "EASTERN TUNING", "tn:east"), EY + 11, LCD, "the Indian voices' parts");
+    text(a, a.font, 14, heading(a, EX + 12, EY + 10, nui::T("EASTERN TUNING"), "tn:east"), EY + 11, LCD, nui::T("the Indian voices' parts"));   // i18n-skip (a help key)
     if (!T.east_mine.empty() && ImGui::GetTime() > T.east_until)
         T.east_mine.clear();
     East p = east_parts(T.east_mine.empty() ? str(&T.t, "eastern") : T.east_mine);
@@ -368,7 +368,7 @@ inline void draw_tuning(App &a)
     bool changed = false;
     float ey = EY + 36;
     {
-        std::vector<std::string> w = {"Off"};
+        std::vector<std::string> w = {nui::T("Off")};
         std::vector<bool> lit = {p.system.empty() && !T.measured};
         std::vector<std::string> sys;
         for (const auto &s : T.systems)
@@ -381,7 +381,7 @@ inline void draw_tuning(App &a)
         for (const auto &s : T.systems)
             any_meas = any_meas || s.rfind("sung_", 0) == 0;
         if (any_meas) {
-            w.push_back("measured ragas\xe2\x80\xa6");
+            w.push_back(nui::T("measured ragas\xe2\x80\xa6"));
             lit.push_back(measured);
         }
         const int h = flow_buttons(a, "tnsys", EX + 12, ey, EW - 24, w, lit);
@@ -414,7 +414,7 @@ inline void draw_tuning(App &a)
             changed = true;
         }
     } else if (!p.system.empty()) {
-        std::vector<std::string> w = {"No raga"};
+        std::vector<std::string> w = {nui::T("No raga")};
         std::vector<bool> lit = {p.raga.empty()};
         for (const auto &r : T.ragas) {
             w.push_back(r);
@@ -436,7 +436,7 @@ inline void draw_tuning(App &a)
             w.push_back(u);
             lit.push_back(k == p.sa);
         }
-        text(a, a.bold, 14, EX + 12, ey + ((IP ? 44 : 30) - a.lh(14)) / 2, SILK, "SA");
+        text(a, a.bold, 14, EX + 12, ey + ((IP ? 44 : 30) - a.lh(14)) / 2, SILK, nui::T("SA"));
         const int h = flow_buttons(a, "tnsa", EX + 50, ey, EW - 62, w, lit, 30);
         if (h >= 0) {
             p.sa = SA[(size_t)h];
@@ -448,16 +448,17 @@ inline void draw_tuning(App &a)
         sa_up[0] = (char)toupper((unsigned char)sa_up[0]);
     std::string say;
     if (p.system.empty())
-        say = "Off: the Indian instruments play the tuner above.";
+        say = nui::T("Off: the Indian instruments play the tuner above.");
     else {
         std::string sys = p.system;
         if (sys.rfind("sung_", 0) == 0) {
             sys = sys.substr(5);
             std::replace(sys.begin(), sys.end(), '_', ' ');
-            sys = "raga " + sys + " as measured";
+            sys = TF("raga {0} as measured", {sys});
         }
-        say = "The Indian instruments' parts play " + sys + (p.raga.empty() ? "" : ", raga " + p.raga) + ", Sa on " + sa_up +
-              " (unless the tuner above is itself Indian).";
+        say = p.raga.empty() ? TF("The Indian instruments' parts play {0}, Sa on {1} (unless the tuner above is itself Indian).", {sys, sa_up})
+                             : TF("The Indian instruments' parts play {0}, raga {1}, Sa on {2} (unless the tuner above is itself Indian).",
+                                  {sys, p.raga, sa_up});
     }
     for (const auto &l : wrap(a, a.font, 14, say, EW - 24)) {
         text(a, a.font, 14, EX + 12, ey, SILK_DIM, l);

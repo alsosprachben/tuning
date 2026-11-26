@@ -31,18 +31,19 @@ inline void display_desc(App &a, const std::string &pd, float x, float y, float 
         look::lcd_text(a, small, x, y0 + i * lh, LCD, ls[i]);
 }
 
-static const char *FAMILIES[16] = {"PIANO", "CHROMATIC PERC.", "ORGAN", "GUITAR", "BASS", "STRINGS", "ENSEMBLE",
-                                   "BRASS", "REED", "PIPE", "SYNTH LEAD", "SYNTH PAD", "SYNTH EFFECTS", "ETHNIC",
-                                   "PERCUSSIVE", "SOUND EFFECTS"};
+static const char *FAMILIES[16] = {N_("PIANO"), N_("CHROMATIC PERC."), N_("ORGAN"), N_("GUITAR"), N_("BASS"),
+                                   N_("STRINGS"), N_("ENSEMBLE"), N_("BRASS"), N_("REED"), N_("PIPE"), N_("SYNTH LEAD"),
+                                   N_("SYNTH PAD"), N_("SYNTH EFFECTS"), N_("ETHNIC"), N_("PERCUSSIVE"),
+                                   N_("SOUND EFFECTS")};
 
 // THE SEVEN FIELDS (the retired web interface's FIELDS): in field units (LEVEL in half dB)
 struct Field {
     const char *label;
     int lo, hi, reset;                  // (reset INT32_MIN: none)
 };
-static const Field FIELDS[7] = {{"LEVEL", -60, 20, 0}, {"PAN", 0, 127, 64}, {"REVERB", 0, 127, 40},
-                                {"CHORUS", 0, 127, 0}, {"DELAY", 0, 127, 0}, {"KEY", -24, 24, 0},
-                                {"CH", 0, 16, INT32_MIN}};
+static const Field FIELDS[7] = {{N_("LEVEL"), -60, 20, 0}, {N_("PAN"), 0, 127, 64}, {N_("REVERB"), 0, 127, 40},
+                                {N_("CHORUS"), 0, 127, 0}, {N_("DELAY"), 0, 127, 0}, {N_("KEY"), -24, 24, 0},
+                                {N_("CH"), 0, 16, INT32_MIN}};
 inline int field_get(App &a, int i)
 {
     const int r = a.row;
@@ -76,7 +77,7 @@ inline std::string field_text(int i, int v)
     case 0: return db_text(v / 2.0);
     case 1: return pan_text(v);
     case 5: return signed_text(v);
-    case 6: return v ? std::to_string(v) : std::string("ALL");
+    case 6: return v ? std::to_string(v) : std::string(T("ALL"));
     default: return std::to_string(v);
     }
 }
@@ -120,15 +121,15 @@ inline std::string health_line(App &a, const J *m, bool &warn)
     const double now = ImGui::GetTime();
     const long lt = (long)num(&a.build, "late"), st = (long)num(&a.build, "stand"), ls = (long)num(&a.build, "lost");
     if (a.seen_lost >= 0 && ls > a.seen_lost) {     // (a held note that never sounded: worst first)
-        a.warn = ls - a.seen_lost > 1 ? "MISSED x" + std::to_string(ls - a.seen_lost) : "MISSED NOTE";
+        a.warn = ls - a.seen_lost > 1 ? TF("MISSED x{0}", {std::to_string(ls - a.seen_lost)}) : T("MISSED NOTE");
         a.warn_red = true;
         a.warn_until = now + 4.0;
     } else if (a.seen_stand >= 0 && st > a.seen_stand) {
-        a.warn = st - a.seen_stand > 1 ? "STAND-IN x" + std::to_string(st - a.seen_stand) : "STAND-IN";
+        a.warn = st - a.seen_stand > 1 ? TF("STAND-IN x{0}", {std::to_string(st - a.seen_stand)}) : T("STAND-IN");
         a.warn_red = true;
         a.warn_until = now + 4.0;
     } else if (a.seen_late >= 0 && lt > a.seen_late && (now >= a.warn_until || !a.warn_red)) {
-        a.warn = lt - a.seen_late > 1 ? "LATE x" + std::to_string(lt - a.seen_late) : "LATE NOTE";
+        a.warn = lt - a.seen_late > 1 ? TF("LATE x{0}", {std::to_string(lt - a.seen_late)}) : T("LATE NOTE");
         a.warn_red = false;
         a.warn_until = now + 2.0;
     }
@@ -145,18 +146,18 @@ inline std::string health_line(App &a, const J *m, bool &warn)
         // (its size beside the percent, known or sampled; over the budget, the middle octaves first)
         const std::string size = mb >= 1024 ? " \xc2\xb7 " + std::to_string((int)std::lround(mb / 1024.0)) + " GB"
                                : mb > 0 ? " \xc2\xb7 " + std::to_string((int)mb) + " MB" : "";
-        return tot > 0 ? "BUILDING " + std::to_string((int)std::lround(100 * done / tot)) + "%" + size +
-                             (flag(&a.build, "over") ? " \xc2\xb7 TOO BIG: MIDDLE FIRST" : "")
-                       : "BUILDING";
+        return tot > 0 ? TF("BUILDING {0}%", {std::to_string((int)std::lround(100 * done / tot))}) + size +
+                             (flag(&a.build, "over") ? " \xc2\xb7 " + std::string(T("TOO BIG: MIDDLE FIRST")) : "")
+                       : std::string(T("BUILDING"));
     }
     const std::string fill = str(&a.build, "fill");
     if (!fill.empty())
-        return "FILL " + fill;
+        return TF("FILL {0}", {fill});
     warn = true;
     if (num(m, "underruns") > 0)
-        return "UNDERRUNS " + std::to_string((int)num(m, "underruns"));
+        return TF("UNDERRUNS {0}", {std::to_string((int)num(m, "underruns"))});
     if (flag(m, "rt_dropped"))
-        return "RT DROPPED";
+        return T("RT DROPPED");
     warn = false;
     return "";
 }
@@ -170,17 +171,17 @@ inline void draw_display(App &a)
     look::well(a, X - 8, Y - 8, W + 16, H + 16, 10.0f, IM_COL32(0x0b, 0x0c, 0x0e, 255));
     lcd_floor(a, X, Y, W, H);
     const J *p = part(a, a.row);
-    look::lcd_text(a, 14, X + 14, Y + 14, LCD, "PART");
+    look::lcd_text(a, 14, X + 14, Y + 14, LCD, T("PART"));
     std::string fam;
     if (p) {
         const int prog = (int)num(p, "program"), var = (int)num(p, "variation"), ch = (int)pv(a, a.row, "channel", -1);
         char b[96];
         if (flag(p, "drums"))
-            snprintf(b, sizeof b, "DRUM SET %d", prog);
+            snprintf(b, sizeof b, T("DRUM SET %d"), prog);
         else
-            snprintf(b, sizeof b, "PROGRAM %03d%s \xc2\xb7 %s", prog, var ? ("." + std::to_string(var)).c_str() : "",
-                     var == 127 ? "MT-32" : var == 126 ? "CM-64 PCM" : FAMILIES[(prog >> 3) & 15]);
-        fam = std::string(b) + (ch < 0 ? " \xc2\xb7 ALL CH" : " \xc2\xb7 CH " + std::to_string(ch + 1));
+            snprintf(b, sizeof b, T("PROGRAM %03d%s \xc2\xb7 %s"), prog, var ? ("." + std::to_string(var)).c_str() : "",
+                     var == 127 ? "MT-32" : var == 126 ? "CM-64 PCM" : T(FAMILIES[(prog >> 3) & 15]));  // i18n-skip
+        fam = std::string(b) + " \xc2\xb7 " + (ch < 0 ? std::string(T("ALL CH")) : TF("CH {0}", {std::to_string(ch + 1)}));
     }
     look::lcd_text(a, 14, X + 92, Y + 14, LCD, fam);
     look::lcd_text(a, 35, X + 14, Y + 34, LCD, p ? pad2(a.row + 1) : "--");
@@ -198,9 +199,9 @@ inline void draw_display(App &a)
     char b[64];
     const double bud = num(m, "budget_ms"), mean = num(m, "ms_mean");
     const int cpu = bud > 0 ? (int)std::lround(100.0 * mean / bud) : 0;
-    snprintf(b, sizeof b, "%-8s%4d%%", flag(m, "gpu") ? "GPU+CPU" : "CPU", std::min(cpu, 999));
+    snprintf(b, sizeof b, "%-8s%4d%%", flag(m, "gpu") ? "GPU+CPU" : "CPU", std::min(cpu, 999));  // i18n-skip
     look::lcd_text(a, 14, X + W - 170, Y + 14, LCD, b);
-    snprintf(b, sizeof b, "%-8s%5d", "VOICES", (int)std::min(99999.0, num(m, "voices")));
+    snprintf(b, sizeof b, "%-8s%5d", T("VOICES"), (int)std::min(99999.0, num(m, "voices")));
     look::lcd_text(a, 14, X + W - 170, Y + 30, LCD, b);
     bool warn = false;
     const std::string health = health_line(a, m, warn);
@@ -211,7 +212,7 @@ inline void draw_display(App &a)
         const float fx = X + 14 + i * (fw + 8), fy = Y + 80;
         float v = (float)field_get(a, i);
         const int f = lcd_field(a, FIELDS[i].label, fx, fy, fw, 52, v, (float)FIELDS[i].lo, (float)FIELDS[i].hi,
-                                FIELDS[i].label, field_text(i, (int)v), a.field == i, 21, i == 0 ? 0.5f : 1.0f);
+                                T(FIELDS[i].label), field_text(i, (int)v), a.field == i, 21, i == 0 ? 0.5f : 1.0f);
         if (f & (K_TAP | K_ACTIVE))
             a.field = i;
         if (f & K_CHANGED)
@@ -237,21 +238,21 @@ inline void draw_keys(App &a)
     const J *p = part(a, a.row);
     const int n = nparts(a);
     const float X = 1466, Y = 22;
-    if (look::key(a, "prev", X, Y, 118, 48, "\xe2\x97\x80 PART", false, a.row > 0, 14, false))
+    if (look::key(a, "prev", X, Y, 118, 48, T("\xe2\x97\x80 PART"), false, a.row > 0, 14, false))
         select(a, a.row - 1);
-    if (look::key(a, "next", X + 128, Y, 118, 48, "PART \xe2\x96\xb6", false, a.row + 1 < n, 14, false))
+    if (look::key(a, "next", X + 128, Y, 118, 48, T("PART \xe2\x96\xb6"), false, a.row + 1 < n, 14, false))
         select(a, a.row + 1);
     const bool muted = pv(a, a.row, "muted") != 0;
-    if (look::key(a, "mute", X, Y + 58, 118, 48, "MUTE", muted) && p)
+    if (look::key(a, "mute", X, Y + 58, 118, 48, T("MUTE"), muted) && p)
         part_set(a, a.row, "muted", muted ? 0 : 1);
-    if (look::key(a, "solo", X + 128, Y + 58, 118, 48, "SOLO", num(p, "solo") == 1) && p)
+    if (look::key(a, "solo", X + 128, Y + 58, 118, 48, T("SOLO"), num(p, "solo") == 1) && p)
         take_parts(a, call(a, "{\"call\":\"part_solo\",\"row\":" + std::to_string(a.row) + "}"));
-    if (look::key(a, "panic", X, Y + 116, 246, 48, "PANIC", false, true, 14, false))
+    if (look::key(a, "panic", X, Y + 116, 246, 48, T("PANIC"), false, true, 14, false))
         call(a, "{\"call\":\"panic\"}");
     // QUIT (the web's Setup card's, here until that card is): two taps within 3 s
     const double now = ImGui::GetTime();
     const bool armed = now - a.quit_armed < 3.0;
-    if (look::key(a, "quit", X, Y + 174, 246, 48, armed ? "TAP AGAIN TO QUIT" : "QUIT CLAVITONE", armed)) {
+    if (look::key(a, "quit", X, Y + 174, 246, 48, armed ? T("TAP AGAIN TO QUIT") : T("QUIT CLAVITONE"), armed)) {
         if (armed)
             a.quit = true;
         else
@@ -263,7 +264,7 @@ inline void draw_keys(App &a)
     if (steps && p)
         field_set(a, a.field, field_get(a, a.field) + steps);
     look::dial_cap(a, cx, cy, r, a.jog.rot);
-    text_c(a, a.bold, 14, cx, cy + r + 10, LCD, FIELDS[a.field].label);
+    text_c(a, a.bold, 14, cx, cy + r + 10, LCD, T(FIELDS[a.field].label));
 }
 
 // ---- THE iPad's PANEL (App::tab: a 1133x744-point canvas, its text half
@@ -282,14 +283,14 @@ inline void draw_display_tab(App &a)
         const int prog = (int)num(p, "program"), var = (int)num(p, "variation"), ch = (int)pv(a, a.row, "channel", -1);
         char b[96];
         if (flag(p, "drums"))
-            snprintf(b, sizeof b, "DRUM SET %d", prog);
+            snprintf(b, sizeof b, T("DRUM SET %d"), prog);
         else
-            snprintf(b, sizeof b, "PROGRAM %03d%s \xc2\xb7 %s", prog, var ? ("." + std::to_string(var)).c_str() : "",
-                     var == 127 ? "MT-32" : var == 126 ? "CM-64 PCM" : FAMILIES[(prog >> 3) & 15]);
-        fam = std::string(b) + (ch < 0 ? " \xc2\xb7 ALL CH" : " \xc2\xb7 CH " + std::to_string(ch + 1));
+            snprintf(b, sizeof b, T("PROGRAM %03d%s \xc2\xb7 %s"), prog, var ? ("." + std::to_string(var)).c_str() : "",
+                     var == 127 ? "MT-32" : var == 126 ? "CM-64 PCM" : T(FAMILIES[(prog >> 3) & 15]));  // i18n-skip
+        fam = std::string(b) + " \xc2\xb7 " + (ch < 0 ? std::string(T("ALL CH")) : TF("CH {0}", {std::to_string(ch + 1)}));
     }
     // (the part and its name 4x code7; the rest 2x)
-    look::lcd_text(a, 14, X + 8, Y + 6, LCD, "PART  " + fam);
+    look::lcd_text(a, 14, X + 8, Y + 6, LCD, std::string(T("PART")) + "  " + fam);
     look::lcd_text(a, 28, X + 8, Y + 18, LCD, p ? pad2(a.row + 1) : "--");
     const float nx = X + 8 + text_w(a, a.font, 28, "00") + 10;
     const std::string nm = p ? fit(a, a.font, 28, str(p, "name"), W - (nx - X) - 130) : "";
@@ -304,9 +305,9 @@ inline void draw_display_tab(App &a)
     char b[64];
     const double bud = num(m, "budget_ms"), mean = num(m, "ms_mean");
     const int cpu = bud > 0 ? (int)std::lround(100.0 * mean / bud) : 0;
-    snprintf(b, sizeof b, "%-8s%4d%%", flag(m, "gpu") ? "GPU+CPU" : "CPU", std::min(cpu, 999));
+    snprintf(b, sizeof b, "%-8s%4d%%", flag(m, "gpu") ? "GPU+CPU" : "CPU", std::min(cpu, 999));  // i18n-skip
     look::lcd_text(a, 14, X + W - 96, Y + 6, LCD, b);
-    snprintf(b, sizeof b, "%-8s%5d", "VOICES", (int)std::min(99999.0, num(m, "voices")));
+    snprintf(b, sizeof b, "%-8s%5d", T("VOICES"), (int)std::min(99999.0, num(m, "voices")));
     look::lcd_text(a, 14, X + W - 96, Y + 16, LCD, b);
     bool warn = false;
     const std::string health = health_line(a, m, warn);
@@ -317,7 +318,7 @@ inline void draw_display_tab(App &a)
         const float fx = X + 8 + i * (fw + 5), fy = Y + 50;
         float v = (float)field_get(a, i);
         const int f = lcd_field(a, FIELDS[i].label, fx, fy, fw, 46, v, (float)FIELDS[i].lo, (float)FIELDS[i].hi,
-                                FIELDS[i].label, field_text(i, (int)v), a.field == i, 21, i == 0 ? 0.5f : 1.0f);
+                                T(FIELDS[i].label), field_text(i, (int)v), a.field == i, 21, i == 0 ? 0.5f : 1.0f);
         if (f & (K_TAP | K_ACTIVE))
             a.field = i;
         if (f & K_CHANGED)
@@ -352,19 +353,19 @@ inline void draw_display_phone(App &a)
         const int prog = (int)num(p, "program"), var = (int)num(p, "variation"), ch = (int)pv(a, a.row, "channel", -1);
         char b[96];
         if (flag(p, "drums"))
-            snprintf(b, sizeof b, "DRUM SET %d", prog);
+            snprintf(b, sizeof b, T("DRUM SET %d"), prog);
         else
-            snprintf(b, sizeof b, "PROGRAM %03d%s \xc2\xb7 %s", prog, var ? ("." + std::to_string(var)).c_str() : "",
-                     var == 127 ? "MT-32" : var == 126 ? "CM-64 PCM" : FAMILIES[(prog >> 3) & 15]);
-        fam = std::string(b) + (ch < 0 ? " \xc2\xb7 ALL CH" : " \xc2\xb7 CH " + std::to_string(ch + 1));
+            snprintf(b, sizeof b, T("PROGRAM %03d%s \xc2\xb7 %s"), prog, var ? ("." + std::to_string(var)).c_str() : "",
+                     var == 127 ? "MT-32" : var == 126 ? "CM-64 PCM" : T(FAMILIES[(prog >> 3) & 15]));  // i18n-skip
+        fam = std::string(b) + " \xc2\xb7 " + (ch < 0 ? std::string(T("ALL CH")) : TF("CH {0}", {std::to_string(ch + 1)}));
     }
-    look::lcd_text(a, 14, X + 8, Y + 5, LCD, fit(a, a.lcd ? a.lcd : a.font, 14, "PART  " + fam, W - 130));
+    look::lcd_text(a, 14, X + 8, Y + 5, LCD, fit(a, a.lcd ? a.lcd : a.font, 14, std::string(T("PART")) + "  " + fam, W - 130));
     const J *m = a.meters.is(J::OBJ) ? &a.meters : nullptr;
     {
         char b[64];
         const double bud = num(m, "budget_ms"), mean = num(m, "ms_mean");
         const int cpu = bud > 0 ? (int)std::lround(100.0 * mean / bud) : 0;
-        snprintf(b, sizeof b, "%s %d%% \xc2\xb7 %d V", flag(m, "gpu") ? "GPU" : "CPU", std::min(cpu, 999),
+        snprintf(b, sizeof b, T("%s %d%% \xc2\xb7 %d V"), flag(m, "gpu") ? "GPU" : "CPU", std::min(cpu, 999),  // i18n-skip
                  (int)std::min(9999.0, num(m, "voices")));
         bool warn = false;
         const std::string health = health_line(a, m, warn);
@@ -385,14 +386,14 @@ inline void draw_display_phone(App &a)
     // the part keys
     const int n = nparts(a);
     const float KX = 572, bw = 60, g = 4;
-    if (look::key(a, "prev", KX, Y, bw, 44, "\xe2\x97\x80 PART", false, a.row > 0, 21, false))
+    if (look::key(a, "prev", KX, Y, bw, 44, T("\xe2\x97\x80 PART"), false, a.row > 0, 21, false))
         select(a, a.row - 1);
-    if (look::key(a, "next", KX + bw + g, Y, bw, 44, "PART \xe2\x96\xb6", false, a.row + 1 < n, 21, false))
+    if (look::key(a, "next", KX + bw + g, Y, bw, 44, T("PART \xe2\x96\xb6"), false, a.row + 1 < n, 21, false))
         select(a, a.row + 1);
     const bool muted = pv(a, a.row, "muted") != 0;
-    if (look::key(a, "mute", KX + 2 * (bw + g), Y, bw, 44, "MUTE", muted, true, 21) && p)
+    if (look::key(a, "mute", KX + 2 * (bw + g), Y, bw, 44, T("MUTE"), muted, true, 21) && p)
         part_set(a, a.row, "muted", muted ? 0 : 1);
-    if (look::key(a, "solo", KX + 3 * (bw + g), Y, bw, 44, "SOLO", num(p, "solo") == 1, true, 21) && p)
+    if (look::key(a, "solo", KX + 3 * (bw + g), Y, bw, 44, T("SOLO"), num(p, "solo") == 1, true, 21) && p)
         take_parts(a, call(a, "{\"call\":\"part_solo\",\"row\":" + std::to_string(a.row) + "}"));
     // the seven fields: dragged, or held for their sheet (no jog dial: no room)
     const float FX = 162, FY = 56, FW = 526;
@@ -403,7 +404,7 @@ inline void draw_display_phone(App &a)
         const float fx = FX + 4 + i * (fw + 4);
         float v = (float)field_get(a, i);
         const int f = lcd_field(a, FIELDS[i].label, fx, FY + 4, fw, 36, v, (float)FIELDS[i].lo, (float)FIELDS[i].hi,
-                                FIELDS[i].label, field_text(i, (int)v), a.field == i, 21, i == 0 ? 0.5f : 1.0f);
+                                T(FIELDS[i].label), field_text(i, (int)v), a.field == i, 21, i == 0 ? 0.5f : 1.0f);
         if (f & (K_TAP | K_ACTIVE))
             a.field = i;
         if (f & K_CHANGED)
@@ -412,13 +413,13 @@ inline void draw_display_phone(App &a)
             field_set(a, i, FIELDS[i].reset);
     }
     look::glass(a, FX, FY, FW, 44);
-    if (look::key(a, "panic", 694, 56, 64, 44, "PANIC", false, true, 21, false))
+    if (look::key(a, "panic", 694, 56, 64, 44, T("PANIC"), false, true, 21, false))
         call(a, "{\"call\":\"panic\"}");
     const double now = ImGui::GetTime();
     const bool armed = now - a.quit_armed < 3.0;
     if (armed)
         a.animate = true;
-    if (look::key(a, "quit", 762, 56, 64, 44, armed ? "AGAIN" : "QUIT", armed, true, 21)) {
+    if (look::key(a, "quit", 762, 56, 64, 44, armed ? T("AGAIN") : T("QUIT"), armed, true, 21)) {
         if (armed)
             a.quit = true;
         else
@@ -452,7 +453,7 @@ inline void draw_corner_jog(App &a)
     look::dial_cap(a, dcx, dcy, dr, a.jog.rot);
     dl()->PopClipRect();
     // (the field it turns, small, above it in the strip)
-    const std::string lb = FIELDS[a.field].label;
+    const std::string lb = T(FIELDS[a.field].label);
     const float tw = text_w(a, a.bold, 14, lb) * k;
     text(a, a.bold, 14, (sr + (W - sr - tw) / 2 - a.org.x) / k, (cy - Rc - 6 - a.lh(14) * k - a.org.y) / k, LCD, lb);
 }
@@ -461,22 +462,22 @@ inline void draw_keys_tab(App &a)
     const J *p = part(a, a.row);
     const int n = nparts(a);
     const float X = 814, Y = 10, bw = 98, bh = 44, g = 4;
-    if (look::key(a, "prev", X, Y, bw, bh, "\xe2\x97\x80 PART", false, a.row > 0, 21, false))
+    if (look::key(a, "prev", X, Y, bw, bh, T("\xe2\x97\x80 PART"), false, a.row > 0, 21, false))
         select(a, a.row - 1);
-    if (look::key(a, "next", X + bw + g, Y, bw, bh, "PART \xe2\x96\xb6", false, a.row + 1 < n, 21, false))
+    if (look::key(a, "next", X + bw + g, Y, bw, bh, T("PART \xe2\x96\xb6"), false, a.row + 1 < n, 21, false))
         select(a, a.row + 1);
     const bool muted = pv(a, a.row, "muted") != 0;
-    if (look::key(a, "mute", X, Y + bh + g, bw, bh, "MUTE", muted, true, 21) && p)
+    if (look::key(a, "mute", X, Y + bh + g, bw, bh, T("MUTE"), muted, true, 21) && p)
         part_set(a, a.row, "muted", muted ? 0 : 1);
-    if (look::key(a, "solo", X + bw + g, Y + bh + g, bw, bh, "SOLO", num(p, "solo") == 1, true, 21) && p)
+    if (look::key(a, "solo", X + bw + g, Y + bh + g, bw, bh, T("SOLO"), num(p, "solo") == 1, true, 21) && p)
         take_parts(a, call(a, "{\"call\":\"part_solo\",\"row\":" + std::to_string(a.row) + "}"));
-    if (look::key(a, "panic", X, Y + 2 * (bh + g), bw, bh, "PANIC", false, true, 21, false))
+    if (look::key(a, "panic", X, Y + 2 * (bh + g), bw, bh, T("PANIC"), false, true, 21, false))
         call(a, "{\"call\":\"panic\"}");
     const double now = ImGui::GetTime();
     const bool armed = now - a.quit_armed < 3.0;
     if (armed)
         a.animate = true;
-    if (look::key(a, "quit", X + bw + g, Y + 2 * (bh + g), bw, bh, armed ? "AGAIN" : "QUIT", armed, true, 21)) {
+    if (look::key(a, "quit", X + bw + g, Y + 2 * (bh + g), bw, bh, armed ? T("AGAIN") : T("QUIT"), armed, true, 21)) {
         if (armed)
             a.quit = true;
         else
@@ -488,7 +489,7 @@ inline void draw_keys_tab(App &a)
     if (steps && p)
         field_set(a, a.field, field_get(a, a.field) + steps);
     look::dial_cap(a, cx, cy, r, a.jog.rot);
-    text_c(a, a.bold, 14, cx, cy + r + 6, LCD, FIELDS[a.field].label);
+    text_c(a, a.bold, 14, cx, cy + r + 6, LCD, T(FIELDS[a.field].label));
 }
 
 }  // namespace nui

@@ -285,16 +285,16 @@ inline void syn_phone_page(App &a, int page)
         std::vector<std::vector<int>> lines;        // (each line: the iPad's rows along it)
     };
     static const std::vector<std::vector<Sec>> PP = {
-        {{"Oscillators", {{1, 2, 3}}}},
-        {{"Mixer", {{1, 2}}}, {"Filter", {{1, 2, 3}}}},
-        {{"Envelopes", {{1, 2}, {3}}}},
-        {{"LFO 1", {{1, 2, 3}}}, {"Left hand", {{1, 2}}}},
-        {{"Delay", {{1, 2, 3, 4}}}}};
+        {{N_("Oscillators"), {{1, 2, 3}}}},     // (the engine's section names, compared; translated where drawn)
+        {{N_("Mixer"), {{1, 2}}}, {N_("Filter"), {{1, 2, 3}}}},
+        {{N_("Envelopes"), {{1, 2}, {3}}}},
+        {{N_("LFO 1"), {{1, 2, 3}}}, {N_("Left hand"), {{1, 2}}}},
+        {{N_("Delay"), {{1, 2, 3, 4}}}}};
     auto group = [](const std::string &sec, int row) -> const char * {
         if (sec == "Oscillators")
-            return row == 1 ? "OSC 1" : row == 2 ? "OSC 2" : "1\xe2\x86\x92" "2";
+            return row == 1 ? T("OSC 1") : row == 2 ? T("OSC 2") : "1\xe2\x86\x92" "2";
         if (sec == "Envelopes")
-            return row == 1 ? "FILTER" : row == 2 ? "AMPLIFIER" : "";
+            return row == 1 ? T("FILTER") : row == 2 ? T("AMPLIFIER") : "";
         return "";
     };
     const auto &secs = PP[(size_t)std::max(0, std::min(page, (int)PP.size() - 1))];
@@ -335,7 +335,7 @@ inline void syn_phone_page(App &a, int page)
         look::tray(a, cx0, top, cw, bottom - top, 8);
         a.lab_x0 = cx0 + 4;
         a.lab_x1 = cx0 + cw - 4;
-        std::string up = secs[s].name;
+        std::string up = T(secs[s].name);
         for (char &ch : up)
             ch = (char)toupper((unsigned char)ch);
         heading(a, cx0 + 12, top + 10, up, std::string("synth:") + secs[s].name);
@@ -386,26 +386,26 @@ inline void draw_synth(App &a)
     const bool PH = a.ph;               // (the phone's: its own card from y 106, five pages)
     const float HX = PH ? 14 : T ? 22 : 34, HY = PH ? 120 : T ? 224 : 356, BY = PH ? 112 : T ? 216 : 346, BH = PH ? 40 : T ? 44 : 38,
                 HX1 = PH ? 818 : T ? 1105 : 1886;
-    const float TX = heading(a, HX, HY, "SYNTH", "synth");
+    const float TX = heading(a, HX, HY, nui::T("SYNTH"), "synth");   // (nui::T: the bool T here is the iPad's)
     if (layers <= 0) {
         text(a, a.font, 21, HX, PH ? 166 : T ? 270 : 400, SILK_DIM,
-             layers < 0 ? std::string("Reading the part\xe2\x80\xa6")
-                        : (p ? str(p, "name") : std::string("This part")) + " is not a synth.");
+             layers < 0 ? std::string(nui::T("Reading the part\xe2\x80\xa6"))
+                        : TF("{0} is not a synth.", {p ? str(p, "name") : std::string(nui::T("This part"))}));
         text(a, a.font, 14, HX, PH ? 196 : T ? 300 : 432, SILK_DIM,
-             "The synth programs (Synth Lead, Synth Pad, the synth basses, brass and strings) bring their knobs here.");
+             nui::T("The synth programs (Synth Lead, Synth Pad, the synth basses, brass and strings) bring their knobs here."));
         return;
     }
     if (!PH)                            // (the phone's display names the part; its row is the pages')
-        text(a, a.font, 14, TX, HY + 1, OWN, fit(a, a.font, 14, "part " + pad2(a.row + 1) + " \xc2\xb7 " + (p ? str(p, "name") : ""), T ? 200 : 900));
+        text(a, a.font, 14, TX, HY + 1, OWN, fit(a, a.font, 14, TF("part {0} \xc2\xb7 {1}", {pad2(a.row + 1), p ? str(p, "name") : std::string()}), T ? 200 : 900));
     // (the iPad's two pages: the sound's sources and shaping; its movement and time)
     static int page = 0, ppage = 0;
     if (PH) {                           // (the phone's five: a section or two each, a line of controls)
-        static const char *PN[5] = {"OSC", "MIX \xc2\xb7 FILTER", "ENV", "LFO", "DELAY"};
+        static const char *PN[5] = {N_("OSC"), N_("MIX \xc2\xb7 FILTER"), N_("ENV"), N_("LFO"), N_("DELAY")};
         static const float PW[5] = {62, 118, 62, 62, 78};
         float px_ = TX + 6;
         for (int pg = 0; pg < 5; pg++) {
             const std::string id = "syppage" + std::to_string(pg);
-            if (button(a, id.c_str(), px_, BY, PW[pg], BH, PN[pg], ppage == pg, true, 21))
+            if (button(a, id.c_str(), px_, BY, PW[pg], BH, nui::T(PN[pg]), ppage == pg, true, 21))
                 ppage = pg;
             px_ += PW[pg] + 4;
         }
@@ -413,7 +413,7 @@ inline void draw_synth(App &a)
         for (int pg = 0; pg < 2; pg++) {
             const std::string id = "sypage" + std::to_string(pg);
             if (button(a, id.c_str(), 300 + pg * 214, BY, 208, BH,
-                       pg ? "LFO \xc2\xb7 ENV \xc2\xb7 DELAY" : "OSC \xc2\xb7 MIX \xc2\xb7 FILTER", page == pg, true, 21))
+                       pg ? nui::T("LFO \xc2\xb7 ENV \xc2\xb7 DELAY") : nui::T("OSC \xc2\xb7 MIX \xc2\xb7 FILTER"), page == pg, true, 21))
                 page = pg;
         }
     // the head: back to the patch (how many changed), the layers
@@ -422,8 +422,10 @@ inline void draw_synth(App &a)
         changed += syn_own(k);
     const float bbw = a.ph ? 124 : T ? (layers >= 2 ? 200 : 360) : 420;
     if (button(a, "synback", HX1 - bbw, BY, bbw, BH,
-               changed ? PH ? std::to_string(changed) + " \xc2\xb7 BACK" : std::to_string(changed) + (T && layers >= 2 ? " CHANGED \xc2\xb7 BACK" : " CHANGED \xc2\xb7 BACK TO THE PATCH")
-                       : "AS THE PATCH", false, changed > 0, T ? 21 : 14)) {
+               changed ? PH ? TF("{0} \xc2\xb7 BACK", {std::to_string(changed)})
+                            : T && layers >= 2 ? TF("{0} CHANGED \xc2\xb7 BACK", {std::to_string(changed)})
+                                               : TF("{0} CHANGED \xc2\xb7 BACK TO THE PATCH", {std::to_string(changed)})
+                       : std::string(nui::T("AS THE PATCH")), false, changed > 0, T ? 21 : 14)) {
         for (const Knob &k : Y.knobs)
             if (syn_own(k))
                 call(a, "{\"call\":\"synth_forget\",\"row\":" + std::to_string(a.row) + ",\"layer\":" +
@@ -434,7 +436,7 @@ inline void draw_synth(App &a)
         for (int l = 0; l < 2; l++) {
             const std::string id = "layer" + std::to_string(l);
             if (button(a, id.c_str(), HX1 - bbw - (a.ph ? 116 : T ? 176 : 260) + l * (a.ph ? 56 : T ? 86 : 124), BY,
-                       a.ph ? 52 : T ? 82 : 120, BH, a.ph ? (l ? "B" : "A") : l ? "LAYER B" : "LAYER A",
+                       a.ph ? 52 : T ? 82 : 120, BH, a.ph ? (l ? "B" : "A") : l ? nui::T("LAYER B") : nui::T("LAYER A"),
                        Y.layer == l, true, T ? 14 : 14)) {
                 Y.layer = l;
                 take_parts(a, call(a, "{\"call\":\"select\",\"row\":" + std::to_string(a.row) + ",\"layer\":" + std::to_string(l) + "}"));
@@ -454,11 +456,11 @@ inline void draw_synth(App &a)
     };
     // (in proportion to the controls side by side in each: a row's number a half)
     // (labels wrap a little short of their cell, so a neighbour's one long word has room beside them)
-    static const Col COLS[] = {{"LFO 1", 3.1f, 0}, {"Oscillators", 5.4f, 1}, {"Mixer", 1.55f, 0},
-                               {"Filter", 3.1f, 0}, {"Envelopes", 5.4f, 1}, {"Delay", 2.4f, 0}};
+    static const Col COLS[] = {{N_("LFO 1"), 3.1f, 0}, {N_("Oscillators"), 5.4f, 1}, {N_("Mixer"), 1.55f, 0},
+                               {N_("Filter"), 3.1f, 0}, {N_("Envelopes"), 5.4f, 1}, {N_("Delay"), 2.4f, 0}};
     // (the iPad's pages: the left hand a column of its own, LFO 1 the full height for its stacks)
-    static const Col PAGES[2][4] = {{{"Oscillators", 5.6f, 1}, {"Mixer", 1.8f, 0}, {"Filter", 2.4f, 0}, {nullptr, 0, 0}},
-                                    {{"LFO 1", 2.2f, 0}, {"Left hand", 2.3f, 0}, {"Envelopes", 4.4f, 1}, {"Delay", 1.8f, 0}}};
+    static const Col PAGES[2][4] = {{{N_("Oscillators"), 5.6f, 1}, {N_("Mixer"), 1.8f, 0}, {N_("Filter"), 2.4f, 0}, {nullptr, 0, 0}},
+                                    {{N_("LFO 1"), 2.2f, 0}, {N_("Left hand"), 2.3f, 0}, {N_("Envelopes"), 4.4f, 1}, {N_("Delay"), 1.8f, 0}}};
     std::vector<Col> cols;
     if (T) {
         for (const Col &c : PAGES[page])
@@ -479,16 +481,16 @@ inline void draw_synth(App &a)
         a.lab_x1 = cx0 + cw - 4;
         // a column's sections: itself, and what stacks under it (the left hand under LFO 1)
         std::vector<std::pair<std::string, std::pair<float, float>>> secs;   // (name, (y0, y1))
-        if (std::string(col.name) == "LFO 1" && !T) {
-            secs.push_back({"LFO 1", {top, top + 0.62f * (bottom - top)}});
-            secs.push_back({"Left hand", {top + 0.62f * (bottom - top), bottom}});
+        if (std::string(col.name) == "LFO 1" && !T) {   // i18n-skip (the engine's section name, compared)
+            secs.push_back({N_("LFO 1"), {top, top + 0.62f * (bottom - top)}});
+            secs.push_back({N_("Left hand"), {top + 0.62f * (bottom - top), bottom}});
         } else
             secs.push_back({col.name, {top, bottom}});
         for (const auto &sec : secs) {
             const float sy0 = sec.second.first, sy1 = sec.second.second;
             if (sy0 > top)
                 rect(a, cx0 + 10, sy0, cw - 20, 1, IM_COL32(0x33, 0x36, 0x3a, 255), 0);
-            std::string up = sec.first;
+            std::string up = nui::T(sec.first);
             for (char &ch : up)
                 ch = (char)toupper((unsigned char)ch);
             heading(a, cx0 + 12, sy0 + 10, up, "synth:" + sec.first);
@@ -510,10 +512,10 @@ inline void draw_synth(App &a)
                 for (int r = 1; r <= 2; r++)
                     text_c(a, a.font, 35, gx + numw_ * cellw * 0.5f, gy + (r - 1) * cellh + cellh / 2 - 20, SILK_DIM, std::to_string(r));
             if (sec.first == "Envelopes") {
-                static const char *ENV[2] = {"FILTER", "AMPLIFIER"};
+                static const char *ENV[2] = {N_("FILTER"), N_("AMPLIFIER")};
                 for (int r = 0; r < 2; r++) {
-                    text(a, a.bold, 14, gx + 4, gy + r * cellh + cellh / 2 - 16, SILK_DIM, ENV[r]);
-                    text(a, a.bold, 14, gx + 4, gy + r * cellh + cellh / 2, SILK_DIM, "ENVELOPE");
+                    text(a, a.bold, 14, gx + 4, gy + r * cellh + cellh / 2 - 16, SILK_DIM, nui::T(ENV[r]));
+                    text(a, a.bold, 14, gx + 4, gy + r * cellh + cellh / 2, SILK_DIM, nui::T("ENVELOPE"));
                 }
             }
             for (size_t i = 0; i < Y.knobs.size(); i++) {

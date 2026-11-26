@@ -20,6 +20,7 @@
 #include "../native/session.h"
 #include "kit.h"
 #include "shape.h"
+#include "i18n.h"
 
 namespace nui {
 
@@ -44,6 +45,7 @@ struct App {
     float safe_x = 0, safe_y = 0, safe_w = 0, safe_h = 0;
     ImFont *font = nullptr, *bold = nullptr, *lcd = nullptr;     // (lcd: code7 dotted, the display's)
     std::string ui_dir;                 // (ui/: the fonts, about.json)
+    std::string lang_pref = "auto";     // (the language asked for: a code, or "auto" -- the system's; i18n().code the one drawn)
     float k = 1.0f;                     // design units to pixels
     ImVec2 org{0, 0};
     // THE LAYOUT: the laptop's (a 1920x1080 canvas) or the iPad's (tab: 1133x744
@@ -385,6 +387,17 @@ inline void label_c(App &a, ImFont *f, float size, float cx, float y, ImU32 col,
         text_c(a, f, size, cx, y + i * (size + 2), col, ls[i]);
 }
 
+
+// THE LANGUAGE drawn: the one asked for (a.lang_pref), or for "auto" the
+// system's first that has a table (lang_system(), nui.cpp's: SDL's preferred
+// locales), else English
+std::string lang_system();
+inline void lang_apply(App &a)
+{
+    std::string c = a.lang_pref == "auto" ? lang_system() : a.lang_pref;
+    if (!lang_known(c) || !i18n_load(a.ui_dir, c))
+        i18n_load(a.ui_dir, "en");
+}
 }  // namespace nui
 // (the hardware's look: after the primitives above, which it draws with; every
 // file includes app.h first, so this is where look.h is first read)

@@ -84,15 +84,15 @@ inline void drums_hits(const J &hits)
 inline std::string drum_kind(const std::string &nm)
 {
     static const std::pair<const char *, std::regex> K[] = {
-        {"Kicks", std::regex("kick|bass drum|\\bbd\\b", std::regex::icase)},
-        {"Snares", std::regex("snare|rim|stick|clap|snap|brush", std::regex::icase)},
-        {"Toms", std::regex("\\btom", std::regex::icase)},
-        {"Hi-hats", std::regex("hat\\b|hi-?hat|\\bhh\\b", std::regex::icase)},
-        {"Cymbals", std::regex("cymbal|crash|ride|splash|china|chinese", std::regex::icase)}};
+        {N_("Kicks"), std::regex("kick|bass drum|\\bbd\\b", std::regex::icase)},   // i18n-skip
+        {N_("Snares"), std::regex("snare|rim|stick|clap|snap|brush", std::regex::icase)},
+        {N_("Toms"), std::regex("\\btom", std::regex::icase)},
+        {N_("Hi-hats"), std::regex("hat\\b|hi-?hat|\\bhh\\b", std::regex::icase)},   // i18n-skip
+        {N_("Cymbals"), std::regex("cymbal|crash|ride|splash|china|chinese", std::regex::icase)}};
     for (const auto &k : K)
         if (std::regex_search(nm, k.second))
             return k.first;
-    return "Percussion";
+    return N_("Percussion");
 }
 // what the pad is (about.json: the kit's own notes, else the GM key's)
 inline const J *drum_note(const J &about, int kit, int key)
@@ -126,11 +126,11 @@ inline void draw_drums(App &a)
     const bool IP = a.tab;              // (the iPad's: its card from y 210 to card_y1 + 6)
     const float X0 = IP ? 20 : 34, X1 = IP ? (a.ph ? 818 : 1113) : 1886, Y0 = IP ? 260 : 394, Y1 = card_y1(a), HY = IP ? 224 : 356;
     const float LH = a.lh(14) + (IP ? 3 : 4);
-    const float TX = heading(a, X0, HY, "DRUMS", "drums");
+    const float TX = heading(a, X0, HY, T("DRUMS"), "drums");
     if (!D.d.is(J::OBJ))
         return;
     const std::string part_name = str(&D.d, "part");
-    text(a, a.font, 14, TX, HY + 1, OWN, "part " + pad2(a.row + 1) + " \xc2\xb7 " + part_name);
+    text(a, a.font, 14, TX, HY + 1, OWN, TF("part {0} \xc2\xb7 {1}", {pad2(a.row + 1), part_name}));
     const bool drums = flag(&D.d, "drums"), user = D.d.get("user") != nullptr;
     const int kit = (int)num(&D.d, "kit", -1);
     if (drums) {
@@ -138,8 +138,8 @@ inline void draw_drums(App &a)
         for (const auto &k : D.keys)
             nk += !user || !k.name.empty();
         const int ch = (int)num(&D.d, "channel", -1);
-        const std::string info = std::to_string(nk) + " key" + (nk == 1 ? "" : "s") + " \xc2\xb7 channel " +
-                                 std::to_string(ch < 0 ? 10 : ch + 1);
+        const std::string info = nk == 1 ? TF("{0} key \xc2\xb7 channel {1}", {std::to_string(nk), std::to_string(ch < 0 ? 10 : ch + 1)})
+                                         : TF("{0} keys \xc2\xb7 channel {1}", {std::to_string(nk), std::to_string(ch < 0 ? 10 : ch + 1)});
         text(a, a.font, 14, X1 - text_w(a, a.font, 14, info), HY + 1, SILK_DIM, info);
     }
 
@@ -173,8 +173,8 @@ inline void draw_drums(App &a)
 
     const float SW = IP ? 280 : 400, PX0 = X0 + KW + 8, PX1 = X1 - SW - 8, SX = X1 - SW;
     if (!drums) {
-        const auto ls = wrap(a, a.font, 21, (part_name.empty() ? std::string("This part") : part_name) +
-                                                " is not a drum set. Pick a kit for part " + pad2(a.row + 1) + " from the list.", PX1 - PX0 - 20);
+        const auto ls = wrap(a, a.font, 21, TF("{0} is not a drum set. Pick a kit for part {1} from the list.",
+                                               {part_name.empty() ? std::string(T("This part")) : part_name, pad2(a.row + 1)}), PX1 - PX0 - 20);
         for (size_t i = 0; i < ls.size(); i++)
             text(a, a.font, 21, PX0 + 10, Y0 + 10 + i * (a.lh(21) + 6), SILK_DIM, ls[i]);
         return;
@@ -186,10 +186,10 @@ inline void draw_drums(App &a)
         if (!user || (k.key >= 27 && k.key <= 87) || !k.name.empty())
             shown.push_back(&k);
     const bool sfx = std::regex_search(part_name, std::regex("sfx|sound|effect", std::regex::icase));
-    static const char *ORDER[] = {"Kicks", "Snares", "Toms", "Hi-hats", "Cymbals", "Percussion", "Sounds", "Not set"};
+    static const char *ORDER[] = {N_("Kicks"), N_("Snares"), N_("Toms"), N_("Hi-hats"), N_("Cymbals"), N_("Percussion"), N_("Sounds"), N_("Not set")};
     std::map<std::string, std::vector<const DrumKey *>> groups;
     for (const DrumKey *k : shown)
-        groups[user && k->name.empty() ? "Not set" : sfx ? "Sounds" : drum_kind(k->name)].push_back(k);
+        groups[user && k->name.empty() ? N_("Not set") : sfx ? N_("Sounds") : drum_kind(k->name)].push_back(k);
     const float pw_min = IP ? 96 : 112, ph = IP ? 70 : 82, pg = IP ? 5 : 6, hh = IP ? 18 : 24;
     const float PW = PX1 - PX0 - 10;
     const int cols = std::max(1, (int)((PW + pg) / (pw_min + pg)));
@@ -243,7 +243,7 @@ inline void draw_drums(App &a)
     for (const Pl &q : pl) {
         const float x = PX0 + q.col * (pw + pg), y = Y0 + top[(size_t)q.row] - D.scroll;
         if (q.head)
-            text(a, a.bold, 14, x, y - hh + 2, SILK, q.head);
+            text(a, a.bold, 14, x, y - hh + 2, SILK, T(q.head));
         if (y + ph < Y0 || y > Y1)
             continue;
         const DrumKey &k = *q.k;
@@ -310,7 +310,7 @@ inline void draw_drums(App &a)
         const float UH = IP ? 270 : 360;   // (the user set's panel)
         look::tray(a, SX, Y0, SW, UH, 9);
         if (D.sel < 0 || !D.sets.is(J::ARR)) {
-            text(a, a.font, 14, SX + 12, Y0 + 12, SILK_DIM, "A user set: touch a pad to choose its sound.");
+            text(a, a.font, 14, SX + 12, Y0 + 12, SILK_DIM, T("A user set: touch a pad to choose its sound."));
         } else {
             DrumKey e;
             e.key = D.sel;
@@ -320,17 +320,17 @@ inline void draw_drums(App &a)
             const int ss = e.skey >= 0 ? e.set : -1;
             const int bs = D.browse >= 0 ? D.browse : ss;
             const J *set = nullptr;
-            std::string ssname = "set " + std::to_string(ss);
+            std::string ssname = TF("set {0}", {std::to_string(ss)});
             for (const J &x : D.sets.a) {
                 if ((int)x.a[0].d() == bs)
                     set = &x;
                 if ((int)x.a[0].d() == ss)
                     ssname = x.a[1].s;
             }
-            const float kx = heading(a, SX + 12, Y0 + 10, "KEY " + note_name_sharp(D.sel), "drums:user");
+            const float kx = heading(a, SX + 12, Y0 + 10, TF("KEY {0}", {note_name_sharp(D.sel)}), "drums:user");   // i18n-skip (a help key)
             text(a, a.font, 14, kx, Y0 + 10, LCD, std::to_string(D.sel));
             text(a, a.font, 14, SX + 12, Y0 + 14 + LH, SILK_DIM,
-                 fit(a, a.font, 14, e.skey >= 0 ? "Plays " + e.name + " from " + ssname + "." : "No sound yet.", SW - 24));
+                 fit(a, a.font, 14, e.skey >= 0 ? TF("Plays {0} from {1}.", {e.name, ssname}) : std::string(T("No sound yet.")), SW - 24));
             const float ly = Y0 + 20 + 2 * LH, lh = UH - (ly - Y0) - 8, cw = (SW - 32) / 2, LR = IP ? 48 : 30, LB = IP ? 44 : 27;
             const int ns = (int)D.sets.a.size();
             const int ts = scroll_list(a, "uksets", SX + 12, ly, cw, lh, ns, LR, D.list_scroll["uksets"], [&](int i, float y) {
@@ -365,13 +365,13 @@ inline void draw_drums(App &a)
                         drums_take(a, *x);
                 }
             } else
-                text(a, a.font, 14, SX + 20 + cw, ly + 6, SILK_DIM, "Choose a set.");
+                text(a, a.font, 14, SX + 20 + cw, ly + 6, SILK_DIM, T("Choose a set."));
         }
         sy = Y0 + UH + 8;
     }
     look::tray(a, SX, sy, SW, Y1 - sy, 9);
     if (D.touched < 0) {
-        const auto ls = wrap(a, a.font, 14, "Touch a pad for what it is.", SW - 24);
+        const auto ls = wrap(a, a.font, 14, T("Touch a pad for what it is."), SW - 24);
         for (size_t i = 0; i < ls.size(); i++)
             text(a, a.font, 14, SX + 12, sy + 12 + i * LH, LCD_DIM, ls[i]);
         return;
@@ -395,9 +395,9 @@ inline void draw_drums(App &a)
         text(a, a.bold, 14, SX + 12, y, SILK, l);
         y += LH;
     }
-    const std::string w = rn && rn->is(J::STR) ? rn->s : std::string("its own sound");
+    const std::string w = rn && rn->is(J::STR) ? rn->s : std::string(T("its own sound"));
     for (const auto &l : wrap(a, a.font, 14, w, SW - 24)) {
-        text(a, a.font, 14, SX + 12, y + 4, w.rfind("stand-in", 0) == 0 ? LCD : SILK_DIM, l);
+        text(a, a.font, 14, SX + 12, y + 4, w.rfind("stand-in", 0) == 0 ? LCD : SILK_DIM, l);   // i18n-skip (the engine's note, compared)
         y += LH;
     }
 }

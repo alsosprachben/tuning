@@ -11,6 +11,9 @@
 // records -- their parameter numbers, defaults, marks and ranges -- the
 // laws, the cabinets, the value tables); SR the render's rate.
 
+#ifndef N_
+#define N_(s) s   // (a text the interface translates where it shows it: nui/i18n.h)
+#endif
 #include <algorithm>
 #include <cmath>
 #include <cstdio>
@@ -19,6 +22,7 @@
 #include <vector>
 
 #include "nv.h"
+
 
 extern "C" int nv_efx_chain(const double *X, double SR, int msb, int lsb, const int *p, const int *snd,
                             const int *ctl, int ncv, const int *cv_src, const int *cv_val, double *rec,
@@ -45,7 +49,7 @@ extern "C" int nv_efx_chain(const double *X, double SR, int msb, int lsb, const 
         return -3;
     };
     if (!D)
-        return refuse("type");
+        return refuse(N_("type"));
     const int kind = (int)D[1];
     const bool bass = D[2] != 0.0;
     // (EFX_KEYS's order)
@@ -414,7 +418,7 @@ extern "C" int nv_efx_chain(const double *X, double SR, int msb, int lsb, const 
                                    kPHLevel, kAWLevel};
         static const int PAN[9] = {kChoPan, kFLPan, kDlyPan, kODPan, kOD1Pan, kOD2Pan, kRTPan, kPHPan, kAWPan};
         if (lsb > 8)
-            return refuse("type");
+            return refuse(N_("type"));
         auto fbk = [](int v) { return std::max(-0.98, std::min(0.98, (v - 64) * 2.0 / 100.0)); };
         auto ms = [&](const double *T, int key, int d) {
             double v = T[clamp(g(key, d))];
@@ -897,7 +901,7 @@ extern "C" int nv_efx_chain(const double *X, double SR, int msb, int lsb, const 
         }
     }
     if (choice)
-        return refuse("controller on a choice");
+        return refuse(N_("controller on a choice"));
     r[12] = snd[0];
     r[13] = snd[2];
     memcpy(rec, r, sizeof r);

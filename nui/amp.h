@@ -158,7 +158,7 @@ inline int pk_switch(App &a, const std::string &kind, float x, float y, float w,
             for (int n = 0; n <= 10; n++)       // (its numbers' ticks, 0 to 10)
                 d->AddLine(pt(R * 1.02f, A0 + (A1 - A0) * n / 10), pt(R * 1.1f, A0 + (A1 - A0) * n / 10), SILK_DIM, 1.2f * k);
             look::knob_cap(a, cx, cy, R * 0.68f, up ? A1 : A0);
-            text_c(a, a.bold, 14, cx, cy + R + 12, up ? LCD : SILK_DIM, s ? "BRIDGE" : "NECK");
+            text_c(a, a.bold, 14, cx, cy + R + 12, up ? LCD : SILK_DIM, s ? T("BRIDGE") : T("NECK"));
             text_c(a, a.font, 14, cx, cy + R + 12 + a.lh(14) + 2, up ? LCD : SILK_DIM, up ? "10" : "0");
             const bool n2 = s ? nk : !nk, b2 = s ? !bk : bk;    // (this knob turned over, the other as it is)
             const int c = n2 && b2 ? 6 : n2 ? 1 : b2 ? 5 : (s ? 1 : 5);
@@ -221,8 +221,8 @@ inline void pk_string(App &a, float x, float y, float w, const std::vector<doubl
         d->AddRectFilled(P(a, cx - 7, y - 11), P(a, cx + 7, y + 11), on ? LCD : IM_COL32(0x2e, 0x31, 0x35, 255), 3 * k);
         d->AddRect(P(a, cx - 7, y - 11), P(a, cx + 7, y + 11), on ? LCD : SILK_DIM, 3 * k, 0, 1.2f * k);
     }
-    text(a, a.font, 14, x, y + 18, SILK_DIM, "\xe2\x86\x90 neck");
-    const std::string br = "bridge";
+    text(a, a.font, 14, x, y + 18, SILK_DIM, T("\xe2\x86\x90 neck"));
+    const std::string br = T("bridge");
     text(a, a.font, 14, bx - text_w(a, a.font, 14, br) + 6, y + 18, SILK_DIM, br);
 }
 
@@ -240,10 +240,10 @@ inline void draw_amp(App &a)
             M.st = *s;
         M.for_row = a.row;
     }
-    const float TX = heading(a, X0, HY, "AMP", "amp");
+    const float TX = heading(a, X0, HY, T("AMP"), "amp");
     const J *p = part(a, a.row);
     if (p && !PH)
-        text(a, a.font, 14, TX, HY + 1, OWN, fit(a, a.font, 14, "part " + pad2(a.row + 1) + " \xc2\xb7 " + str(p, "name"), IP ? 600 : 900));
+        text(a, a.font, 14, TX, HY + 1, OWN, fit(a, a.font, 14, TF("part {0}", {pad2(a.row + 1)}) + " \xc2\xb7 " + str(p, "name"), IP ? 600 : 900));
     const int kind = (int)num(&M.st, "kind", 0);
     // (its pickup: [chosen (-1 none), now (0 its own), [the choices offered]] -- the parts push's)
     std::vector<int> pk_offer;
@@ -260,10 +260,10 @@ inline void draw_amp(App &a)
     const bool has_pk = p && !flag(p, "drums") && !pk_offer.empty();
     if (!p || (kind == 0 && !has_pk) || flag(p, "drums")) {
         const std::string why = p && flag(p, "drums")
-                                    ? "A drum set has no amplifier: its drums are heard as they are."
-                                    : "This voice plays through no amplifier or speaker of its own -- an acoustic "
+                                    ? T("A drum set has no amplifier: its drums are heard as they are.")
+                                    : T("This voice plays through no amplifier or speaker of its own -- an acoustic "
                                       "instrument is heard as it is. The electric pianos, the organs, the "
-                                      "electric guitars and basses have one.";
+                                      "electric guitars and basses have one.");
         const auto ls = wrap(a, a.font, 21, why, X1 - X0);
         for (size_t i = 0; i < ls.size(); i++)
             text(a, a.font, 21, X0, Y0 + 10 + i * (a.lh(21) + 6), SILK_DIM, ls[i]);
@@ -287,13 +287,13 @@ inline void draw_amp(App &a)
                     st = st || (int)o.d() == 10 || (int)o.d() == 11;
         std::vector<std::pair<int, std::string>> pages;
         if (has_pk)
-            pages.push_back({0, "PICKUP"});
+            pages.push_back({0, T("PICKUP")});
         if (kind != 0) {
-            pages.push_back({1, "VALVE"});
-            pages.push_back({2, "SPEAKER"});
+            pages.push_back({1, T("VALVE")});
+            pages.push_back({2, T("SPEAKER")});
         }
         if (organ)
-            pages.push_back({3, st ? "CONE ROTOR" : "ROTARY"});
+            pages.push_back({3, st ? T("CONE ROTOR") : T("ROTARY")});
         apage = std::max(0, std::min(apage, (int)pages.size() - 1));
         float px_ = TX + 6;
         for (size_t i = 0; i < pages.size() && pages.size() > 1; i++) {
@@ -312,7 +312,7 @@ inline void draw_amp(App &a)
         const float PW = PWd;
         const float x = X0, y = Y0;
         look::tray(a, x, y, PW, H, 10);
-        heading(a, x + 14, y + 12, "PICKUP", "pickup");
+        heading(a, x + 14, y + 12, T("PICKUP"), "pickup");
         LibUi &L = g_lib;
         if (!L.loaded)
             lib_load(a);
@@ -388,7 +388,7 @@ inline void draw_amp(App &a)
             ty = y + 40;
         const bool mine = pk_chosen > 0 && pk_chosen != own;
         if (button(a, "amppkown", RX, ty, RW, IP ? 40 : 40,
-                   mine ? "BACK TO THE PATCH'S " + lab(own) : "AS THE PATCH \xc2\xb7 " + lab(own), false, mine)) {
+                   mine ? TF("BACK TO THE PATCH'S {0}", {lab(own)}) : TF("AS THE PATCH \xc2\xb7 {0}", {lab(own)}), false, mine)) {
             a.hold["pickup"] = {(double)own, ImGui::GetTime() + 0.8};
             call(a, "{\"call\":\"pickup_set\",\"row\":" + std::to_string(a.row) + ",\"choice\":-1}");
         }
@@ -396,7 +396,7 @@ inline void draw_amp(App &a)
         const J *e = ch(lit);
         std::string ab = e && e->is(J::ARR) && e->a.size() >= 2 ? e->a[1].s : "";
         if (kind == 0)
-            ab += " No amplifier of its own: it is heard straight from its pickups.";
+            ab += std::string(" ") + T("No amplifier of its own: it is heard straight from its pickups.");
         const auto ls = wrap(a, a.font, 14, ab, RW);
         for (size_t i = 0; i < ls.size(); i++)
             text(a, a.font, 14, RX, ty + i * LH, SILK_DIM, ls[i]);
@@ -409,7 +409,7 @@ inline void draw_amp(App &a)
         const float VW = VWd;
         const float x = PH ? X0 : X0 + (has_pk ? PW + G : 0), y = Y0;
         look::tray(a, x, y, VW, H, 10);
-        heading(a, x + 14, y + 12, "VALVE", "drive");
+        heading(a, x + 14, y + 12, T("VALVE"), "drive");
         const J *dv = M.st.get("drive");
         const double now = dv && dv->is(J::ARR) && dv->a.size() >= 3 ? dv->a[0].d() : 0.0;
         const double voice = dv && dv->is(J::ARR) && dv->a.size() >= 3 ? dv->a[1].d() : 0.0;
@@ -431,8 +431,8 @@ inline void draw_amp(App &a)
         snprintf(st_, sizeof st_, "%.2f", sounds);
         // (the phone's: the knobs at the page's left, the way back and words at its right)
         const float KS = IP ? 80 : 120, ky = y + (PH ? 100 : IP ? 110 : 150);
-        const int f = knob(a, "ampdrive", x + VW * (PH ? 0.14f : 0.28f), ky, KS, v01, "DRIVE", vt, false, {}, 0, own);
-        knob(a, "ampsounds", x + VW * (PH ? 0.38f : 0.72f), ky, KS, s01, "WITH THE WHEEL", st_, false, {}, 0, false);    // (display only)
+        const int f = knob(a, "ampdrive", x + VW * (PH ? 0.14f : 0.28f), ky, KS, v01, T("DRIVE"), vt, false, {}, 0, own);
+        knob(a, "ampsounds", x + VW * (PH ? 0.38f : 0.72f), ky, KS, s01, T("WITH THE WHEEL"), st_, false, {}, 0, false);    // (display only)
         if (f & K_CHANGED) {
             const double d = std::round(v01 * top * 100) / 100;
             a.hold["drive"] = {d, ImGui::GetTime() + 0.6};
@@ -444,20 +444,20 @@ inline void draw_amp(App &a)
         };
         if (f & K_RESET)
             back();
-        char bt[48];
-        snprintf(bt, sizeof bt, own ? "BACK TO THE PATCH'S %.2f" : "AS THE PATCH (%.2f)", voice);
+        char bt[160];
+        snprintf(bt, sizeof bt, own ? T("BACK TO THE PATCH'S %.2f") : T("AS THE PATCH (%.2f)"), voice);
         const float by = PH ? y + 40 : ky + KS / 2 + (IP ? 44 : 58), bx = PH ? x + VW * 0.54f : x + 14, bw = PH ? VW * 0.46f - 14 : VW - 28;
         if (button(a, "ampdriveback", bx, by, bw, IP ? 44 : 40, bt, false, own))
             back();
         const std::string note = voice > 0.0 || now > 0.0
-                                     ? "A triode stage before the speaker: clean at 0, the edge of breakup at 1, "
+                                     ? T("A triode stage before the speaker: clean at 0, the edge of breakup at 1, "
                                        "a clip past it. Its distortion is mostly the notes mixing: a chord "
-                                       "thickens where one note barely would."
-                                     : "No valve of its own: turned up, it gains one, a triode stage before "
-                                       "the speaker, the edge of breakup at 1.";
-        char wn[96];
-        snprintf(wn, sizeof wn, " WITH THE WHEEL is the drive as the mod wheel scales it (now x%.2f).", wheel);
-        const auto ls = wrap(a, a.font, 14, note + (organ ? " The mod wheel is the swell." : std::string(wn)), bw);
+                                       "thickens where one note barely would.")
+                                     : T("No valve of its own: turned up, it gains one, a triode stage before "
+                                       "the speaker, the edge of breakup at 1.");
+        char wn[256];
+        snprintf(wn, sizeof wn, T("WITH THE WHEEL is the drive as the mod wheel scales it (now x%.2f)."), wheel);
+        const auto ls = wrap(a, a.font, 14, note + " " + (organ ? std::string(T("The mod wheel is the swell.")) : std::string(wn)), bw);
         for (size_t i = 0; i < ls.size(); i++)
             text(a, a.font, 14, bx, by + (IP ? 56 : 54) + i * LH, SILK_DIM, ls[i]);
     }
@@ -467,7 +467,7 @@ inline void draw_amp(App &a)
         const float SW = SWd;
         const float x = PH ? X0 : X0 + (has_pk ? PW + G : 0) + VW + G, y = Y0;
         look::tray(a, x, y, SW, H, 10);
-        heading(a, x + 14, y + 12, "SPEAKER", "cabinet");
+        heading(a, x + 14, y + 12, T("SPEAKER"), "cabinet");
         LibUi &L = g_lib;
         if (!L.loaded)
             lib_load(a);
@@ -510,7 +510,7 @@ inline void draw_amp(App &a)
             const int c = ring[i];
             const float bx = x + 14 + (i % cols) * (bw + bg), by = y + (IP ? 40 : 46) + (i / cols) * (bh + bg);
             const std::string id = "ampcab" + std::to_string(c);
-            const std::string lb = c ? label(c) : "PATCH'S OWN \xc2\xb7 " + label(own);
+            const std::string lb = c ? label(c) : TF("PATCH'S OWN \xc2\xb7 {0}", {label(own)});
             if (button(a, id.c_str(), bx, by, bw, bh, lb, c == now)) {
                 a.hold["cabinet"] = {(double)c, ImGui::GetTime() + 0.8};
                 call(a, "{\"call\":\"cabinet_set\",\"row\":" + std::to_string(a.row) + ",\"choice\":"
@@ -520,7 +520,7 @@ inline void draw_amp(App &a)
         const int rows = ((int)ring.size() + cols - 1) / cols;
         const float ay = y + (IP ? 40 : 46) + rows * (bh + bg) + (IP ? 12 : 18);
         const int shown = now ? now : own;
-        text(a, a.bold, 14, x + 14, ay, SILK, now ? label(now) : "PATCH'S OWN \xc2\xb7 " + label(own));
+        text(a, a.bold, 14, x + 14, ay, SILK, now ? label(now) : TF("PATCH'S OWN \xc2\xb7 {0}", {label(own)}));
         const auto ls = wrap(a, a.font, 14, about(shown), SW - 28);
         for (size_t i = 0; i < ls.size(); i++)
             text(a, a.font, 14, x + 14, ay + LH * (i + 1) + 4, SILK_DIM, ls[i]);
@@ -544,18 +544,18 @@ inline void draw_amp(App &a)
         auto hc = a.hold.find("cpl");
         if (hc != a.hold.end() && ImGui::GetTime() < hc->second.second)
             cur = (int)hc->second.first;
-        static const char *CN[4] = {"8' OFF", "16'", "4'", "2'"};
+        static const char *CN[4] = {N_("8' OFF"), "16'", "4'", "2'"};
         int nb = 0;
         for (int b = 0; b < 4; b++)
             nb += (offer >> b) & 1;
         const float by = y + H - (IP ? 62 : 70), bw = (LW - 28 - (nb - 1) * 6) / (float)nb, bh = 44;
-        text(a, a.font, 14, x + 14, by - (IP ? 20 : 24), SILK_DIM, "COUPLERS");
+        text(a, a.font, 14, x + 14, by - (IP ? 20 : 24), SILK_DIM, T("COUPLERS"));
         int k = 0;
         for (int b = 0; b < 4; b++) {
             if (!((offer >> b) & 1))
                 continue;
             const std::string id = std::string("ampcpl") + CN[b];
-            if (button(a, id.c_str(), x + 14 + k * (bw + 6), by, bw, bh, CN[b], ((cur >> b) & 1) != 0)) {
+            if (button(a, id.c_str(), x + 14 + k * (bw + 6), by, bw, bh, T(CN[b]), ((cur >> b) & 1) != 0)) {
                 const int v = cur ^ (1 << b);
                 a.hold["cpl"] = {(double)v, ImGui::GetTime() + 0.8};
                 call(a, "{\"call\":\"couplers_set\",\"row\":" + std::to_string(a.row) + ",\"v\":" + std::to_string(v) + "}");
@@ -567,11 +567,11 @@ inline void draw_amp(App &a)
         const float LW = LWd;
         const float x = X1 - LW, y = Y0;
         look::tray(a, x, y, LW, H, 10);
-        heading(a, x + 14, y + 12, "CONE ROTOR", "spectra");
+        heading(a, x + 14, y + 12, T("CONE ROTOR"), "spectra");
         couplers(x, y);
         if ((int)num(&M.st, "spectra", 0) == 0) {
-            const std::string why = "No cone rotor on it now: choose CONE ROTOR or ROTOR CHORUS under SPEAKER for "
-                                    "its two speakers turning.";
+            const std::string why = T("No cone rotor on it now: choose CONE ROTOR or ROTOR CHORUS under SPEAKER for "
+                                    "its two speakers turning.");
             const auto ls = wrap(a, a.font, 14, why, LW - 28);
             for (size_t i = 0; i < ls.size(); i++)
                 text(a, a.font, 14, x + 14, y + (IP ? 44 : 50) + i * LH, SILK_DIM, ls[i]);
@@ -581,18 +581,18 @@ inline void draw_amp(App &a)
         auto hf = a.hold.find("stfast");
         if (hf != a.hold.end() && ImGui::GetTime() < hf->second.second)
             fast = (int)hf->second.first;
-        text(a, a.font, 14, x + 14, y + (IP ? 40 : 48), SILK_DIM, "SPEED");
-        static const char *RN[2] = {"CATHEDRAL", "THEATER"};
+        text(a, a.font, 14, x + 14, y + (IP ? 40 : 48), SILK_DIM, T("SPEED"));
+        static const char *RN[2] = {N_("CATHEDRAL"), N_("THEATER")};
         const float sb = (LW - 28 - 6) / 2, sy = y + (IP ? 60 : 70), bh = 44;
         for (int f = 0; f < 2; f++) {
             const std::string id = std::string("ampst") + RN[f];
-            if (button(a, id.c_str(), x + 14 + f * (sb + 6), sy, sb, bh, RN[f], fast == f)) {
+            if (button(a, id.c_str(), x + 14 + f * (sb + 6), sy, sb, bh, T(RN[f]), fast == f)) {
                 a.hold["stfast"] = {(double)f, ImGui::GetTime() + 0.8};
                 call(a, "{\"call\":\"part_cc\",\"row\":" + std::to_string(a.row) + ",\"cc\":80,\"v\":" + (f ? "127" : "0") + "}");
             }
         }
-        const auto sn = wrap(a, a.font, 14, "The console's rocker: Cathedral slow, Theater fast. The rotor takes several "
-                                            "seconds to climb to Theater and drops back to Cathedral in about one.", LW - 28);
+        const auto sn = wrap(a, a.font, 14, T("The console's rocker: Cathedral slow, Theater fast. The rotor takes several "
+                                            "seconds to climb to Theater and drops back to Cathedral in about one."), LW - 28);
         for (size_t i = 0; i < sn.size(); i++)
             text(a, a.font, 14, x + 14, sy + bh + 8 + i * LH, SILK_DIM, sn[i]);
         return;
@@ -601,9 +601,9 @@ inline void draw_amp(App &a)
         const float LW = LWd;
         const float x = X1 - LW, y = Y0;
         look::tray(a, x, y, LW, H, 10);
-        heading(a, x + 14, y + 12, "ROTARY", "rotary");
+        heading(a, x + 14, y + 12, T("ROTARY"), "rotary");
         if (!les) {
-            const std::string why = "No rotary on it now: choose ROTARY under SPEAKER for the horn and drum turning.";
+            const std::string why = T("No rotary on it now: choose ROTARY under SPEAKER for the horn and drum turning.");
             const auto ls = wrap(a, a.font, 14, why, LW - 28);
             for (size_t i = 0; i < ls.size(); i++)
                 text(a, a.font, 14, x + 14, y + (IP ? 44 : 50) + i * LH, SILK_DIM, ls[i]);
@@ -614,24 +614,24 @@ inline void draw_amp(App &a)
         auto hs = a.hold.find("speed");
         if (hs != a.hold.end() && ImGui::GetTime() < hs->second.second)
             speed = (int)hs->second.first;
-        text(a, a.font, 14, x + 14, y + (IP ? 40 : 48), SILK_DIM, "SPEED");
-        static const char *SN[3] = {"STOP", "SLOW", "FAST"};
+        text(a, a.font, 14, x + 14, y + (IP ? 40 : 48), SILK_DIM, T("SPEED"));
+        static const char *SN[3] = {N_("STOP"), N_("SLOW"), N_("FAST")};
         static const int SV[3] = {0, 64, 127};
         const float sb = (LW - 28 - 2 * 6) / 3, sy = y + (IP ? 60 : 70), bh = IP ? 44 : 44;
         for (int s = 0; s < 3; s++) {
             const std::string id = std::string("ampspeed") + SN[s];
-            if (button(a, id.c_str(), x + 14 + s * (sb + 6), sy, sb, bh, SN[s], speed == s)) {
+            if (button(a, id.c_str(), x + 14 + s * (sb + 6), sy, sb, bh, T(SN[s]), speed == s)) {
                 a.hold["speed"] = {(double)s, ImGui::GetTime() + 0.8};
                 call(a, "{\"call\":\"part_cc\",\"row\":" + std::to_string(a.row) + ",\"cc\":80,\"v\":" + std::to_string(SV[s]) + "}");
             }
         }
-        const auto sn = wrap(a, a.font, 14, "The rotors spin up and down between speeds as a real rotary speaker's do; "
-                                            "a flick of the pitch wheel steps them too.", LW - 28);
+        const auto sn = wrap(a, a.font, 14, T("The rotors spin up and down between speeds as a real rotary speaker's do; "
+                                            "a flick of the pitch wheel steps them too."), LW - 28);
         for (size_t i = 0; i < sn.size(); i++)
             text(a, a.font, 14, x + 14, sy + bh + 8 + i * LH, SILK_DIM, sn[i]);
         // (how it is heard: the cabinet in the room, or two mics round it)
         const float ry = sy + bh + 16 + sn.size() * LH + (IP ? 10 : 20);
-        text(a, a.font, 14, x + 14, ry, SILK_DIM, "HEARD");
+        text(a, a.font, 14, x + 14, ry, SILK_DIM, T("HEARD"));
         const J *rv = p->get("rotary");
         int mode = rv && rv->is(J::ARR) && rv->a.size() >= 2 ? (int)rv->a[0].d() : -1;
         double spread = rv && rv->is(J::ARR) && rv->a.size() >= 2 ? rv->a[1].d() : -1.0;
@@ -648,22 +648,22 @@ inline void draw_amp(App &a)
                         + ",\"spread\":" + jnum(sd) + "}");
         };
         const float hb = (LW - 28 - 8) / 2, hy = ry + (IP ? 20 : 24);
-        if (button(a, "amproom", x + 14, hy, hb, bh, "IN THE ROOM", !mics))
+        if (button(a, "amproom", x + 14, hy, hb, bh, T("IN THE ROOM"), !mics))
             set(0, spread);
-        if (button(a, "ampmics", x + 22 + hb, hy, hb, bh, "TWO MICS", mics))
+        if (button(a, "ampmics", x + 22 + hb, hy, hb, bh, T("TWO MICS"), mics))
             set(1, spread);
         if (mics) {
             float v01 = (float)(sp / 180.0);
             char vt[16];
             snprintf(vt, sizeof vt, "%.0f\xc2\xb0", sp);
-            const int f = knob(a, "ampspread", x + LW / 2, hy + bh + (IP ? 50 : 70), IP ? 60 : 80, v01, "SPREAD", vt, false,
+            const int f = knob(a, "ampspread", x + LW / 2, hy + bh + (IP ? 50 : 70), IP ? 60 : 80, v01, T("SPREAD"), vt, false,
                                {}, 0, spread >= 0.0);
             if (f & K_CHANGED)
                 set(1, std::round(v01 * 180.0));
             if (f & K_RESET)
                 set(1, -1.0);
         } else {
-            const auto rn = wrap(a, a.font, 14, "The cabinet heard where it stands: its horn and drum turning toward you and away.",
+            const auto rn = wrap(a, a.font, 14, T("The cabinet heard where it stands: its horn and drum turning toward you and away."),
                                  LW - 28);
             for (size_t i = 0; i < rn.size(); i++)
                 text(a, a.font, 14, x + 14, hy + bh + 12 + i * LH, SILK_DIM, rn[i]);
