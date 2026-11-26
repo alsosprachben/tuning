@@ -26,9 +26,12 @@ int nvlive_main(int argc, char **argv);         // (nvlive.cpp's main, renamed: 
 extern "C" void nv_ui_files_dirs(const char *music, const char *tmp);
 
 // THE FILES PICKER (the Files card's FILES..., nui's hooks): iOS's document
-// picker for MIDI files -- iCloud Drive, On My iPad, a USB drive -- each file
-// copied into Documents/MIDI (a copy: the picker's own is gone with its
-// sandbox), the last one's path left for the card to take, the UI woken
+// picker for MIDI and audio files -- iCloud Drive, On My iPad, a USB drive --
+// opened IN PLACE: a file already in the app's own Documents (its MIDI, its
+// Renders) is used where it is; one from outside is copied into Documents/MIDI
+// (the picker's access ends with its sandbox), a different file of the same
+// name there given a new one ("song 2.mid") rather than replacing it. The last
+// one's path left for the card to take, the UI woken
 static std::mutex g_pick_mu;
 static std::string g_picked;
 @interface ClavitonePicker : NSObject <UIDocumentPickerDelegate>
@@ -41,16 +44,26 @@ static std::string g_picked;
     NSFileManager *fm = [NSFileManager defaultManager];
     [fm createDirectoryAtPath:dir withIntermediateDirectories:YES attributes:nil error:nil];
     std::string last;
+    NSString *home = [[NSURL fileURLWithPath:docs] URLByResolvingSymlinksInPath].path;
     for (NSURL *u in urls) {
+        NSString *src = [u URLByResolvingSymlinksInPath].path;
+        if ([src hasPrefix:[home stringByAppendingString:@"/"]]) {     // (the app's own: used where it is)
+            last = src.UTF8String;
+            continue;
+        }
         const BOOL scoped = [u startAccessingSecurityScopedResource];
-        NSString *to = [dir stringByAppendingPathComponent:u.lastPathComponent];
-        [fm removeItemAtPath:to error:nil];
+        NSString *name = u.lastPathComponent, *to = [dir stringByAppendingPathComponent:name];
+        // (a different file of that name already here: a new name, never replaced)
+        for (int k = 2; [fm fileExistsAtPath:to] && ![fm contentsEqualAtPath:to andPath:src] && k < 1000; k++)
+            to = [dir stringByAppendingPathComponent:[NSString stringWithFormat:@"%@ %d.%@",
+                                                     name.stringByDeletingPathExtension, k, name.pathExtension]];
         NSError *e = nil;
-        if ([fm copyItemAtURL:u toURL:[NSURL fileURLWithPath:to] error:&e])
+        if ([fm fileExistsAtPath:to])                                // (the same file: already copied)
+            last = to.UTF8String;
+        else if ([fm copyItemAtURL:u toURL:[NSURL fileURLWithPath:to] error:&e])
             last = to.UTF8String;
         else
-            fprintf(stderr, "clavitone: could not copy %s: %s\n", u.lastPathComponent.UTF8String,
-                    e.localizedDescription.UTF8String);
+            fprintf(stderr, "clavitone: could not copy %s: %s\n", name.UTF8String, e.localizedDescription.UTF8String);
         if (scoped)
             [u stopAccessingSecurityScopedResource];
     }
@@ -74,7 +87,7 @@ extern "C" void nui_pick_midi(void)
             if (UTType *t = [UTType typeWithFilenameExtension:x])
                 [types addObject:t];
         UIDocumentPickerViewController *dp = [[UIDocumentPickerViewController alloc] initForOpeningContentTypes:types
-                                                                                                         asCopy:YES];
+                                                                                                         asCopy:NO];
         if (!g_picker)
             g_picker = [ClavitonePicker new];
         dp.delegate = g_picker;
