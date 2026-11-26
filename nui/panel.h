@@ -183,7 +183,8 @@ inline void draw_display(App &a)
                      var == 127 ? "MT-32" : var == 126 ? "CM-64 PCM" : T(FAMILIES[(prog >> 3) & 15]));  // i18n-skip
         fam = std::string(b) + " \xc2\xb7 " + (ch < 0 ? std::string(T("ALL CH")) : TF("CH {0}", {std::to_string(ch + 1)}));
     }
-    look::lcd_text(a, 14, X + 92, Y + 14, LCD, fam);
+    // (after PART -- a language's longer word moves it on, never back from where the name starts)
+    look::lcd_text(a, 14, std::max(X + 92, X + 14 + text_w(a, a.lcd ? a.lcd : a.font, 14, T("PART")) + 18), Y + 14, LCD, fam);
     look::lcd_text(a, 35, X + 14, Y + 34, LCD, p ? pad2(a.row + 1) : "--");
     // (the name, and after it the patch's few words -- "Hammond: 16 5-1/3 8 1, Leslie fast")
     const std::string nm = p ? fit(a, a.font, 35, str(p, "name"), W - 300) : "";

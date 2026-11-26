@@ -282,7 +282,7 @@ inline void draw_files(App &a)
     else if (!F.info.is(J::OBJ))
         about = T("Reading it\xe2\x80\xa6");
     else if (!ok)
-        about = TF("It cannot be read: {0}.", {str(&F.info, "err")});
+        about = TF("It cannot be read: {0}.", {T(str(&F.info, "err"))});
     else {
         const J *chs = F.info.get("channels");
         std::string cl;
@@ -298,7 +298,7 @@ inline void draw_files(App &a)
                               : det == "mt32" ? "MT-32" : det == "names" ? T("an orchestra by track names") : det;
         const std::string chs_ = nch == 1 ? TF("{0} channel ({1})", {std::to_string(nch), cl}) : TF("{0} channels ({1})", {std::to_string(nch), cl});
         const std::string pcs_ = np == 1 ? TF("{0} program change", {std::to_string(np)}) : TF("{0} program changes", {std::to_string(np)});
-        about = TF("{0} long \xc2\xb7 {1} \xc2\xb7 {2}. It reads as {3}: {4}.", {mmss(num(&F.info, "total")), chs_, pcs_, say, str(&F.info, "why")});
+        about = TF("{0} long \xc2\xb7 {1} \xc2\xb7 {2}. It reads as {3}: {4}.", {mmss(num(&F.info, "total")), chs_, pcs_, say, T(str(&F.info, "why"))});
     }
     float y = Y0 + 36;
     for (const auto &l : wrap(a, a.font, 14, about, FW - 24)) {
@@ -308,7 +308,7 @@ inline void draw_files(App &a)
     if (!aud) {                         // (an audio file: no mode, no check)
     const std::string sug = str(&F.info, "suggest");
     if (ok && !sug.empty() && fl_eff() != sug)
-        for (const auto &l : wrap(a, a.font, 14, TF("Worth trying {0}: {1}.", {fl_mode_label(sug), str(&F.info, "suggest_why")}), FW - 24)) {
+        for (const auto &l : wrap(a, a.font, 14, TF("Worth trying {0}: {1}.", {fl_mode_label(sug), T(str(&F.info, "suggest_why"))}), FW - 24)) {
             text(a, a.font, 14, FX + 12, y, OWN, l);
             y += LH;
         }
@@ -448,7 +448,7 @@ inline void draw_files(App &a)
     {
         std::string st;
         if (pl) {
-            const std::string msg = str(pl, "msg"), stage = str(pl, "stage"), md = str(pl, "mode");
+            const std::string msg = T(str(pl, "msg")), stage = T(str(pl, "stage")), md = str(pl, "mode");
             st = !msg.empty() ? msg
                  : playing ? stage + " (" + (md == "gs" ? std::string(T("GS, the Setup card's standard")) : fl_mode_label(md)) + ")"
                  : !stage.empty() ? str(pl, "name") + ": " + stage + "." : "";
@@ -486,9 +486,9 @@ inline void draw_files(App &a)
             const double at_ = num(rd, "at"), len_ = num(rd, "len");
             const std::string where = len_ > 0 ? " \xc2\xb7 " + std::to_string((int)(100.0 * at_ / len_)) + "% \xc2\xb7 " +
                                                  mmss(at_) + " / " + mmss(len_) : "";
-            st = rendering ? str(rd, "name") + ": " + str(rd, "stage") + "\xe2\x80\xa6 " + mmss(num(rd, "secs")) + where +
+            st = rendering ? str(rd, "name") + ": " + T(str(rd, "stage")) + "\xe2\x80\xa6 " + mmss(num(rd, "secs")) + where +
                                  (last.empty() ? "" : " \xc2\xb7 " + last)
-                 : !msg.empty() ? str(rd, "name") + ": " + (msg == "rendered" ? TF("{0} in {1}", {msg, mmss(num(rd, "secs"))}) : msg) + "."
+                 : !msg.empty() ? str(rd, "name") + ": " + (msg == "rendered" ? TF("{0} in {1}", {T(msg), mmss(num(rd, "secs"))}) : T(msg)) + "."
                  : !fx_ok ? T(FL_NO_EXPORT) : "";
         }
         for (const auto &l : wrap(a, a.font, 14, st, PW - 24)) {

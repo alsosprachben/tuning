@@ -41,6 +41,7 @@
 #include "stops.h"
 #include "piano.h"
 #include "drums.h"
+#include "keys.h"
 #include "effects.h"
 #include "amp.h"
 #include "matrix.h"
@@ -72,9 +73,14 @@ std::string lang_system()
 // (SCENES after PARTS: a setup's parts arranged, then saved and brought back -- Ben 2026-11-25)
 static const char *CARDS[][2] = {{"parts", N_("PARTS")}, {"scenes", N_("SCENES")}, {"library", N_("LIBRARY")},
                                  {"synth", N_("SYNTH")}, {"stops", N_("STOPS")}, {"piano", N_("PIANO")},
-                                 {"drums", N_("DRUMS")}, {"amp", N_("AMP")}, {"effects", N_("EFFECTS")},
+                                 {"drums", N_("DRUMS")}, {"keys", N_("KEYS")}, {"amp", N_("AMP")}, {"effects", N_("EFFECTS")},
                                  {"matrix", N_("MATRIX")}, {"tuning", N_("TUNING")}, {"control", N_("CONTROL")},
                                  {"files", N_("FILES")}, {"setup", N_("SETUP")}};
+// (each card's name on its tab, where a language may need a short form: the catalogue's "tab|..." texts)
+[[maybe_unused]] static const char *TAB_NAMES[] = {
+    NC_("tab", "PARTS"), NC_("tab", "SCENES"), NC_("tab", "LIBRARY"), NC_("tab", "SYNTH"),   NC_("tab", "STOPS"),
+    NC_("tab", "PIANO"), NC_("tab", "DRUMS"),  NC_("tab", "KEYS"),    NC_("tab", "AMP"),     NC_("tab", "EFFECTS"),
+    NC_("tab", "MATRIX"), NC_("tab", "TUNING"), NC_("tab", "CONTROL"), NC_("tab", "FILES"), NC_("tab", "SETUP")};
 
 
 static void draw(App &a)
@@ -182,7 +188,7 @@ static void draw(App &a)
         draw_keys_tab(a);
         const float X = 10, Y = 160, gap = 4, w = (1113 - gap * nc - 44) / nc;
         for (int i = 0; i < nc; i++)
-            if (button(a, CARDS[i][0], X + i * (w + gap), Y, w, 44, T(CARDS[i][1]), a.card == CARDS[i][0], true, 21))
+            if (button(a, CARDS[i][0], X + i * (w + gap), Y, w, 44, TC("tab", CARDS[i][1]), a.card == CARDS[i][0], true, 21))
                 a.card = CARDS[i][0];
         if (button(a, "help", X + nc * (w + gap), Y, 44, 44, "?", false, true, 21))
             help_open(a, "basics");
@@ -193,7 +199,7 @@ static void draw(App &a)
         // THE CARD TABS, and the card (each built from the web's in turn)
         const float X = 14, Y = 276, gap = 8, w = (1892 - gap * nc - 56) / nc;
         for (int i = 0; i < nc; i++)
-            if (button(a, CARDS[i][0], X + i * (w + gap), Y, w, 46, T(CARDS[i][1]), a.card == CARDS[i][0]))
+            if (button(a, CARDS[i][0], X + i * (w + gap), Y, w, 46, TC("tab", CARDS[i][1]), a.card == CARDS[i][0]))
                 a.card = CARDS[i][0];
         if (button(a, "help", X + nc * (w + gap), Y, 56, 46, "?"))
             help_open(a, "basics");
@@ -203,6 +209,7 @@ static void draw(App &a)
     if (a.card != "amp")
         amp_open(a, false);             // (...and the amp's only while its card is)
     drums_card(a, a.card == "drums");   // (...and the kit and its hits)
+    keys_card(a, a.card == "keys");     // (shut: what it held let go)
     effects_card(a, a.card == "effects");
     matrix_card(a, a.card == "matrix");
     tuning_card(a, a.card == "tuning");
@@ -211,10 +218,10 @@ static void draw(App &a)
     files_card(a, a.card == "files");
     setup_card(a, a.card == "setup");
     // (on the iPad, a card not yet laid out for it says so)
-    static const std::set<std::string> TAB_READY = {"parts", "library", "synth", "stops", "piano", "drums", "amp", "effects", "matrix", "tuning", "control", "scenes", "files", "setup"};
+    static const std::set<std::string> TAB_READY = {"parts", "library", "synth", "stops", "piano", "drums", "keys", "amp", "effects", "matrix", "tuning", "control", "scenes", "files", "setup"};
     // (on the phone, a card not laid out for its height: the iPad's height, the
     //  phone's width, scrolled -- a drag on the card's empty ground, or the wheel)
-    static const std::set<std::string> PHONE_READY = {"parts", "library", "synth", "stops", "amp", "piano", "matrix", "tuning"};
+    static const std::set<std::string> PHONE_READY = {"parts", "library", "synth", "stops", "amp", "piano", "matrix", "tuning", "keys"};
     static std::map<std::string, float> card_scroll, card_foot;     // (the foot: as drawn last frame, in iPad units)
     const bool virt = a.ph && !PHONE_READY.count(a.card);
     const ImVec2 org0 = a.org;
@@ -249,6 +256,8 @@ static void draw(App &a)
         draw_piano(a);
     } else if (a.card == "drums") {
         draw_drums(a);
+    } else if (a.card == "keys") {
+        draw_keys_card(a);
     } else if (a.card == "amp") {
         draw_amp(a);                    // (amp_open: the engine pushes the card's state while it is up)
     } else if (a.card == "effects") {
@@ -290,6 +299,8 @@ static void draw(App &a)
             draw_matrix(a);
         else if (a.card == "tuning")
             draw_tuning(a);
+        else if (a.card == "keys")
+            draw_keys_card(a);
     }
     if (virt) {                         // (the scrolled card's place: a rail at its right edge)
         // (its scroll: a touch on the card that no control took, dragged; or the wheel off a control --
@@ -658,6 +669,14 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
                     a.K.fingers++;
                 else if ((e.type == SDL_EVENT_FINGER_UP || e.type == SDL_EVENT_FINGER_CANCELED) && a.K.fingers > 0)
                     a.K.fingers--;
+                // (each finger where it is, in window points: SDL gives it as a fraction of the window)
+                if (e.type == SDL_EVENT_FINGER_DOWN || e.type == SDL_EVENT_FINGER_MOTION) {
+                    int ww = 0, wh = 0;
+                    SDL_GetWindowSize(win, &ww, &wh);
+                    a.touches[(unsigned long long)e.tfinger.fingerID] = ImVec2(e.tfinger.x * ww, e.tfinger.y * wh);
+                    a.touch_seen = true;
+                } else if (e.type == SDL_EVENT_FINGER_UP || e.type == SDL_EVENT_FINGER_CANCELED)
+                    a.touches.erase((unsigned long long)e.tfinger.fingerID);
                 dirty = true;
             } while (SDL_PollEvent(&e));
         }

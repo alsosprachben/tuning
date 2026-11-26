@@ -5,7 +5,7 @@
 "%.0f Hz · %.0f frames a block (%.2f ms)"	setup.h:72
 "%d patch · tap to play on part %02d%s"	library.h:292
 "%d patches · tap to play on part %02d%s"	library.h:292
-"%s %d%% · %d V"	panel.h:368
+"%s %d%% · %d V"	panel.h:369
 "+ ADD A CONTROL"	control.h:189 control.h:189
 "..."	i18n.h:5 i18n.h:8
 "... {0} ..."	i18n.h:6
@@ -25,10 +25,10 @@
 "A0 to C8: each octave's stretch from 2:1, in cents"	tuning.h:339
 "ADD THE ROUTE"	control.h:328
 "AFTERTOUCH"	control.h:251 matrix.h:75
-"AGAIN"	panel.h:422 panel.h:480
+"AGAIN"	panel.h:423 panel.h:481
 "ALL"	library.h:303 panel.h:80 parts.h:231
-"ALL CH"	panel.h:184 panel.h:290 panel.h:360
-"AMP"	amp.h:243 nui.cpp:75
+"ALL CH"	panel.h:184 panel.h:291 panel.h:361
+"AMP"	amp.h:243 nui.cpp:76
 "AMPLIFIER"	synth.h:297 synth.h:515
 "AS HEARD"	files.h:474
 "AS MIDI"	scenes.h:186
@@ -65,15 +65,15 @@
 "CANCEL"	scenes.h:145
 "CATHEDRAL"	amp.h:585
 "CH"	panel.h:46 parts.h:231 parts.h:330
-"CH {0}"	panel.h:184 panel.h:290 panel.h:360
+"CH {0}"	panel.h:184 panel.h:291 panel.h:361
 "CHANNEL {0}"	control.h:307
 "CHOOSE"	files.h:190
 "CHORUS"	effects.h:413 panel.h:45
 "CHROMATIC PERC."	panel.h:34
 "CLEAR"	library.h:196
-"CLOSE"	help.h:138
+"CLOSE"	help.h:142
 "CONE ROTOR"	amp.h:296 amp.h:570
-"CONTROL"	control.h:96 nui.cpp:76
+"CONTROL"	control.h:96 nui.cpp:77
 "CONTROLS"	control.h:99
 "COUPLERS"	amp.h:552
 "Callbacks that waited"	setup.h:326
@@ -94,14 +94,14 @@
 "DOWN"	piano.h:74 piano.h:177
 "DRIVE"	amp.h:434 stops.h:262 stops.h:273
 "DRIVE · ROTARY"	stops.h:174
-"DRUM SET %d"	panel.h:180 panel.h:286 panel.h:356
-"DRUMS"	drums.h:129 nui.cpp:75
+"DRUM SET %d"	panel.h:180 panel.h:287 panel.h:357
+"DRUMS"	drums.h:129 nui.cpp:76
 "Delay"	effects.h:379 effects.h:509 synth.h:292
 "Delay, reverb"	effects.h:19
 "Drum kits"	library.h:76 library.h:222
 "EASTERN"	tuning.h:196 tuning.h:210
 "EASTERN TUNING"	tuning.h:363
-"EFFECTS"	effects.h:204 nui.cpp:75
+"EFFECTS"	effects.h:204 nui.cpp:76
 "ENSEMBLE"	panel.h:35
 "ENV"	synth.h:403
 "ENVELOPE"	synth.h:518
@@ -113,7 +113,7 @@
 "Ethnic"	library.h:19
 "Every part back to program 000, the controllers, effects and receive settings to power-on, as a sequencer's GS Reset."	scenes.h:268
 "FAST"	amp.h:618
-"FILES"	files.h:186 nui.cpp:77
+"FILES"	files.h:186 nui.cpp:78
 "FILES…"	files.h:216
 "FILL {0}"	panel.h:155
 "FILTER"	synth.h:297 synth.h:515
@@ -134,7 +134,7 @@
 "HALF"	piano.h:177
 "HALF {0}"	piano.h:74
 "HEARD"	amp.h:634 effects.h:365
-"HELP"	help.h:110 nui.cpp:166
+"HELP"	help.h:114 nui.cpp:172
 "HOW"	control.h:289
 "Headroom"	setup.h:206
 "Held by ringing notes"	setup.h:331
@@ -157,6 +157,7 @@
 "KEEP THE ORIGINAL TOO"	control.h:290
 "KEY"	panel.h:45 parts.h:225 parts.h:324
 "KEY {0}"	drums.h:330
+"KEYS"	keys.h:64 nui.cpp:76
 "KIT"	library.h:375 library.h:376 library.h:377
 "Kicks"	drums.h:87 drums.h:189
 "LANGUAGE"	setup.h:285
@@ -173,7 +174,7 @@
 "LFO 1"	matrix.h:95 matrix.h:95 matrix.h:95
 "LFO 2"	matrix.h:95 matrix.h:95 matrix.h:95
 "LFO · ENV · DELAY"	synth.h:416
-"LIBRARY"	nui.cpp:73
+"LIBRARY"	nui.cpp:74
 "LOAD"	scenes.h:186
 "Left hand"	synth.h:291 synth.h:463 synth.h:486
 "Level"	scenes.h:258
@@ -181,7 +182,7 @@
 "Looked for when the program is a Messenger patch."	setup.h:182
 "Low"	effects.h:441
 "Low gain"	effects.h:442
-"MATRIX"	matrix.h:70 nui.cpp:76
+"MATRIX"	matrix.h:70 nui.cpp:77
 "METRONOME"	control.h:99 scenes.h:220
 "MICS"	effects.h:373
 "MIDI IN"	setup.h:110
@@ -194,7 +195,7 @@
 "MOVE…"	matrix.h:135
 "MT-32 VELOCITY {0}"	files.h:334
 "MUSIC"	files.h:209
-"MUTE"	panel.h:246 panel.h:394 panel.h:470
+"MUTE"	panel.h:247 panel.h:395 panel.h:471
 "Master"	setup.h:206
 "Mixer"	synth.h:289 synth.h:459 synth.h:462
 "Mod depth"	setup.h:207
@@ -220,10 +221,11 @@
 "No sound yet."	drums.h:333
 "No valve of its own: turned up, it gains one, a triode stage before the speaker, the edge of breakup at 1."	amp.h:456
 "None set."	setup.h:182
-"Not built in the native interface yet: the web interface has it (nvlive --ui)."	nui.cpp:274
+"Not built in the native interface yet: the web interface has it (nvlive --ui)."	nui.cpp:283
 "Not played live: {0}."	effects.h:271
 "Not set"	drums.h:189 drums.h:192
 "Nothing matches."	library.h:409
+"OCTAVE ▶"	keys.h:83
 "OFF"	files.h:334 setup.h:228
 "OFF: MY PARTS"	setup.h:142
 "ON"	files.h:334 scenes.h:239
@@ -248,17 +250,17 @@
 "Other systems"	tuning.h:250
 "Owed now"	setup.h:328
 "PAN"	panel.h:44 parts.h:216 parts.h:308
-"PANIC"	panel.h:250 panel.h:416 panel.h:474
+"PANIC"	panel.h:251 panel.h:417 panel.h:475
 "PARAMETERS"	effects.h:210
-"PART"	panel.h:174 panel.h:293 panel.h:362
-"PART ▶"	panel.h:243 panel.h:391 panel.h:467
-"PARTS"	i18n.h:2 nui.cpp:73 parts.h:89
+"PART"	panel.h:174 panel.h:187 panel.h:294
+"PART ▶"	panel.h:244 panel.h:392 panel.h:468
+"PARTS"	i18n.h:2 nui.cpp:74 parts.h:89
 "PATCH'S OWN · {0}"	amp.h:513 amp.h:523
 "PAUSE"	files.h:388
 "PEDAL KEY"	piano.h:271
 "PEDALS"	piano.h:134 piano.h:160
 "PERCUSSIVE"	panel.h:36
-"PIANO"	nui.cpp:74 panel.h:34 piano.h:129
+"PIANO"	nui.cpp:75 panel.h:34 piano.h:129
 "PICKUP"	amp.h:290 amp.h:315
 "PIPE"	panel.h:35
 "PLAY"	files.h:190 files.h:388
@@ -269,7 +271,7 @@
 "PRESETS"	scenes.h:166
 "PRESS A KEY…"	control.h:249
 "PRESS THE KEY NOW… (TAP TO STOP)"	piano.h:312
-"PROGRAM %03d%s · %s"	panel.h:182 panel.h:288 panel.h:358
+"PROGRAM %03d%s · %s"	panel.h:182 panel.h:289 panel.h:359
 "PROGRAM CHANGES READ AS"	setup.h:270
 "PUSH INTO IT TO DAMP"	control.h:299
 "Percussion"	drums.h:95 drums.h:189
@@ -282,8 +284,8 @@
 "Poly aftertouch"	matrix.h:94
 "Position"	widgets.h:42
 "Pure octaves: pipes"	tuning.h:230
-"QUIT"	panel.h:422 panel.h:480
-"QUIT CLAVITONE"	panel.h:255
+"QUIT"	panel.h:423 panel.h:481
+"QUIT CLAVITONE"	panel.h:256
 "READ ITS KNOBS"	setup.h:185
 "RECALL"	scenes.h:200
 "REED"	panel.h:35
@@ -313,15 +315,15 @@
 "SAVE THE CONTROLS…"	scenes.h:201
 "SAVE THIS SETUP AS"	scenes.h:127
 "SAVE THIS SETUP AS…"	scenes.h:187
-"SCENES"	nui.cpp:73 scenes.h:112 scenes.h:194
-"SEE ALSO"	help.h:302
+"SCENES"	nui.cpp:74 scenes.h:112 scenes.h:194
+"SEE ALSO"	help.h:306
 "SENDS"	effects.h:378
-"SETUP"	nui.cpp:77 setup.h:61
+"SETUP"	nui.cpp:78 setup.h:61
 "SHAPE"	tuning.h:196
-"SHOW THE {0} CARD"	help.h:322
+"SHOW THE {0} CARD"	help.h:326
 "SLOW"	amp.h:618
 "SOFT"	piano.h:163
-"SOLO"	panel.h:248 panel.h:396 panel.h:472
+"SOLO"	panel.h:249 panel.h:397 panel.h:473
 "SOSTENUTO"	piano.h:165
 "SOUND"	setup.h:65 setup.h:199
 "SOUND EFFECTS"	panel.h:37
@@ -334,16 +336,16 @@
 "STAND-IN x{0}"	panel.h:128
 "STOP"	amp.h:618 files.h:390 files.h:436
 "STOP RENDER"	files.h:478
-"STOPS"	nui.cpp:74 stops.h:94 stops.h:175
+"STOPS"	nui.cpp:75 stops.h:94 stops.h:175
 "STRINGS"	panel.h:35
-"SUSTAIN"	piano.h:170
-"SYNTH"	nui.cpp:74 synth.h:389
+"SUSTAIN"	keys.h:79 piano.h:170
+"SYNTH"	nui.cpp:75 synth.h:389
 "SYNTH EFFECTS"	panel.h:36
 "SYNTH LEAD"	panel.h:35
 "SYNTH PAD"	panel.h:36
 "SYSTEM"	effects.h:210
 "Saved to {0}"	files.h:521
-"Search help"	help.h:117
+"Search help"	help.h:121
 "Search patches"	library.h:267
 "Set by a file's GM2 messages (shown, not changed here): "	matrix.h:165
 "Sixteen parts, one per channel; OFF puts your parts back."	setup.h:163
@@ -357,7 +359,7 @@
 "Synth Effects"	library.h:19
 "Synth Lead"	library.h:19
 "Synth Pad"	library.h:19
-"TAP AGAIN TO QUIT"	panel.h:255
+"TAP AGAIN TO QUIT"	panel.h:256
 "TAP AGAIN TO RESET"	scenes.h:275
 "THE FILE"	files.h:260
 "THE GPU"	setup.h:245
@@ -370,7 +372,7 @@
 "TO"	control.h:269
 "TOO BIG: MIDDLE FIRST"	panel.h:150
 "TUNERS"	tuning.h:196 tuning.h:210
-"TUNING"	nui.cpp:76 tuning.h:194
+"TUNING"	nui.cpp:77 tuning.h:194
 "TWO MICS"	amp.h:653 stops.h:318
 "TYPE"	effects.h:210
 "Tempo"	scenes.h:241
@@ -388,7 +390,7 @@
 "The rotors spin up and down between speeds as a real rotary speaker's do; a flick of the pitch wheel steps them too."	amp.h:628
 "The synth programs (Synth Lead, Synth Pad, the synth basses, brass and strings) bring their knobs here."	synth.h:395
 "The whole render holds the entire song in memory, which a long song may not fit in."	files.h:503
-"This card's iPad layout is still to come; the laptop's has it."	nui.cpp:239
+"This card's iPad layout is still to come; the laptop's has it."	nui.cpp:246
 "This part"	drums.h:177 piano.h:197 stops.h:103
 "This voice plays through no amplifier or speaker of its own -- an acoustic instrument is heard as it is. The electric pianos, the organs, the electric guitars and basses have one."	amp.h:264
 "Thru: the parts on it play dry. Choose a type."	effects.h:329
@@ -403,7 +405,7 @@
 "UP"	piano.h:74 piano.h:177
 "VALVE"	amp.h:292 amp.h:412
 "VEL"	parts.h:253 parts.h:342 parts.h:423
-"VOICES"	panel.h:204 panel.h:310
+"VOICES"	panel.h:205 panel.h:311
 "Value"	effects.h:139 effects.h:139 widgets.h:97
 "WHEEL DOWN"	control.h:251
 "WHEEL EITHER"	control.h:251
@@ -472,7 +474,7 @@
 "outdoors"	setup.h:16
 "pan delay"	setup.h:17
 "part {0}"	amp.h:246 control.h:112 effects.h:207
-"part {0} · {1}"	drums.h:133 matrix.h:85 stops.h:98
+"part {0} · {1}"	drums.h:133 keys.h:66 matrix.h:85
 "pedals on channel {0}"	piano.h:146
 "pedals on every channel"	piano.h:146
 "plate"	setup.h:17
@@ -500,6 +502,21 @@
 "stopped"	fileplay.h:605
 "stopped: not enough memory beside the engine playing"	fileplay.h:916 fileplay.h:967
 "studio"	setup.h:15
+"tab|AMP"	nui.cpp:82
+"tab|CONTROL"	nui.cpp:83
+"tab|DRUMS"	nui.cpp:82
+"tab|EFFECTS"	nui.cpp:82
+"tab|FILES"	nui.cpp:83
+"tab|KEYS"	nui.cpp:82
+"tab|LIBRARY"	nui.cpp:81
+"tab|MATRIX"	nui.cpp:83
+"tab|PARTS"	nui.cpp:81
+"tab|PIANO"	nui.cpp:82
+"tab|SCENES"	nui.cpp:81
+"tab|SETUP"	nui.cpp:83
+"tab|STOPS"	nui.cpp:81
+"tab|SYNTH"	nui.cpp:81
+"tab|TUNING"	nui.cpp:83
 "the Indian voices' parts"	tuning.h:363
 "the keyboard's controls, rewritten first"	control.h:220
 "the pitch wheel down"	control.h:324
@@ -520,7 +537,7 @@
 "{0} channels ({1})"	files.h:299
 "{0} control"	control.h:115
 "{0} controls"	control.h:115
-"{0} found"	help.h:176
+"{0} found"	help.h:180
 "{0} has no stops. Pick one with stops for part {1}:"	stops.h:102
 "{0} in {1}"	files.h:491
 "{0} is not a drum set. Pick a kit for part {1} from the list."	drums.h:176
@@ -543,5 +560,6 @@
 "{0}–{1} of {2}"	parts.h:276
 "← neck"	amp.h:224
 "▲ UP"	files.h:207
-"◀ BACK"	help.h:111
-"◀ PART"	panel.h:241 panel.h:389 panel.h:465
+"◀ BACK"	help.h:115
+"◀ OCTAVE"	keys.h:89
+"◀ PART"	panel.h:242 panel.h:390 panel.h:466

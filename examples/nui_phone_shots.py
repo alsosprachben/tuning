@@ -11,10 +11,11 @@ nvx = os.path.expanduser('~/nvx/live.nvx')
 ps = T.picks(nvx)
 sess = os.path.join(out, 'session.json'); open(sess, 'w').write('{}\n')
 cw = (804 - 32) / 5
-CARDS = ['parts', 'scenes', 'library', 'synth', 'stops', 'piano', 'drums', 'amp', 'effects', 'matrix', 'tuning', 'control', 'files', 'setup']
+CARDS = ['parts', 'scenes', 'library', 'synth', 'stops', 'piano', 'drums', 'keys', 'amp', 'effects', 'matrix', 'tuning', 'control', 'files', 'setup']
 def card(c): i = CARDS.index(c); return 'tap %.0f %.0f' % (14 + (i % 5) * (cw + 8) + cw / 2, 114 + (i // 5) * 64 + 28)
 P2, P3 = [(580, 134), (740, 134)], [(495, 134), (625, 134), (755, 134)]
 STATES = [  # (shot, patch, card, taps after opening)
+    ('keys_piano', dict(program=0, variation=0), 'keys', []),
     ('synth_lead', dict(program=84, variation=0), 'synth', [(117, 132)]),
     ('synth_lead_p2', dict(program=84, variation=0), 'synth', [(211, 132)]),
     ('synth_lead_p3', dict(program=84, variation=0), 'synth', [(305, 132)]),

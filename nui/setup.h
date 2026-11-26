@@ -102,7 +102,7 @@ inline void draw_setup(App &a)
     auto head = [&](float x, float &y, const char *h, const char *sub, const char *key) {
         const float hx = heading(a, x + 12, y, h, key);
         if (sub)
-            text(a, a.font, 14, hx, y + 1, LCD, sub);
+            text(a, a.font, 14, hx, y + 1, LCD, fit(a, a.font, 14, sub, x + (x == AX ? AW : x == BX ? BW : CW) - 12 - hx));
         y += 26;
     };
     float y = Y0 + 10;
@@ -142,7 +142,7 @@ inline void draw_setup(App &a)
             {"off", N_("OFF: MY PARTS")}, {"auto", N_("AUTO")}, {"gm", "GM"}, {"ours", N_("GS: OURS")},
             {"sc55", "GS: SC-55"}, {"sc88", "GS: SC-88"}, {"sc88pro", "GS: SC-88Pro"}, {"sc8850", "GS: SC-8850"},   // i18n-skip (the modules' names)
             {"cm64", N_("GS: INIT CM-64")}, {"mt32", "MT-32"}, {"cm64u", "CM-64"}};
-        const std::string mode = U.mod.is(J::OBJ) ? str(&U.mod, "mode") : "off", eff = str(&U.mod, "eff"), stage = str(&U.mod, "stage");
+        const std::string mode = U.mod.is(J::OBJ) ? str(&U.mod, "mode") : "off", eff = str(&U.mod, "eff"), stage = T(str(&U.mod, "stage"));
         const bool busy = flag(&U.mod, "busy");
         std::vector<std::string> w;
         std::vector<bool> lit;

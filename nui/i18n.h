@@ -22,6 +22,7 @@
 #include "../native/session.h"
 
 #define N_(s) s
+#define NC_(ctx, s) s           // (a text with a context, for the catalogue: TC(ctx, it) where drawn)
 
 namespace nui {
 
@@ -102,6 +103,17 @@ inline std::string T(const std::string &en)
         return en;
     auto it = I.t.find(en);
     return it == I.t.end() ? en : it->second;
+}
+
+// (a text in a CONTEXT: the table's "ctx|English" if it has one -- a card's tab, where a short form must fit
+//  -- else the text's own translation; in English the text itself)
+inline const char *TC(const char *ctx, const char *en)
+{
+    I18n &I = i18n();
+    if (I.t.empty())
+        return en;
+    auto it = I.t.find(std::string(ctx) + "|" + en);
+    return it == I.t.end() ? T(en) : it->second.c_str();
 }
 
 // (a text with values: {0} {1} ... replaced in the translation's own order)

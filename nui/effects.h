@@ -268,7 +268,7 @@ inline void draw_effects(App &a)
     std::string pt = pl.empty() ? std::string(T("No part is on it yet."))
                                  : pl.find(',') != std::string::npos ? TF("On it: channels {0}.", {pl}) : TF("On it: channel {0}.", {pl});
     if (!str(x, "why").empty())
-        pt += " " + TF("Not played live: {0}.", {str(x, "why")});
+        pt += " " + TF("Not played live: {0}.", {T(str(x, "why"))});
     text(a, a.font, 14, IX + 12, Y0 + (IP ? 32 : 46), SILK_DIM, fit(a, a.font, 14, pt, IW - (IP ? 260 : 24)));
     }
     // the families, then the family's types

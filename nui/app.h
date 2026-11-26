@@ -45,6 +45,10 @@ struct App {
     float safe_x = 0, safe_y = 0, safe_w = 0, safe_h = 0;
     ImFont *font = nullptr, *bold = nullptr, *lcd = nullptr;     // (lcd: code7 dotted, the display's)
     std::string ui_dir;                 // (ui/: the fonts, about.json)
+    // THE FINGERS ON THE GLASS, each by SDL's id: where it is, in window points (the Keys card plays one key a
+    // finger; touch_seen once any has touched -- then the mouse SDL makes of a touch is not played as well)
+    std::map<unsigned long long, ImVec2> touches;
+    bool touch_seen = false;
     std::string lang_pref = "auto";     // (the language asked for: a code, or "auto" -- the system's; i18n().code the one drawn)
     float k = 1.0f;                     // design units to pixels
     ImVec2 org{0, 0};
@@ -419,6 +423,9 @@ inline bool button(App &a, const char *id, float x, float y, float w, float h, c
         look::lit_cap(a, x, y, w, h, press);
     else
         look::key_cap(a, x, y, w, h, press, enabled);
+    // (a label wider than its cap -- a language's longer word -- a size smaller, never under 14)
+    while (size > 14 && text_w(a, a.bold, size, label) > w - 8 && px(a, size - 7) < px(a, size))
+        size -= 7;
     const float ty = y + (press ? look::cap_sink(h) : 0.0f) + (h - a.lh(size)) / 2 - 1;
     text_c(a, a.bold, size, x + w / 2, ty, on ? IM_COL32(0x26, 0x18, 0x02, 255) : enabled ? SILK : SILK_DIM, label);
     return hit;

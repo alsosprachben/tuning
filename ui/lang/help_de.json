@@ -3101,7 +3101,7 @@
 },
 "how:file/title": {
 "en": "Play or render a MIDI file",
-"t": "Eine MIDI-Datei spielen oder rendern"
+"t": "MIDI-Datei spielen, rendern"
 },
 "how:file/intro": {
 "en": "Hear a file through the engine, or make a WAV of it.",
@@ -3149,7 +3149,7 @@
 },
 "how:save/title": {
 "en": "Save a setup and bring it back",
-"t": "Ein Setup speichern und zurückholen"
+"t": "Setup speichern, zurückholen"
 },
 "how:save/intro": {
 "en": "A preset keeps the whole setup: the parts, their sounds, the routes, the tuning and the effects.",
@@ -3243,76 +3243,120 @@
 "en": "Under a finished render: chooses that render here, ready to play.",
 "t": "Unter einem fertigen Rendering: wählt dieses Rendering hier, bereit zum Abspielen."
 },
-"toc/0": {
+"toc/basics": {
 "en": "Start here",
 "t": "Hier anfangen"
 },
-"toc/1": {
+"toc/how:keyboard": {
 "en": "How to…",
 "t": "So geht's…"
 },
-"toc/2": {
+"toc/display": {
 "en": "Front panel",
 "t": "Bedienfeld"
 },
-"toc/3": {
+"toc/parts": {
 "en": "Parts",
 "t": "Parts"
 },
-"toc/4": {
+"toc/scenes": {
 "en": "Scenes",
 "t": "Szenen"
 },
-"toc/5": {
+"toc/library": {
 "en": "Library",
 "t": "Bibliothek"
 },
-"toc/6": {
+"toc/synth": {
 "en": "Synth",
 "t": "Synth"
 },
-"toc/7": {
+"toc/stops": {
 "en": "Stops",
 "t": "Register"
 },
-"toc/8": {
+"toc/amp": {
 "en": "Amp",
 "t": "Verstärker"
 },
-"toc/9": {
+"toc/piano": {
 "en": "Piano",
 "t": "Piano"
 },
-"toc/10": {
+"toc/drums": {
 "en": "Drums",
 "t": "Drums"
 },
-"toc/11": {
+"toc/effects": {
 "en": "Effects",
 "t": "Effekte"
 },
-"toc/12": {
+"toc/matrix": {
 "en": "Matrix",
 "t": "Matrix"
 },
-"toc/13": {
+"toc/tuning": {
 "en": "Tuning",
 "t": "Stimmung"
 },
-"toc/14": {
+"toc/control": {
 "en": "Control",
 "t": "Control"
 },
-"toc/15": {
+"toc/files": {
 "en": "Files",
 "t": "Dateien"
 },
-"toc/16": {
+"toc/setup": {
 "en": "Setup",
 "t": "Setup"
 },
-"toc/17": {
+"toc/credits": {
 "en": "About",
 "t": "Über"
+},
+"keys/title": {
+"en": "Keys",
+"t": "Tasten"
+},
+"keys/intro": {
+"en": "A keyboard to touch, playing the selected part: for trying a sound, or showing it, without a keyboard plugged in.",
+"t": "Eine Tastatur zum Antippen, die den gewählten Part spielt: um einen Klang auszuprobieren oder vorzuführen, ohne angeschlossenes Keyboard."
+},
+"keys/terms/0/0": {
+"en": "A key",
+"t": "Eine Taste"
+},
+"keys/terms/0/1": {
+"en": "Plays while it is held: nearer its front edge is harder. Every finger plays its own key, so chords work, and sliding along the keys plays each one in turn.",
+"t": "Klingt, solange sie gehalten wird: näher an der Vorderkante ist stärker. Jeder Finger spielt seine eigene Taste, also gehen Akkorde, und über die Tasten gleiten spielt eine nach der anderen."
+},
+"keys/terms/1/0": {
+"en": "◀ OCTAVE / OCTAVE ▶",
+"t": "◀ OKTAVE / OKTAVE ▶"
+},
+"keys/terms/1/1": {
+"en": "Moves the keyboard down or up an octave. Its range is shown between them.",
+"t": "Verschiebt die Tastatur eine Oktave nach unten oder oben. Dazwischen steht ihr Umfang."
+},
+"keys/terms/2/0": {
+"en": "SUSTAIN",
+"t": "SUSTAIN"
+},
+"keys/terms/2/1": {
+"en": "The part's sustain pedal: lit, what the keys play rings on. Leaving the card lets it go.",
+"t": "Das Haltepedal des Parts: leuchtet es, klingt das Gespielte weiter. Beim Verlassen der Karte wird es gelöst."
+},
+"keys/terms/3/0": {
+"en": "How many keys",
+"t": "Wie viele Tasten"
+},
+"keys/terms/3/1": {
+"en": "Four octaves on a computer, three on the iPad, two on the phone.",
+"t": "Vier Oktaven am Computer, drei auf dem iPad, zwei auf dem Telefon."
+},
+"toc/keys": {
+"en": "Keys",
+"t": "Tasten"
 }
 }

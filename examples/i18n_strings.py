@@ -26,6 +26,8 @@ LANG = os.path.join(HERE, "ui", "lang")
 
 LIT = r'"(?:[^"\\]|\\.)*"'
 CALL = re.compile(r'\b(T|TF|N_)\(\s*((?:' + LIT + r'\s*)+)')
+# (a text in a context -- TC("tab", "LIBRARY"), NC_(...) -- is the table's "tab|LIBRARY")
+CTX = re.compile(r'\b(TC|NC_)\(\s*(' + LIT + r')\s*,\s*((?:' + LIT + r'\s*)+)')
 
 
 def unescape(lit):
@@ -70,6 +72,10 @@ def catalogue():
             en = unescape(m.group(2))
             line = src.count("\n", 0, m.start()) + 1
             cat.setdefault(en, []).append("%s:%d" % (os.path.basename(p), line))
+        for m in CTX.finditer(src):
+            key = unescape(m.group(2)) + "|" + unescape(m.group(3))
+            line = src.count("\n", 0, m.start()) + 1
+            cat.setdefault(key, []).append("%s:%d" % (os.path.basename(p), line))
     return cat
 
 
@@ -124,6 +130,10 @@ def lint():
         for m in CALL.finditer(src):
             for mm in re.finditer(LIT, m.group(2)):
                 wrapped.add(m.start(2) + mm.start())
+        for m in CTX.finditer(src):
+            wrapped.add(m.start(2))
+            for mm in re.finditer(LIT, m.group(3)):
+                wrapped.add(m.start(3) + mm.start())
         for m in re.finditer(LIT, src):
             if m.start() in wrapped:
                 continue
@@ -155,7 +165,8 @@ def main(argv):
             for en in sorted(cat):
                 f.write("%s\t%s\n" % (json.dumps(en, ensure_ascii=False), " ".join(cat[en][:3])))
         print("%d texts -> ui/lang/strings.txt" % len(cat))
-    codes = [opt["lang"]] if opt.get("lang") else sorted(os.path.basename(p)[:-5] for p in glob.glob(os.path.join(LANG, "*.json")))
+    codes = [opt["lang"]] if opt.get("lang") else sorted(c for c in (os.path.basename(p)[:-5] for p in glob.glob(os.path.join(LANG, "*.json")))
+                                                         if re.fullmatch(r"[a-z]{2}(-[A-Za-z]+)?", c))    # (the tables: ja, de ... not help_*)
     for c in codes:
         ok = check(cat, c, opt.get("long")) and ok
     if opt.get("lint"):

@@ -3243,76 +3243,120 @@
 "en": "Under a finished render: chooses that render here, ready to play.",
 "t": "書き出し完了後に表示されます。その書き出しをここで選び、再生できる状態にします。"
 },
-"toc/0": {
+"toc/basics": {
 "en": "Start here",
 "t": "はじめに"
 },
-"toc/1": {
+"toc/how:keyboard": {
 "en": "How to…",
 "t": "操作ガイド"
 },
-"toc/2": {
+"toc/display": {
 "en": "Front panel",
 "t": "フロントパネル"
 },
-"toc/3": {
+"toc/parts": {
 "en": "Parts",
 "t": "パート"
 },
-"toc/4": {
+"toc/scenes": {
 "en": "Scenes",
 "t": "シーン"
 },
-"toc/5": {
+"toc/library": {
 "en": "Library",
 "t": "ライブラリ"
 },
-"toc/6": {
+"toc/synth": {
 "en": "Synth",
 "t": "シンセ"
 },
-"toc/7": {
+"toc/stops": {
 "en": "Stops",
 "t": "ストップ"
 },
-"toc/8": {
+"toc/amp": {
 "en": "Amp",
 "t": "アンプ"
 },
-"toc/9": {
+"toc/piano": {
 "en": "Piano",
 "t": "ピアノ"
 },
-"toc/10": {
+"toc/drums": {
 "en": "Drums",
 "t": "ドラム"
 },
-"toc/11": {
+"toc/effects": {
 "en": "Effects",
 "t": "エフェクト"
 },
-"toc/12": {
+"toc/matrix": {
 "en": "Matrix",
 "t": "マトリクス"
 },
-"toc/13": {
+"toc/tuning": {
 "en": "Tuning",
 "t": "チューニング"
 },
-"toc/14": {
+"toc/control": {
 "en": "Control",
 "t": "コントロール"
 },
-"toc/15": {
+"toc/files": {
 "en": "Files",
 "t": "ファイル"
 },
-"toc/16": {
+"toc/setup": {
 "en": "Setup",
 "t": "設定"
 },
-"toc/17": {
+"toc/credits": {
 "en": "About",
 "t": "情報"
+},
+"keys/title": {
+"en": "Keys",
+"t": "鍵盤"
+},
+"keys/intro": {
+"en": "A keyboard to touch, playing the selected part: for trying a sound, or showing it, without a keyboard plugged in.",
+"t": "選択中のパートを鳴らす、タッチで弾く鍵盤です。キーボードをつながずに音色を試したり、聴かせたりできます。"
+},
+"keys/terms/0/0": {
+"en": "A key",
+"t": "鍵"
+},
+"keys/terms/0/1": {
+"en": "Plays while it is held: nearer its front edge is harder. Every finger plays its own key, so chords work, and sliding along the keys plays each one in turn.",
+"t": "押している間鳴ります。手前の端に近いほど強く鳴ります。指ごとに別の鍵を弾けるので和音が弾け、鍵の上を滑らせると順に鳴ります。"
+},
+"keys/terms/1/0": {
+"en": "◀ OCTAVE / OCTAVE ▶",
+"t": "◀ オクターブ / オクターブ ▶"
+},
+"keys/terms/1/1": {
+"en": "Moves the keyboard down or up an octave. Its range is shown between them.",
+"t": "鍵盤を1オクターブ下げる・上げるボタンです。その間に音域が表示されます。"
+},
+"keys/terms/2/0": {
+"en": "SUSTAIN",
+"t": "サステイン"
+},
+"keys/terms/2/1": {
+"en": "The part's sustain pedal: lit, what the keys play rings on. Leaving the card lets it go.",
+"t": "パートのサステインペダルです。点灯中は弾いた音が伸び続けます。カードを離れると解除されます。"
+},
+"keys/terms/3/0": {
+"en": "How many keys",
+"t": "鍵の数"
+},
+"keys/terms/3/1": {
+"en": "Four octaves on a computer, three on the iPad, two on the phone.",
+"t": "コンピューターでは4オクターブ、iPadでは3オクターブ、iPhoneでは2オクターブです。"
+},
+"toc/keys": {
+"en": "Keys",
+"t": "鍵盤"
 }
 }

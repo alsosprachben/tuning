@@ -88,8 +88,8 @@ def help_texts(help_, toc):
             else:
                 for j, x in enumerate(term):
                     out["%s/terms/%d/%d" % (topic, i, j)] = x
-    for g, (name, _) in enumerate(toc):
-        out["toc/%d" % g] = name
+    for name, topics in toc:            # (a group by its first topic: inserting one moves no other)
+        out["toc/%s" % topics[0]] = name
     return out
 
 
@@ -114,7 +114,10 @@ def translated(help_, toc, texts, tr, ui_tab):
         used += 1
         parts = path.split("/")
         if parts[0] == "toc":
-            toc2[int(parts[1])][0] = t
+            key = "/".join(parts[1:])
+            for g in toc2:
+                if g[1] and g[1][0] == key:
+                    g[0] = t
         elif len(parts) == 2:
             h2[parts[0]][parts[1]] = t
         elif len(parts) == 3:
