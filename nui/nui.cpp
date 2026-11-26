@@ -525,8 +525,9 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
     else if (windowed) {                // (a desktop's window: most of the screen it opens on, clear of the menu bar and Dock)
         SDL_Rect ub;
         if (SDL_GetDisplayUsableBounds(SDL_GetPrimaryDisplay(), &ub) && ub.w > 0 && ub.h > 0) {
-            ww = std::min(1920, (int)(ub.w * 0.92f));
+            // (no wider than 16:9, the laptop layout's widest: a wider window would have bands at its sides)
             wh = std::min(1324, (int)(ub.h * 0.92f));
+            ww = std::min({1920, (int)(ub.w * 0.92f), (int)(wh * 16.0f / 9.0f)});
         }
     }
 #endif
