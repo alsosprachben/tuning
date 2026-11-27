@@ -591,5 +591,8 @@
  "BEND": "ベンド",
  "Bend: drawn sideways, a key's width a semitone, up to the bend range (Setup).": "ベンド：横に動かすと鍵盤1つ分で半音、ベンド幅（設定）まで。",
  "Aftertouch: drawn toward the front edge, the key pressed harder.": "アフタータッチ：手前に動かすほど、鍵盤を強く押したことになります。",
- "Glissando: drawn along the keys, each one plays in turn.": "グリッサンド：鍵盤の上を動かすと、順に鳴ります。"
+ "Glissando: drawn along the keys, each one plays in turn.": "グリッサンド：鍵盤の上を動かすと、順に鳴ります。",
+ "SET": "設定",
+ "BACK TO THE PATCH": "音色の値に戻す",
+ "{0} to {1}.": "{0}〜{1}。"
 }

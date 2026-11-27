@@ -88,6 +88,7 @@ struct App {
     // for the control to take on its next frame (sheet_set), as a drag would
     struct Sheet {
         bool open = false, can_reset = true;
+        bool fresh = false;             // (typed is still the value as it was: the first digit replaces it)
         std::string key, title, now, label, hint, typed;
         double lo = 0, hi = 1;
         int digits = 3;
@@ -485,6 +486,7 @@ inline void open_sheet(App &a, const std::string &key, const std::string &title,
     char b[48];
     snprintf(b, sizeof b, "%.*f", digits, value);
     s.typed = b;
+    s.fresh = true;
 }
 // ...and what it left for the control: true (v set) if SET, flags K_RESET if BACK
 inline int take_sheet(App &a, const std::string &key, double &v)

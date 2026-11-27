@@ -591,5 +591,8 @@
  "BEND": "BEND",
  "Bend: drawn sideways, a key's width a semitone, up to the bend range (Setup).": "Bend: seitwärts gezogen, eine Tastenbreite ein Halbton, bis zum Bend-Bereich (Setup).",
  "Aftertouch: drawn toward the front edge, the key pressed harder.": "Aftertouch: zur Vorderkante gezogen, die Taste stärker gedrückt.",
- "Glissando: drawn along the keys, each one plays in turn.": "Glissando: über die Tasten gezogen, spielt jede der Reihe nach."
+ "Glissando: drawn along the keys, each one plays in turn.": "Glissando: über die Tasten gezogen, spielt jede der Reihe nach.",
+ "SET": "SETZEN",
+ "BACK TO THE PATCH": "ZURÜCK ZUM KLANG",
+ "{0} to {1}.": "{0} bis {1}."
 }

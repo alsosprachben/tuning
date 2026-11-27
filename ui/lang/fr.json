@@ -591,5 +591,8 @@
  "BEND": "PITCH-BEND",
  "Bend: drawn sideways, a key's width a semitone, up to the bend range (Setup).": "Pitch-bend : glissé de côté, une largeur de touche par demi-ton, jusqu'à l'étendue du bend (configuration).",
  "Aftertouch: drawn toward the front edge, the key pressed harder.": "Aftertouch : glissé vers le bord avant, la touche pressée plus fort.",
- "Glissando: drawn along the keys, each one plays in turn.": "Glissando : glissé sur les touches, chacune joue à son tour."
+ "Glissando: drawn along the keys, each one plays in turn.": "Glissando : glissé sur les touches, chacune joue à son tour.",
+ "SET": "VALIDER",
+ "BACK TO THE PATCH": "RETOUR AU SON",
+ "{0} to {1}.": "De {0} à {1}."
 }

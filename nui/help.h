@@ -117,11 +117,13 @@ inline void draw_help(App &a)
         H.hist.pop_back();
         H.scroll_page = 0;
     }
-    look::lcd_window(a, 256, 28, 520, 42, H.typing);
-    look::lcd_text(a, 21, 268, 38, H.q.empty() ? LCD_DIM : LCD, H.q.empty() ? std::string(T("Search help")) : H.q + (H.typing ? "_" : ""), !H.q.empty());
-    look::glass(a, 256, 28, 520, 42);
+    const float SW = std::min(520.0f, R - 150 - 12 - 256);     // (the search, short of CLOSE: the phone's narrower)
+    look::lcd_window(a, 256, 28, SW, 42, H.typing);
+    look::lcd_text(a, 21, 268, 38, H.q.empty() ? LCD_DIM : LCD,
+                   fit(a, a.font, 21, H.q.empty() ? std::string(T("Search help")) : H.q + (H.typing ? "_" : ""), SW - 24), !H.q.empty());
+    look::glass(a, 256, 28, SW, 42);
     ImGui::SetCursorScreenPos(P(a, 256, 28));
-    if (ImGui::InvisibleButton("hvsearch", ImVec2(520 * a.k, 42 * a.k)))
+    if (ImGui::InvisibleButton("hvsearch", ImVec2(SW * a.k, 42 * a.k)))
         H.typing = true;
     if (H.typing) {
         ImGuiIO &io = ImGui::GetIO();
@@ -275,11 +277,14 @@ inline void draw_help(App &a)
                 continue;
             const std::string dt = t.a[0].is(J::STR) ? t.a[0].s : "", dd = t.a[1].is(J::STR) ? t.a[1].s : "";
             const float tw = std::min(260.0f, std::max(120.0f, text_w(a, a.font, 14, dt) + 20));
+            // (the definition's column: past the term's, at 270 -- on a narrow page (the phone's) no
+            //  further than a third of it, the term wrapping in what is left)
+            const float dx = TW < 600 ? std::min(tw, std::floor(TW / 3)) : std::max(270.0f, tw);
             const float y0 = y;
-            para(a.font, 14, 0, 250, LCD, dt, 20);
+            para(a.font, 14, 0, dx - 20, LCD, dt, 20);
             const float y1 = y;
             y = y0;
-            para(a.font, 14, std::max(270.0f, tw), TW - std::max(270.0f, tw), SILK, dd, 20);
+            para(a.font, 14, dx, TW - dx, SILK, dd, 20);
             y = std::max(y, y1) + 6;
         }
     // see also: the topic's own list, else the rest of its group and the guides that name it
