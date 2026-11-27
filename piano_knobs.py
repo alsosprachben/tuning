@@ -15,6 +15,9 @@ module is the reference it is checked against (examples/piano_knobs_check.py).
     knobs_of(cls)               -> {index: value}: the knobs cls has, at its values
     transforms(cls, values)     -> (t[N_KNOBS], mask): a setting against cls
     piano_class(base, t, mask)  -> base with the transforms applied (cached)
+    voicing(base, felt=..., ...) -> the attributes of base moved by knobs given
+                                   as moves (an offset for felt and lid, else a
+                                   ratio): a variation as knob positions
 """
 
 HAMMER, WEAR, STRIKE, UNISON, LID, BOARD, PICKUP = range(7)
@@ -82,19 +85,9 @@ def transforms(cls, values):
     return t, mask
 
 
-_MADE = {}
-
-
-def piano_class(base, t, mask):
-    """base with transforms (t, mask) applied: a subclass, made once (its
-    section_salt_name kept, so its draws are base's)."""
-    if not mask or not _family(base):
-        return base
-    key = (base, tuple(t), mask)
-    got = _MADE.get(key)
-    if got is not None:
-        return got
-    a = {'section_salt_name': getattr(base, 'section_salt_name', None) or base.__name__}
+def _attrs(base, t, mask):
+    """The class attributes transforms (t, mask) give base."""
+    a = {}
     if mask >> HAMMER & 1:
         a['hammer_logk'] = base.hammer_logk + t[HAMMER]
     if mask >> WEAR & 1:
@@ -115,6 +108,37 @@ def piano_class(base, t, mask):
         a['board_high_hz'] = base.board_high_hz * t[BOARD]
     if mask >> PICKUP & 1:
         a['bridge_corner_hz'] = base.bridge_corner_hz * t[PICKUP]
+    return a
+
+
+def voicing(base, **moves):
+    """base's attributes moved by knobs named as in NAMES -- felt and lid an
+    offset (log10 K, dB), the rest a ratio: a variation written as the knob
+    positions it is (patch_map's dark and bright pianos)."""
+    t, mask = [0.0] * N_KNOBS, 0
+    have = knobs_of(base)
+    for n, x in moves.items():
+        i = NAMES.index(n)
+        if i not in have:
+            raise ValueError("%s has no %s knob" % (base.__name__, n))
+        t[i] = float(x)
+        mask |= 1 << i
+    return _attrs(base, t, mask)
+
+
+_MADE = {}
+
+
+def piano_class(base, t, mask):
+    """base with transforms (t, mask) applied: a subclass, made once (its
+    section_salt_name kept, so its draws are base's)."""
+    if not mask or not _family(base):
+        return base
+    key = (base, tuple(t), mask)
+    got = _MADE.get(key)
+    if got is not None:
+        return got
+    a = dict(_attrs(base, t, mask), section_salt_name=getattr(base, 'section_salt_name', None) or base.__name__)
     got = type('%s_voiced%d' % (base.__name__, len(_MADE)), (base,), a)
     _MADE[key] = got
     return got

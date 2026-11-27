@@ -1469,13 +1469,21 @@ def palm_mute(s):
     return out
 
 
+# (the dark and bright pianos as positions of the VOICE card's knobs)
+from tonelib import GrandPianoProperties as _GRAND, UprightPianoProperties as _UPRIGHT   # noqa: E402
+from piano_knobs import voicing as _PV                                                  # noqa: E402
+
 SC88_CHEAP = {
     (0, 8): ("Piano 1w", ("set", 0, dict(key_pan_spread=WIDE))),
-    # "d": A SOFTER, WORN HAMMER (Ben: "the hammer is beaten up... the attack
-    # starts darker due to the hammer difference"), not a duller piano: the
-    # felt's contact low-pass at 0.6x -- fewer upper partials excited at the
-    # strike, every string then ringing by its own law
-    (0, 16): ("Piano 1d", ("set", 0, dict(hammer_corner_hz=0.6 * 3542.03))),
+    # "d": A SOFTER HAMMER (Ben: "the hammer is beaten up... the attack
+    # starts darker due to the hammer difference"), not a duller piano: as
+    # the VOICE card's knobs (piano_knobs.voicing), the felt softer by 0.9
+    # (log10 K) and deep enough that a soft blow never reaches the worn hard
+    # layer under it (FELT LEFT x8; else a softer felt BRIGHTENS the middle
+    # keys) -- fewer upper partials excited at the strike, every string then
+    # ringing by its own law. (Its old number, the hammer's corner at 0.6x,
+    # was a filter the hammer model replaced: under it, level only.)
+    (0, 16): ("Piano 1d", ("set", 0, _PV(_GRAND, felt=-0.9, felt_left=8.0))),
     (1, 8): ("Piano 2w", ("set", 1, dict(key_pan_spread=WIDE))),
     (2, 1): ("EG+Rhodes 1", ("layer", ((2, 0, 0.0), (4, 0, -6.0)))),
     (2, 2): ("EG+Rhodes 2", ("layer", ((2, 0, -3.0), (4, 0, 0.0)))),
@@ -1711,7 +1719,7 @@ SC88_CHEAP = {
     # (examples/gs_maps.py; the notes each file gives the tone in brackets) --
     # DANCE PIANO: the bright piano with a harder hammer, across the field
     # (sysex_01, 912)
-    (1, 16): ("Dance Piano", ("set", 1, dict(hammer_corner_hz=1.6 * 189.3, key_pan_spread=WIDE))),
+    (1, 16): ("Dance Piano", ("set", 1, dict(_PV(_UPRIGHT, felt_left=0.5), key_pan_spread=WIDE))),
     # SLOW STRINGS 2: the slow section's bow slower still, and darker for it
     # -- its registers' attack 1.1 -> 1.8 s, their dampening 1.75-1.85 -> 2.1
     # (SENSATIO, 454)
@@ -2319,20 +2327,24 @@ SC8850_CHEAP = {
     (30, 5): ("Attack Dist", ("set", 30, dict(strike_point=0.12))),
 
     # --- THE SC-8850's OTHER KEYBOARDS (2026-10-26) -------------------------
-    # the upright as GS 0.1 names it; the grand with a softer hammer (its
-    # felt's contact low-pass at 0.75, Piano 1d's at 0.6), and wide
+    # the upright as GS 0.1 names it; the grand with a softer hammer (felt
+    # -0.5 over a fresher one, FELT LEFT x5; Piano 1d's -0.9, x8), and wide
     (0, 1): ("UprightPiano", ("alias", 1)),
-    (0, 2): ("Mild Piano", ("set", 0, dict(hammer_corner_hz=0.75 * 3542.03))),
-    (0, 9): ("Mild Piano w", ("set", 0, dict(hammer_corner_hz=0.75 * 3542.03, key_pan_spread=WIDE))),
+    (0, 2): ("Mild Piano", ("set", 0, _PV(_GRAND, felt=-0.5, felt_left=5.0))),
+    (0, 9): ("Mild Piano w", ("set", 0, dict(_PV(_GRAND, felt=-0.5, felt_left=5.0), key_pan_spread=WIDE))),
     # the piano with the strings, the choir, the oohs
     (0, 25): ("Piano + Str2", ("layer", ((0, 0, 0.0), (48, 0, -3.0)))),
     (0, 26): ("Piano+Choir1", ("layer", ((0, 0, 0.0), (52, 0, -6.0)))),
     (0, 27): ("Piano+Choir2", ("layer", ((0, 0, 0.0), (53, 0, -5.0)))),
-    # the upright played pop (a harder hammer: its corner up) and rock (harder
-    # still, through the overdrive), and wide
-    (1, 1): ("Pop Piano", ("set", 1, dict(hammer_corner_hz=1.6 * 189.3))),
-    (1, 2): ("Rock Piano", ("set", 1, dict(hammer_corner_hz=2.2 * 189.3, insertion_efx=((0x01, 0x10), {})))),
-    (1, 9): ("Rock Piano w", ("set", 1, dict(hammer_corner_hz=2.2 * 189.3, key_pan_spread=WIDE,
+    # the upright played pop and rock: hammers worn down to their hard layer,
+    # the felt left over it thinner (FELT LEFT x0.6; Dance Piano's x0.5), the
+    # blow reaching it and ringing bright -- rock's thinner still and its felt
+    # harder (x0.3, +0.3), through the overdrive; and wide. (The upright's
+    # felt alone barely moves its treble: the wear is what brightens it.)
+    (1, 1): ("Pop Piano", ("set", 1, _PV(_UPRIGHT, felt_left=0.6))),
+    (1, 2): ("Rock Piano", ("set", 1, dict(_PV(_UPRIGHT, felt=0.3, felt_left=0.3),
+                                           insertion_efx=((0x01, 0x10), {})))),
+    (1, 9): ("Rock Piano w", ("set", 1, dict(_PV(_UPRIGHT, felt=0.3, felt_left=0.3), key_pan_spread=WIDE,
                                              insertion_efx=((0x01, 0x10), {})))),
     # the Wurlitzer harder, and two a few cents apart
     (5, 1): ("E.Piano 3", ("set", 5, dict(pickup_deflection=1.2))),
@@ -2947,8 +2959,9 @@ MAP_TONES = {
                                           "sound_bias": {"brightness": -0.35}})),
     # THE SC-88Pro MAP'S OWN under numbers the SC-88 used (the SC-8850 keeps
     # them, and GM 2 names them): readings of their names, for Ben's ear.
-    # A European concert grand, warmer than ours: the hammer's corner at 0.8x
-    (3, 0, 16): ("European Pf", ("set", 0, {"hammer_corner_hz": 0.8 * 3542.03})),
+    # A European concert grand, warmer than ours: its felt a little softer
+    # over a fresher hammer (-0.25, FELT LEFT x3)
+    (3, 0, 16): ("European Pf", ("set", 0, _PV(_GRAND, felt=-0.25, felt_left=3.0))),
     # the SC-88 Pro's Synth Horn where ours is Horn Orch: the synth brass
     (3, 60, 16): ("Synth Horn", ("alias", 62)),
     # the SC-88 Pro's Organ. o where ours is Organ 109: the organ and its octave
@@ -2958,7 +2971,7 @@ MAP_TONES = {
     (3, 17, 1): ("Jazz Organ", ("set", 17, {"default_stops": 0b100000000111})),
     # the SC-8850's wide upright and wide pop piano where ours are Piano 1w / 2w
     (4, 0, 8): ("Upright P w", ("set", 1, {"key_pan_spread": WIDE})),
-    (4, 1, 8): ("Pop Piano w", ("set", 1, {"hammer_corner_hz": 1.6 * 189.3, "key_pan_spread": WIDE})),
+    (4, 1, 8): ("Pop Piano w", ("set", 1, dict(_PV(_UPRIGHT, felt_left=0.6), key_pan_spread=WIDE))),
     # the honky-tonk's two extra strings further out: 14-30 cents, not 8-20
     (3, 3, 8): ("Honky-tonk 2", ("set", 3, {"string_detune_range": (14.0, 30.0)})),
     # the Leslie's TREMOLO, its fast speed (Leslie names them chorale and tremolo)

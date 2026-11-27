@@ -68,7 +68,7 @@ VARIATION_DESC = {
     (125, 12): "a gas burner's roar",
     # pianos and keys
     (0, 8): "wide: keys spread in stereo",
-    (0, 16): "dark: worn hammers, soft attack",
+    (0, 16): "dark: softer felt, soft attack",
     (1, 8): "wide: keys spread in stereo",
     (2, 1): "CP-80, a tine piano underneath",
     (2, 2): "tine piano, an electric grand underneath",
@@ -673,6 +673,14 @@ def _setting_words(src, attrs, nm=""):
             out.append("wide stereo")
         elif a == "hammer_corner_hz":
             out.append("harder hammers" if more else "worn hammers")
+        elif a == "hammer_logk":
+            if not (more and getattr(cls, "hammer_core_mm", 0) > attrs.get("hammer_core_mm", 1e9)):
+                out.append("harder felt" if more else "softer felt")     # (worn says harder)
+        elif a == "hammer_core_mm":
+            if not more:                        # (a fresher hammer is the softer felt's to say)
+                out.append("worn hammers")
+        elif a == "hammer_core_edge_mm":
+            pass
         elif a == "tonal_dampening":
             out.append("muted" if more else "ringing")
         elif a == "section_players":
