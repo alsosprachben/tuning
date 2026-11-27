@@ -749,10 +749,19 @@ class PleyelTuner(PathTuner):
     # pitch as a share of A)
     fork_note, fork_share = 57, 0.5
 
+    _raw = None
+
     @classmethod
     def raw_table(cls):
         """The procedure's table before any pitch is set (native/tunertables.h
-        holds it as it comes: examples/tuner_tables.py)."""
+        holds it as it comes: examples/tuner_tables.py). Worked out once: a
+        reference change rebuilds the table, not the procedure."""
+        if PleyelTuner._raw is None:
+            PleyelTuner._raw = PleyelTuner._solve()
+        return dict(PleyelTuner._raw)
+
+    @staticmethod
+    def _solve():
         import pleyel
         import tonelib as _T
         p = _T.PleyelProperties

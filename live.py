@@ -3768,7 +3768,7 @@ class Patch:
                 # key's -- live's level is the session's, never the template's
                 # (nvlive's templates read the fixed trims)
                 B.program_trim = lambda _p, drum=False, gs=False: _PT(_p, drum, False)
-                p = B.prepare(m, self.tuner)
+                p = B.prepare(m, self.tuner, natural=False)
         finally:
             B.program_trim = _PT
             B.MOOG_NEUTRAL = False
@@ -4225,17 +4225,30 @@ def pin_patches(keys):
 _PART_IDS = itertools.count(1)
 
 
-def tuner_for(program, drums, tuner, eastern):
-    """The tuner a part plays: its own (TUNER), unless the rig has a
-    secondary (Eastern) tuning (ragas.py) and the part's voice is an Indian
-    instrument (tonelib tuning_family) -- then that, with Sa at the part's own
-    tuner's pitch for its key, as the file renderer's eastern= places it. A
-    part whose own tuner is already a raga's keeps it: chosen for that part."""
-    if not eastern or drums or str(tuner).lower().startswith("raga:"):
+# NATURAL TUNINGS on (tonelib natural_tuner: tuner_for), the rig's switch.
+# The patches are built in the tuner tuner_for resolved, so the file
+# renderer that builds them must not resolve it again (Patch: natural=False).
+NATURAL_TUNINGS = [True]
+
+
+def tuner_for(program, drums, tuner, eastern, variation=0, own=None):
+    """The tuner a part plays. OWN, the part's own choice, first ("rig": the
+    rig's TUNER); else, where the rig has a secondary (Eastern) tuning
+    (ragas.py) and the part's voice is an Indian instrument (tonelib
+    tuning_family), that, with Sa at TUNER's pitch for its key, as the file
+    renderer's eastern= places it; else the voice's NATURAL TUNING (tonelib
+    natural_tuner: blockrender.natural_spec, at TUNER's A); else TUNER. A
+    drum set plays TUNER; a rig tuner that is a raga's keeps its Indian
+    instruments in it."""
+    if own:
+        return tuner if own == "rig" else own
+    if drums:
         return tuner
-    pc = __import__("patch_map").property_class_for_program(int(program))
-    if getattr(pc, "tuning_family", None) != "indian":
-        return tuner
+    pc = __import__("patch_map").variation_class(int(program), int(variation or 0))
+    if not eastern or str(tuner).lower().startswith("raga:") or getattr(pc, "tuning_family", None) != "indian":
+        if str(tuner).lower().startswith("raga:") and getattr(pc, "tuning_family", None) == "indian":
+            return tuner
+        return B.natural_spec(pc, B.tuning_table(tuner), tuner, on=NATURAL_TUNINGS[0]) or tuner
     import ragas
     _sys, _raga, _key, _hz = ragas.parse(eastern)
     if _hz is not None:
@@ -4311,6 +4324,10 @@ class Part:
         # (Eastern) tuning, for an Indian instrument -- which is never saved as
         # the part's choice and never outlives the voice it was derived for
         self.base_tuner = patch.tuner
+        # ...AND ITS OWN TUNING, where the player chose one for it (None: the
+        # instrument's natural tuning, else the rig's: tuner_for; "rig": the
+        # rig's; else a tuner's name). A program change clears it.
+        self.own_tuner = None
         self.set_patch(patch)
 
     def set_patch(self, patch):
@@ -4420,19 +4437,25 @@ class Part:
             d["rotary_spread"] = round(math.degrees(self.rotary_sep), 3)
         if self.pan is not None:
             d["pan"] = int(self.pan)
+        if self.own_tuner:
+            d["own_tuner"] = self.own_tuner
         return d
 
     @staticmethod
     def from_dict(d, progress=None, eastern=None):
         _base = d.get("tuner", "hybrid")
         _cab, _pk = cab_index(d.get("cabinet")), pk_index(d.get("pickup"))
+        _own = d.get("own_tuner") or None
         patch = patch_for(d.get("program", 56), d.get("drums", False),
-                          tuner_for(d.get("program", 56), d.get("drums", False), _base, eastern),
+                          tuner_for(d.get("program", 56), d.get("drums", False), _base, eastern,
+                                    patch_variation(d.get("program", 56), d.get("drums", False), d.get("bank", 0)),
+                                    _own),
                           progress, with_cab(d.get("program", 56), d.get("drums", False), d.get("bank", 0), _cab or 0,
                                              _pk or 0))
         p = Part(patch, d.get("channel"), d.get("lo", 0), d.get("hi", 127),
                  d.get("transpose", 0), d.get("level_db", 0.0))
         p.base_tuner = _base
+        p.own_tuner = _own
         p.muted = bool(d.get("muted", False))
         p.synth = {k: v for k, v in (d.get("synth") or {}).items() if k in _MG.PANEL}
         p.synth_b = {k: v for k, v in (d.get("synth_b") or {}).items() if k in _MG.PANEL}
@@ -6677,7 +6700,8 @@ class Live:
                 # program change is another instrument -- CC83, CC85 after
                 # it choose again)
                 part.cab = part.pk = None
-                want = (_pp, _pd, self._tuner_for(_pp, _pd, part.base_tuner),
+                part.own_tuner = None           # (...and its tuning: the new voice's own)
+                want = (_pp, _pd, self._tuner_for(_pp, _pd, part.base_tuner, with_cab(_pp, _pd, _var, 0, 0)),
                         with_cab(_pp, _pd, _var, 0, 0))
                 self._ask_patch(part, want)
             if self.patch_reqs:
@@ -9242,9 +9266,24 @@ class Live:
         hz = float(nf[int(np.argmin(np.abs(np.log(np.maximum(nf, 1e-6) / ref))))])
         return hz if ch is None else hz * self._key_ratio(part, ch, n)
 
-    def _tuner_for(self, program, drums, tuner):
+    def _tuner_for(self, program, drums, tuner, variation=0, own=None):
         """The tuner a part with this program plays (tuner_for)."""
-        return tuner_for(program, drums, tuner, self.eastern)
+        return tuner_for(program, drums, tuner, self.eastern, variation, own)
+
+    def set_part_tuner(self, part, own):
+        """A PART'S OWN TUNING (None: its instrument's natural one, "rig": the
+        rig's, else a tuner's name): its patch rebuilt in it, as a program
+        change is -- notes sounding keep the tuning they started in."""
+        if own and own != "rig":
+            B.tuning_table(own)             # refuse a bad name before anything moves
+        part.own_tuner = own or None
+        want = (part.program, part.drums,
+                self._tuner_for(part.program, part.drums, part.base_tuner, part.variation, part.own_tuner),
+                part.variation)
+        self._ask_patch(part, want)
+        if self.patch_reqs:
+            self.patch_go.set()
+        self.dirty = True
 
     def set_eastern(self, spec):
         """THE SECONDARY (EASTERN) TUNING, changed while playing: every part
@@ -9257,7 +9296,8 @@ class Live:
         self.eastern = spec or None
         for part in self.parts:
             want = (part.program, part.drums,
-                    self._tuner_for(part.program, part.drums, part.base_tuner), part.variation)
+                    self._tuner_for(part.program, part.drums, part.base_tuner, part.variation, part.own_tuner),
+                    part.variation)
             self._ask_patch(part, want)
         if self.patch_reqs:
             self.patch_go.set()
@@ -11446,7 +11486,8 @@ class Live:
                 if part.channel != ch:
                     continue
                 want = (part.program, bool(mode),
-                        self._tuner_for(part.program, bool(mode), part.base_tuner),
+                        self._tuner_for(part.program, bool(mode), part.base_tuner,
+                                        patch_variation(part.program, bool(mode), part.variation), part.own_tuner),
                         patch_variation(part.program, bool(mode), part.variation))
                 self._ask_patch(part, want)
             if self.patch_reqs:
@@ -11579,6 +11620,7 @@ class Live:
         self.efx_rev += 1
         for part in self.parts:
             part.cab = part.pk = None           # (its cabinet and pickup the voice's own: a program change's)
+            part.own_tuner = None
             want = (0, part.drums, self._tuner_for(0, part.drums, part.base_tuner), 0)
             self._ask_patch(part, want)
         if self.patch_reqs:

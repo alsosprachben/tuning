@@ -32,6 +32,8 @@ def main(argv):
     specs += ["%s@%s" % (n, k) for n in path for k in keys]
     specs += ["%s:%s" % (n, p) for n in path for p in pitches]
     specs += ["%s@%s:%s" % (n, k, p) for n in path for k in ("d", "f#", "bb") for p in ("466", "430")]
+    specs += ["%s~%s" % (n, a) for n in names if not n.startswith("raga:") for a in ("440.0", "437.2581", "415")]
+    specs += ["pleyel@d~440", "hybridmean:466~440.5", "pleyel~abc"]
     specs += ["even@d", "pyth:466", "hybrid@h", "nosuch", "hybrid:abc"]          # refused
     specs += ["raga:%s@%s" % (s, k) for s in ragas.SYSTEMS for k in ("c", "c#", "a")]
     specs += ["raga:%s/%s@d:%s" % (s, r, hz) for s in ("just5", "et", "bel_todi")

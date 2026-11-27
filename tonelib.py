@@ -1637,6 +1637,11 @@ class SynthProperties:
     # tuner; 'indian' plays a secondary tuning when one is set (ragas.py,
     # blockrender's eastern=, live's --eastern), its sympathetic strings on Sa.
     tuning_family = None
+    # ITS NATURAL TUNING (Ben, 2026-11-27: a part's tuning defaults to its
+    # instrument's): the tuner this instrument plays unless the part names
+    # its own -- a temperament, at the rig's A (blockrender.natural_table,
+    # live.tuner_for, the engine's tune_for). None: the rig's tuner.
+    natural_tuner = None
 
     def bloom_delay_for(self, frequency):
         """Seconds this partial ARRIVES LATE. 0 unless the voice blooms.
@@ -3553,6 +3558,9 @@ class HarpsiBase(FormantBody, PluckedStringProperties):
     (strike_fills_with_force = False). That fixed force is also why the instrument
     has no dynamics, which is what makes it a REGISTERED instrument.
     """
+    # (the harpsichord's octaves stretch 0.1 cent: the wolf-free hybrid mean,
+    # verified right for baroque by ear)
+    natural_tuner = "hybridmean"
     # A quill plucks; there is no way to lean on a note afterwards.
     # (A STATIC bend still applies -- that is a temperament, and
     #  bwv847.mid is written that way.)
@@ -5315,6 +5323,9 @@ class PleyelProperties(GrandPianoProperties):
     Pitch (a' = 435 for no. 14810's restoration) and temperament (pleyel.py:
     the Pleyel tuners' own) are the tuner's, not the instrument's.
     """
+    # (as a Paris tuner of the 1840s left it: Cordier's French aural procedure
+    # on these strings, tunelib.PleyelTuner)
+    natural_tuner = "pleyel"
     # THE SCALE: a' 364 mm, C4 608, C6 161 (f L ~ 160 Hz m); CC 1499 mm
     scale_constant_hz_m = 160.0
     case_string_max_m = 1.50
@@ -8323,6 +8334,8 @@ def divider_registration(tabs, couplers=()):
 
 
 class OrganProperties(StoppedPipeProperties):
+    # (pipes are harmonic and mode-locked: the hybrid mean's pure octaves, no wolf)
+    natural_tuner = "hybridmean"
     # THE CHEST (wind.py), shared by every rank on a division's channel: a
     # regulator's wander (0.3% RMS, 0.2 cents on a flue; by ear), and a
     # SWING under the pipes' demand -- 0.4% of the pressure per unit of draw
@@ -10655,6 +10668,7 @@ class SectionMixin:
 
 
 class BrassProperties(OrganProperties):
+    natural_tuner = None            # (not an organ stop: the rig's tuner)
     # CC71-78: a player's effort brightens it, and breath has an onset, a
     # release and a vibrato.
     sound_controls = frozenset(('brightness', 'attack', 'release', 'vib_rate', 'vib_depth', 'vib_delay'))
@@ -10929,6 +10943,8 @@ ReedOrganProperties.stop_ranks = ReedOrganProperties.stop_ranks + [("trumpet", 1
 class OrganGedaktProperties(StoppedPipeProperties):
     """The flute 8: a metal Gedeckt, a stopped pipe -- Audsley's C 2.55 in on
     root 8, mouth 1/4, cut-up 1/2 -- simulated (examples/organ_bake.py)."""
+    # (pipes are harmonic and mode-locked: the hybrid mean's pure octaves, no wolf)
+    natural_tuner = "hybridmean"
     # SIMULATED (examples/organ_bake.py; fluepipe_sim.STOPS['gedakt'], Audsley's
     # construction): the radiated harmonics at the rank's own pitches
     # ...AND ITS LEVEL ACROSS THE KEYBOARD, SIMULATED (examples/organ_levels.py:
@@ -25709,6 +25725,7 @@ class SynthLeadProperties(FlueOrganProperties):
     Calliope lead has no drawbars. The flue timbre is a fair stand-in for these
     simple waveform leads; the drawbars are not.
     """
+    natural_tuner = None            # (not an organ stop: the rig's tuner)
     registerable = False
     # its own series, not the church organ's measured principal tables
     mode_gains = None
@@ -25724,6 +25741,7 @@ class SynthLeadProperties(FlueOrganProperties):
 class ReedPipeProperties(ReedOrganProperties):
     """GM 109/111 (bagpipe, shanai): a reed driving a pipe, but one player's
     instrument rather than a console. Reed tone, no drawbars."""
+    natural_tuner = None            # (not an organ stop: the rig's tuner)
     registerable = False
 
 
@@ -28553,6 +28571,7 @@ class CylindricalReedProperties(ReedOrganProperties):
     one, so this class does not pretend it does, and CC11 goes back to meaning
     what GM says it means.
     """
+    natural_tuner = None            # (not an organ stop: the rig's tuner)
     legato_attack_s = 0.012   # slurred rather than tongued: the reed keeps going, the fingering changes
     registerable = False
 

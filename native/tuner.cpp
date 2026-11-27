@@ -4,7 +4,7 @@
 // one: midilib.set_tuner's name -- a registry name, then optionally @KEY and
 // :A4 (`hybrid@D:466`), or Indian intonation, raga:<system>[/<raga>]@<Sa>
 // [:<Sa Hz>] -- and every key's frequency as tunelib's class gives it, at
-// tunelib.set_reference's pitch when one is in force. What each class starts
+// tunelib.set_reference's pitch when one is in force (or name~Hz: A4 there). What each class starts
 // from is the data in tunertables.h (examples/tuner_tables.py writes it from
 // the Python); what it does with it is here, operation for operation:
 //
@@ -278,6 +278,16 @@ int nv_tuning_table(const char *name, int ref_note, double ref_hz, double *out, 
     if (key.compare(0, 5, "raga:") == 0)
         return raga_table(key, out, have);
     Ref ref{ref_note >= 0, ref_note, ref_hz};
+    // name~Hz: A4 given, as the reference (69, Hz) would set it (a part's own
+    // tuning at the rig's A: blockrender.tuning_table)
+    size_t tilde = key.find('~');
+    if (tilde != std::string::npos) {
+        double a4;
+        if (key.compare(0, 5, "raga:") == 0 || !pyfloat(key.substr(tilde + 1), &a4))
+            return -3;
+        ref = Ref{true, 69, a4};
+        key = key.substr(0, tilde);
+    }
     double pitch = NAN;
     bool has_pitch = false;
     size_t colon = key.find(':');

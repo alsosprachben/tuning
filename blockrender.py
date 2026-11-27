@@ -477,10 +477,81 @@ def _declare(dll, src, func="synth_voice"):
         pass        # unchecked, exactly as before; never fatal
 
 def tuning_table(name):
+    name = str(name)
+    if '~' in name:
+        # A TUNER WITH ITS A4 GIVEN (name~Hz): its temperament under tunelib's
+        # reference (69, Hz), as a= would set it for the whole render -- how a
+        # part's own tuning sits at the rig's A (natural_table, live.tuner_for)
+        import tunelib as _TL
+        base, _, hz = name.partition('~')
+        if base.lower().startswith('raga:'):
+            raise ValueError("a raga's pitch is its Sa's (raga:...@KEY:HZ), not ~A4: %r" % name)
+        try:
+            hz = float(hz)
+        except ValueError:
+            raise ValueError("bad pitch in %r; A4 in Hz, e.g. pleyel~440" % name)
+        keep = _TL._REFERENCE
+        _TL._REFERENCE = (69, hz)
+        _TL._invalidate_tables()
+        try:
+            return tuning_table(base)
+        finally:
+            _TL._REFERENCE = keep
+            _TL._invalidate_tables()
     midilib.set_tuner(name); mc = midilib.middle_c; tuner = midilib.tuner_class()
     for n in range(128): tuner.addNote(n - mc)
     tuner.tune(1000, 30000); pairs = dict(tuner.noteFrequencies())
     return {n: pairs[n - mc] for n in range(128) if (n - mc) in pairs}
+
+
+# NATURAL TUNINGS (Ben, 2026-11-27: a part's tuning defaults to its
+# instrument's): a class that names a natural_tuner (tonelib: the harpsichord's
+# and the organ's hybrid mean, the fortepiano's pleyel) plays that temperament
+# instead of the render's tuner -- at the render's A, so it sits with the rest
+# (its table scaled so A4 lands where the render's table has it). A channel
+# whose tuning the file owns (gm2's MTS store) keeps the file's. natural=0 on
+# the command line, or TUNING_NATURAL=0, plays every class in the render's.
+NATURAL = os.environ.get('TUNING_NATURAL', '1').lower() not in ('0', 'off', 'no', '')
+_NATURAL_TABLES = {}        # natural_spec -> its table
+_RIG = [None, None, None]   # the render's table, tuner name and natural switch, as _prepare set them
+
+
+def natural_spec(pc, rig, rig_name=None, on=None):
+    """The tuner class pc plays by its own nature, as a name: its natural
+    tuner with A4 at rig's (name~Hz); None: rig's own (natural tunings off --
+    ON, else NATURAL -- no natural tuner, or it is the rig's tuner, at any
+    pitch)."""
+    name = getattr(pc, 'natural_tuner', None)
+    if not (NATURAL if on is None else on) or not name or not rig or 69 not in rig:
+        return None
+    if rig_name is not None and re.split(r'[~:@]', str(rig_name).lower())[0] == name:
+        return None
+    return "%s~%r" % (name, float(rig[69]))
+
+
+def natural_table(pc, rig, rig_name=None, on=None):
+    """natural_spec's 128-key table, or None."""
+    spec = natural_spec(pc, rig, rig_name, on)
+    if spec is None:
+        return None
+    t = _NATURAL_TABLES.get(spec)
+    if t is None:
+        keep = midilib.tuner_class
+        try:
+            t = _NATURAL_TABLES[spec] = tuning_table(spec)
+        finally:
+            midilib.tuner_class = keep
+    return t
+
+
+def natural_for(pc, tab):
+    """natural_table for a note whose channel table is tab: only where tab is
+    the render's own (not a file's MTS store)."""
+    return natural_table(pc, tab, _RIG[1], _RIG[2]) if tab is not None and tab is _RIG[0] else None
+
+
+def is_natural(tab):
+    return any(tab is t for t in _NATURAL_TABLES.values())
 
 
 def _lyric_vowels(path, language=None):
@@ -2543,10 +2614,12 @@ _GS_FILE = [False]       # ...and whether it speaks GS at all (patch_map.GS_TRIM
 
 
 
-def prepare(path, tuner='hybrid440', sink=None):
+def prepare(path, tuner='hybrid440', sink=None, natural=None):
     """_prepare, in the room the file's GS reverb macro chose -- where nobody
     chose one (TUNING_ROOM) -- and the room put back after; the file's reverb
-    level and time ride _LAST_PREP to the room sidecar, for roomtail."""
+    level and time ride _LAST_PREP to the room sidecar, for roomtail.
+    NATURAL False: every class in TUNER (a live patch's, already resolved:
+    live.tuner_for); None: NATURAL's say."""
     fx, eq, eqsw, dly, gs, cho = gs_setup(path)
     _GS_FILE[0] = bool(gs)
     # ...and its GS chorus, the device (chorus.gs_device): Chorus 3 as a reset
@@ -2569,7 +2642,7 @@ def prepare(path, tuner='hybrid440', sink=None):
     if room is not None and room != prev:
         T.set_room(room)
     try:
-        out = _prepare(path, tuner, sink)
+        out = _prepare(path, tuner, sink, natural)
     finally:
         if T.ROOM_NAME[0] != prev:
             T.set_room(prev)
@@ -3441,6 +3514,7 @@ def _prep_bend_rows(FREQ_E, _BGEST, _F, _MEEND_CH, _pwseq, nblk, notes, rpns):
                 continue
             _ind = getattr(_pcm, 'tuning_family', None) == 'indian'
             _tab = FREQ_E if (FREQ_E is not None and _ind) else _F(_c, _on)
+            _tab = natural_for(_pcm, _tab) or _tab
             _sa = (T.raga_sa_note if (T.raga_sa_note is not None and (_ind or FREQ_E is None))
                    else int(getattr(_pcm, 'sympathetic_tonic', 60)))
             if _sa not in _tab or _nt not in _tab:
@@ -5560,6 +5634,8 @@ def _note_class_and_pitch(nt, FREQ, FREQ_E, _BTUN, _DRONE_PC, _F, _MEEND_AT, _MP
         nt.freq = _F(nt.ch, nt.on)
         if FREQ_E is not None and getattr(nt.pc, 'tuning_family', None) == 'indian':
             nt.freq = FREQ_E         # the secondary tuning: see FREQ_E above
+        else:
+            nt.freq = natural_for(nt.pc, nt.freq) or nt.freq     # its natural tuning (NATURAL)
         # MIDI 2.0 PER-NOTE PITCH is absolute and outranks the tuner, MTS
         # and the channel's scale/octave table (M2-104 7.4.15); static bend
         # and channel tuning still offset it, below. See _PN_AT.
@@ -7118,7 +7194,8 @@ def _plain_pitch(nt, _pna, _press, _XP, _EFXN, _mpe_member, _MPE_AT, _MEEND_AT, 
             and k not in _mpe_member and k not in _MPE_AT and k not in _MEEND_AT
             and not getattr(pc, 'sounding_octaves', 0.0) and not getattr(pc, 'scale_cents', None)
             and not pc.__name__.endswith('BrassProperties')
-            and not (FREQ_E is not None and getattr(pc, 'tuning_family', None) == 'indian'))
+            and not (FREQ_E is not None and getattr(pc, 'tuning_family', None) == 'indian')
+            and not is_natural(nt.freq))
 
 
 def _song_check(song, nt, off_key, mcut, nx, damp_open, cargs=None, choked=None):
@@ -8229,7 +8306,7 @@ def _note_release_click(props, nt, A, _REL_JACKS, cdb, emit_partial, gain, rando
                 _REL_JACKS.append((_j0, len(A['om']), _jr, _jo))
 
 
-def _prepare(path, tuner='hybrid440', sink=None):
+def _prepare(path, tuner='hybrid440', sink=None, natural=None):
     """Parse + tune + build the full partial table (the one-time cost). Returns a
     dict of contiguous arrays ready for synth_window(); reused by render() (one
     full window) and play.py (streamed windows)."""
@@ -8248,6 +8325,7 @@ def _prepare(path, tuner='hybrid440', sink=None):
     T.RND_STREAM.seed(0)            # ...and the [RND] drum strikes' (tonelib.RandomStrike)
     FREQ = tuning_table(tuner)
     FREQ_E = _prep_eastern_tuning(FREQ, tuner)
+    _RIG[0], _RIG[1], _RIG[2] = FREQ, tuner, natural
     ch_prog, ch_progs, notes, ccs, total, legato, pws, (ats, pts, sotas, _sys) = parse(path)
     _DEDIT = _sys.get('dedit') or {}
     _EFXEV = (_sys.get('efx') or []) if os.environ.get('TUNING_GS_EFX', '1') not in ('0', 'off', '') else []
@@ -8315,7 +8393,8 @@ def _prepare(path, tuner='hybrid440', sink=None):
         under a secondary tuning the raga's for an Indian instrument (FREQ_E)."""
         if FREQ_E is not None and getattr(_SYM_CH.get(c), 'tuning_family', None) == 'indian':
             return FREQ_E
-        return _F(c, t)
+        _t = _F(c, t)
+        return natural_for(_SYM_CH.get(c), _t) or _t
 
     notes = _prep_notes_off(ccs, notes)
 
@@ -10818,6 +10897,11 @@ if __name__=="__main__":
     for _a in list(sys.argv[3:]):
         if _a.lower().startswith('eastern='):
             EASTERN = _a.split('=', 1)[1]
+            sys.argv.remove(_a)
+        elif _a.lower().startswith('natural='):
+            # natural=0: every class in the render's tuner (see NATURAL)
+            NATURAL = _a.split('=', 1)[1].lower() not in ('0', 'off', 'no', '')
+            os.environ['TUNING_NATURAL'] = '1' if NATURAL else '0'
             sys.argv.remove(_a)
     if len(sys.argv)>4 and not sys.argv[4].startswith('--'):
         k,_,v = sys.argv[4].partition('=')
