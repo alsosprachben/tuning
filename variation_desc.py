@@ -97,6 +97,7 @@ VARIATION_DESC = {
     (16, 18): "Wurlitzer: Flute, Diapason, Quint, octaves",
     (16, 40): "Wurlitzer pedals: Bourdon 16' and Flute 8'",
     (16, 41): "after the Wurlitzer 4500's lower manual: Melodia and Trombone",
+    (0, 40): "after the Paris Pleyel grands of the 1840s: Chopin's",
     (16, 32): "all nine drawbars",
     (16, 33): "even drawbars: 16 8 4 2 1",
     (17, 1): "16 5-1/3 8, perc 2nd",

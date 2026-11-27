@@ -73,6 +73,7 @@ typedef struct {
        string scale its impedances come from, and at the note its B and Z_A4/Z */
     int decay_by_hz;
     double decay_b1, decay_b3, decay_board_db, decay_board_hz, dz_scale, dz_lmax, dz_B, dz_zr;
+    double dz_t, dz_tb, dz_tbelow;      /* the strings' tension, N: plain, the wound bass's, below Hz (_string_scale) */
     /* the simulated hammer (GrandPianoProperties.hammer_model; hammer.py): the
        felt by register, its speeds and memory, the worn layer, the loudness
        reference, the register's levels; at the note, partials 1..hm_n's shares */

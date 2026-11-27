@@ -38,6 +38,7 @@ STATES = [
     ("upright", dict(program=1, variation=0), ["voice"]),
     ("cp80", dict(program=2, variation=0), ["voice"]),
     ("rhodes", dict(program=4, variation=0), ["voice"]),
+    ("fortepiano", dict(program=0, variation=40), ["voice", "piano"]),
     ("wurli", dict(program=5, variation=0), ["voice"]),
     ("guitar", dict(program=27, variation=0), ["amp"]),
     ("kit", dict(program=0, drums=True), ["drums", "kits", "seq", "piano", "synth", "parts"]),

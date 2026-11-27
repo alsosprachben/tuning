@@ -109,6 +109,7 @@ def main(argv):
     import random as R_
     classes = [c for c in {PM.PROGRAM_CLASS[k] for k in PM.PROGRAM_CLASS}
                if N.init_supported(c) and issubclass(c, T.GrandPianoProperties)]     # (the drums: drum_check)
+    classes.append(T.PleyelProperties)      # (a variation's: its own tension and stringing)
     inits = 0
     for k in range(n_notes):
         cls = classes[k % len(classes)]

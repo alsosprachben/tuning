@@ -579,10 +579,10 @@ static double blare(const VoiceSnap *v, double hz)
 
 /* hammer.string_of's impedance sqrt(T mu): L = C/f to the case's longest, the
    wound bass's higher tension, mu from f = sqrt(T/mu) / 2L */
-static double string_z(double f0, double scale_c, double lmax)
+static double string_z(double f0, double scale_c, double lmax, double t, double tb, double below)
 {
     double L = (lmax < scale_c / f0 ? lmax : scale_c / f0);
-    double T = f0 < 110.0 ? 1100.0 : 750.0;
+    double T = f0 < below ? tb : t;
     double c = 2.0 * L * f0;
     double mu = T / (c * c);
     return sqrt(T * mu);
@@ -1866,19 +1866,19 @@ static int hm_contact(double f0, double v0, double mass, double K, double p, dou
 
 /* hammer.level_gains' cache: one per (nominal key, level), the felt it was made
    with, its longest spectrum */
-typedef struct { double fn; int j, n; double key[13]; double *g, *ph; } HmEntry;
+typedef struct { double fn; int j, n; double key[16]; double *g, *ph; } HmEntry;
 static HmEntry *hm_cache;
 static int hm_ncache, hm_capcache;
 static pthread_mutex_t hm_lock = PTHREAD_MUTEX_INITIALIZER;
 
-static const double *hm_level_gains_ph(double fn, int j, int nharm, const double key[13], const double **ph_out);
+static const double *hm_level_gains_ph(double fn, int j, int nharm, const double key[16], const double **ph_out);
 
-static const double *hm_level_gains(double fn, int j, int nharm, const double key[13])
+static const double *hm_level_gains(double fn, int j, int nharm, const double key[16])
 {
     return hm_level_gains_ph(fn, j, nharm, key, NULL);
 }
 
-static const double *hm_level_gains_ph(double fn, int j, int nharm, const double key[13], const double **ph_out)
+static const double *hm_level_gains_ph(double fn, int j, int nharm, const double key[16], const double **ph_out)
 {
     /* key: beta, mass, K, p, v_lo, v_hi, scale, lmax, alpha, tau, core_x, core_K, (unused 0) */
     pthread_mutex_lock(&hm_lock);
@@ -1894,7 +1894,7 @@ static const double *hm_level_gains_ph(double fn, int j, int nharm, const double
     pthread_mutex_unlock(&hm_lock);
     double scale = key[6], lmax = key[7];
     double L = lmax < scale / fn ? lmax : scale / fn;
-    double T = fn < 110.0 ? 1100.0 : 750.0;
+    double T = fn < key[15] ? key[14] : key[13];
     double c = 2.0 * L * fn, mu = T / (c * c), Z = sqrt(T * mu);
     double v0 = key[4] * pow(key[5] / key[4], (HM_LEVELS[j] - 1) / 126.0);
     double *F, dt;
@@ -1933,7 +1933,7 @@ static const double *hm_level_gains_ph(double fn, int j, int nharm, const double
 }
 
 /* the felt's key (hm_level_gains') for the key at nominal pitch fn */
-static void hm_key(const VoiceSnap *s, double fn, double key[13])
+static void hm_key(const VoiceSnap *s, double fn, double key[16])
 {
     double octs = log(fn / 440.0) / log(2.0);
     double u = log(fn / 27.5) / log(4186.0 / 27.5);
@@ -1948,8 +1948,9 @@ static void hm_key(const VoiceSnap *s, double fn, double key[13])
         double w = exp(-0.5 * d * d);
         core_mm = s->hm_core_edge_mm + (s->hm_core_mm - s->hm_core_edge_mm) * w;
     }
-    double k2[13] = {s->strike_point, mass, K, p, s->hm_speed_lo, s->hm_speed_hi, s->dz_scale, s->dz_lmax,
-                     s->hm_alpha, pow(10.0, s->hm_log_tau), core_mm * 1e-3, pow(10.0, s->hm_core_logk), 0.0};
+    double k2[16] = {s->strike_point, mass, K, p, s->hm_speed_lo, s->hm_speed_hi, s->dz_scale, s->dz_lmax,
+                     s->hm_alpha, pow(10.0, s->hm_log_tau), core_mm * 1e-3, pow(10.0, s->hm_core_logk), 0.0,
+                     s->dz_t, s->dz_tb, s->dz_tbelow};
     memcpy(key, k2, sizeof(k2));
 }
 
@@ -1974,7 +1975,7 @@ int nv_hammer_warm(const VoiceSnap *tmpl)
     int made = 0;
     for (int k = 21; k <= 108; k++) {
         double fn = 440.0 * pow(2.0, (k - 69) / 12.0);
-        double key[13];
+        double key[16];
         hm_key(tmpl, fn, key);
         int n = tmpl->hm_max_partial_hz != 0.0 ? (int)(tmpl->hm_max_partial_hz / (fn * 0.97)) + 1 : 64;
         if (n < 64) n = 64;
@@ -1994,7 +1995,7 @@ static void hm_note(VoiceSnap *s)
     /* hammer.nominal_f0 and _hammer_felt: the felt at the key's nominal pitch */
     int k = (int)rint(69.0 + 12.0 * log(f0 / 440.0) / log(2.0));
     double fn = 440.0 * pow(2.0, (k - 69) / 12.0);
-    double key[13];
+    double key[16];
     hm_key(s, fn, key);
     int vel = (int)rint(127.0 * pow(s->attack_volume, 0.5));
     int n = s->max_harmonic ? s->max_harmonic : 64;
@@ -2487,7 +2488,8 @@ void nv_voice_init(const VoiceInit *c, const VoiceSnap *tmpl, double frequency, 
            note's frequency as Python rebuilds it (frequency_x * 2 ** op) */
         double f0 = s->frequency_x * pow(2.0, s->octave_position);
         s->dz_B = law_B(c, f0);
-        s->dz_zr = string_z(440.0, s->dz_scale, s->dz_lmax) / string_z(f0, s->dz_scale, s->dz_lmax);
+        s->dz_zr = string_z(440.0, s->dz_scale, s->dz_lmax, s->dz_t, s->dz_tb, s->dz_tbelow)
+                   / string_z(f0, s->dz_scale, s->dz_lmax, s->dz_t, s->dz_tb, s->dz_tbelow);
     }
     /* blockrender: the law's B at the note (inharmonicity_coefficient_for_frequency) */
     o->B = law_B(c, frequency);

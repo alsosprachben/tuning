@@ -734,6 +734,33 @@ class HybridMeanPianoTuner(PathTuner):
     generator_name = "HybridMeanNotes"
 
 
+class PleyelTuner(PathTuner):
+    """THE PLEYEL TEMPERAMENT on a Pleyel's own strings (pleyel.py: Cordier's
+    reconstruction of the French aural procedure -- the partition's thirds and
+    sixths beating at the textbook rates, the sixth Ab-F like the third Db-F,
+    10ths up, beatless octaves down) worked for the inharmonicity of
+    tonelib.PleyelProperties, the 1840s grand: what a Paris tuner of Chopin's
+    day would have left on that piano. A = 435, the pitch McNulty restored
+    Chopin's last Pleyel to, set as the procedure sets it: the fork's A3 at
+    217.5 (a reference given on the command line rescales it)."""
+    A = 435
+
+    @classmethod
+    def _build_table(cls):
+        import pleyel
+        import tonelib as _T
+        p = _T.PleyelProperties
+        B = lambda f: p.a + p.b * f + p.c * f * f + p.d / f + p.e / (f * f)
+        # (the fork sets A3, the French LA2, as the procedure starts: its A4 is
+        # then a 10th's work, a stretched octave above)
+        ref = _REFERENCE if _REFERENCE is not None else (57, cls.A / 2.0)
+        table = pleyel.tune(B, a4=440.0)
+        if table.get(ref[0]):
+            s = float(ref[1]) / table[ref[0]]
+            table = {n: f * s for n, f in table.items()}
+        return table
+
+
 class StretchedHelmholtzTuner(PathTuner):
     """Ben's StretchedHelmholtz: two chains of pure 5ths, F#2-C6 and C3-B5,
     joined only by three inharmonic octaves, C6 back to C3 (path.py). On pipes

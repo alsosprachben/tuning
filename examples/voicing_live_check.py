@@ -90,7 +90,9 @@ def main(argv):
             saw = saw or v["building"]
             mine = k is None or any(x["k"] == k and x["own"] for x in v["knobs"])
             if mine and not v["building"] and (saw or k is None or time.time() - t0 > 2.0):
-                return v, time.time() - t0, saw
+                took = time.time() - t0
+                render(0.1)     # (the patch built is handed to the audio a block or two after: then strike)
+                return v, took, saw
         return v, None, saw
 
     render(1.0)

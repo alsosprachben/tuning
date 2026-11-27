@@ -5002,11 +5002,20 @@ class GrandPianoProperties(InharmonicStringProperties):
             board = board / (1.0 + (f / self.decay_board_top_hz) ** 2)
         return self.decay_b1 + self.decay_b3 * (f / 1000.0) ** 2 + board
 
+    # THE STRINGS' TENSION (hammer.string_of): N per plain string, and the
+    # wound bass's below bass_tension_below_hz -- a modern grand's; a
+    # fortepiano's far lower (PleyelProperties)
+    string_tension_n = 750.0
+    bass_tension_n = 1100.0
+    bass_tension_below_hz = 110.0
+
     def _string_scale(self):
-        """(C, longest string) for hammer.string_of: the class's own scale where
-        it has one (the electric grand's shorter case), else the grand's."""
+        """(C, longest string, tension, the bass's, its break) for
+        hammer.string_of: the class's own scale where it has one (the electric
+        grand's shorter case), else the grand's."""
         return (getattr(self, 'scale_constant_hz_m', None) or 162.0,
-                getattr(self, 'case_string_max_m', None) or 1.95)
+                getattr(self, 'case_string_max_m', None) or 1.95,
+                float(self.string_tension_n), float(self.bass_tension_n), float(self.bass_tension_below_hz))
 
     def _core_mm(self, f0):
         """How deep a hard blow must squeeze before the worn hard layer, here."""
@@ -5272,6 +5281,88 @@ class GrandPianoProperties(InharmonicStringProperties):
 # is literally "the CC1 value to build this template with".
 honky_detune = 1.0
 
+
+
+class PleyelProperties(GrandPianoProperties):
+    """A PARIS PLEYEL GRAND OF THE 1840s -- Chopin's piano: straight-strung,
+    on a wooden case braced with bolted iron bars, its strings at two thirds
+    of a modern grand's tension, its hammers soft felt over leather. Built
+    from what is published about the instruments, not from recordings (no
+    openly licensed single notes of an 1820-1860 piano were found):
+
+    THE STRINGS, Pleyel no. 14174 (1847), its owner's measurements (Louchet,
+    Registre Pleyel, entry 48): each plain string's length and wire, its
+    tension and stiffness worked out (examples/pleyel_scale.py) -- 474-590 N
+    a string, 533 on average, against the modern 750; B like the modern
+    grand's through the middle, 1.3-1.8x at the bottom of the plain wire
+    (thick wire, low tension) and ~1.2x in the treble. The wound bass's
+    cores are not published: its B is the grand's law's shape, joined at F2
+    (1.8x), and its tension taken as the plain wire's (the scale's tension
+    is nearly flat), both INFERRED.
+    THE STRINGING, Pleyel no. 9486 (1841/2, Schureck Collection): one wound
+    string C1-E1, two wound F1-E2, three plain from F2; dampers to D6, the
+    top seventeen notes undamped (no. 16601, 1850: nineteen).
+    THE HAMMERS (Ponzi's replicas of no. 10966, 1844; McNulty on no. 14810,
+    1848): a mahogany head, two or three layers of leather, soft felt over
+    them, 0.30-0.38 g/cm3 -- "sweet and velvety piano becoming brighter with
+    force" (Montal, 1836). No masses, stiffnesses or strike points are
+    published: the hammers are scaled to the strings (their mass and the
+    felt's stiffness with the tension), the felt softer on top; the leather
+    is not modelled yet (see hammer_core_mm). For Ben's ear.
+    THE FAUSSE TABLE (gone by about 1850), a veneered board over the strings
+    that "seems to reduce some upper overtones" (Traeger, H&F 20/1, 2015):
+    the board's top lower -- INFERRED in amount.
+    Pitch (a' = 435 for no. 14810's restoration) and temperament (pleyel.py:
+    the Pleyel tuners' own) are the tuner's, not the instrument's.
+    """
+    # THE SCALE: a' 364 mm, C4 608, C6 161 (f L ~ 160 Hz m); CC 1499 mm
+    scale_constant_hz_m = 160.0
+    case_string_max_m = 1.50
+    string_tension_n = 533.0
+    bass_tension_n = 533.0
+    bass_tension_below_hz = 85.0
+    # THE STIFFNESS LAW, fitted (pleyel_scale.py: rms 0.088 in log B)
+    a = -0.00045726
+    b = 2.46765e-06
+    c = 8.22384e-10
+    d = 0.0428547
+    e = -0.630984
+
+    def string_count_for_frequency(self, frequency):
+        if frequency < 42.5:    # C1-E1: one wound string
+            return 1
+        if frequency < 85.0:    # F1-E2: two, wound
+            return 2
+        return 3                # F2 up: three plain
+
+    # (the engine's breaks: a string added across E1|F1 and E2|F2)
+    string_break_hz = (42.5, 85.0)
+    damper_top = 86
+
+    # THE HAMMER: soft felt (felt of 0.30-0.38 g/cm3, its law half a decade
+    # softer than the modern grand's) on hammers scaled to their strings:
+    # a string at 533 N carries 0.71 of a modern one's mass (same length and
+    # pitch: mu ~ T), and a hammer is made for its strings -- its mass and
+    # the felt's K both x0.71 leave the contact as the grand's (M, K and the
+    # string's impedance all scaled alike), the felt's softness then on top.
+    # (The Pleyel's key weighs ~30 g at A2 against a Steinway's ~60:
+    # Ishimura, City Univ. PhD 2020 -- lighter hammers.) Unscaled, the
+    # grand's heavy hammers on the light strings rang the middle bright.
+    # THE LEATHER UNDER THE FELT is not modelled yet: as the worn grand's hard
+    # layer (hammer_core_*, its force ~ x^3.5) it engages like a wall -- a
+    # forte's brightness +100-250% in one velocity step at any depth or
+    # stiffness tried (pleyel_voice.py). A progressive leather (its own
+    # exponent) is the mechanism to add if the forte wants more edge.
+    hammer_mass_lo_g = GrandPianoProperties.hammer_mass_lo_g * 533.0 / 750.0
+    hammer_mass_hi_g = GrandPianoProperties.hammer_mass_hi_g * 533.0 / 750.0
+    hammer_logk = GrandPianoProperties.hammer_logk + _log(533.0 / 750.0) / _log(10.0) - 0.5
+    hammer_core_mm = 0.0
+    hammer_core_edge_mm = 0.0
+    # LESS BEATING (Traeger, on an 1855 Pleyel: "a smoother decay ... less
+    # beating" than a modern piano): its unisons closer, the grand's x0.7
+    string_detune_range = (0.35, 1.2)
+    # THE FAUSSE TABLE's veil over the board: its top 3/4 of the grand's (INFERRED)
+    board_high_hz = 0.75 * GrandPianoProperties.board_high_hz
 
 
 class UprightPianoProperties(GrandPianoProperties):

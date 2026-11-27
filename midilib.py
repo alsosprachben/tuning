@@ -66,6 +66,7 @@ tuner_registry = {
     # which the FILE owns the tuning -- MTS dumps, single-note changes, and the
     # tuning program and bank RPNs. See tunelib.GM2Tuner and mts.py.
     "gm2": GM2Tuner,
+    "pleyel": PleyelTuner,           # the French aural tuning, on the 1840s Pleyel's strings, at 435
 }
 tuner_class = StretchTuner
 

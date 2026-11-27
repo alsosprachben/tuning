@@ -64,7 +64,7 @@ class VoiceSnap(ctypes.Structure):
                 ('wound_below_hz', C), ('wound_corner_hz', C), ('wound_zing_db', C), ('wound_decay_db', C),
                 ('bridge_peak_db', C), ('bridge_peak_hz', C), ('bridge_peak_width', C),
                 ('decay_by_hz', I), ('decay_b1', C), ('decay_b3', C), ('decay_board_db', C), ('decay_board_hz', C),
-                ('dz_scale', C), ('dz_lmax', C), ('dz_B', C), ('dz_zr', C),
+                ('dz_scale', C), ('dz_lmax', C), ('dz_B', C), ('dz_zr', C), ('dz_t', C), ('dz_tb', C), ('dz_tbelow', C),
                 ('hammer_model', I), ('hm_logk', C), ('hm_logk_slope', C), ('hm_logk_curve', C), ('hm_p_lo', C),
                 ('hm_p_hi', C), ('hm_mass_lo_g', C), ('hm_mass_hi_g', C), ('hm_speed_lo', C), ('hm_speed_hi', C),
                 ('hm_alpha', C), ('hm_log_tau', C), ('hm_core_mm', C), ('hm_core_logk', C), ('hm_core_edge_mm', C),
@@ -2763,7 +2763,7 @@ def snapshot(props):
         s.decay_board_db, s.decay_board_hz = p.decay_board_db, p.decay_board_hz
         s.decay_board_top_hz = float(getattr(p, 'decay_board_top_hz', 0.0) or 0.0)
         s.decay_treble_power = float(getattr(p, 'decay_treble_power', 0.0) or 0.0)
-        s.dz_scale, s.dz_lmax = p._string_scale()
+        s.dz_scale, s.dz_lmax, s.dz_t, s.dz_tb, s.dz_tbelow = p._string_scale()
         import hammer as _H
         _f0 = p.frequency_x * (2.0 ** p.octave_position)
         s.dz_B = p.inharmonicity_coefficient_for_frequency(_f0)
@@ -2786,7 +2786,7 @@ def snapshot(props):
         for i, (hz, ep) in enumerate(vps):
             s.hm_vp_hz[i], s.hm_vp_p[i] = float(hz), float(ep)
         if not s.decay_by_hz:
-            s.dz_scale, s.dz_lmax = p._string_scale()
+            s.dz_scale, s.dz_lmax, s.dz_t, s.dz_tb, s.dz_tbelow = p._string_scale()
         # (the note's own shares, as Python's harmonic_volume reads them)
         p._hammer_gain(1)
         g = p.__dict__['_hammer_g'][:400]

@@ -1249,6 +1249,12 @@ VARIATIONS[(61, 8)] = routed_variation(61, "brass2", detuned_pair=(-4.0, 4.0))
 VARIATIONS[(16, 41)] = type("DividerLowerProperties_ours", (DividerLowerProperties,), {})
 VARIATION_NAMES[(16, 41)] = "60's Lower"         # (a name of our own, in the GS set's style -- licences.md L13)
 
+# THE FORTEPIANO, a tone of our own map: a Paris Pleyel grand of the 1840s,
+# Chopin's (tonelib.PleyelProperties), beside the grand at 0.40
+from tonelib import PleyelProperties as _PLY   # noqa: E402
+VARIATIONS[(0, 40)] = _PLY
+VARIATION_NAMES[(0, 40)] = "Fortepiano"          # (a name of our own -- licences.md L13)
+
 # A LAYERED VARIATION: one key, two (or more) voices -- each routed by its
 # own program at its own transposition and level. blockrender expands such a
 # note into one event per layer before anything else sees it (so live's
