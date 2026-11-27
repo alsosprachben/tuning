@@ -3510,5 +3510,105 @@
  "toc/kits": {
   "en": "Kits",
   "t": "Kits"
+ },
+ "seq/title": {
+  "en": "Seq",
+  "t": "Sec"
+ },
+ "seq/intro": {
+  "en": "A Euclidean sequencer: each lane strikes one drum on HITS of its STEPS, spread as evenly as they can be. Four hits in sixteen steps is the beat; three in eight is the tresillo; five in eight, seven in sixteen and many other rhythms from around the world come out the same way. Each lane has its own length, so lanes of 16, 12 and 7 steps drift against each other and meet again.",
+  "t": "Un secuenciador euclidiano: cada carril golpea un tambor en HITS de sus STEPS, repartidos lo más uniformemente posible. Cuatro golpes en dieciséis pasos son el pulso; tres en ocho, el tresillo; cinco en ocho, siete en dieciséis y muchos otros ritmos del mundo salen igual. Cada carril tiene su propia longitud, así que carriles de 16, 12 y 7 pasos se desfasan y vuelven a encontrarse."
+ },
+ "seq/terms/0/0": {
+  "en": "PLAY / STOP",
+  "t": "TOCAR / STOP"
+ },
+ "seq/terms/0/1": {
+  "en": "Runs the lanes on the drum part: the selected part if it is a drum kit, else the first that is. It keeps running while you use the other cards.",
+  "t": "Toca los carriles en la parte de batería: la parte elegida si es un kit, si no la primera que lo sea. Sigue sonando mientras usas las otras tarjetas."
+ },
+ "seq/terms/1/0": {
+  "en": "TEMPO",
+  "t": "TEMPO"
+ },
+ "seq/terms/1/1": {
+  "en": "Beats a minute. It is the metronome's tempo too: change either and both follow, and the metronome clicks on the sequencer's beats while it runs.",
+  "t": "Pulsos por minuto. Es también el tempo del metrónomo: cambia uno y ambos lo siguen, y el metrónomo marca los pulsos del secuenciador mientras suena."
+ },
+ "seq/terms/2/0": {
+  "en": "SWING",
+  "t": "SWING"
+ },
+ "seq/terms/2/1": {
+  "en": "50% is straight. Higher delays every second step, to 66% (a triplet feel) and up to 75%.",
+  "t": "50 % es recto. Más alto retrasa cada segundo paso, hasta 66 % (sensación de tresillo) y como mucho 75 %."
+ },
+ "seq/terms/3/0": {
+  "en": "STEPS A BEAT",
+  "t": "PASOS POR PULSO"
+ },
+ "seq/terms/3/1": {
+  "en": "How many steps make a beat: 4 for sixteenths, 3 for triplets, 2 for eighths.",
+  "t": "Cuántos pasos hacen un pulso: 4 para semicorcheas, 3 para tresillos, 2 para corcheas."
+ },
+ "seq/terms/4/0": {
+  "en": "DRUM",
+  "t": "TAMBOR"
+ },
+ "seq/terms/4/1": {
+  "en": "The sound a lane strikes. Tap it to choose one from the kit, or none to rest the lane.",
+  "t": "El sonido que golpea un carril. Tócalo para elegir uno del kit, o ninguno para que el carril descanse."
+ },
+ "seq/terms/5/0": {
+  "en": "STEPS AS STRUCK",
+  "t": "PASOS QUE SUENAN"
+ },
+ "seq/terms/5/1": {
+  "en": "The lane's steps: lit where it strikes, the beats' steps a shade lighter, the step playing now framed. Drag sideways along them to rotate the pattern.",
+  "t": "Los pasos del carril: encendidos donde golpea, los de los pulsos algo más claros, el que suena ahora enmarcado. Arrastra de lado para rotar el patrón."
+ },
+ "seq/terms/6/0": {
+  "en": "STEPS / HITS",
+  "t": "PASOS / GOLPES"
+ },
+ "seq/terms/6/1": {
+  "en": "The lane's length (1 to 32) and how many of its steps strike.",
+  "t": "La longitud del carril (1 a 32) y cuántos de sus pasos golpean."
+ },
+ "seq/terms/7/0": {
+  "en": "ROTATE",
+  "t": "ROTAR"
+ },
+ "seq/terms/7/1": {
+  "en": "Starts the pattern later by this many steps: the same rhythm, from another place in it.",
+  "t": "Empieza el patrón tantos pasos más tarde: el mismo ritmo, desde otro punto."
+ },
+ "seq/terms/8/0": {
+  "en": "VEL",
+  "t": "VEL"
+ },
+ "seq/terms/8/1": {
+  "en": "How hard the lane strikes, 1 to 127.",
+  "t": "Con qué fuerza golpea el carril, de 1 a 127."
+ },
+ "seq/terms/9/0": {
+  "en": "MUTE (M)",
+  "t": "SILENCIO (M)"
+ },
+ "seq/terms/9/1": {
+  "en": "Silences the lane, keeping its pattern.",
+  "t": "Silencia el carril conservando su patrón."
+ },
+ "seq/terms/10/0": {
+  "en": "Kept",
+  "t": "Guardado"
+ },
+ "seq/terms/10/1": {
+  "en": "The lanes, tempo and swing are kept in the session. It starts stopped.",
+  "t": "Los carriles, el tempo y el swing se guardan en la sesión. Empieza parado."
+ },
+ "toc/seq": {
+  "en": "Seq",
+  "t": "Sec"
  }
 }

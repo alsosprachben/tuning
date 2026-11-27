@@ -3510,5 +3510,105 @@
  "toc/kits": {
   "en": "Kits",
   "t": "Sets"
+ },
+ "seq/title": {
+  "en": "Seq",
+  "t": "Seq"
+ },
+ "seq/intro": {
+  "en": "A Euclidean sequencer: each lane strikes one drum on HITS of its STEPS, spread as evenly as they can be. Four hits in sixteen steps is the beat; three in eight is the tresillo; five in eight, seven in sixteen and many other rhythms from around the world come out the same way. Each lane has its own length, so lanes of 16, 12 and 7 steps drift against each other and meet again.",
+  "t": "Ein euklidischer Sequencer: jede Spur schlägt eine Trommel auf HITS ihrer STEPS an, so gleichmäßig verteilt wie möglich. Vier Schläge in sechzehn Steps sind der Grundschlag; drei in acht der Tresillo; fünf in acht, sieben in sechzehn und viele andere Rhythmen aus aller Welt entstehen genauso. Jede Spur hat ihre eigene Länge, so laufen Spuren von 16, 12 und 7 Steps auseinander und treffen sich wieder."
+ },
+ "seq/terms/0/0": {
+  "en": "PLAY / STOP",
+  "t": "START / STOP"
+ },
+ "seq/terms/0/1": {
+  "en": "Runs the lanes on the drum part: the selected part if it is a drum kit, else the first that is. It keeps running while you use the other cards.",
+  "t": "Spielt die Spuren auf dem Drum-Part: dem gewählten Part, wenn er ein Drumset ist, sonst dem ersten, der eines ist. Er läuft weiter, während du die anderen Karten benutzt."
+ },
+ "seq/terms/1/0": {
+  "en": "TEMPO",
+  "t": "TEMPO"
+ },
+ "seq/terms/1/1": {
+  "en": "Beats a minute. It is the metronome's tempo too: change either and both follow, and the metronome clicks on the sequencer's beats while it runs.",
+  "t": "Schläge pro Minute. Es ist auch das Tempo des Metronoms: ändere eines, und beide folgen; während der Sequencer läuft, klickt das Metronom auf seinen Schlägen."
+ },
+ "seq/terms/2/0": {
+  "en": "SWING",
+  "t": "SWING"
+ },
+ "seq/terms/2/1": {
+  "en": "50% is straight. Higher delays every second step, to 66% (a triplet feel) and up to 75%.",
+  "t": "50 % ist gerade. Höher verzögert jeden zweiten Step, bis 66 % (ein Triolengefühl) und höchstens 75 %."
+ },
+ "seq/terms/3/0": {
+  "en": "STEPS A BEAT",
+  "t": "STEPS JE SCHLAG"
+ },
+ "seq/terms/3/1": {
+  "en": "How many steps make a beat: 4 for sixteenths, 3 for triplets, 2 for eighths.",
+  "t": "Wie viele Steps einen Schlag ergeben: 4 für Sechzehntel, 3 für Triolen, 2 für Achtel."
+ },
+ "seq/terms/4/0": {
+  "en": "DRUM",
+  "t": "DRUM"
+ },
+ "seq/terms/4/1": {
+  "en": "The sound a lane strikes. Tap it to choose one from the kit, or none to rest the lane.",
+  "t": "Der Klang einer Spur. Antippen, um einen aus dem Set zu wählen, oder keinen, damit die Spur pausiert."
+ },
+ "seq/terms/5/0": {
+  "en": "STEPS AS STRUCK",
+  "t": "GESPIELTE STEPS"
+ },
+ "seq/terms/5/1": {
+  "en": "The lane's steps: lit where it strikes, the beats' steps a shade lighter, the step playing now framed. Drag sideways along them to rotate the pattern.",
+  "t": "Die Steps der Spur: leuchtend, wo sie anschlägt, die Schlag-Steps etwas heller, der gerade spielende umrahmt. Seitlich darüber ziehen dreht das Muster."
+ },
+ "seq/terms/6/0": {
+  "en": "STEPS / HITS",
+  "t": "STEPS / SCHLÄGE"
+ },
+ "seq/terms/6/1": {
+  "en": "The lane's length (1 to 32) and how many of its steps strike.",
+  "t": "Die Länge der Spur (1 bis 32) und wie viele ihrer Steps anschlagen."
+ },
+ "seq/terms/7/0": {
+  "en": "ROTATE",
+  "t": "DREHEN"
+ },
+ "seq/terms/7/1": {
+  "en": "Starts the pattern later by this many steps: the same rhythm, from another place in it.",
+  "t": "Beginnt das Muster so viele Steps später: derselbe Rhythmus, von einer anderen Stelle aus."
+ },
+ "seq/terms/8/0": {
+  "en": "VEL",
+  "t": "VEL"
+ },
+ "seq/terms/8/1": {
+  "en": "How hard the lane strikes, 1 to 127.",
+  "t": "Wie stark die Spur anschlägt, 1 bis 127."
+ },
+ "seq/terms/9/0": {
+  "en": "MUTE (M)",
+  "t": "MUTE (M)"
+ },
+ "seq/terms/9/1": {
+  "en": "Silences the lane, keeping its pattern.",
+  "t": "Schaltet die Spur stumm und behält ihr Muster."
+ },
+ "seq/terms/10/0": {
+  "en": "Kept",
+  "t": "Gespeichert"
+ },
+ "seq/terms/10/1": {
+  "en": "The lanes, tempo and swing are kept in the session. It starts stopped.",
+  "t": "Spuren, Tempo und Swing bleiben in der Session gespeichert. Er startet angehalten."
+ },
+ "toc/seq": {
+  "en": "Seq",
+  "t": "Seq"
  }
 }

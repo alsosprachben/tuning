@@ -48,6 +48,58 @@
 #include "panel.h"
 #include "session.h"
 #include "pycompat.h"
+#include "eucseq.h"
+
+// THE SEQUENCER's state as JSON (the session's "seq", the seq call's): lanes
+// [key, steps, hits, rot, vel, accent, mute]; a missing field its default's
+namespace nv {
+inline sess::J seq_json(const Seq &s)
+{
+    sess::J o = sess::obj();
+    o.o["on"] = sess::integer(s.on);
+    o.o["bpm"] = sess::real(s.bpm);
+    o.o["spb"] = sess::integer(s.spb);
+    o.o["swing"] = sess::real(s.swing);
+    o.o["ch"] = sess::integer(s.ch);
+    sess::J ls = sess::arr();
+    for (const SeqLane &l : s.lane) {
+        sess::J e = sess::arr();
+        for (int v : {l.key, l.steps, l.hits, l.rot, l.vel, l.accent, l.mute})
+            e.a.push_back(sess::integer(v));
+        ls.a.push_back(e);
+    }
+    o.o["lanes"] = ls;
+    return o;
+}
+inline void seq_from(Seq &s, const sess::J &o)
+{
+    if (!o.is(sess::J::OBJ))
+        return;
+    if (const sess::J *x = o.get("bpm"))
+        s.bpm = x->d(s.bpm);
+    if (const sess::J *x = o.get("spb"))
+        s.spb = (int)x->i(s.spb);
+    if (const sess::J *x = o.get("swing"))
+        s.swing = x->d(s.swing);
+    if (const sess::J *x = o.get("ch"))
+        s.ch = std::max(0, std::min(15, (int)x->i(s.ch)));
+    if (const sess::J *ls = o.get("lanes"); ls && ls->is(sess::J::ARR))
+        for (size_t i = 0; i < ls->a.size() && i < (size_t)SEQ_LANES; i++) {
+            const sess::J &e = ls->a[i];
+            if (!e.is(sess::J::ARR) || e.a.size() < 7)
+                continue;
+            SeqLane &l = s.lane[i];
+            l.key = (int)e.a[0].i(l.key);
+            l.steps = (int)e.a[1].i(l.steps);
+            l.hits = (int)e.a[2].i(l.hits);
+            l.rot = (int)e.a[3].i(l.rot);
+            l.vel = (int)e.a[4].i(l.vel);
+            l.accent = (int)e.a[5].i(l.accent);
+            l.mute = (int)e.a[6].i(l.mute);
+        }
+    seq_patterns(s);
+}
+}  // namespace nv
 
 extern "C" {
 void *nv_midi_read(const uint8_t *buf, long long len, int *err);
@@ -110,6 +162,9 @@ int nv_part_drawn(void *h, int pi, char *out, int cap);
 void nv_part_set_drawn(void *h, int pi, const char *want, int n);
 void nv_part_chanstate(void *h, double *out);
 void nv_part_metronome(void *h, int pi, double bpm, int ring);
+void nv_part_seq(void *h, const nv::Seq *s, long long n0);
+long nv_part_seq_pos(void *h);
+void nv_part_hits_out(void *h, std::atomic<unsigned> *ctr, unsigned char *vel);
 int nv_part_synth_get(void *h, int pi, int layer, double *pn, char *own);
 int nv_part_synth_set(void *h, int pi, int layer, int knob, double v);
 void nv_part_synth_forget(void *h, int pi, int layer, int knob);
@@ -1728,6 +1783,21 @@ struct nv_host {
     double gval[15] = {};                   // the globals as they stand (livetui.GLOBALS: the panel's g; 9 mod
                                             // rate, 10-12 the metronome: bpm, ring, level; 13 the standard)
     std::atomic<int> metro_pi{-1};          // the metronome's patch (-1 not built)
+    // THE SEQUENCER (eucseq.h; the SEQ card): the host's copy, under seq_mu --
+    // seq_apply hands it to the slab between two blocks; the session keeps it
+    // (stopped)
+    nv::Seq seq_state = nv::seq_default();
+    std::mutex seq_mu;
+    void seq_apply()
+    {
+        nv::Seq c;
+        {
+            std::lock_guard<std::mutex> lk(seq_mu);
+            nv::seq_patterns(seq_state);
+            c = seq_state;
+        }
+        post([this, c](long long n0) { nv_part_seq(part, &c, n0); });
+    }
     bool metro_building = false;
     void globals_init();
     void set_global(int i, double v);

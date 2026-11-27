@@ -630,6 +630,16 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
         for (const sess::J &r : x->a)
             if (r.is(sess::J::ARR) && r.a.size() == 4)
                 udrum_queue((int)r.a[0].i(), (int)r.a[1].i(), (int)r.a[2].i(), (int)r.a[3].i());
+    // THE SEQUENCER's pattern (eucseq.h): as kept, stopped
+    if ((x = session.get("seq")) && x->is(sess::J::OBJ)) {
+        {
+            std::lock_guard<std::mutex> lk(seq_mu);
+            seq_state = nv::seq_default();
+            nv::seq_from(seq_state, *x);
+            seq_state.on = 0;
+        }
+        seq_apply();
+    }
     // THE PARTS (live.Part.to_dict's): the first's place, level and mute on
     // the part; each after it added -- a drum set on channel 10 the drums
     // nvlive keeps beside the part (its own, not live's: never written back)
@@ -935,6 +945,12 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
                 }
             j.o["user_drums"] = ud;
         }
+    }
+    {                                           // THE SEQUENCER's pattern (kept stopped: loaded so)
+        std::lock_guard<std::mutex> lk(seq_mu);
+        nv::Seq c = seq_state;
+        c.on = 0;
+        j.o["seq"] = nv::seq_json(c);
     }
     // THE PARTS (live.Part.to_dict): each one's program, set or variation,
     // its place, level and mute, the first's stops; each one's other keys as

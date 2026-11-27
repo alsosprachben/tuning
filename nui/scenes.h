@@ -223,6 +223,8 @@ inline void draw_metro_gs(App &a, float MX, float Y0, float MW, float Y1)
     const int bpm = (int)std::lround(mv(0));
     if (bpm > 0)
         C.last_bpm = bpm;
+    else if (mv(3) > 0)                 // (off: the one tempo, the sequencer's)
+        C.last_bpm = (int)std::lround(mv(3));
     auto gset = [&](int i, int v) {
         call(a, "{\"call\":\"global_set\",\"i\":" + std::to_string(i) + ",\"v\":" + std::to_string(v) + "}");
         J &mm = C.s.o["metro"];         // (shown at once; the push confirms)
@@ -244,6 +246,12 @@ inline void draw_metro_gs(App &a, float MX, float Y0, float MW, float Y1)
             C.last_bpm = picked;
             if (on)
                 gset(10, picked);
+            else {                      // (off: the one tempo is the sequencer's)
+                call(a, "{\"call\":\"seq_set\",\"lane\":-1,\"f\":\"bpm\",\"v\":" + std::to_string(picked) + "}");
+                J &mm = C.s.o["metro"];         // (shown at once; the push confirms)
+                if (mm.is(J::ARR) && mm.a.size() > 3)
+                    mm.a[3] = sess::integer(picked);
+            }
         }
         std::vector<std::string> bs = {T("none")};
         for (int n = 1; n <= 16; n++)

@@ -102,19 +102,20 @@ def main(argv):
     expect("glissando: keys crossed struck", len(set(h[0] for h in hits if h[1] > 0)) >= 2, True)
     expect("glissando: no bend or pressure", run.ctl, [])
 
-    # THE PADS: the first pad (its top 0..82 from the grid's first row); the second, slid onto
+    # THE PADS: the first pad (its top 0..96 from the grid's first row); the second, slid onto
     pads = [kit, "wait 800", card("drums"), "wait 800", "tap PX PT", "wait 300", "tap PX PB", "wait 300",
             "drag PX PB PX2 PB 300", "wait 400"]
     if shots:
         pads += ["shot SHOTpads.ppm"]
-    # (the laptop's first pad, C-1: from x 296, its top at y 418, 82 tall; the second from x 412)
-    geo = {"x": 330, "x2": 440, "top": 418, "yt": 424, "yb": 494}
+    # (the laptop's first pad, C-1 -- the pads the card's width since the KITS card took the list:
+    #  from x 34, its top at y 430 under "Kicks", 96 tall; the second from x 200)
+    geo = {"x": 100, "x2": 260, "top": 430, "yt": 436, "yb": 516, "h": 96}
     if geo:
         pads = [s.replace("PX2", str(geo["x2"])).replace("PX", str(geo["x"])).replace("PT", str(geo["yt"])).replace("PB", str(geo["yb"]))
                 for s in pads]
         hits, _ = run(out, "pads_default", None, pads)
         on = [h for h in hits if h[1] > 0]
-        dt, db = 1 - (geo["yt"] - geo["top"]) / 82, 1 - (geo["yb"] - geo["top"]) / 82
+        dt, db = 1 - (geo["yt"] - geo["top"]) / geo["h"], 1 - (geo["yb"] - geo["top"]) / geo["h"]
         expect("pads: default", [x[1] for x in on], [v(30, 127, dt), v(30, 127, db), v(30, 127, db)])
         expect("pads: a slide strikes no other", len(set(x[0] for x in on)), 1)
         hits, saved = run(out, "pads_own_fixed", {"drums_own": True, "drums": {"mode": "fixed", "fixed": 55}}, pads)

@@ -867,6 +867,10 @@ J scenes_of(nv_host *h)
     J m = sess::arr();
     for (int g : {NV_G_METRONOME, NV_G_METRO_RING, NV_G_METRO_DB})
         m.a.push_back(num(nv_host_global(h, g)));
+    {                                           // (...and the one tempo, the sequencer's: the metronome's while off)
+        std::lock_guard<std::mutex> lk(h->seq_mu);
+        m.a.push_back(num(h->seq_state.bpm));
+    }
     o.o["metro"] = m;
     return o;
 }
@@ -1198,6 +1202,9 @@ struct nv_ui_watch {
     std::string parts_sent, synth_sent, build_sent, stops_sent, piano_sent;
     bool piano = false;                 // (its piano card is open: its pedals read each poll)
     bool drums = false;                 // (its drums card is open: the kit, and the keys struck)
+    bool seq = false;                   // (its SEQ card is open: the sequencer's step, its state when it moves)
+    long seq_pos = -2;
+    std::string seq_sent;
     bool effects = false;               // (its effects card is open)
     bool matrix = false;                // (its matrix card is open)
     bool tuning = false;                // (its tuning card is open)
@@ -1470,6 +1477,66 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         }
         if (w)
             w->piano_sent.clear();
+    } else if (call == "seq" || call == "seq_set" || call == "seq_run") {
+        // THE SEQUENCER (eucseq.h): seq opens the card (open 0 shuts it) and reads the state;
+        // seq_set changes one field -- lane -1 the whole's (bpm, spb, swing), else the lane's
+        // (key, steps, hits, rot, vel, accent, mute); seq_run starts it (on 1, on channel ch)
+        // or stops it (on 0). Each answers with the state, as the push sends it.
+        if (call == "seq" && w) {
+            w->seq = arg_i(q, "open", 1) != 0;
+            w->seq_sent.clear();
+        }
+        if (call == "seq_set") {
+            const int ln = (int)arg_i(q, "lane", -1);
+            const std::string f = arg_s(q, "f");
+            const double v = arg_d(q, "v", 0.0);
+            bool known = true;
+            {
+                std::lock_guard<std::mutex> lk(h->seq_mu);
+                nv::Seq &S = h->seq_state;
+                if (ln < 0) {
+                    if (f == "bpm")
+                        S.bpm = std::max(20.0, std::min(300.0, v));
+                    else if (f == "spb")
+                        S.spb = (int)v;
+                    else if (f == "swing")
+                        S.swing = v;
+                    else
+                        known = false;
+                } else if (ln < nv::SEQ_LANES) {
+                    nv::SeqLane &L = S.lane[ln];
+                    int *x = f == "key" ? &L.key : f == "steps" ? &L.steps : f == "hits" ? &L.hits : f == "rot" ? &L.rot
+                           : f == "vel" ? &L.vel : f == "accent" ? &L.accent : f == "mute" ? &L.mute : nullptr;
+                    if (x)
+                        *x = (int)std::lround(v);
+                    else
+                        known = false;
+                } else
+                    known = false;
+            }
+            if (!known) {
+                ok = false;
+                r.o["error"] = sess::str("seq_set: no lane " + std::to_string(ln) + " field '" + f + "'");
+            } else {
+                h->seq_apply();
+                if (f == "bpm" && nv_host_global(h, NV_G_METRONOME) > 0.0)   // (one tempo: the metronome's too)
+                    nv_host_set_global(h, NV_G_METRONOME, h->seq_state.bpm);
+            }
+        }
+        if (call == "seq_run") {
+            {
+                std::lock_guard<std::mutex> lk(h->seq_mu);
+                h->seq_state.on = arg_i(q, "on", 0) != 0;
+                if (q.get("ch"))
+                    h->seq_state.ch = std::max(0, std::min(15, (int)arg_i(q, "ch", 9)));
+            }
+            h->seq_apply();
+        }
+        {
+            std::lock_guard<std::mutex> lk(h->seq_mu);
+            r.o["seq"] = nv::seq_json(h->seq_state);
+        }
+        r.o["seq_pos"] = sess::integer(nv_part_seq_pos(h->part));
     } else if (call == "drums") {              // the card opened (or shut: open false); sets: 1 for the user sets' sources
         if (w) {
             w->drums = arg_i(q, "open", 1) != 0;
@@ -2035,6 +2102,28 @@ extern "C" char *nv_ui_poll(nv_host *h, nv_ui_watch *w)
             if (ds != w->drums_sent) {
                 w->drums_sent = ds;
                 r.o["drums"] = dj;
+                any = true;
+            }
+        }
+    }
+    if (w->seq) {                               // (the sequencer's step as it moves; its state when changed)
+        const long sp = nv_part_seq_pos(h->part);
+        if (sp != w->seq_pos) {
+            w->seq_pos = sp;
+            r.o["seq_pos"] = sess::integer(sp);
+            any = true;
+        }
+        if (w->tick % 6 == 5) {
+            J sj;
+            {
+                std::lock_guard<std::mutex> lk(h->seq_mu);
+                sj = nv::seq_json(h->seq_state);
+            }
+            std::string ss;
+            put(ss, sj);
+            if (ss != w->seq_sent) {
+                w->seq_sent = ss;
+                r.o["seq"] = sj;
                 any = true;
             }
         }

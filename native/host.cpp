@@ -905,6 +905,7 @@ int nv_host::open(int argc, char **argv)
     miss_swap.reserve(256);
     gval[14] = 20.0;                            // (a held note's stand-in after 20 ms: the Setup card's, the session's)
     part = nv_part_new(cache, 1, 0.0, pp[1], pp[6], pp[7], pp[8], pp[9], SR, E.k[K_RETRIGGER], slots, E.headroom, E.pan.data(), E.beta);
+    nv_part_hits_out(part, &key_hits[0][0], &key_vel[0][0]);   // (the sequencer's notes light the pads as a keyboard's)
     if (!E.les.empty())                         // the room's Leslie: its rotors, on chorale
         nv_part_leslie(part, E.les.data(), (int)E.les.size());
     if (!E.spec.empty() && !E.cone_lib.empty()) {   // ...and the console's Spectra-Tone: its rotor, its kernel
@@ -3594,6 +3595,18 @@ void nv_host::set_global(int i, double v)
         return;
     }
     if (i == 10 || i == 11) {                   // THE METRONOME (livetui.metronome): built the first time it is on
+        if (i == 10 && v > 0.0) {               // ONE TEMPO (the SEQ card's): the sequencer's, which a metronome
+            std::lock_guard<std::mutex> lk(seq_mu);     //  turned on takes, and a tempo set on it changes
+            if (gval[10] <= 0.0)
+                v = seq_state.bpm;
+            else if (seq_state.bpm != v) {
+                seq_state.bpm = std::max(20.0, std::min(300.0, v));
+                v = seq_state.bpm;
+                nv::Seq c = seq_state;
+                nv::seq_patterns(c);
+                post([this, c](long long n0) { nv_part_seq(part, &c, n0); });
+            }
+        }
         gval[i] = v;
         const double bpm = gval[10];
         const int ring = (int)gval[11];

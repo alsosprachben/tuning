@@ -47,6 +47,7 @@
 #include "kernels.h"            // (the kernels, linked in)
 #include "rubfill.h"            // (the room's part of a held moment)               // the controller matrix (ctrlmatrix)
 #include "nvenv.h"
+#include "eucseq.h"            // (the SEQ card's sequencer: its state and patterns)
 
 // THE ORGAN'S WIND, live (live.WIND_ROWS): bend rows a chest may take -- a
 // Swell family's nine, an octave band each -- the sirens' 32 after them
@@ -13956,6 +13957,111 @@ struct Part {
             metro_beat = 0;
         }
     }
+    // THE SEQUENCER (eucseq.h; the SEQ card): its lanes struck at their steps'
+    // own samples, each note through core as a key's would come (the part's
+    // key range, velocity sense, a user set's mute), let go at its lane's next
+    // step. Running, it is the metronome's clock too: the click on its beats
+    // (a metronome already ticking: it starts on the next of those beats), so
+    // the two never drift; stopped, the metronome goes on from its beat.
+    nv::Seq seq;
+    bool seq_has = false;                       // (seq_base unset: the next block's start)
+    double seq_base = 0.0;                      // (the sample of step seq_s, straight -- swing added as struck)
+    long seq_s = 0;
+    int seq_held[nv::SEQ_LANES] = {-1, -1, -1, -1, -1, -1, -1, -1};
+    std::atomic<long> seq_pos{-1};              // (the step last struck: the card's playhead; -1 stopped)
+    std::atomic<unsigned> *hit_ctr = nullptr;   // (the host's key_hits, [16][128]: the pads lit by its notes)
+    unsigned char *hit_vel = nullptr;
+    std::vector<std::vector<uint8_t>> seq_sxs;  // (none: core's exclusives, for its notes)
+    void seq_note(int ch, int key, int v, long long at)
+    {
+        Ev e{};
+        e.type = v > 0 ? 0 : 1;
+        e.ch = ch;
+        e.a = key;
+        e.b = v > 0 ? v : 64;
+        e.x = NAN;
+        core(e, seq_sxs, at);
+        if (v > 0 && hit_ctr && ch >= 0 && ch < 16) {
+            hit_vel[ch * 128 + key] = (unsigned char)v;
+            hit_ctr[ch * 128 + key].fetch_add(1, std::memory_order_relaxed);
+        }
+    }
+    void seq_release(long long at)
+    {
+        for (int l = 0; l < nv::SEQ_LANES; l++)
+            if (seq_held[l] >= 0) {
+                seq_note(seq.ch, seq_held[l], 0, at);
+                seq_held[l] = -1;
+            }
+    }
+    void seq_set(const nv::Seq &ns, long long n0)
+    {
+        const bool was = seq.on != 0;
+        if (was && (!ns.on || ns.ch != seq.ch))
+            seq_release(n0);
+        if (was && !ns.on && seq_has && metro_bpm > 0.0) {
+            // (stopped with the metronome on: it goes on from the sequencer's next beat)
+            const double period = rate * 60.0 / (seq.bpm * seq.spb);
+            const long to = (seq.spb - seq_s % seq.spb) % seq.spb;
+            metro_next = seq_base + to * period;
+            metro_beat = (seq_s + to) / seq.spb;
+            metro_has = true;
+        }
+        if (!was && ns.on) {
+            seq_has = false;
+            seq_s = 0;
+        }
+        seq = ns;
+        if (!seq.on)
+            seq_pos.store(-1, std::memory_order_relaxed);
+    }
+    void seq_tick(long long n0, long long frames)
+    {
+        const double period = rate * 60.0 / (seq.bpm * seq.spb);
+        if (!seq_has || seq_base < (double)n0 - 2 * period) {
+            // (a start: on the metronome's next beat if it is ticking, else now)
+            seq_base = metro_bpm > 0.0 && metro_has && metro_next >= (double)n0 ? metro_next : (double)n0;
+            seq_s = 0;
+            seq_has = true;
+        }
+        const long long end = n0 + frames;
+        const double sw = (seq.swing / 100.0 * 2.0 - 1.0) * period;     // (the pair's second step: this much late)
+        for (;;) {
+            const double t = seq_base + ((seq_s & 1) && seq.spb % 2 == 0 ? sw : 0.0);
+            if (t >= (double)end)
+                break;
+            const long long at = std::max(n0, (long long)nearbyint(t));
+            if (seq_s % seq.spb == 0 && metro_bpm > 0.0 && metro_pi >= 0) {     // (the metronome's click, on its beat)
+                const long beat = seq_s / seq.spb;
+                const bool bell = metro_ring > 0 && beat % metro_ring == 0;
+                Force f(*this, metro_pi);
+                cut_on(9, bell ? 34 : 33, 100, at, false);
+            }
+            for (int l = 0; l < nv::SEQ_LANES; l++) {
+                const nv::SeqLane &L = seq.lane[l];
+                if (seq_held[l] >= 0) {         // (the lane's last note let go at its next step)
+                    seq_note(seq.ch, seq_held[l], 0, at);
+                    seq_held[l] = -1;
+                }
+                if (L.mute || L.key < 0 || L.key > 127 || L.steps <= 0)
+                    continue;
+                const int pos = (int)(seq_s % L.steps);
+                if (!((L.pat >> pos) & 1u))
+                    continue;
+                int v = L.vel;
+                if (L.accent > 0) {
+                    const int nth = __builtin_popcount(L.pat & ((1u << pos) - 1u));
+                    if (nth % L.accent == 0)
+                        v = std::min(127, v + 20);
+                }
+                seq_note(seq.ch, L.key, v, at);
+                seq_held[l] = L.key;
+            }
+            seq_pos.store(seq_s, std::memory_order_relaxed);
+            seq_s++;
+            seq_base += period;
+        }
+    }
     void metro_tick(long long n0, long long frames)
     {
         const double period = rate * 60.0 / metro_bpm;
@@ -14199,7 +14305,9 @@ struct Part {
             tex_tick(n0, blk);                  // a held texture's grains (live's _tex_tick)
         if (!roll_gen.empty())
             roll_tick(n0, blk);                 // a held roll's strokes (live's _roll_tick)
-        if (metro_bpm > 0.0 && metro_pi >= 0)
+        if (seq.on)
+            seq_tick(n0, blk);                  // the sequencer's steps (and the metronome's beats on its clock)
+        else if (metro_bpm > 0.0 && metro_pi >= 0)
             metro_tick(n0, blk);                // the metronome's beats (live's _metro_tick)
         if (!moog_glide.empty())
             moog_tick(n0);                      // the Moog's knobs gliding (live's _moog_tick)
@@ -14564,6 +14672,24 @@ void nv_part_chanstate(void *h, double *out)
         o[11] = P->modrange[c];
         o[12] = P->mono[c] ? 1.0 : 0.0;
     }
+}
+
+// THE SEQUENCER (eucseq.h): its state now, at the block from n0 (between two
+// blocks: the host's post); its step last struck (-1 stopped); and the
+// host's key counters, which its notes count as a keyboard's would
+void nv_part_seq(void *h, const nv::Seq *s, long long n0)
+{
+    ((nv::slab::Part *)h)->seq_set(*s, n0);
+}
+long nv_part_seq_pos(void *h)
+{
+    return ((nv::slab::Part *)h)->seq_pos.load(std::memory_order_relaxed);
+}
+void nv_part_hits_out(void *h, std::atomic<unsigned> *ctr, unsigned char *vel)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    P->hit_ctr = ctr;
+    P->hit_vel = vel;
 }
 
 // THE METRONOME (live.set_metronome): patch pi its own drum part (claiming no

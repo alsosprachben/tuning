@@ -25,7 +25,7 @@ import sys
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
 
-CARDS = ["parts", "scenes", "library", "synth", "stops", "piano", "drums", "kits", "keys", "amp", "effects", "matrix",
+CARDS = ["parts", "scenes", "library", "synth", "stops", "piano", "drums", "kits", "seq", "keys", "amp", "effects", "matrix",
          "tuning", "control", "files", "setup"]
 # (each state: the patch put on part 1, and the cards whose look it changes -- every card for the first)
 STATES = [
@@ -36,7 +36,7 @@ STATES = [
     ("harmonium", dict(program=20, variation=0), ["stops"]),
     ("piano", dict(program=0, variation=0), ["piano", "amp", "library"]),
     ("guitar", dict(program=27, variation=0), ["amp"]),
-    ("kit", dict(program=0, drums=True), ["drums", "kits", "piano", "synth", "parts"]),
+    ("kit", dict(program=0, drums=True), ["drums", "kits", "seq", "piano", "synth", "parts"]),
     ("userkit", dict(program=64, drums=True), ["drums", "kits"]),
     ("mt32", dict(family="MT-32"), ["library", "parts"]),
 ]
@@ -47,6 +47,8 @@ EXTRA = {
     ("ipad", "synth", "lead"): [("page2", [(617, 235)])],
     ("ipad", "setup", "lead"): [("touch", [(787, 238)])],
     ("ipad", "kits", "kit"): [("key", [(400, 284)])],
+    ("ipad", "seq", "kit"): [("play", [(90, 285)]), ("stopped", [(90, 285)])],
+    ("laptop", "seq", "kit"): [("play", [(119, 430)]), ("stopped", [(119, 430)])],
     ("laptop", "kits", "kit"): [("key", [(560, 424)])],
     ("ipad", "kits", "userkit"): [("key", [(400, 284), (700, 373), (960, 373)])],
     ("laptop", "kits", "userkit"): [("key", [(560, 424), (1000, 507), (1546, 507)])],

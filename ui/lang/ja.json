@@ -600,5 +600,20 @@
  "No sound yet: choose one below.": "まだ音がありません。下から選んでください。",
  "PITCH": "ピッチ",
  "random": "ランダム",
- "ITS SOUND FROM": "音の出どころ"
+ "ITS SOUND FROM": "音の出どころ",
+ "SEQ": "シーケンサー",
+ "tab|SEQ": "SEQ",
+ "playing channel {0}": "チャンネル {0} で演奏中",
+ "No drum part: choose a kit for one on the KITS card.": "ドラムのパートがありません。キットのカードでパートにキットを選んでください。",
+ "PLAY ▶": "再生 ▶",
+ "TEMPO": "テンポ",
+ "SWING": "スウィング",
+ "STEPS A BEAT": "1拍のステップ",
+ "DRUM": "ドラム",
+ "STEPS AS STRUCK": "打つステップ",
+ "STEPS": "ステップ",
+ "HITS": "打数",
+ "ROTATE": "回転",
+ "LANE {0}: ITS DRUM": "レーン {0}:ドラム",
+ "none: the lane rests": "なし:このレーンは休み"
 }

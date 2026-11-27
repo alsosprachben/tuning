@@ -414,6 +414,27 @@ HELP = {
                 'Kits you build yourself: each key takes its sound from any key of any kit, with its own pitch, '
                 'level and pan. Choose a key, then its sound.'],
                ['DRUMS \u25b8', 'Back to the pads.']]},
+    'seq': {'title': 'Seq',
+     'intro': "A Euclidean sequencer: each lane strikes one drum on HITS of its STEPS, spread as evenly as they "
+              "can be. Four hits in sixteen steps is the beat; three in eight is the tresillo; five in eight, seven in "
+              "sixteen and many other rhythms from around the world come out the same way. Each lane has its own "
+              "length, so lanes of 16, 12 and 7 steps drift against each other and meet again.",
+     'terms': [['PLAY / STOP',
+                'Runs the lanes on the drum part: the selected part if it is a drum kit, else the first that is. It '
+                'keeps running while you use the other cards.'],
+               ['TEMPO', "Beats a minute. It is the metronome's tempo too: change either and both follow, and the "
+                         "metronome clicks on the sequencer's beats while it runs."],
+               ['SWING', "50% is straight. Higher delays every second step, to 66% (a triplet feel) and up to 75%."],
+               ['STEPS A BEAT', 'How many steps make a beat: 4 for sixteenths, 3 for triplets, 2 for eighths.'],
+               ['DRUM', 'The sound a lane strikes. Tap it to choose one from the kit, or none to rest the lane.'],
+               ['STEPS AS STRUCK',
+                "The lane's steps: lit where it strikes, the beats' steps a shade lighter, the step playing now framed. "
+                'Drag sideways along them to rotate the pattern.'],
+               ['STEPS / HITS', "The lane's length (1 to 32) and how many of its steps strike."],
+               ['ROTATE', 'Starts the pattern later by this many steps: the same rhythm, from another place in it.'],
+               ['VEL', 'How hard the lane strikes, 1 to 127.'],
+               ['MUTE (M)', 'Silences the lane, keeping its pattern.'],
+               ['Kept', 'The lanes, tempo and swing are kept in the session. It starts stopped.']]},
     'keys': {'title': 'Keys',
      'intro': "A keyboard to touch, playing the selected part: for trying a sound, or showing it, without a keyboard "
               'plugged in.',
@@ -890,6 +911,7 @@ HELP_TOC = [['Start here', ['basics']],
  ['Piano', ['piano', 'piano:pedals', 'piano:dampers', 'piano:key']],
  ['Drums', ['drums']],
  ['Kits', ['kits', 'drums:user']],
+ ['Seq', ['seq']],
  ['Keys', ['keys']],
  ['Effects', ['effects', 'fx:ins', 'fx:sends', 'fx:rev', 'fx:cho', 'fx:dly', 'fx:eq']],
  ['Matrix', ['matrix']],

@@ -600,5 +600,20 @@
  "No sound yet: choose one below.": "Pas encore de son : choisissez-en un ci-dessous.",
  "PITCH": "HAUTEUR",
  "random": "aléatoire",
- "ITS SOUND FROM": "SON PRIS DE"
+ "ITS SOUND FROM": "SON PRIS DE",
+ "SEQ": "SÉQ",
+ "tab|SEQ": "SÉQ",
+ "playing channel {0}": "joue sur le canal {0}",
+ "No drum part: choose a kit for one on the KITS card.": "Aucune partie de batterie : choisissez un kit pour une partie sur la carte KITS.",
+ "PLAY ▶": "LECTURE ▶",
+ "TEMPO": "TEMPO",
+ "SWING": "SWING",
+ "STEPS A BEAT": "PAS PAR TEMPS",
+ "DRUM": "FÛT",
+ "STEPS AS STRUCK": "PAS JOUÉS",
+ "STEPS": "PAS",
+ "HITS": "COUPS",
+ "ROTATE": "DÉCALER",
+ "LANE {0}: ITS DRUM": "PISTE {0} : SON FÛT",
+ "none: the lane rests": "aucun : la piste se tait"
 }
