@@ -228,7 +228,8 @@ inline void draw_tuning(App &a)
     static const std::vector<std::pair<const char *, std::vector<std::string>>> GROUPS = {
         {N_("Concert pitch, A=440"), {"gm2", "hybrid440", "hybridmeanpiano", "stretchedhelmholtz", "even"}},
         {N_("Baroque pitch, A=415"), {"hybrid", "stretch", "werckmeister", "sankey", "meantone"}},
-        {N_("Pure octaves: pipes"), {"hybridharm", "hybridharm440", "hybridmean"}}};
+        {N_("Pure octaves: pipes"), {"hybridharm", "hybridharm440", "hybridmean"}},
+        {N_("Period pianos"), {"pleyel"}}};
     std::vector<std::pair<std::string, std::vector<const std::pair<std::string, std::string> *>>> groups;
     std::set<std::string> named;
     for (const auto &g : GROUPS) {

@@ -407,6 +407,7 @@ static const char *TUNERS[][2] = {
     {"hybridmean", "the hybrid's chains bridged by a mean third: no wolf, pure octaves"},
     {"hybridmeanpiano", "hybridmean after a Steinway's stretched octaves, A=440"},
     {"stretchedhelmholtz", "two pure-fifth chains joined by inharmonic octaves, A=440"},
+    {"pleyel", "the French aural tuning on an 1840s Pleyel's strings (Cordier), A=435"},
     {"gm2", "the default: a GM 2 device, equal A=440, and the FILE owns the tuning (MTS)"},
     {"even", "equal temperament, A=440"},
     {"stretch", "pure fifths, the comma taken into stretched octaves, A=415"},

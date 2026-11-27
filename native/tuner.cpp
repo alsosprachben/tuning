@@ -17,6 +17,8 @@
 //                           chains (HybridMean); a key outside the table by
 //                           pure octaves from the nearest one; @KEY (in_key:
 //                           moved, A4 kept) and :A4 (at_pitch) on these only
+//   the procedure tuners    (PleyelTuner) the procedure's table, the fork's
+//                           key at A times its share (or the reference)
 //   `dynamic`               its search's table, as it comes (the search reads
 //                           no reference, so neither does this)
 //   ragas                   (ragas.table) Sa at its key in the octave from
@@ -115,6 +117,29 @@ static Table path_table(const PathT &p, double A, const Ref &ref)
         double base = rh / pow(2.0, (c[m] + 1200.0 * q) / 1200.0);
         for (int n = 0; n < 128; n++)
             t[n] = base * pow(2.0, (c[n % 12] + 1200.0 * (n / 12)) / 1200.0);
+        return t;
+    }
+    if (p.kind == 3) {
+        // a procedure's table (PleyelTuner._build_table): scaled so the fork's
+        // key sounds the reference, else A times the fork's share
+        for (const Fixed &x : FIXED)
+            if (!strcmp(x.name, p.name))
+                for (int n = 0; n < 128; n++)
+                    if (!std::isnan(x.f[n]))
+                        t[n] = x.f[n];
+        int rn = 0;
+        double rh = 0.0;
+        for (const Fixed &x : FIXED)
+            if (!strcmp(x.name, p.name)) {
+                rn = ref.on ? ref.note : x.fork_note;
+                rh = ref.on ? ref.hz : A * x.fork_share;
+            }
+        auto it = t.find(rn);
+        if (it != t.end() && it->second != 0.0) {
+            double s = rh / it->second;
+            for (auto &kv : t)
+                kv.second = kv.second * s;
+        }
         return t;
     }
     const Gen *g = gen_of(p.gen);

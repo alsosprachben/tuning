@@ -23,6 +23,9 @@ oracle:
                            generator places it (no frequency: NAN)
   the path tuners          which generator each registry name reads, its A,
                            and whether it is the pure-octave or mean-third kind
+  the procedure tuners     a table a procedure works out (pleyel: Cordier's
+                           French aural tuning on the Pleyel's strings), as
+                           it comes, with the key and share of A its fork sets
   `dynamic`                the search tuner's whole-keyboard table (tunelib.
                            Tuner: a search, so its result, at its own pitch)
   the raga systems         ragas.SYSTEMS' cents, and RAGAS' names
@@ -81,18 +84,33 @@ def main(argv):
     L.append("};\n")
     # the path tuners
     L.append("// kind 0 the generator's table, 1 on pure octaves (HybridHarmonicTuner),\n"
-             "// 2 the mean-third chains (HybridMeanTuner, no generator); A NAN: the generator's pitch")
+             "// 2 the mean-third chains (HybridMeanTuner, no generator), 3 a procedure's own\n"
+             "// table (FIXED: PleyelTuner); A NAN: the generator's pitch")
+    fixed = []
     L.append("struct PathT {\n    const char *name, *gen;\n    double A;\n    int kind;\n};")
     L.append("static const PathT PATH[] = {")
     for name, cls in midilib.tuner_registry.items():
         if not (isinstance(cls, type) and issubclass(cls, TL.PathTuner)):
             continue
-        kind = (2 if issubclass(cls, TL.HybridMeanTuner)
+        kind = (3 if hasattr(cls, "raw_table") else 2 if issubclass(cls, TL.HybridMeanTuner)
                 else 1 if issubclass(cls, TL.HybridHarmonicTuner) else 0)
         gen = cls.generator_name or ""
-        if kind != 2:
+        if kind == 3:
+            fixed.append((name, cls))
+        elif kind != 2:
             assert (gen, tuple(cls.generator_args)) in GENERATORS, (name, gen)
         L.append("    {\"%s\", \"%s\", %s, %d}," % (name, gen, hx(cls.A), kind))
+    L.append("};\n")
+    # the procedures' tables (kind 3): as they come, before any pitch, and the
+    # key the fork sets with its pitch as a share of A
+    L.append("struct Fixed {\n    const char *name;\n    int fork_note;\n    double fork_share, f[128];   // NAN: none\n};")
+    L.append("static const Fixed FIXED[] = {")
+    for name, cls in fixed:
+        raw = cls.raw_table()
+        L.append("    {\"%s\", %d, %s, {%s}}," % (name, cls.fork_note, hx(cls.fork_share),
+                                               ", ".join(hx(raw.get(n)) for n in range(128))))
+    if not fixed:
+        L.append("    {\"\", 0, 0.0, {}},")
     L.append("};\n")
     # dynamic
     dyn = B.tuning_table("dynamic")

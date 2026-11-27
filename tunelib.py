@@ -744,17 +744,25 @@ class PleyelTuner(PathTuner):
     Chopin's last Pleyel to, set as the procedure sets it: the fork's A3 at
     217.5 (a reference given on the command line rescales it)."""
     A = 435
+    # (the fork sets A3, the French LA2, as the procedure starts: its A4 is
+    # then a 10th's work, a stretched octave above -- the fork's key, and its
+    # pitch as a share of A)
+    fork_note, fork_share = 57, 0.5
 
     @classmethod
-    def _build_table(cls):
+    def raw_table(cls):
+        """The procedure's table before any pitch is set (native/tunertables.h
+        holds it as it comes: examples/tuner_tables.py)."""
         import pleyel
         import tonelib as _T
         p = _T.PleyelProperties
         B = lambda f: p.a + p.b * f + p.c * f * f + p.d / f + p.e / (f * f)
-        # (the fork sets A3, the French LA2, as the procedure starts: its A4 is
-        # then a 10th's work, a stretched octave above)
-        ref = _REFERENCE if _REFERENCE is not None else (57, cls.A / 2.0)
-        table = pleyel.tune(B, a4=440.0)
+        return pleyel.tune(B, a4=440.0)
+
+    @classmethod
+    def _build_table(cls):
+        ref = _REFERENCE if _REFERENCE is not None else (cls.fork_note, cls.A * cls.fork_share)
+        table = cls.raw_table()
         if table.get(ref[0]):
             s = float(ref[1]) / table[ref[0]]
             table = {n: f * s for n, f in table.items()}

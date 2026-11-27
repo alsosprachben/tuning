@@ -44,7 +44,8 @@ static const Gen GEN[] = {
 };
 
 // kind 0 the generator's table, 1 on pure octaves (HybridHarmonicTuner),
-// 2 the mean-third chains (HybridMeanTuner, no generator); A NAN: the generator's pitch
+// 2 the mean-third chains (HybridMeanTuner, no generator), 3 a procedure's own
+// table (FIXED: PleyelTuner); A NAN: the generator's pitch
 struct PathT {
     const char *name, *gen;
     double A;
@@ -61,6 +62,16 @@ static const PathT PATH[] = {
     {"spiral", "SpiralNotes", NAN, 0},
     {"semi", "SemiNotes", NAN, 0},
     {"path", "PATHNotes", NAN, 0},
+    {"pleyel", "", 0x1.b300000000000p+8, 3},
+};
+
+struct Fixed {
+    const char *name;
+    int fork_note;
+    double fork_share, f[128];   // NAN: none
+};
+static const Fixed FIXED[] = {
+    {"pleyel", 57, 0x1.0000000000000p-1, {NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, 0x1.b781baf92599ep+4, 0x1.d17f2f4ef5808p+4, 0x1.ed0a83e9f21ecp+4, 0x1.051d74fc30cd0p+5, 0x1.150207aa13c86p+5, 0x1.25657e01a4f2ep+5, 0x1.36c3f48668f72p+5, 0x1.492c514f3de88p+5, 0x1.5cd05bfed6b82p+5, 0x1.7174263cbe386p+5, 0x1.8752cae2410dcp+5, 0x1.9e7e9b60490b0p+5, 0x1.b7ba3cd95de42p+5, 0x1.d1bc6adfdbc48p+5, 0x1.ed4bf0a238c3ep+5, 0x1.05400352c684ap+6, 0x1.15263b60c983ep+6, 0x1.258b11f6f2238p+6, 0x1.36eab4277bd2ap+6, 0x1.49540c3bbc66ap+6, 0x1.5cf8e78d4048ap+6, 0x1.719d59950ae22p+6, 0x1.877c8459837c4p+6, 0x1.9ea8bf03db488p+6, 0x1.b7e4b7163abdep+6, 0x1.d1e72aac396ccp+6, 0x1.ed76ef7d3ed3ap+6, 0x1.0555a36be4748p+7, 0x1.153c036b09f62p+7, 0x1.25a10cc86d140p+7, 0x1.3700f3f082b04p+7, 0x1.496aaa651685ep+7, 0x1.5d1006b169f0ep+7, 0x1.71b523a3c8669p+7, 0x1.87952ece5a33ep+7, 0x1.9ec28b6cbc63bp+7, 0x1.b800000000000p+7, 0x1.d20445e52eff9p+7, 0x1.ed964e4a0f244p+7, 0x1.0566b77be768dp+8, 0x1.154ed796fb299p+8, 0x1.25b5f1e8b64b0p+8, 0x1.371855732aee4p+8, 0x1.4985052cdbd60p+8, 0x1.5d8f995995825p+8, 0x1.71d73f936a19ap+8, 0x1.87bc3c2c60904p+8, 0x1.9eef6880bfbb0p+8, 0x1.b86e001374226p+8, 0x1.d283395432412p+8, 0x1.ee2962f7e8e8ap+8, 0x1.05bc26056e4ccp+9, 0x1.15b2aaea297f0p+9, 0x1.262a33577e626p+9, 0x1.379fc5cc265f8p+9, 0x1.4a22ca0675986p+9, 0x1.5e4801622aba6p+9, 0x1.72ad1ca53b9aep+9, 0x1.88b4bd8faefd4p+9, 0x1.a00fda41c80e0p+9, 0x1.b9be2f8975040p+9, 0x1.d40871d18333ep+9, 0x1.efeb7a0363e82p+9, 0x1.06c013daec7a4p+10, 0x1.16dfae4bc57d8p+10, 0x1.2784fa8e0b6e8p+10, 0x1.392ed773d5702p+10, 0x1.4bed8d9619516p+10, 0x1.6058b917f1456p+10, 0x1.7509f7a2e5f60p+10, 0x1.8b69de1cfcfb0p+10, 0x1.a3296d19ad80ep+10, 0x1.bd4e6139ce056p+10, 0x1.d81af6f1d9046p+10, 0x1.f49217a855422p+10, 0x1.09677c2892e04p+11, 0x1.19e94a3b4d8f2p+11, 0x1.2afb1d0879020p+11, 0x1.3d201338c085ep+11, 0x1.506a5b0c2a0e4p+11, 0x1.6578028feba72p+11, 0x1.7ad90369a2ac8p+11, 0x1.92037de47eb8ap+11, 0x1.aaa840225a2e4p+11, 0x1.c533333333332p+11, 0x1.e0260f85e98e4p+11, 0x1.fcb3261cafa2ap+11, 0x1.0d796dd6c67dap+12, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN, NAN}},
 };
 
 // `dynamic` (tunelib.Tuner): its search's whole-keyboard table

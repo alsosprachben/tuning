@@ -210,6 +210,7 @@ TUNERS = {
     "hybridmean": ("Hybrid mean", "the hybrid's chains joined by a mean third: no wolf"),
     "hybridmeanpiano": ("Hybrid mean, piano", "hybrid mean on a piano's stretched octaves, A=440"),
     "stretchedhelmholtz": ("Stretched Helmholtz", "two pure-fifth chains joined by stretched octaves"),
+    "pleyel": ("Pleyel, A=435", "the French aural tuning, on an 1840s Pleyel's strings"),
     "gm2": ("GM2 standard", "the default: equal at A=440, or a file's own"),
     "even": ("Equal", "equal temperament, A=440"),
     "stretch": ("Stretched fifths", "pure fifths; the comma goes into the octaves"),
