@@ -10,13 +10,30 @@
 // equations, which is LAPACK's and the machine's).
 
 #include <algorithm>
+#include <atomic>
 #include <cmath>
 #include <map>
 #include <mutex>
 #include <set>
 #include <vector>
 
+#include "team.h"
+
 namespace {
+
+// A FEW THREADS FOR A NOTE's SOLVE (a patch rebuilt through a VOICE knob is
+// 704 of them: the Rhodes' 14 ms each, 10 s alone): its flux rows and its
+// harmonics are each TAKEN by count, every value computed as one thread
+// would, so the layers are the same however many share the work. Two cores
+// left free for the audio and the interface.
+nv::Team &ep_team()
+{
+    static nv::Team t([] {
+        const int hc = (int)std::thread::hardware_concurrency();
+        return std::max(1, std::min(4, hc - 2));
+    }());
+    return t;
+}
 
 // the pickup's flux at u (units of the field's width); kind 1 the Rhodes
 // (p: offset, gap, side, side depth, tine arc, its power; op the key's octave), kind 2
@@ -159,10 +176,15 @@ int nv_ep_layers(int kind, const double *p, double a0, double rho, double f0, do
         sn[j] = sin(th[j]);
     }
     std::vector<double> F((size_t)nx * nt);
-    for (int i = 0; i < nx; i++) {
-        double sw = a0 * xs[i] / sqrt(1.0 + rho * a0 * a0 * (1.0 - xs[i] * xs[i]));
-        for (int j = 0; j < nt; j++)
-            F[(size_t)i * nt + j] = flux(p[0] + sw * sn[j]);
+    {
+        std::atomic<int> row{0};
+        ep_team().run([&](int) {
+            for (int i; (i = row.fetch_add(1)) < nx;) {
+                double sw = a0 * xs[i] / sqrt(1.0 + rho * a0 * a0 * (1.0 - xs[i] * xs[i]));
+                for (int j = 0; j < nt; j++)
+                    F[(size_t)i * nt + j] = flux(p[0] + sw * sn[j]);
+            }
+        });
     }
     int kmax = harmonics;
     if (max_hz != 0.0)
@@ -171,9 +193,12 @@ int nv_ep_layers(int kind, const double *p, double a0, double rho, double f0, do
     std::vector<double> pin(nx, 1.0);
     pin[0] = 30.0;
     struct Lay { int k; double n, w, ph; };
-    std::vector<Lay> layers;
+    std::vector<std::vector<Lay>> byk((size_t)kmax + 1);
+    std::atomic<int> nextk{1};
+    ep_team().run([&](int) {
     std::vector<double> cr(nx), ci(nx), sgn(nx), cs(nt), sk(nt);
-    for (int k = 1; k <= kmax; k++) {
+    for (int k; (k = nextk.fetch_add(1)) <= kmax;) {
+        std::vector<Lay> &layers = byk[(size_t)k];
         for (int j = 0; j < nt; j++) {
             cs[j] = cos((double)k * th[j]);
             sk[j] = sin((double)k * th[j]);
@@ -253,6 +278,10 @@ int nv_ep_layers(int kind, const double *p, double a0, double rho, double f0, do
         for (int q : ord)
             layers.push_back({k, chosen[q], (double)k * w[q], ph});
     }
+    });
+    std::vector<Lay> layers;
+    for (int k = 1; k <= kmax; k++)
+        layers.insert(layers.end(), byk[(size_t)k].begin(), byk[(size_t)k].end());
     // the floor drops a HARMONIC, never one of its layers
     std::map<int, double> lev;
     for (const Lay &q : layers)

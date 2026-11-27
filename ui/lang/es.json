@@ -648,6 +648,16 @@
  "The highest the soundboard radiates.": "Lo más agudo que irradia la tabla armónica.",
  "The piezo pickup's top.": "El límite agudo de la pastilla piezoeléctrica.",
  "BUILDING THE NEW SOUND...": "CONSTRUYENDO EL NUEVO SONIDO...",
- "This voice has no physical knobs yet. Pianos have them first; other families follow.": "Esta voz aún no tiene mandos físicos. Los pianos los tienen primero; las demás familias vendrán después.",
- "ALL AS THE VOICE": "TODO COMO LA VOZ"
+ "ALL AS THE VOICE": "TODO COMO LA VOZ",
+ "This voice has no physical knobs yet. Pianos and electric pianos have them first; other families follow.": "Esta voz aún no tiene mandos físicos. Los pianos y los pianos eléctricos los tienen primero; las demás familias vendrán después.",
+ "TINE OFFSET": "DESPLAZ. TINE",
+ "REED OFFSET": "DESPLAZ. LENGÜETA",
+ "PICKUP GAP": "DISTANCIA PASTILLA",
+ "HAMMER SWING": "OSCILACIÓN",
+ "TONE BAR": "BARRA TONAL",
+ "The tine's rest off the pickup's centre. Centred is a thin bell; off centre, warm with bark.": "El reposo del tine fuera del centro de la pastilla. Centrado es una campana fina; descentrado, cálido y con mordida.",
+ "The reed's rest off the plate's slot. Further off, more bark at every touch.": "El reposo de la lengüeta fuera de la ranura de la placa. Más lejos, más mordida en cada toque.",
+ "The tine to the pickup. Closer is louder and barks sooner.": "Del tine a la pastilla. Más cerca suena más fuerte y muerde antes.",
+ "How far the hammer throws the tine or reed. Wider barks and buzzes.": "Cuánto desplaza el martillo el tine o la lengüeta. Más amplio muerde y zumba.",
+ "The tone bar's ring in the attack: the bell.": "El sonido de la barra tonal en el ataque: la campana."
 }

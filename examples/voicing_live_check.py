@@ -11,7 +11,11 @@ host library in step (ctypes, no device), a part on the grand --
 
 Brightness is the spectrum's centroid over a note's first 0.4 s.
 
-    python3 examples/voicing_live_check.py EXPORT.nvx
+    python3 examples/voicing_live_check.py EXPORT.nvx [PROGRAM]
+
+PROGRAM 4 (the Rhodes) instead: its four knobs; the swing wider and the
+pickup closer, brighter; the tone bar up, its bell heard in the attack (a
+12 ms ring: the first 50 ms changed by more than -30 dB re the note).
 """
 import ctypes
 import json
@@ -27,6 +31,7 @@ sys.path.insert(0, HERE)
 
 def main(argv):
     nvx = argv[1]
+    prog = int(argv[2]) if len(argv) > 2 else 0
     import native as N
     d = N.lib()
     vp, cp, ci = ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int
@@ -39,7 +44,7 @@ def main(argv):
     d.nv_ui_call.restype = ctypes.c_void_p
     d.nv_ui_call.argtypes = [vp, vp, cp]
     d.nv_ui_free.argtypes = [vp]
-    av = [b"nvlive", nvx.encode(), b"--program=0", b"--cpu", b"--no-pipeline", b"--no-register",
+    av = [b"nvlive", nvx.encode(), ("--program=%d" % prog).encode(), b"--cpu", b"--no-pipeline", b"--no-register",
           b"--no-drums", b"--reg-sync", b"--no-governor"]
     h = d.nv_host_open_args(len(av), (cp * len(av))(*av), ctypes.create_string_buffer(256), 256)
     assert h, "the host refused"
@@ -69,8 +74,8 @@ def main(argv):
         render(1.0)
         return x
 
-    def bright(x):
-        x = x[:int(0.4 * sr)] * np.hanning(int(0.4 * sr))
+    def bright(x, win=0.4):
+        x = x[:int(win * sr)] * np.hanning(int(win * sr))
         s = np.abs(np.fft.rfft(x)) ** 2
         f = np.fft.rfftfreq(len(x), 1.0 / sr)
         return float((s * f).sum() / max(1e-30, s.sum()))
@@ -92,42 +97,59 @@ def main(argv):
     bad = 0
     v = call({"call": "voicing", "row": 0})["voicing"]
     names = [k["name"] for k in v["knobs"]]
-    ok = names == ["felt", "felt_left", "strike", "unison", "lid", "board"] and not any(k["own"] for k in v["knobs"])
+    want = ["felt", "felt_left", "strike", "unison", "lid", "board"] if prog == 0 else ["tine", "gap", "swing", "tonebar"]
+    ok = names == want and not any(k["own"] for k in v["knobs"])
     ok = ok and all(abs(k["v"] - k["v0"]) < 1e-12 and k["lo"] <= k["v"] <= k["hi"] for k in v["knobs"])
-    print("the grand's knobs:", ", ".join("%s %s" % (k["name"], k["text"]) for k in v["knobs"]), "ok" if ok else "WRONG")
+    print("the voice's knobs:", ", ".join("%s %s" % (k["name"], k["text"]) for k in v["knobs"]), "ok" if ok else "WRONG")
     bad += not ok
     kn = {k["name"]: k for k in v["knobs"]}
-    base = {key: bright(strike(key)) for key in (60, 84)}
+    keys = (60, 84) if prog == 0 else (48, 60, 72)
+    base = {key: bright(strike(key)) for key in keys}
     print("plain: brightness %s" % ", ".join("key %d %.0f Hz" % kv for kv in base.items()))
 
-    def case(name, k, val, key, darker):
+    def case(name, k, val, key, darker, win=0.4):
         nonlocal bad
+        x_plain = strike(key) if win != 0.4 else None
+        b_plain = bright(x_plain, win) if win != 0.4 else base[key]
         call({"call": "voicing_set", "row": 0, "k": k, "v": val})
         v, took, b0 = settle(k)
         own = [x for x in v["knobs"] if x["k"] == k][0]
-        b = bright(strike(key))
-        moved = b < base[key] if darker else b > base[key]
+        x = strike(key)
+        b = bright(x, win)
+        moved = b < 0.98 * b_plain if darker else b > 1.02 * b_plain
+        if win != 0.4:          # (a brief part of the attack: how much the note changed there, re the note)
+            n = int(win * sr)
+            dd = 10 * np.log10(np.sum((x[:n] - x_plain[:n]) ** 2) / max(1e-30, np.sum(x_plain[:n] ** 2)))
+            moved = dd > -30.0
         ok = b0 and took is not None and own["own"] and abs(own["v"] - val) < 1e-9 and moved
         print("%-14s building %s, rebuilt in %s s, its own %s at %s; key %d brightness %.0f Hz (plain %.0f)  %s" % (
             name, b0, "%.1f" % took if took is not None else "never", own["own"], own["text"], key, b, base[key],
             "ok" if ok else "WRONG"))
+        if win != 0.4:
+            print("               (the first %.0f ms changed by %.1f dB re the note)" % (win * 1000, dd))
         bad += not ok
         call({"call": "voicing_forget", "row": 0, "k": -1})
         render(0.1)
         settle()
 
-    case("felt harder", 0, kn["felt"]["v0"] + 1.0, 84, False)
-    case("lid shut", 4, -9.0, 84, True)
-    case("board lower", 5, kn["board"]["v0"] * 0.5, 60, True)
-    after = {key: bright(strike(key)) for key in (60, 84)}
+    if prog == 0:
+        case("felt harder", 0, kn["felt"]["v0"] + 1.0, 84, False)
+        case("lid shut", 4, -9.0, 84, True)
+        case("board lower", 5, kn["board"]["v0"] * 0.5, 60, True)
+    else:
+        case("swing wider", 9, kn["swing"]["v0"] * 1.8, 60, False)
+        case("pickup closer", 8, kn["gap"]["v0"] * 0.5, 48, False)
+        case("tone bar up", 10, kn["tonebar"]["v0"] * 4.0, 72, False, 0.05)
+    after = {key: bright(strike(key)) for key in keys}
     v = call({"call": "voicing", "row": 0})["voicing"]
     ok = all(abs(after[k] - base[k]) < 0.005 * base[k] for k in base) and not any(x["own"] for x in v["knobs"])
     print("put back: brightness %s  %s" % (", ".join("key %d %.0f Hz" % kv for kv in after.items()), "ok" if ok else "WRONG"))
     bad += not ok
     # A PROGRAM CHANGE is another instrument: its knobs go (as its cabinet does)
-    call({"call": "voicing_set", "row": 0, "k": 4, "v": -6.0})
-    settle(4)
-    d.nv_host_midi(h, bytes([0xC0, 0]), 2)
+    k4 = 4 if prog == 0 else 9
+    call({"call": "voicing_set", "row": 0, "k": k4, "v": -6.0 if prog == 0 else kn["swing"]["v0"] * 1.5})
+    settle(k4)
+    d.nv_host_midi(h, bytes([0xC0, prog]), 2)
     render(0.2)
     v, took, _ = settle()
     ok = not any(x["own"] for x in v["knobs"])

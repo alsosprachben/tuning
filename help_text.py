@@ -370,7 +370,7 @@ HELP = {
      'intro': "The selected part's instrument as the physics it is modelled by: each knob a physical part of it, in "
               "its own units. Each starts at the voice's own value. Turn one and the part's sound is built again "
               "through it, which takes a second or two; the notes after that have it. Double-tap a knob to put it "
-              "back. A new program puts every knob back. Pianos have knobs first.",
+              "back. A new program puts every knob back. Pianos and electric pianos have knobs first.",
      'terms': [['FELT', "The hammer felt's stiffness, against the program's own (x1). Harder felt is brighter; softer "
                         "is darker."],
                ['FELT LEFT', "How much soft felt is left over a worn hammer's hard layer, in millimetres. Thin, a "
@@ -382,6 +382,11 @@ HELP = {
                ['LID', "The grand's lid, as a lift of the treble: shut is darker, open is brighter."],
                ['SOUNDBOARD', "The highest frequency the soundboard radiates well. Lower is darker."],
                ['PICKUP', "The electric grand's piezo pickup: the top of its range. Lower is darker."],
+               ['TINE OFFSET', "Where the Rhodes tine rests against its pickup, as a share of the pickup's half-width (0% centred). Centred, the tone is thin and bell-like; off centre, it is warm and barks when played hard. A technician's main voicing adjustment."],
+               ['REED OFFSET', "Where the Wurlitzer reed rests against the slot in its pickup plate, as a share of the slot's width. Further off, the tone has more bark at every touch."],
+               ['PICKUP GAP', 'The distance from the Rhodes tine to its pickup, in millimetres. Closer is louder and barks at a softer touch.'],
+               ['HAMMER SWING', "How far the hammer throws the tine or reed at full velocity, against the program's own (x1). Wider swings bark and buzz; the Rhodes bass buzzes hardest."],
+               ['TONE BAR', "The Rhodes tone bar's ring in the attack, the bell, in dB against the program's own."],
                ['ALL AS THE VOICE', "Puts every knob back to the voice's own value."]]},
     'piano:pedals': {'title': 'Pedals',
      'intro': 'Tap a pedal to press it; tap again to let it up.',

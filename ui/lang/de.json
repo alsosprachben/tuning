@@ -648,6 +648,16 @@
  "The highest the soundboard radiates.": "Das Höchste, was der Resonanzboden abstrahlt.",
  "The piezo pickup's top.": "Die Obergrenze des Piezo-Tonabnehmers.",
  "BUILDING THE NEW SOUND...": "NEUER KLANG WIRD GEBAUT...",
- "This voice has no physical knobs yet. Pianos have them first; other families follow.": "Diese Stimme hat noch keine physikalischen Regler. Klaviere bekommen sie zuerst; andere Familien folgen.",
- "ALL AS THE VOICE": "ALLE WIE DIE STIMME"
+ "ALL AS THE VOICE": "ALLE WIE DIE STIMME",
+ "This voice has no physical knobs yet. Pianos and electric pianos have them first; other families follow.": "Diese Stimme hat noch keine physikalischen Regler. Klaviere und E-Pianos bekommen sie zuerst; andere Familien folgen.",
+ "TINE OFFSET": "TINE-VERSATZ",
+ "REED OFFSET": "ZUNGEN-VERSATZ",
+ "PICKUP GAP": "PICKUP-ABSTAND",
+ "HAMMER SWING": "HAMMERAUSSCHLAG",
+ "TONE BAR": "TONBALKEN",
+ "The tine's rest off the pickup's centre. Centred is a thin bell; off centre, warm with bark.": "Die Ruhelage des Tines neben der Mitte des Tonabnehmers. Mittig ist eine dünne Glocke; daneben warm mit Biss.",
+ "The reed's rest off the plate's slot. Further off, more bark at every touch.": "Die Ruhelage der Zunge neben dem Schlitz der Platte. Weiter weg mehr Biss bei jedem Anschlag.",
+ "The tine to the pickup. Closer is louder and barks sooner.": "Vom Tine zum Tonabnehmer. Näher ist lauter und beißt früher.",
+ "How far the hammer throws the tine or reed. Wider barks and buzzes.": "Wie weit der Hammer Tine oder Zunge auslenkt. Weiter beißt und schnarrt.",
+ "The tone bar's ring in the attack: the bell.": "Das Klingen des Tonbalkens im Anschlag: die Glocke."
 }

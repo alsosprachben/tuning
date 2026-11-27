@@ -58,6 +58,14 @@ inline std::string voice_words(const std::string &name, double v, double cap)
         snprintf(t, sizeof t, "%.1f c", v);
     else if (name == "lid")
         snprintf(t, sizeof t, "%+.1f dB", v);
+    else if (name == "tine" || name == "reed")
+        snprintf(t, sizeof t, "%.0f%%", 100.0 * v);
+    else if (name == "gap")
+        snprintf(t, sizeof t, "%.2f mm", v * 1.7568);      // (uiapi's RHODES_POLE_MM)
+    else if (name == "swing")
+        snprintf(t, sizeof t, "x%.2f", v / std::max(1e-9, cap));
+    else if (name == "tonebar")
+        snprintf(t, sizeof t, "%+.1f dB", 20.0 * std::log10(std::max(1e-9, v / std::max(1e-9, cap))));
     else
         snprintf(t, sizeof t, "%.1f kHz", v / 1000.0);
     return t;
@@ -70,6 +78,11 @@ inline const char *voice_label(const std::string &name)
     if (name == "unison") return N_("UNISON");
     if (name == "lid") return N_("LID");
     if (name == "board") return N_("SOUNDBOARD");
+    if (name == "tine") return N_("TINE OFFSET");
+    if (name == "reed") return N_("REED OFFSET");
+    if (name == "gap") return N_("PICKUP GAP");
+    if (name == "swing") return N_("HAMMER SWING");
+    if (name == "tonebar") return N_("TONE BAR");
     return N_("PICKUP");
 }
 inline const char *voice_about(const std::string &name)
@@ -80,6 +93,11 @@ inline const char *voice_about(const std::string &name)
     if (name == "unison") return N_("How far a note's strings are tuned apart.");
     if (name == "lid") return N_("The lid: shut is darker, open is brighter.");
     if (name == "board") return N_("The highest the soundboard radiates.");
+    if (name == "tine") return N_("The tine's rest off the pickup's centre. Centred is a thin bell; off centre, warm with bark.");
+    if (name == "reed") return N_("The reed's rest off the plate's slot. Further off, more bark at every touch.");
+    if (name == "gap") return N_("The tine to the pickup. Closer is louder and barks sooner.");
+    if (name == "swing") return N_("How far the hammer throws the tine or reed. Wider barks and buzzes.");
+    if (name == "tonebar") return N_("The tone bar's ring in the attack: the bell.");
     return N_("The piezo pickup's top.");
 }
 
@@ -108,7 +126,7 @@ inline void draw_voice(App &a)
     }
     if (!ks || !ks->is(J::ARR) || ks->a.empty()) {
         const float y = PH ? 180 : IP ? 290 : 440;
-        const auto ls = wrap(a, a.font, 21, T("This voice has no physical knobs yet. Pianos have them first; other families follow."), X1 - X0 - 40);
+        const auto ls = wrap(a, a.font, 21, T("This voice has no physical knobs yet. Pianos and electric pianos have them first; other families follow."), X1 - X0 - 40);
         for (size_t i = 0; i < ls.size(); i++)
             text(a, a.font, 21, X0 + 20, y + i * (a.lh(21) + 4), SILK_DIM, ls[i]);
         return;

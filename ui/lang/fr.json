@@ -648,6 +648,16 @@
  "The highest the soundboard radiates.": "Le plus aigu que rayonne la table d'harmonie.",
  "The piezo pickup's top.": "Le haut de gamme du micro piézo.",
  "BUILDING THE NEW SOUND...": "CONSTRUCTION DU NOUVEAU SON...",
- "This voice has no physical knobs yet. Pianos have them first; other families follow.": "Cette voix n'a pas encore de boutons physiques. Les pianos les ont en premier ; les autres familles suivront.",
- "ALL AS THE VOICE": "TOUT COMME LA VOIX"
+ "ALL AS THE VOICE": "TOUT COMME LA VOIX",
+ "This voice has no physical knobs yet. Pianos and electric pianos have them first; other families follow.": "Cette voix n'a pas encore de boutons physiques. Les pianos et les pianos électriques les ont d'abord ; les autres familles suivront.",
+ "TINE OFFSET": "DÉCALAGE TINE",
+ "REED OFFSET": "DÉCALAGE LAME",
+ "PICKUP GAP": "ÉCART MICRO",
+ "HAMMER SWING": "AMPLITUDE",
+ "TONE BAR": "BARRE DE TON",
+ "The tine's rest off the pickup's centre. Centred is a thin bell; off centre, warm with bark.": "Le repos du tine hors du centre du micro. Centré, une cloche fine ; décentré, chaud et mordant.",
+ "The reed's rest off the plate's slot. Further off, more bark at every touch.": "Le repos de la lame hors de la fente de la plaque. Plus loin, plus de mordant à chaque toucher.",
+ "The tine to the pickup. Closer is louder and barks sooner.": "Du tine au micro. Plus près, plus fort et mordant plus tôt.",
+ "How far the hammer throws the tine or reed. Wider barks and buzzes.": "Jusqu'où le marteau lance le tine ou la lame. Plus large, ça mord et grésille.",
+ "The tone bar's ring in the attack: the bell.": "La résonance de la barre de ton dans l'attaque : la cloche."
 }

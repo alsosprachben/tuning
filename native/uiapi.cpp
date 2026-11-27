@@ -321,6 +321,9 @@ bool pedals_of(nv_host *h, int channel, int out[3])
 // range (round its program's plain voice; log: a ratio's, turned in octaves),
 // whether it is the part's own, and its words in its units -- and whether
 // the part's patch is being built through a setting just made
+// (tonelib.RhodesProperties.pole_halfwidth_mm: the unit of its pickup's
+// lengths, the GAP knob's millimetres -- examples/piano_knobs_check.py holds it to the class)
+static const double RHODES_POLE_MM = 1.7568;
 J voicing_of(nv_host *h, int row)
 {
     J o = sess::obj();
@@ -329,7 +332,11 @@ J voicing_of(nv_host *h, int row)
     n = nv_host_parts(h, ps.data(), n);
     const bool has = row >= 0 && row < n;
     o.o["row"] = sess::integer(row);
-    o.o["part"] = sess::str(has ? ps[(size_t)row].name : "");
+    // (the patch the knobs are of: while a program change builds, the new one's)
+    char pn[96] = {0};
+    if (has)
+        nv_host_voicing_name(h, row, pn, (int)sizeof pn);
+    o.o["part"] = sess::str(pn);
     o.o["program"] = sess::integer(has ? ps[(size_t)row].program : -1);
     o.o["variation"] = sess::integer(has ? ps[(size_t)row].variation : 0);
     double v[NV_VK_N] = {0}, v0[NV_VK_N] = {0}, cap[NV_VK_N] = {0};
@@ -337,7 +344,7 @@ J voicing_of(nv_host *h, int row)
     const int have = has ? nv_host_voicing(h, row, v, v0, cap, &own, &building) : 0;
     o.o["building"] = sess::boolean(building != 0);
     J ks = sess::arr();
-    static const char *NAMES[NV_VK_N] = {"felt", "felt_left", "strike", "unison", "lid", "board", "pickup"};
+    static const char *const *NAMES = nv_host::VK_NAMES;
     for (int i = 0; have > 0 && i < NV_VK_N; i++) {
         if (!(have >> i & 1))
             continue;
@@ -364,6 +371,26 @@ J voicing_of(nv_host *h, int row)
         case NV_VK_LID:     // (the open lid's shelf, dB: shut to over open)
             lo = -9.0, hi = 3.0;
             snprintf(t, sizeof t, "%+.1f dB", v[i]);
+            break;
+        case NV_VK_TINE:    // (the tine's rest off the pole's centre, in its half-widths: centred to off its edge)
+            lo = 0.0, hi = std::max(1.5, 1.5 * cap[i]);
+            snprintf(t, sizeof t, "%.0f%%", 100.0 * v[i]);
+            break;
+        case NV_VK_REED:    // (the reed's rest off the plate's plane, in slot widths)
+            lo = 0.0, hi = std::max(1.2, 2.0 * cap[i]);
+            snprintf(t, sizeof t, "%.0f%%", 100.0 * v[i]);
+            break;
+        case NV_VK_GAP:     // (the tine to the pickup: RhodesProperties.pole_halfwidth_mm the unit)
+            lo = cap[i] * 0.4, hi = cap[i] * 3.0, lg = true;
+            snprintf(t, sizeof t, "%.2f mm", v[i] * RHODES_POLE_MM);
+            break;
+        case NV_VK_SWING:   // (the hammer's swing: a third to two and a half times the program's)
+            lo = cap[i] * 0.3, hi = cap[i] * 2.5, lg = true;
+            snprintf(t, sizeof t, "x%.2f", v[i] / std::max(1e-9, cap[i]));
+            break;
+        case NV_VK_TONEBAR: // (the tone bar's bell: -20 to +12 dB of the program's)
+            lo = cap[i] * 0.1, hi = cap[i] * 4.0, lg = true;
+            snprintf(t, sizeof t, "%+.1f dB", 20.0 * log10(std::max(1e-9, v[i] / std::max(1e-9, cap[i]))));
             break;
         default:            // (the soundboard's top, the piezo's corner, Hz: an octave either way)
             lo = cap[i] * 0.5, hi = cap[i] * 2.0, lg = true;

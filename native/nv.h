@@ -2052,8 +2052,18 @@ const NoteClass *nv_variant(const NoteClass *k, int code);
    mask k has, v0[NV_VK_N] its values. A setting is a transform against a
    class: t[i] an offset (HAMMER, LID) or a ratio (the rest), mask the knobs
    set; apply edits d in place; an id (1..2047, 0 none) names a setting for
-   a variation key's bits 20-30, and variant is k through it (made once) */
-enum { NV_VK_HAMMER, NV_VK_WEAR, NV_VK_STRIKE, NV_VK_UNISON, NV_VK_LID, NV_VK_BOARD, NV_VK_PICKUP, NV_VK_N };
+   a variation key's bits 20-30, and variant is k through it (made once).
+   THE ELECTRIC PIANOS' (ElectricPianoProperties, VoiceSnap.kind 5): TINE
+   (the Rhodes tine's rest off the pole's centre, in its half-widths), GAP
+   (the tine to the pickup, ditto), SWING (the hammer's swing at velocity
+   127, ditto), TONEBAR (its bell's level), REED (the Wurlitzer reed's rest
+   off the plate's plane, in slot widths) -- TINE and REED offsets */
+enum { NV_VK_HAMMER, NV_VK_WEAR, NV_VK_STRIKE, NV_VK_UNISON, NV_VK_LID, NV_VK_BOARD, NV_VK_PICKUP,
+       NV_VK_TINE, NV_VK_GAP, NV_VK_SWING, NV_VK_TONEBAR, NV_VK_REED, NV_VK_N };
+static inline int nv_voicing_offset(int i)
+{
+    return i == NV_VK_HAMMER || i == NV_VK_LID || i == NV_VK_TINE || i == NV_VK_REED;
+}
 int nv_voicing_knobs(const NoteClass *k, double *v0);
 void nv_voicing_apply(NoteClass *d, const double *t, int mask);
 int nv_voicing_id(const double *t, int mask);

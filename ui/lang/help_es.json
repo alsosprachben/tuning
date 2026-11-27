@@ -3668,8 +3668,8 @@
   "t": "Voz"
  },
  "voice/intro": {
-  "en": "The selected part's instrument as the physics it is modelled by: each knob a physical part of it, in its own units. Each starts at the voice's own value. Turn one and the part's sound is built again through it, which takes a second or two; the notes after that have it. Double-tap a knob to put it back. A new program puts every knob back. Pianos have knobs first.",
-  "t": "El instrumento de la parte elegida como la física con que está modelado: cada mando una parte física de él, en sus propias unidades. Cada uno empieza en el valor propio de la voz. Al girar uno, el sonido de la parte se construye de nuevo con él, lo que tarda un segundo o dos; las notas siguientes ya lo tienen. Toca dos veces un mando para devolverlo. Un programa nuevo devuelve todos los mandos. Los pianos tienen mandos primero."
+  "en": "The selected part's instrument as the physics it is modelled by: each knob a physical part of it, in its own units. Each starts at the voice's own value. Turn one and the part's sound is built again through it, which takes a second or two; the notes after that have it. Double-tap a knob to put it back. A new program puts every knob back. Pianos and electric pianos have knobs first.",
+  "t": "El instrumento de la parte elegida como la física con que está modelado: cada mando una parte física de él, en sus propias unidades. Cada uno empieza en el valor propio de la voz. Al girar uno, el sonido de la parte se construye de nuevo con él, lo que tarda un segundo o dos; las notas siguientes ya lo tienen. Toca dos veces un mando para devolverlo. Un programa nuevo devuelve todos los mandos. Los pianos y los pianos eléctricos tienen mandos primero."
  },
  "voice/terms/0/1": {
   "en": "The hammer felt's stiffness, against the program's own (x1). Harder felt is brighter; softer is darker.",
@@ -3699,8 +3699,28 @@
   "en": "The electric grand's piezo pickup: the top of its range. Lower is darker.",
   "t": "La pastilla piezoeléctrica del piano de cola eléctrico: el límite agudo de su rango. Más baja suena más oscura."
  },
- "voice/terms/7/1": {
+ "voice/terms/12/1": {
   "en": "Puts every knob back to the voice's own value.",
   "t": "Devuelve cada mando al valor propio de la voz."
+ },
+ "voice/terms/7/1": {
+  "en": "Where the Rhodes tine rests against its pickup, as a share of the pickup's half-width (0% centred). Centred, the tone is thin and bell-like; off centre, it is warm and barks when played hard. A technician's main voicing adjustment.",
+  "t": "Dónde reposa el tine del Rhodes frente a su pastilla, como fracción de la media anchura de la pastilla (0 % centrado). Centrado, el tono es fino y de campana; descentrado, es cálido y muerde al tocar fuerte. El ajuste principal del técnico."
+ },
+ "voice/terms/8/1": {
+  "en": "Where the Wurlitzer reed rests against the slot in its pickup plate, as a share of the slot's width. Further off, the tone has more bark at every touch.",
+  "t": "Dónde reposa la lengüeta del Wurlitzer frente a la ranura de su placa captadora, como fracción de la anchura de la ranura. Más lejos, el tono muerde más en cada toque."
+ },
+ "voice/terms/9/1": {
+  "en": "The distance from the Rhodes tine to its pickup, in millimetres. Closer is louder and barks at a softer touch.",
+  "t": "La distancia del tine del Rhodes a su pastilla, en milímetros. Más cerca suena más fuerte y muerde con un toque más suave."
+ },
+ "voice/terms/10/1": {
+  "en": "How far the hammer throws the tine or reed at full velocity, against the program's own (x1). Wider swings bark and buzz; the Rhodes bass buzzes hardest.",
+  "t": "Cuánto desplaza el martillo el tine o la lengüeta a máxima velocidad, frente al valor propio del programa (x1). Oscilaciones más amplias muerden y zumban; el grave del Rhodes zumba más."
+ },
+ "voice/terms/11/1": {
+  "en": "The Rhodes tone bar's ring in the attack, the bell, in dB against the program's own.",
+  "t": "El sonido de la barra tonal del Rhodes en el ataque, la campana, en dB frente al valor propio del programa."
  }
 }

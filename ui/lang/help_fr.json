@@ -3668,8 +3668,8 @@
   "t": "Voix"
  },
  "voice/intro": {
-  "en": "The selected part's instrument as the physics it is modelled by: each knob a physical part of it, in its own units. Each starts at the voice's own value. Turn one and the part's sound is built again through it, which takes a second or two; the notes after that have it. Double-tap a knob to put it back. A new program puts every knob back. Pianos have knobs first.",
-  "t": "L'instrument de la partie choisie tel que la physique le modélise : chaque bouton une partie physique de l'instrument, dans ses propres unités. Chacun part de la valeur propre de la voix. En tourner un reconstruit le son de la partie avec lui, ce qui prend une ou deux secondes ; les notes suivantes l'ont. Touchez deux fois un bouton pour le remettre. Un nouveau programme remet tous les boutons. Les pianos ont des boutons en premier."
+  "en": "The selected part's instrument as the physics it is modelled by: each knob a physical part of it, in its own units. Each starts at the voice's own value. Turn one and the part's sound is built again through it, which takes a second or two; the notes after that have it. Double-tap a knob to put it back. A new program puts every knob back. Pianos and electric pianos have knobs first.",
+  "t": "L'instrument de la partie choisie tel que la physique le modélise : chaque bouton une partie physique de l'instrument, dans ses propres unités. Chacun part de la valeur propre de la voix. En tourner un reconstruit le son de la partie avec lui, ce qui prend une ou deux secondes ; les notes suivantes l'ont. Touchez deux fois un bouton pour le remettre. Un nouveau programme remet tous les boutons. Les pianos et les pianos électriques ont des boutons en premier."
  },
  "voice/terms/0/1": {
   "en": "The hammer felt's stiffness, against the program's own (x1). Harder felt is brighter; softer is darker.",
@@ -3699,8 +3699,28 @@
   "en": "The electric grand's piezo pickup: the top of its range. Lower is darker.",
   "t": "Le micro piézo du piano à queue électrique : le haut de sa plage. Plus bas, plus sombre."
  },
- "voice/terms/7/1": {
+ "voice/terms/12/1": {
   "en": "Puts every knob back to the voice's own value.",
   "t": "Remet chaque bouton à la valeur propre de la voix."
+ },
+ "voice/terms/7/1": {
+  "en": "Where the Rhodes tine rests against its pickup, as a share of the pickup's half-width (0% centred). Centred, the tone is thin and bell-like; off centre, it is warm and barks when played hard. A technician's main voicing adjustment.",
+  "t": "Où le tine du Rhodes repose face à son micro, en part de la demi-largeur du micro (0 % centré). Centré, le son est fin et cristallin ; décentré, il est chaud et mord quand on joue fort. Le principal réglage du technicien."
+ },
+ "voice/terms/8/1": {
+  "en": "Where the Wurlitzer reed rests against the slot in its pickup plate, as a share of the slot's width. Further off, the tone has more bark at every touch.",
+  "t": "Où la lame du Wurlitzer repose face à la fente de sa plaque de captage, en part de la largeur de la fente. Plus loin, le son mord davantage à chaque toucher."
+ },
+ "voice/terms/9/1": {
+  "en": "The distance from the Rhodes tine to its pickup, in millimetres. Closer is louder and barks at a softer touch.",
+  "t": "La distance du tine du Rhodes à son micro, en millimètres. Plus près, c'est plus fort et ça mord dès un toucher plus doux."
+ },
+ "voice/terms/10/1": {
+  "en": "How far the hammer throws the tine or reed at full velocity, against the program's own (x1). Wider swings bark and buzz; the Rhodes bass buzzes hardest.",
+  "t": "Jusqu'où le marteau lance le tine ou la lame à pleine vélocité, par rapport à la valeur du programme (x1). Plus large, ça mord et grésille ; la basse du Rhodes grésille le plus."
+ },
+ "voice/terms/11/1": {
+  "en": "The Rhodes tone bar's ring in the attack, the bell, in dB against the program's own.",
+  "t": "La résonance de la barre de ton du Rhodes dans l'attaque, la cloche, en dB par rapport à la valeur du programme."
  }
 }

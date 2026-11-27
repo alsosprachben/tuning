@@ -332,6 +332,8 @@ void nv_host_set_pickup(nv_host *h, int row, int choice);
    (where the ranges sit), *own the mask set, *building its patch on its way;
    set one (in its units), or put it back to the voice's (knob -1: every one) */
 int nv_host_voicing(nv_host *h, int row, double *v, double *v0, double *cap, int *own, int *building);
+/* ...and the name of the patch those knobs are of (the one being built, while a program change is) */
+void nv_host_voicing_name(nv_host *h, int row, char *out, int cap);
 void nv_host_set_voicing(nv_host *h, int row, int knob, double v);
 void nv_host_forget_voicing(nv_host *h, int row, int knob);
 void nv_host_set_drive(nv_host *h, int row, double v);

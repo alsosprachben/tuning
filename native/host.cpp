@@ -3982,7 +3982,7 @@ int nv_host::voicing_vid(int p, int v, const std::array<double, NV_VK_N> &vk, in
     for (int i = 0; i < NV_VK_N; i++) {
         if (!((vmask & have) >> i & 1))
             continue;
-        if (i == NV_VK_HAMMER || i == NV_VK_LID)
+        if (nv_voicing_offset(i))
             t[i] = vk[(size_t)i] - v0[i];
         else if (v0[i] > 0.0)
             t[i] = vk[(size_t)i] / v0[i];
@@ -4316,13 +4316,23 @@ std::vector<panel::PartRow> nv_host::part_rows()
         r.muted = pa.muted;
         r.solo = pa.solo ? 1 : solo_n.load() > 0 ? 2 : 0;
         r.touch_fixed = pa.fixed < 0 ? !nv_part_patch_touch_sensitive(part, pa.pi) : pa.fixed != 0;
-        r.name = pa.drums ? kit_name(r.program) : E.prog[r.program].name;
-        for (size_t j = 0; j < E.vpv.size() && r.var; j++)
-            if (E.vpv[j][0] == r.program && E.vpv[j][1] == r.var)
-                r.name = E.vnames[j];
+        r.name = patch_name(r.program, r.var, r.drums);
         out.push_back(r);
     }
     return out;
+}
+
+std::string nv_host::patch_name(int program, int var, bool drums) const
+{
+    program &= 127;
+    if (drums)
+        return kit_name(program);
+    std::string n = E.prog[program].name;
+    var &= 4095;                // (the GS variation: a cabinet's, a pickup's, a voicing's bits ride above it)
+    for (size_t j = 0; j < E.vpv.size() && var; j++)
+        if (E.vpv[j][0] == program && E.vpv[j][1] == var)
+            n = E.vnames[j];
+    return n;
 }
 
 // a part's channel (-1 every one), keys, transpose, level and mute: the

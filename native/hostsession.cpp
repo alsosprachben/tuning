@@ -1955,6 +1955,28 @@ int nv_host_voicing(nv_host *h, int row, double *v, double *v0, double *cap, int
     *own = vmask & have;
     return have;
 }
+void nv_host_voicing_name(nv_host *h, int row, char *out, int cap)
+{
+    size_t i;
+    if (cap <= 0)
+        return;
+    out[0] = 0;
+    if (!row_index(h, row, i))
+        return;
+    int p, var;
+    bool dr;
+    {
+        std::lock_guard<std::mutex> lk(h->parts_mu);
+        if (i >= h->pats.size())
+            return;
+        const nv_host::PartAt &pa = h->pats[i];
+        const bool w = pa.want >= 0;
+        p = w ? pa.want : pa.program;
+        var = w ? pa.want_var : pa.var;
+        dr = w ? pa.want_dr : pa.drums;
+    }
+    snprintf(out, (size_t)cap, "%s", h->patch_name(p, dr ? 0 : var & 4095, dr).c_str());
+}
 void nv_host_set_voicing(nv_host *h, int row, int knob, double v)
 {
     size_t i;

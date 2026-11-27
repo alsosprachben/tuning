@@ -2909,6 +2909,27 @@ int nv_voicing_knobs(const NoteClass *k, double *v0)
     if (!k)
         return 0;
     const VoiceSnap &s = k->tmpl;
+    if (s.kind == 5 && (s.ep_kind == 1 || s.ep_kind == 2)) {
+        // (an electric piano: its pickup's voicing and the hammer's swing)
+        int m = 0;
+        if (s.ep_kind == 1) {
+            m |= 1 << NV_VK_TINE | 1 << NV_VK_GAP;
+            v0[NV_VK_TINE] = s.ep_p[0];
+            v0[NV_VK_GAP] = s.ep_p[1];
+            if (s.n_tb > 0 && s.tb_g[0] > 0.0) {
+                m |= 1 << NV_VK_TONEBAR;
+                v0[NV_VK_TONEBAR] = s.tb_g[0];
+            }
+        } else {
+            m |= 1 << NV_VK_REED;
+            v0[NV_VK_REED] = s.ep_p[0];
+        }
+        if (s.ep_defl > 0.0) {
+            m |= 1 << NV_VK_SWING;
+            v0[NV_VK_SWING] = s.ep_defl;
+        }
+        return m;
+    }
     if (s.kind != 0 || !s.hammer_model)
         return 0;
     int m = 1 << NV_VK_HAMMER;
@@ -2975,6 +2996,22 @@ void nv_voicing_apply(NoteClass *d, const double *t, int mask)
         s.board_high_hz *= t[NV_VK_BOARD];
     if (mask >> NV_VK_PICKUP & 1)
         s.bridge_corner_hz *= t[NV_VK_PICKUP];
+    if (s.kind == 5) {
+        // (an electric piano's: its pickup's parameters and the swing; each
+        // note's layers nv_voice_init's from them)
+        if (mask >> NV_VK_TINE & 1)
+            s.ep_p[0] += t[NV_VK_TINE];
+        if (mask >> NV_VK_REED & 1)
+            s.ep_p[0] += t[NV_VK_REED];
+        if (mask >> NV_VK_GAP & 1)
+            s.ep_p[1] *= t[NV_VK_GAP];
+        if (mask >> NV_VK_SWING & 1)
+            s.ep_defl *= t[NV_VK_SWING];
+        if (mask >> NV_VK_TONEBAR & 1)
+            for (int i = 0; i < s.n_tb; i++)
+                s.tb_g[i] *= t[NV_VK_TONEBAR];
+        return;
+    }
     if (mask)
         nv_hammer_note(&s);                 // (its prototype's hammer shares: the export's, of the moved class)
 }

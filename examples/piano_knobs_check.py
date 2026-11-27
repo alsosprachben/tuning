@@ -29,7 +29,8 @@ import piano_knobs as PK    # noqa: E402
 
 RANGE = {PK.HAMMER: (-1.0, 0.0, 1.0), PK.WEAR: (0.3, 1.0, 2.5), PK.STRIKE: (0.1, None, 0.18),
          PK.UNISON: (0.0, 0.5, 2.5), PK.LID: (-6.0, None, 2.5), PK.BOARD: (0.5, 0.8, 1.8),
-         PK.PICKUP: (0.6, 1.3, 1.8)}
+         PK.PICKUP: (0.6, 1.3, 1.8), PK.TINE: (0.0, 0.3, 1.2), PK.GAP: (0.5, 1.5, 2.5),
+         PK.SWING: (0.4, 1.4, 2.2), PK.TONEBAR: (0.2, 2.0, 3.5), PK.REED: (0.0, 0.25, 1.0)}
 
 
 def settings(i, v0):
@@ -40,7 +41,7 @@ def settings(i, v0):
             continue
         if i == PK.HAMMER:
             out.append(v0 + x + 0.25)
-        elif i in (PK.STRIKE, PK.LID):
+        elif i in (PK.STRIKE, PK.LID, PK.TINE, PK.REED):
             out.append(x)
         else:
             out.append(v0 * x)
@@ -59,11 +60,11 @@ def main():
     d.nv_voicing_apply.restype = None
     d.nv_voicing_apply.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
     d.nv_noteclass_size.restype = ctypes.c_size_t
-    voices = [(p, PM.property_class_for_note(p, 60)) for p in range(4)]
+    voices = [(p, PM.property_class_for_note(p, 60)) for p in range(6)]
     # (the variations with classes of their own: Honky-tonk 2 and the like)
     seen = {c for _, c in voices}
     for (p, v), _ in sorted(PM.VARIATIONS.items(), key=lambda kv: kv[0]) if hasattr(PM, 'VARIATIONS') else ():
-        if p > 3 or v >= 4096:
+        if p > 5 or v >= 4096:
             continue
         try:
             c = PM.variation_class(p, v)
@@ -74,6 +75,14 @@ def main():
             seen.add(c)
             voices.append(((p, v), c))
     bad, asked = 0, 0
+    # (the VOICE card's millimetres for the Rhodes' GAP: uiapi's RHODES_POLE_MM, the class's unit)
+    import re
+    import tonelib as T
+    src = open(os.path.join(HERE, "native", "uiapi.cpp")).read()
+    mm = float(re.search(r"RHODES_POLE_MM = ([0-9.]+);", src).group(1))
+    if abs(mm - T.RhodesProperties.pole_halfwidth_mm) > 1e-9:
+        print("uiapi RHODES_POLE_MM %g, the class's %g" % (mm, T.RhodesProperties.pole_halfwidth_mm))
+        bad += 1
     notes = [(33, 40), (33, 110), (60, 64), (72, 100), (88, 30), (100, 120)]
     for who, base in voices:
         have = PK.knobs_of(base)

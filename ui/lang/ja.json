@@ -648,6 +648,16 @@
  "The highest the soundboard radiates.": "響板が放射する上限。",
  "The piezo pickup's top.": "ピエゾピックアップの上限。",
  "BUILDING THE NEW SOUND...": "新しい音を作成中...",
- "This voice has no physical knobs yet. Pianos have them first; other families follow.": "この音色にはまだ物理ノブがありません。まずピアノから。他の楽器群も続きます。",
- "ALL AS THE VOICE": "すべて音色のまま"
+ "ALL AS THE VOICE": "すべて音色のまま",
+ "This voice has no physical knobs yet. Pianos and electric pianos have them first; other families follow.": "この音色にはまだ物理ノブがありません。まずピアノとエレクトリックピアノに付き、他のファミリーが続きます。",
+ "TINE OFFSET": "トーン位置",
+ "REED OFFSET": "リード位置",
+ "PICKUP GAP": "ピックアップ間隔",
+ "HAMMER SWING": "ハンマー振幅",
+ "TONE BAR": "トーンバー",
+ "The tine's rest off the pickup's centre. Centred is a thin bell; off centre, warm with bark.": "トーンがピックアップ中心からずれた静止位置。中心では細いベル、ずらすと温かく唸る。",
+ "The reed's rest off the plate's slot. Further off, more bark at every touch.": "リードがプレートのスロットからずれた静止位置。離すほどどのタッチでも唸る。",
+ "The tine to the pickup. Closer is louder and barks sooner.": "トーンとピックアップの距離。近いほど大きく、早く唸る。",
+ "How far the hammer throws the tine or reed. Wider barks and buzzes.": "ハンマーがトーンやリードを振る幅。広いほど唸り、ビリつく。",
+ "The tone bar's ring in the attack: the bell.": "アタックでのトーンバーの響き、ベルの音。"
 }

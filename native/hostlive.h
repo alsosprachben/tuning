@@ -1596,6 +1596,7 @@ struct nv_host {
     std::vector<std::pair<PartSpec, void *>> add_done;
     long long next_pid = 10;
     std::vector<panel::PartRow> part_rows();
+    std::string patch_name(int program, int var, bool drums) const;    // (a part row's name for a patch; E's, no lock)
     bool drawn_of(int pi, std::vector<char> &out);
     void part_set(size_t row, int channel, int lo, int hi, int tr, double level, bool muted);
     void part_add(const PartSpec &sp);
@@ -1615,7 +1616,8 @@ struct nv_host {
     void set_voicings(size_t row, const std::array<double, NV_VK_N> &vk, int vmask);     // (every knob at once: a session's)
     void voicing_apply(size_t row, const std::array<double, NV_VK_N> &vk, int vmask);
     // (the knobs' names in a session: piano_knobs.NAMES)
-    static constexpr const char *VK_NAMES[NV_VK_N] = {"felt", "felt_left", "strike", "unison", "lid", "board", "pickup"};
+    static constexpr const char *VK_NAMES[NV_VK_N] = {"felt", "felt_left", "strike", "unison", "lid", "board", "pickup",
+                                                            "tine", "gap", "swing", "tonebar", "reed"};
     // (variation key v of program p through knob values vk, vmask: the setting's
     //  id against its key-60 class -- 0 none, -1 no more ids)
     int voicing_vid(int p, int v, const std::array<double, NV_VK_N> &vk, int vmask) const;
