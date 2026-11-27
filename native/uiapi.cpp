@@ -1547,6 +1547,62 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         for (long v : lp)
             la.a.push_back(sess::integer(v));
         r.o["seq_lpos"] = la;
+    } else if (call == "seq_export") {
+        // THE PATTERN AS A MIDI FILE (eucseq.h's seq_midi): bars of beats, into the Files
+        // card's folder's Sequences (made if missing) -- the kit's program on the channel,
+        // a user set's settings before it; the file's path and name back
+        const int bars = (int)arg_i(q, "bars", 4), beats = (int)arg_i(q, "beats", 4);
+        nv::Seq S;
+        {
+            std::lock_guard<std::mutex> lk(h->seq_mu);
+            S = h->seq_state;
+        }
+        int program = -1;
+        {
+            int n = nv_host_parts(h, nullptr, 0);
+            std::vector<nv_host_partinfo> ps((size_t)std::max(0, n));
+            n = nv_host_parts(h, ps.data(), n);
+            for (int i = 0; i < n && program < 0; i++)         // (the drum part on the channel it plays)
+                if (ps[(size_t)i].drums && (ps[(size_t)i].channel == S.ch || (ps[(size_t)i].channel < 0 && S.ch == 9)))
+                    program = ps[(size_t)i].program;
+        }
+        std::vector<std::vector<uint8_t>> exs;
+        if (program == 64 || program == 65) {                   // (a user set: its keys' settings, as a sequencer sends them)
+            panel::Host::USets u;
+            if (h->udrum_read(u))
+                for (const auto &kv : u)
+                    if (kv.first.first == program - 64)
+                        for (const auto &cv : kv.second) {
+                            const uint8_t a1 = (uint8_t)((kv.first.first << 4) | (cv.first & 15)), key = (uint8_t)kv.first.second,
+                                          v = (uint8_t)(cv.second & 127);
+                            const uint8_t cs = (uint8_t)((128 - (0x21 + a1 + key + v) % 128) % 128);
+                            exs.push_back({0x41, 0x10, 0x42, 0x12, 0x21, a1, key, v, cs});
+                        }
+        }
+        const std::string dir = fileplay::music_root() + "/Sequences";
+        mkdir(dir.c_str(), 0755);
+        char nm[128];
+        {
+            const time_t now = time(nullptr);
+            struct tm tmv;
+            localtime_r(&now, &tmv);
+            char ts[32];
+            strftime(ts, sizeof ts, "%Y%m%d-%H%M%S", &tmv);
+            snprintf(nm, sizeof nm, "seq-%dbpm-%dx%d-%s.mid", (int)std::lround(S.bpm), std::max(1, bars), std::max(1, beats), ts);
+        }
+        const std::string path = dir + "/" + nm;
+        const std::vector<uint8_t> f = nv::seq_midi(S, bars, beats, program, exs, std::string("Clavitone SEQ ") + nm);
+        FILE *fp = fopen(path.c_str(), "wb");
+        if (!fp || fwrite(f.data(), 1, f.size(), fp) != f.size()) {
+            ok = false;
+            r.o["error"] = sess::str("could not write " + path);
+        } else {
+            r.o["path"] = sess::str(path);
+            r.o["name"] = sess::str(nm);
+            r.o["bytes"] = sess::integer((long)f.size());
+        }
+        if (fp)
+            fclose(fp);
     } else if (call == "drums") {              // the card opened (or shut: open false); sets: 1 for the user sets' sources
         if (w) {
             w->drums = arg_i(q, "open", 1) != 0;

@@ -2480,8 +2480,8 @@
   "t": "Tempo"
  },
  "sc:metro/terms/1/1": {
-  "en": "Beats a minute, 30 to 300.",
-  "t": "Pulsos por minuto, de 30 a 300."
+  "en": "Beats a minute, 30 to 300. The sequencer's tempo too (the SEQ card): change either and both follow.",
+  "t": "Pulsos por minuto, de 30 a 300. También el tempo del secuenciador (tarjeta SEC): cambia uno y ambos lo siguen."
  },
  "sc:metro/terms/2/0": {
   "en": "Bell every",
@@ -2524,12 +2524,12 @@
   "t": "El equipo: entradas, los ajustes de sonido de todas las partes, la sala. La línea de arriba es la frecuencia de muestreo y el tamaño de bloque, el tiempo que tiene el motor para cada bloque de sonido."
  },
  "setup/terms/0/0": {
-  "en": "QUIT CLAVITONE",
-  "t": "SALIR DE CLAVITONE"
+  "en": "Quitting",
+  "t": "Salir"
  },
  "setup/terms/0/1": {
-  "en": "Tap twice within 3 seconds: the engine saves the session and stops, and this window closes. Closing the window does the same.",
-  "t": "Toca dos veces en menos de 3 segundos: el motor guarda la sesión y se detiene, y esta ventana se cierra. Cerrar la ventana hace lo mismo."
+  "en": "There is no quit button. On a computer, close the window or press Ctrl+Q (Cmd+Q on a Mac): the engine saves the session and stops. On the iPhone and iPad, leave the app as any other.",
+  "t": "No hay botón de salir. En un ordenador, cierra la ventana o pulsa Ctrl+Q (Cmd+Q en Mac): el motor guarda la sesión y se detiene. En iPhone y iPad, sal de la app como de cualquier otra."
  },
  "su:midi/title": {
   "en": "MIDI in",
@@ -3650,5 +3650,13 @@
  "seq/terms/15/1": {
   "en": "The lanes, tempo and swing are kept in the session. It starts stopped.",
   "t": "Los carriles, el tempo y el swing se guardan en la sesión. Empieza parado."
+ },
+ "seq/terms/16/0": {
+  "en": "SAVE MIDI",
+  "t": "GUARDAR MIDI"
+ },
+ "seq/terms/16/1": {
+  "en": "Writes the pattern as a MIDI file: BARS bars of BEATS A BAR beats, every lane from the start, with the tempo, the kit, and a user set's settings. It goes in the Sequences folder, on the FILES card, to play, render or take into another program. Swing, NUDGE and ACCENT are written as they play; a drifting lane is written as it drifts.",
+  "t": "Escribe el patrón como archivo MIDI: COMPASES compases de PULSOS POR COMPÁS pulsos, cada carril desde el principio, con el tempo, el kit y los ajustes de un set de usuario. Va a la carpeta Sequences, en la tarjeta ARCHIVOS, para tocarlo, renderizarlo o llevarlo a otro programa. El swing, el EMPUJE y el ACENTO se escriben como suenan; un carril que deriva, tal como deriva."
  }
 }

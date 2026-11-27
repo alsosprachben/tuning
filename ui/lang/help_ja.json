@@ -2480,8 +2480,8 @@
   "t": "テンポ"
  },
  "sc:metro/terms/1/1": {
-  "en": "Beats a minute, 30 to 300.",
-  "t": "1分あたりの拍数、30〜300。"
+  "en": "Beats a minute, 30 to 300. The sequencer's tempo too (the SEQ card): change either and both follow.",
+  "t": "1分間の拍数、30〜300。シーケンサー(SEQ カード)のテンポでもあり、どちらを変えても両方が従います。"
  },
  "sc:metro/terms/2/0": {
   "en": "Bell every",
@@ -2524,12 +2524,12 @@
   "t": "機材構成：入力、全パート共通の音の設定、ルーム。上部の行はサンプルレートとブロックサイズ（エンジンが音の各ブロックに使える時間）です。"
  },
  "setup/terms/0/0": {
-  "en": "QUIT CLAVITONE",
-  "t": "CLAVITONE を終了"
+  "en": "Quitting",
+  "t": "終了"
  },
  "setup/terms/0/1": {
-  "en": "Tap twice within 3 seconds: the engine saves the session and stops, and this window closes. Closing the window does the same.",
-  "t": "3秒以内に2回タップします。エンジンがセッションを保存して停止し、このウィンドウが閉じます。ウィンドウを閉じても同じです。"
+  "en": "There is no quit button. On a computer, close the window or press Ctrl+Q (Cmd+Q on a Mac): the engine saves the session and stops. On the iPhone and iPad, leave the app as any other.",
+  "t": "終了ボタンはありません。コンピュータではウインドウを閉じるか Ctrl+Q(Mac では Cmd+Q)。エンジンはセッションを保存して止まります。iPhone と iPad では、ほかのアプリと同じように離れてください。"
  },
  "su:midi/title": {
   "en": "MIDI in",
@@ -3650,5 +3650,13 @@
  "seq/terms/15/1": {
   "en": "The lanes, tempo and swing are kept in the session. It starts stopped.",
   "t": "レーン、テンポ、スウィングはセッションに保存されます。開いたときは停止しています。"
+ },
+ "seq/terms/16/0": {
+  "en": "SAVE MIDI",
+  "t": "MIDI 保存"
+ },
+ "seq/terms/16/1": {
+  "en": "Writes the pattern as a MIDI file: BARS bars of BEATS A BAR beats, every lane from the start, with the tempo, the kit, and a user set's settings. It goes in the Sequences folder, on the FILES card, to play, render or take into another program. Swing, NUDGE and ACCENT are written as they play; a drifting lane is written as it drifts.",
+  "t": "パターンを MIDI ファイルに書き出します。「1小節の拍」×「小節」分、全レーンを頭から、テンポ、キット、ユーザーセットの設定も一緒に。Sequences フォルダ(ファイルのカード)に入り、再生やレンダー、ほかのソフトへの持ち出しに使えます。スウィング、ずらし、アクセントは鳴るとおりに、ドリフトするレーンはずれたまま書かれます。"
  }
 }

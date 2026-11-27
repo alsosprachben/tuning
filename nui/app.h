@@ -81,7 +81,6 @@ struct App {
     float lab_x0 = 0, lab_x1 = 0;       // (the panel centred labels stay inside, while a card draws one; 0, 0 none)
     bool quit = false;
     bool animate = false;               // (a card asks for another frame: a blink, a send still due)
-    double quit_armed = -10.0;          // (QUIT's first tap: a second within 3 s quits)
     Kit K;
     Dial jog;
     // A CONTROL's SHEET (a long-press): its value typed; SET leaves the value

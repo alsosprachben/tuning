@@ -11,7 +11,8 @@
 //
 // TESTS (NUI_SCRIPT=FILE): a line each, "wait MS", "tap X Y" (a finger down
 // and up there, in the 1920x1080 design's units), "shot PATH" (the frame as
-// a PPM), "quit" -- with SDL_VIDEODRIVER=offscreen, headless.
+// a PPM), "key ctrl+q" (a key pressed through SDL's queue), "quit" -- with
+// SDL_VIDEODRIVER=offscreen, headless.
 #include <SDL3/SDL.h>
 #ifdef __APPLE__
 #include <TargetConditionals.h>
@@ -543,7 +544,7 @@ static std::vector<Step> load_script(const char *path)
             st.y1 = st.y;
         } else if (st.op == "fingers")          // (fingers N: N fingers resting -- fine mode at 2)
             s >> st.ms;
-        else if (st.op == "shot")
+        else if (st.op == "shot" || st.op == "key")   // (key ctrl+q: a key pressed, its modifier held -- through SDL's queue)
             s >> st.arg;
         else if (st.op == "call")             // (call JSON: an API call, as a card makes it -- the rest of the line)
             std::getline(s >> std::ws, st.arg);
@@ -692,6 +693,12 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
                 ImGui_ImplSDL3_ProcessEvent(&e);
                 if (e.type == SDL_EVENT_QUIT || e.type == SDL_EVENT_WINDOW_CLOSE_REQUESTED)
                     a.quit = true;
+#if !(defined(__APPLE__) && TARGET_OS_IPHONE)
+                // (no QUIT key on the panel: Ctrl+Q or Ctrl+W, Cmd on a Mac -- the window full-screen has no close box)
+                if (e.type == SDL_EVENT_KEY_DOWN && (e.key.key == SDLK_Q || e.key.key == SDLK_W) &&
+                    (e.key.mod & (SDL_KMOD_CTRL | SDL_KMOD_GUI)))
+                    a.quit = true;
+#endif
                 // (the fingers down: a second one resting makes a drag fine)
                 if (e.type == SDL_EVENT_FINGER_DOWN)
                     a.K.fingers++;
@@ -742,6 +749,14 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
             } else if (st.op == "shot") {
                 shot_path = home_path(st.arg);
                 shot_in = 3;
+            } else if (st.op == "key") {
+                SDL_Event k{};
+                k.type = SDL_EVENT_KEY_DOWN;
+                const std::string ka = st.arg;
+                k.key.mod = ka.find("ctrl+") != std::string::npos ? SDL_KMOD_LCTRL : ka.find("cmd+") != std::string::npos ? SDL_KMOD_LGUI : 0;
+                k.key.key = SDL_GetKeyFromName(ka.substr(ka.rfind('+') + 1).c_str());
+                k.key.down = true;
+                SDL_PushEvent(&k);
             } else if (st.op == "call") {
                 const J r = call(a, st.arg);
                 fprintf(stderr, "nui: call %s -> %s\n", st.arg.c_str(), sess::dump(r).substr(0, 4000).c_str());

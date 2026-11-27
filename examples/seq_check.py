@@ -200,6 +200,57 @@ def main(argv):
     print("drift     1%% fast: gaps %s want %.1f %s; held: off the grid by %s %s; SYNC: %s %s" % (
         list(g0), want, "ok" if ok0 else "WRONG", held, "ok" if ok1 else "WRONG", synced, "ok" if ok2 else "WRONG"))
 
+    # THE MIDI FILE (seq_export): swing, nudge, accent and drift written where the engine plays
+    # them -- each note's tick against the formula worked out here, independently of eucseq.h
+    import tempfile, mido
+    tmp = tempfile.mkdtemp()
+    os.environ["HOME"] = tmp                                         # (its Sequences under a scratch ~/Music)
+    os.makedirs(os.path.join(tmp, "Music"))
+    lanes((36, 16, 4, 0, 0, 0), (38, 16, 2, 4, 10, 0), (42, 16, 11, 0, -5, 0), (46, 12, 5, 1, 0, 7))
+    call({"call": "seq_set", "lane": 0, "f": "accent", "v": 2})
+    call({"call": "seq_set", "lane": -1, "f": "swing", "v": 60})
+    call({"call": "seq_set", "lane": -1, "f": "bpm", "v": 96})
+    r = call({"call": "seq_export", "bars": 3, "beats": 4})
+    mf = mido.MidiFile(r["path"])
+
+    def bj(k, n):               # (Bjorklund, as Toussaint's table: written again here)
+        a, b = [[1]] * k, [[0]] * (n - k)
+        first = True
+        while a and (len(b) > 1 or (first and len(b) == 1)):
+            m = min(len(a), len(b))
+            na = [a[i] + b[i] for i in range(m)]
+            a, b = na, (a[m:] if len(a) > m else b[m:])
+            first = False
+        return sum(a, []) + sum(b, [])
+    total, want = 3 * 4 * 960, []
+    for key, n, k, rot, nud, dr, acc in ((36, 16, 4, 0, 0, 0, 2), (38, 16, 2, 4, 10, 0, 0), (42, 16, 11, 0, -5, 0, 0), (46, 12, 5, 1, 0, 7, 0)):
+        p = bj(k, n)
+        p = [p[(i - rot) % n] for i in range(n)]
+        pl = 240.0 / (1 + dr / 1000.0)
+        st = 0
+        while st * pl < total - 1e-9:
+            if p[st % n]:
+                t = st * pl + (0.2 * pl if st % 2 else 0) + nud / 100.0 * pl
+                v = 100 + (20 if acc and sum(p[:st % n]) % acc == 0 else 0)
+                want.append((int(round(t % total)), key, min(127, v)))
+            st += 1
+    got, tick, meta = [], 0, {}
+    for m in mf.tracks[0]:
+        tick += m.time
+        if m.type == "note_on" and m.velocity > 0:
+            got.append((tick, m.note, m.velocity))
+        elif m.type in ("set_tempo", "time_signature", "program_change", "end_of_track"):
+            meta[m.type] = (tick, m)
+    ok = sorted(want) == sorted(got)
+    ok_meta = (meta["set_tempo"][1].tempo == 625000 and meta["time_signature"][1].numerator == 4
+               and meta["end_of_track"][0] == total and "program_change" not in meta)    # (no drum part here: no kit to name)
+    bad += not (ok and ok_meta)
+    print("midi file %s: %d notes %s; tempo %d us, %d/4, %d ticks, no kit (none here) %s" % (
+        r.get("name"), len(got), "as worked out" if ok else "WRONG (%d want, %d got, first diff %s)" % (
+            len(want), len(got), sorted(set(want) ^ set(got))[:4]),
+        meta["set_tempo"][1].tempo, meta["time_signature"][1].numerator, meta["end_of_track"][0],
+        "ok" if ok_meta else "WRONG"))
+
     # THE METRONOME: built, then clicking alone for 2 s, on the sequencer's clock (empty lanes)
     # for 2 s, alone again for 2 s -- a click every beat throughout, none lost or doubled at
     # either change. (Its click is a noise burst: placed to within ~25 samples, here as alone.)

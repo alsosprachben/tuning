@@ -23,6 +23,9 @@ struct SeqUi {
     int pick = -1;                      // (the lane whose drum is being chosen)
     float scroll = 0, pick_scroll = 0;
     int drag_lane = -1, drag_rot0 = 0;  // (a lane's steps dragged sideways: its rotation then)
+    bool save_open = false;             // (SAVE MIDI's panel: how many bars of how many beats)
+    int bars = 4, beats = 4;
+    std::string saved, save_err;        // (what the last save wrote, or why it could not)
     float drag_x0 = 0;
 };
 static SeqUi g_seq;
@@ -110,7 +113,16 @@ inline void draw_seq(App &a)
                   TF("channel {0}", {std::to_string(pc < 0 ? 10 : pc + 1)});
         } else
             sub = T("No drum part: choose a kit for one on the KITS card.");
-        text(a, a.font, 14, TX, HY + 1, OWN, fit(a, a.font, 14, sub, X1 - TX - 8));
+        // (SAVE MIDI, at the heading's right)
+        const std::string sl = T("SAVE MIDI \xe2\x96\xb8");
+        const float sw = text_w(a, a.bold, 21, sl) + 28, sh = PH ? 40 : 44;
+        if (button(a, "sqsave", X1 - sw, HY - (PH ? 8 : 10), sw, sh, sl, S.save_open, true, 21)) {
+            S.save_open = !S.save_open;
+            S.pick = -1;
+            S.saved.clear();
+            S.save_err.clear();
+        }
+        text(a, a.font, 14, TX, HY + 1, OWN, fit(a, a.font, 14, sub, X1 - sw - 12 - TX));
     }
 
     // THE TRANSPORT: PLAY/STOP, TEMPO, SWING, STEPS A BEAT
@@ -189,7 +201,7 @@ inline void draw_seq(App &a)
     for (int i = 0; i < nv::SEQ_LANES; i++)
         maxsteps = std::max(maxsteps, seq_lane(i, 1));
     const float cw = (CX1 - CX0) / maxsteps;
-    {
+    if (!S.save_open && S.pick < 0) {   // (the columns' names: over the lanes, not over a panel)
         text(a, a.font, 14, X0, HDY, SILK_DIM, T("DRUM"));
         text(a, a.font, 14, CX0, HDY, SILK_DIM, T("STEPS AS STRUCK"));
         for (int k = 0; k < nc; k++)
@@ -212,6 +224,63 @@ inline void draw_seq(App &a)
         const float mx = (m.x - a.org.x) / a.k;
         if (mx >= X0 && mx < X1 && my >= LY0 && my < Y1 && ImGui::GetIO().MouseWheel != 0)
             S.scroll = std::max(0.0f, std::min(smax, S.scroll - ImGui::GetIO().MouseWheel * (RH + RG)));
+    }
+
+    // (SAVE MIDI: the pattern as a MIDI file -- bars of beats -- into the FILES card's Sequences folder)
+    if (S.save_open) {
+        look::tray(a, X0, LY0, X1 - X0, view, 9);
+        const float px = X0 + 14, LHs = a.lh(14) + 4;
+        float yy = LY0 + 10;
+        text(a, a.bold, 14, px, yy, SILK, T("SAVE THE PATTERN AS A MIDI FILE"));
+        const float cbw = text_w(a, a.bold, 21, T("CLOSE")) + 28, cbh = PH ? 36 : 44;
+        if (button(a, "sqsavex", X1 - 12 - cbw, LY0 + 6, cbw, cbh, T("CLOSE"), false, true, 21))
+            S.save_open = false;
+        yy = LY0 + cbh + 14;
+        const float sfw = PH ? 120 : IP ? 150 : 170, sfh = PH ? 44 : IP ? 46 : 52;
+        float fx = px;
+        auto sfield = [&](const char *id, int &val, int lo, int hi, const std::string &label) {
+            const float w = std::max(sfw, text_w(a, a.lcd ? a.lcd : a.font, 14, label) + 26);
+            float v = (float)val;
+            const int fl = lcd_field(a, id, fx, yy, w, sfh, v, (float)lo, (float)hi, label, std::to_string(val), false, PH ? 14 : 21);
+            if (fl & K_CHANGED)
+                val = (int)v;
+            fx += w + 8;
+        };
+        sfield("sqbars", S.bars, 1, 128, T("BARS"));
+        sfield("sqbeats", S.beats, 1, 16, T("BEATS A BAR"));
+        {
+            const std::string sv = T("SAVE");
+            const float bw = text_w(a, a.bold, 21, sv) + 40;
+            if (button(a, "sqsavego", fx, yy, bw, sfh, sv, false, true, 21)) {
+                const J r = call(a, "{\"call\":\"seq_export\",\"bars\":" + std::to_string(S.bars) + ",\"beats\":" + std::to_string(S.beats) + "}");
+                S.saved = str(&r, "name");
+                S.save_err = S.saved.empty() ? str(&r, "error") : std::string();
+            }
+        }
+        yy += sfh + 12;
+        {
+            char b[32];
+            snprintf(b, sizeof b, "%.1f", S.bars * S.beats * 60.0 / std::max(1, bpm));
+            std::string what = TF("{0} bars of {1} beats at {2} bpm: {3} seconds, every lane from the start.",
+                                  {std::to_string(S.bars), std::to_string(S.beats), std::to_string(bpm), b});
+            bool drifts = false;
+            for (int i = 0; i < nv::SEQ_LANES; i++)
+                drifts = drifts || (seq_lane(i, 8) != 0 && seq_lane(i, 0) >= 0 && seq_lane(i, 2) > 0 && !seq_lane(i, 6));
+            if (drifts)
+                what += " " + std::string(T("A drifting lane is written as it drifts, so the file will not loop evenly."));
+            for (const auto &l : wrap(a, a.font, 14, what, X1 - X0 - 28)) {
+                text(a, a.font, 14, px, yy, SILK_DIM, l);
+                yy += LHs;
+            }
+        }
+        yy += 4;
+        const std::string res = !S.saved.empty() ? TF("Saved {0} in the Sequences folder: on the FILES card.", {S.saved})
+                              : !S.save_err.empty() ? TF("Not saved: {0}", {S.save_err}) : std::string();
+        for (const auto &l : wrap(a, a.font, 14, res, X1 - X0 - 28)) {
+            text(a, a.font, 14, px, yy, S.save_err.empty() ? LCD : IM_COL32(0xff, 0x70, 0x60, 0xff), l);
+            yy += LHs;
+        }
+        return;
     }
 
     // (a lane's drum being chosen: the kit's keys over the lanes)

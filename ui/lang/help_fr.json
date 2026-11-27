@@ -2480,8 +2480,8 @@
   "t": "Tempo"
  },
  "sc:metro/terms/1/1": {
-  "en": "Beats a minute, 30 to 300.",
-  "t": "Battements par minute, de 30 à 300."
+  "en": "Beats a minute, 30 to 300. The sequencer's tempo too (the SEQ card): change either and both follow.",
+  "t": "Temps par minute, de 30 à 300. Aussi le tempo du séquenceur (carte SÉQ) : changez l'un, les deux suivent."
  },
  "sc:metro/terms/2/0": {
   "en": "Bell every",
@@ -2524,12 +2524,12 @@
   "t": "L'installation : les entrées, les réglages de son pour toutes les parties, la salle. La ligne du haut indique la fréquence d'échantillonnage et la taille de bloc, le temps dont le moteur dispose pour chaque bloc de son."
  },
  "setup/terms/0/0": {
-  "en": "QUIT CLAVITONE",
-  "t": "QUITTER CLAVITONE"
+  "en": "Quitting",
+  "t": "Quitter"
  },
  "setup/terms/0/1": {
-  "en": "Tap twice within 3 seconds: the engine saves the session and stops, and this window closes. Closing the window does the same.",
-  "t": "Touchez deux fois en moins de 3 secondes : le moteur enregistre la session et s'arrête, et cette fenêtre se ferme. Fermer la fenêtre fait de même."
+  "en": "There is no quit button. On a computer, close the window or press Ctrl+Q (Cmd+Q on a Mac): the engine saves the session and stops. On the iPhone and iPad, leave the app as any other.",
+  "t": "Il n'y a pas de bouton pour quitter. Sur un ordinateur, fermez la fenêtre ou appuyez sur Ctrl+Q (Cmd+Q sur Mac) : le moteur enregistre la session et s'arrête. Sur iPhone et iPad, quittez l'app comme toute autre."
  },
  "su:midi/title": {
   "en": "MIDI in",
@@ -3650,5 +3650,13 @@
  "seq/terms/15/1": {
   "en": "The lanes, tempo and swing are kept in the session. It starts stopped.",
   "t": "Les pistes, le tempo et le swing sont gardés dans la session. Il démarre à l'arrêt."
+ },
+ "seq/terms/16/0": {
+  "en": "SAVE MIDI",
+  "t": "ENREG. MIDI"
+ },
+ "seq/terms/16/1": {
+  "en": "Writes the pattern as a MIDI file: BARS bars of BEATS A BAR beats, every lane from the start, with the tempo, the kit, and a user set's settings. It goes in the Sequences folder, on the FILES card, to play, render or take into another program. Swing, NUDGE and ACCENT are written as they play; a drifting lane is written as it drifts.",
+  "t": "Écrit le motif en fichier MIDI : MESURES mesures de TEMPS PAR MESURE temps, chaque piste depuis le début, avec le tempo, le kit et les réglages d'un kit utilisateur. Il va dans le dossier Sequences, sur la carte FICHIERS, pour le jouer, le rendre ou l'emporter dans un autre logiciel. Le swing, le DÉCALAGE et l'ACCENT sont écrits comme ils jouent ; une piste qui dérive, comme elle dérive."
  }
 }

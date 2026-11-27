@@ -1,6 +1,6 @@
 // THE FRONT PANEL (the web's #lcd and its keys): the display -- the part,
 // its program, its seven fields, the meters, the engine's load -- the part
-// keys, PANIC and QUIT, and the jog dial that turns the field selected.
+// keys, PANIC, and the jog dial that turns the field selected.
 // A field: tap selects it, a drag moves it, a double-tap puts it back.
 #pragma once
 
@@ -250,15 +250,7 @@ inline void draw_keys(App &a)
         take_parts(a, call(a, "{\"call\":\"part_solo\",\"row\":" + std::to_string(a.row) + "}"));
     if (look::key(a, "panic", X, Y + 116, 246, 48, T("PANIC"), false, true, 14, false))
         call(a, "{\"call\":\"panic\"}");
-    // QUIT (the web's Setup card's, here until that card is): two taps within 3 s
-    const double now = ImGui::GetTime();
-    const bool armed = now - a.quit_armed < 3.0;
-    if (look::key(a, "quit", X, Y + 174, 246, 48, armed ? T("TAP AGAIN TO QUIT") : T("QUIT CLAVITONE"), armed)) {
-        if (armed)
-            a.quit = true;
-        else
-            a.quit_armed = now;
-    }
+    // (no QUIT: the window closes, or Ctrl+Q / Cmd+Q -- the session is kept as it goes)
     // THE JOG DIAL: the selected field, a step each 15 degrees (45 fine)
     const float cx = 1810, cy = 112, r = 74;
     const int steps = dial(a.K, a.jog, "jog", P(a, cx, cy), r * a.k);
@@ -341,7 +333,7 @@ inline void draw_display_tab(App &a)
     look::glass(a, X, Y, W, H);
 }
 // THE PHONE's PANEL: the display's two lines and the part keys; under them
-// (the card's key drawn by the frame) the seven fields, PANIC and QUIT
+// (the card's key drawn by the frame) the seven fields and PANIC
 inline void draw_display_phone(App &a)
 {
     look::plate(a, -400, -100, a.W + 800, 206);         // (under the safe area's edges too)
@@ -414,18 +406,9 @@ inline void draw_display_phone(App &a)
             field_set(a, i, FIELDS[i].reset);
     }
     look::glass(a, FX, FY, FW, 44);
-    if (look::key(a, "panic", 694, 56, 64, 44, T("PANIC"), false, true, 21, false))
+    // (PANIC where QUIT was too: an app leaves as the system has it -- Apple's rule)
+    if (look::key(a, "panic", 694, 56, 132, 44, T("PANIC"), false, true, 21, false))
         call(a, "{\"call\":\"panic\"}");
-    const double now = ImGui::GetTime();
-    const bool armed = now - a.quit_armed < 3.0;
-    if (armed)
-        a.animate = true;
-    if (look::key(a, "quit", 762, 56, 64, 44, armed ? T("AGAIN") : T("QUIT"), armed, true, 21)) {
-        if (armed)
-            a.quit = true;
-        else
-            a.quit_armed = now;
-    }
 }
 // THE PHONE's JOG WHEEL, in the screen's bottom-right corner: outside the safe
 // area (the panel and cards never there), a wheel whose rim is the corner's own
@@ -472,18 +455,9 @@ inline void draw_keys_tab(App &a)
         part_set(a, a.row, "muted", muted ? 0 : 1);
     if (look::key(a, "solo", X + bw + g, Y + bh + g, bw, bh, T("SOLO"), num(p, "solo") == 1, true, 21) && p)
         take_parts(a, call(a, "{\"call\":\"part_solo\",\"row\":" + std::to_string(a.row) + "}"));
-    if (look::key(a, "panic", X, Y + 2 * (bh + g), bw, bh, T("PANIC"), false, true, 21, false))
+    // (PANIC where QUIT was too: an app leaves as the system has it -- Apple's rule)
+    if (look::key(a, "panic", X, Y + 2 * (bh + g), 2 * bw + g, bh, T("PANIC"), false, true, 21, false))
         call(a, "{\"call\":\"panic\"}");
-    const double now = ImGui::GetTime();
-    const bool armed = now - a.quit_armed < 3.0;
-    if (armed)
-        a.animate = true;
-    if (look::key(a, "quit", X + bw + g, Y + 2 * (bh + g), bw, bh, armed ? T("AGAIN") : T("QUIT"), armed, true, 21)) {
-        if (armed)
-            a.quit = true;
-        else
-            a.quit_armed = now;
-    }
     // THE JOG DIAL
     const float cx = 1123 - 50, cy = 64, r = 48;   // (clear of the keys: they end at 1014)
     const int steps = dial(a.K, a.jog, "jog", P(a, cx, cy), r * a.k);

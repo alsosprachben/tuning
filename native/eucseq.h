@@ -10,6 +10,8 @@
 // slab as bits (slab.cpp's seq_tick steps them at their samples).
 #pragma once
 #include <algorithm>
+#include <cmath>
+#include <string>
 #include <cstdint>
 #include <vector>
 
@@ -110,6 +112,104 @@ inline Seq seq_default()
     s.lane[2].vel = 80;
     seq_patterns(s);
     return s;
+}
+
+// A STANDARD MIDI FILE of the pattern (the SEQ card's SAVE MIDI): BARS bars of
+// BEATS beats, at 960 ticks a beat, format 0 -- its name, the tempo, the time
+// signature (BEATS/4), the kit (program on the channel; a user set's settings
+// as GS 21 exclusives, exs, before it), then each lane's notes where the engine
+// plays them: swing, NUDGE, ACCENT and DRIFT as seq_tick has them, all lanes
+// from the start; a note let go at its lane's next step. A note nudged over the
+// loop's edge is wrapped round to the other end (the file loops as it plays).
+inline std::vector<uint8_t> seq_midi(const Seq &s0, int bars, int beats, int program,
+                                     const std::vector<std::vector<uint8_t>> &exs, const std::string &name)
+{
+    Seq s = s0;
+    seq_patterns(s);
+    bars = std::max(1, std::min(999, bars));
+    beats = std::max(1, std::min(32, beats));
+    const double PPQ = 960.0, step = PPQ / s.spb, total = (double)bars * beats * PPQ;
+    const double swf = s.swing / 100.0 * 2.0 - 1.0;
+    const bool swings = s.spb % 2 == 0;
+    struct E {
+        long t;
+        int order;                      // (at one tick: a let-go before a strike)
+        std::vector<uint8_t> b;
+    };
+    std::vector<E> ev;
+    const uint8_t ch = (uint8_t)(s.ch & 15);
+    for (int l = 0; l < SEQ_LANES; l++) {
+        const SeqLane &L = s.lane[l];
+        if (L.mute || L.key < 0 || L.key > 127 || L.steps <= 0 || !L.pat)
+            continue;
+        const double pl = step / (1.0 + L.drift / 1000.0), nud = L.nudge / 100.0 * pl;
+        for (long k = 0; k * pl < total - 1e-9; k++) {
+            const int pos = (int)(k % L.steps);
+            if (!((L.pat >> pos) & 1u))
+                continue;
+            double t = k * pl + ((k & 1) && swings ? swf * pl : 0.0) + nud;
+            t = std::fmod(std::fmod(t, total) + total, total);
+            int v = L.vel;
+            if (L.accent > 0 && __builtin_popcount(L.pat & ((1u << pos) - 1u)) % L.accent == 0)
+                v = std::min(127, v + 20);
+            const long on = std::lround(t), off = std::min(std::lround(total), std::lround(t + pl));
+            ev.push_back({on, 1, {(uint8_t)(0x90 | ch), (uint8_t)L.key, (uint8_t)v}});
+            ev.push_back({std::max(on + 1, off), 0, {(uint8_t)(0x80 | ch), (uint8_t)L.key, 64}});
+        }
+    }
+    std::stable_sort(ev.begin(), ev.end(), [](const E &a, const E &b) { return a.t != b.t ? a.t < b.t : a.order < b.order; });
+    std::vector<uint8_t> tr;
+    auto vlq = [&](unsigned long v) {
+        uint8_t b[5];
+        int n = 0;
+        b[n++] = v & 0x7F;
+        while (v >>= 7)
+            b[n++] = (uint8_t)(0x80 | (v & 0x7F));
+        while (n)
+            tr.push_back(b[--n]);
+    };
+    auto meta = [&](uint8_t type, const std::vector<uint8_t> &d) {
+        vlq(0);
+        tr.push_back(0xFF);
+        tr.push_back(type);
+        vlq(d.size());
+        tr.insert(tr.end(), d.begin(), d.end());
+    };
+    meta(0x03, std::vector<uint8_t>(name.begin(), name.end()));
+    const unsigned long us = (unsigned long)std::lround(60000000.0 / s.bpm);
+    meta(0x51, {(uint8_t)(us >> 16), (uint8_t)(us >> 8), (uint8_t)us});
+    meta(0x58, {(uint8_t)beats, 2, 24, 8});
+    for (const auto &x : exs) {                 // (a user set's settings: F0 x.. F7)
+        vlq(0);
+        tr.push_back(0xF0);
+        vlq(x.size() + 1);
+        tr.insert(tr.end(), x.begin(), x.end());
+        tr.push_back(0xF7);
+    }
+    if (program >= 0) {
+        vlq(0);
+        tr.push_back((uint8_t)(0xC0 | ch));
+        tr.push_back((uint8_t)(program & 127));
+    }
+    long now = 0;
+    for (const E &e : ev) {
+        vlq((unsigned long)(e.t - now));
+        now = e.t;
+        tr.insert(tr.end(), e.b.begin(), e.b.end());
+    }
+    vlq((unsigned long)std::max(0L, std::lround(total) - now));
+    tr.push_back(0xFF);
+    tr.push_back(0x2F);
+    tr.push_back(0);
+    std::vector<uint8_t> f = {'M', 'T', 'h', 'd', 0, 0, 0, 6, 0, 0, 0, 1, (uint8_t)(960 >> 8), (uint8_t)(960 & 255),
+                              'M', 'T', 'r', 'k'};
+    const uint32_t n = (uint32_t)tr.size();
+    f.push_back((uint8_t)(n >> 24));
+    f.push_back((uint8_t)(n >> 16));
+    f.push_back((uint8_t)(n >> 8));
+    f.push_back((uint8_t)n);
+    f.insert(f.end(), tr.begin(), tr.end());
+    return f;
 }
 
 }  // namespace nv

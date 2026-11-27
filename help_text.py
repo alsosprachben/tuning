@@ -447,7 +447,12 @@ HELP = {
                 "On the iPad and phone: which of the lane's numbers show, its pattern's (STEPS, HITS, ROTATE) or its "
                 "timing's (NUDGE, DRIFT, ACCENT). VEL shows on both."],
                ['MUTE (M)', 'Silences the lane, keeping its pattern.'],
-               ['Kept', 'The lanes, tempo and swing are kept in the session. It starts stopped.']]},
+               ['Kept', 'The lanes, tempo and swing are kept in the session. It starts stopped.'],
+               ['SAVE MIDI',
+                'Writes the pattern as a MIDI file: BARS bars of BEATS A BAR beats, every lane from the start, with '
+                "the tempo, the kit, and a user set's settings. It goes in the Sequences folder, on the FILES card, "
+                'to play, render or take into another program. Swing, NUDGE and ACCENT are written as they play; '
+                'a drifting lane is written as it drifts.']]},
     'keys': {'title': 'Keys',
      'intro': "A keyboard to touch, playing the selected part: for trying a sound, or showing it, without a keyboard "
               'plugged in.',
@@ -644,7 +649,8 @@ HELP = {
     'sc:metro': {'title': 'Metronome',
      'intro': 'A click from a recorded metronome.',
      'terms': [['ON', 'Starts and stops it.'],
-               ['Tempo', 'Beats a minute, 30 to 300.'],
+               ['Tempo', "Beats a minute, 30 to 300. The sequencer's tempo too (the SEQ card): change either and both "
+                         'follow.'],
                ['Bell every', 'A bell on the first of every n beats, or none.'],
                ['Level', 'How loud, in dB.']]},
     'sc:gs': {'title': 'GS reset',
@@ -655,9 +661,9 @@ HELP = {
     'setup': {'title': 'Setup',
      'intro': 'The rig: inputs, the sound settings for every part, the room. The line at the top is the sample rate and '
               'the block size, the time the engine has for each block of sound.',
-     'terms': [['QUIT CLAVITONE',
-                'Tap twice within 3 seconds: the engine saves the session and stops, and this window closes. Closing the '
-                'window does the same.']]},
+     'terms': [['Quitting',
+                'There is no quit button. On a computer, close the window or press Ctrl+Q (Cmd+Q on a Mac): the engine '
+                'saves the session and stops. On the iPhone and iPad, leave the app as any other.']]},
     'su:midi': {'title': 'MIDI in',
      'intro': 'Every MIDI device plugged in. Several can be on at once; their notes are merged. The choice is kept in '
               'the session.',
@@ -877,8 +883,10 @@ HELP = {
      'see': ['display', 'su:sound', 'su:rubato']},
     'how:quit': {'title': 'Quit',
      'intro': 'The session is saved as you go, and once more as the engine stops.',
-     'steps': ['Open the Setup card and tap QUIT CLAVITONE twice within 3 seconds.',
-               'Or close the window (Ctrl+W), or press Ctrl-C in the terminal.'],
+     'steps': ['On a computer: close the window, or press Ctrl+Q (Cmd+Q on a Mac). Full screen, Ctrl+Q is the way '
+               'out. Started from a terminal, Ctrl-C there stops it too.',
+               'On the iPhone and iPad: leave the app as you leave any other. There is no quit button; the session '
+               'is already saved.'],
      'see': ['setup']},
     'credits': {'title': 'Credits',
      'intro': 'No recordings are included in Clavitone. Its instruments are models, and many of them were fitted to '
