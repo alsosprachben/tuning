@@ -178,13 +178,20 @@ inline void draw_files(App &a)
         const char *d0 = getenv("NUI_DIR");
         fl_go(a, F.dir.empty() && d0 ? d0 : F.dir);
     }
-    // (the iPad's: its card from y 210 to card_y1 + 6, two pages -- choosing the file; playing and rendering it)
-    const bool IP = a.tab;
+    // (the iPad's: its card from y 210 to card_y1 + 6, two pages -- choosing the file; playing and rendering it.
+    //  The phone's the same two, the card's height: what scrolls there is buttons alone -- the file's
+    //  panel, a MIDI file's play and render; an audio file's player, its bar and its level, fits)
+    const bool IP = a.tab, PH = a.ph;
     static int page = 0;
-    const float X0 = IP ? 20 : 34, X1 = IP ? (a.ph ? 818 : 1113) : 1886, Y0 = IP ? 266 : 394, Y1 = card_y1(a), HY = IP ? 224 : 356;
+    const float X0 = PH ? 14 : IP ? 20 : 34, X1 = IP ? (PH ? 818 : 1113) : 1886, Y0 = PH ? 160 : IP ? 266 : 394, Y1 = card_y1(a),
+                HY = PH ? 120 : IP ? 224 : 356;
     const float LH = a.lh(14) + (IP ? 3 : 4), B21 = IP ? 21 : 14, BB = IP ? 44 : 34;
     const float TX = heading(a, X0, HY, T("FILES"), "files");
-    if (IP)
+    if (PH) {
+        const int h = phone_pages(a, "flppage", TX, {T("CHOOSE"), T("PLAY")}, page);
+        if (h >= 0)
+            page = h;
+    } else if (IP)
         for (int pg = 0; pg < 2; pg++) {
             const std::string id = "flpage" + std::to_string(pg);
             if (button(a, id.c_str(), page_kx(a, 2, pg, 300), 216, page_kw(a, 2), 44, pg ? T("PLAY") : T("CHOOSE"), page == pg, true, 21))
@@ -196,7 +203,7 @@ inline void draw_files(App &a)
     const J *pl = F.f.get("player"), *rd = F.f.get("render");
     const bool playing = flag(pl, "busy"), rendering = flag(rd, "busy");
     if (playing)
-        text(a, a.font, 14, IP ? 700 : TX, HY + 1, OWN, fit(a, a.font, 14, TF("playing {0}", {str(pl, "name")}), IP ? 400 : 900));
+        text(a, a.font, 14, PH ? 420 : IP ? 700 : TX, HY + 1, OWN, fit(a, a.font, 14, TF("playing {0}", {str(pl, "name")}), PH ? 390 : IP ? 400 : 900));
 
     // THE FOLDERS
     const float BW = IP ? 360 : 560, FR = IP ? 48 : 36, FB = IP ? 44 : 32;
@@ -300,6 +307,7 @@ inline void draw_files(App &a)
         const std::string pcs_ = np == 1 ? TF("{0} program change", {std::to_string(np)}) : TF("{0} program changes", {std::to_string(np)});
         about = TF("{0} long \xc2\xb7 {1} \xc2\xb7 {2}. It reads as {3}: {4}.", {mmss(num(&F.info, "total")), chs_, pcs_, say, T(str(&F.info, "why"))});
     }
+    PhoneBodyScope fbody(a, PH, "flfile", FX + 2, Y0 + 32, X1 - 2, Y1 - 2);   // (the phone's: buttons alone, scrolling)
     float y = Y0 + 36;
     for (const auto &l : wrap(a, a.font, 14, about, FW - 24)) {
         text(a, a.font, 14, FX + 12, y, SILK_DIM, l);
@@ -374,6 +382,8 @@ inline void draw_files(App &a)
         look::tray(a, X0, Y0, X1 - X0, Y1 - Y0, 9);
     } else
         rect(a, PX - 6, Y0 + 12, 1, Y1 - Y0 - 24, IM_COL32(0x33, 0x36, 0x3a, 255), 0);
+    // (the phone's MIDI file: play and render, buttons alone, scrolling; an audio file's player fits)
+    PhoneBodyScope pbody(a, PH && !aud, "flplay", X0 + 2, Y0 + 2, X1 - 2, Y1 - 2);
     float py = Y0 + 10;
     if (IP) {
         text(a, a.font, 21, PX + 8, py, LCD, F.sel.empty() ? std::string(T("No file chosen: choose one on the CHOOSE page."))
@@ -413,7 +423,7 @@ inline void draw_files(App &a)
         {
             static float lv = 0;
             static bool held = false;
-            const int fl_ = fader(a, "flalevel", PX + PW - 70, Y0 + (IP ? 90 : 130), IP ? 240 : 170, lv, -30, 6, 0.5f, {0.0f},
+            const int fl_ = fader(a, "flalevel", PX + PW - 70, Y0 + (PH ? 40 : IP ? 90 : 130), PH ? Y1 - Y0 - 100 : IP ? 240 : 170, lv, -30, 6, 0.5f, {0.0f},
                                   T("LEVEL"), (lv > 0 ? "+" : "") + std::to_string((int)std::lround(lv)) + " dB");
             if (fl_ & K_CHANGED)
                 fl_take(call(a, "{\"call\":\"audio_level\",\"db\":" + std::to_string(lv) + "}"));
@@ -531,7 +541,7 @@ inline void draw_files(App &a)
     }
     // (the caution under the render buttons and what they said, not at the card's foot)
     const auto warn = wrap(a, a.font, 14, T("Rendering while you play can cause dropouts: both use the processors. A render that needs more memory than is free is stopped."), PW - 24);
-    float wy = std::min(py + 12, Y1 - 12 - warn.size() * LH);
+    float wy = PH ? py + 12 : std::min(py + 12, Y1 - 12 - warn.size() * LH);   // (the phone's: under them, its body scrolling to it)
     for (const auto &l : warn) {
         text(a, a.font, 14, PX + 8, wy, LCD_DIM, l);
         wy += LH;

@@ -89,12 +89,19 @@ inline void draw_control(App &a)
     if (!C.c.is(J::OBJ) || C.kinds.empty())
         ct_take(call(a, "{\"call\":\"control\",\"open\":1,\"kinds\":1}"));
     ct_flush(a);
-    // (the iPad's: its card from y 210 to card_y1 + 6, two pages -- the on-screen controls; the routes)
-    const bool IP = a.tab;
+    // (the iPad's: its card from y 210 to card_y1 + 6, three pages -- the on-screen controls; the routes; the metronome.
+    //  The phone's the same three, the card's height: the controls five a view (their faders the column's
+    //  height, REMOVE an edit of its own); the routes, buttons alone, scrolling under the keys)
+    const bool IP = a.tab, PH = a.ph;
     static int page = 0;
-    const float X0 = IP ? 20 : 34, X1 = IP ? (a.ph ? 818 : 1113) : 1886, Y0 = IP ? 266 : 394, Y1 = card_y1(a), HY = IP ? 224 : 356;
+    const float X0 = PH ? 14 : IP ? 20 : 34, X1 = IP ? (PH ? 818 : 1113) : 1886, Y0 = PH ? 160 : IP ? 266 : 394, Y1 = card_y1(a),
+                HY = PH ? 120 : IP ? 224 : 356;
     const float TX = heading(a, X0, HY, T("CONTROL"), "control");
-    if (IP)
+    if (PH) {
+        const int h = phone_pages(a, "ctppage", TX, {T("CONTROLS"), T("ROUTES"), T("METRONOME")}, page);
+        if (h >= 0)
+            page = h;
+    } else if (IP)
         for (int pg = 0; pg < 3; pg++) {
             static const char *PG[3] = {N_("CONTROLS"), N_("ROUTES"), N_("METRONOME")};
             const std::string id = "ctpage" + std::to_string(pg);
@@ -104,11 +111,11 @@ inline void draw_control(App &a)
     // THE METRONOME AND THE GS RESET: under the on-screen controls (the iPad's a page of its own)
     const float MH = IP ? 0 : 190;
     if (IP && page == 2) {
-        draw_metro_gs(a, X0, Y0, X1 - X0, Y0 + 200);
+        draw_metro_gs(a, X0, Y0, X1 - X0, PH ? Y1 : Y0 + 200);
         return;
     }
     const J *p = part(a, a.row);
-    if (p)
+    if (p && !PH)
         text(a, a.font, 14, TX, HY + 1, OWN, fit(a, a.font, 14, TF("part {0}", {pad2(a.row + 1)}) + " \xc2\xb7 " + str(p, "name"), IP ? 160 : 900));
     const J *ctls = C.c.get("controls"), *routes = C.c.get("routes");
     const int nc = ctls && ctls->is(J::ARR) ? (int)ctls->a.size() : 0, nr = routes && routes->is(J::ARR) ? (int)routes->a.size() : 0;
@@ -120,6 +127,122 @@ inline void draw_control(App &a)
 
     // THE ON-SCREEN CONTROLS
     const float LW = IP ? X1 - X0 : 900;
+    static const int SCAN_V[7] = {0, 18, 37, 55, 73, 91, 110};
+    static const std::vector<std::string> SCAN_N = {N_("off"), "V1", "V2", "V3", "C1", "C2", "C3"};
+    if (PH && page == 0) {
+        // THE PHONE's: five columns a view (◀ ▶ for more), ADD and REMOVE… at the right; adding, the kinds
+        // (buttons alone) scroll in the columns' place; removing, each column a REMOVE where its control was
+        static bool removing = false;
+        static int view = 0;
+        look::tray(a, X0, Y0, X1 - X0, Y1 - Y0, 9);
+        text(a, a.font, 14, heading(a, X0 + 12, Y0 + 10, T("ON-SCREEN CONTROLS"), "ct:strip"), Y0 + 11, LCD, T("sent straight to the engine"));   // i18n-skip (the help key)
+        const float RBW = 170, rx = X1 - 12 - RBW;
+        if (button(a, "ctadd", rx, Y0 + 36, RBW, 44, T("+ ADD A CONTROL"), C.adding, true, 14)) {
+            C.adding = !C.adding;
+            removing = false;
+        }
+        if (button(a, "ctrmv", rx, Y0 + 86, RBW, 44, T("REMOVE\xe2\x80\xa6"), removing, nc > 0 && !C.adding, 14))
+            removing = !removing;
+        if (C.adding) {
+            PhoneBodyScope body(a, true, "ctadd", X0 + 2, Y0 + 32, rx - 8, Y1 - 2);
+            float y = Y0 + 40;
+            text(a, a.font, 14, X0 + 12, y, SILK_DIM,
+                 TF("Add a control on {0}:", {pch < 0 ? std::string(T("every channel")) : TF("channel {0} (part {1}'s)", {std::to_string(pch + 1), pad2(a.row + 1)})}));
+            y += 20;
+            std::vector<std::string> w;
+            std::vector<bool> lit;
+            for (const CtKind &k : C.kinds) {
+                w.push_back(k.label);
+                bool have = false;
+                for (int n = 0; n < nc; n++)
+                    have = have || ((int)num(&ctls->a[(size_t)n], "key") == k.key && (int)num(&ctls->a[(size_t)n], "channel", -1) == pch);
+                lit.push_back(have);
+            }
+            const int h = flow_buttons(a, "ctkind", X0 + 12, y, rx - X0 - 32, w, lit, 28, 14);
+            if (h >= 0) {
+                call(a, "{\"call\":\"control_add\",\"key\":" + std::to_string(C.kinds[(size_t)h].key) + ",\"channel\":" + std::to_string(pch) + "}");
+                C.adding = false;
+                ct_refresh(a);
+            }
+            return;
+        }
+        if (!nc) {
+            text(a, a.font, 14, X0 + 12, Y0 + 44, SILK_DIM, T("None yet: + ADD A CONTROL puts one here."));
+            return;
+        }
+        const float cw = 124, cy0 = Y0 + 34, ch_ = Y1 - 6 - cy0;
+        const int per = std::max(1, (int)((rx - 12 - X0 - 12) / cw)), views = (nc + per - 1) / per;
+        view = std::max(0, std::min(view, views - 1));
+        if (views > 1) {
+            const float bw = (RBW - 4) / 2;
+            if (button(a, "ctvprev", rx, Y1 - 52, bw, 44, "\xe2\x97\x80", false, view > 0, 21))
+                view--;
+            if (button(a, "ctvnext", rx + bw + 4, Y1 - 52, bw, 44, "\xe2\x96\xb6", false, view + 1 < views, 21))
+                view++;
+            const std::string vs = TF("{0} of {1}", {std::to_string(view + 1), std::to_string(views)});
+            text_c(a, a.font, 14, rx + RBW / 2, Y1 - 74, SILK_DIM, vs);
+        }
+        float x = X0 + 12;
+        for (int n = view * per; n < std::min(nc, (view + 1) * per); n++) {
+            const J &c = ctls->a[(size_t)n];
+            const int i = (int)num(&c, "i"), key = (int)num(&c, "key"), chn = (int)num(&c, "channel", -1);
+            const CtKind k = ct_kind(key);
+            std::string label = k.label;
+            for (char &ch : label)
+                ch = (char)toupper((unsigned char)ch);
+            rect(a, x, cy0, cw - 8, ch_, IM_COL32(0x26, 0x2a, 0x2e, 255), 8);
+            const float bx = x + (cw - 8) / 2, bottom = cy0 + ch_;
+            const std::string id = "ct" + std::to_string(i);
+            text_c(a, a.font, 14, bx, bottom - 22, SILK_DIM, chn < 0 ? std::string(T("every ch")) : TF("ch {0}", {std::to_string(chn + 1)}));
+            if (removing) {
+                text_c(a, a.bold, 14, bx, cy0 + 12, SILK, fit(a, a.bold, 14, label, cw - 16));
+                if (button(a, ("ctrm" + std::to_string(i)).c_str(), x + 6, cy0 + ch_ / 2 - 22, cw - 20, 44, T("REMOVE"))) {
+                    call(a, "{\"call\":\"control_remove\",\"i\":" + std::to_string(i) + "}");
+                    ct_refresh(a);
+                    return;
+                }
+            } else if (k.kind == "switch") {
+                bool on = flag(&c, "on");
+                auto m = C.mine.find(i);
+                if (m != C.mine.end() && ImGui::GetTime() < m->second.second)
+                    on = m->second.first != 0;
+                if (pedal_btn(a, id.c_str(), bx, cy0 + 8, on, label.c_str(), "")) {
+                    C.mine[i] = {on ? 0 : 1, ImGui::GetTime() + 0.6};
+                    call(a, "{\"call\":\"control_set\",\"i\":" + std::to_string(i) + ",\"v\":" + (on ? "0" : "127") + "}");
+                }
+            } else if (k.kind == "selector") {   // (the phone's: a rotary selector, as the console's own)
+                const int v = (int)num(&c, "value");
+                int sel = 0;
+                for (int j = 0; j < 7; j++)
+                    if (v >= SCAN_V[j])
+                        sel = j;
+                std::vector<std::string> scan_n;
+                for (const std::string &s : SCAN_N)
+                    scan_n.push_back(T(s));
+                int picked;
+                list_knob(a, id, bx, cy0 + 50, 48, irange(0, 6), scan_n, sel, label, false, cw - 12, picked);
+                if (picked != sel)
+                    call(a, "{\"call\":\"control_set\",\"i\":" + std::to_string(i) + ",\"v\":" + std::to_string(SCAN_V[picked]) + "}");
+            } else {
+                const bool bend = k.kind == "bend", spring = bend || k.kind == "pressure";
+                float v = (float)num(&c, "value");
+                auto w = C.want.find(i);
+                if (w != C.want.end())
+                    v = (float)w->second;
+                const float lo = bend ? -8192 : 0, hi = bend ? 8191 : 127;
+                char vt[16];
+                snprintf(vt, sizeof vt, bend && v > 0 ? "+%d" : "%d", (int)std::lround(v));
+                const int f = fader(a, id.c_str(), bx, cy0 + 14, ch_ - 14 - 72, v, lo, hi, 1, bend ? std::vector<float>{0} : std::vector<float>{},
+                                    label, vt);
+                if (f & K_CHANGED)
+                    ct_send(i, (int)std::lround(v));
+                if ((f & K_ENDED) && spring)     // (the wheel and aftertouch spring back)
+                    ct_send(i, 0);
+            }
+            x += cw;
+        }
+        return;
+    }
     if (!IP || page == 0) {
     if (!IP)
         draw_metro_gs(a, X0, Y1 - MH, LW, Y1);
@@ -127,8 +250,6 @@ inline void draw_control(App &a)
     text(a, a.font, 14, heading(a, X0 + 12, Y0 + 10, T("ON-SCREEN CONTROLS"), "ct:strip"), Y0 + 11, LCD, T("sent straight to the engine"));   // i18n-skip (the help key)
     const float cw = IP ? 124 : 136, cy0 = Y0 + 40, ch_ = C.adding ? (IP ? 214 : 250) : Y1 - MH - 10 - Y0 - 52;
     float x = X0 + 12;
-    static const int SCAN_V[7] = {0, 18, 37, 55, 73, 91, 110};
-    static const std::vector<std::string> SCAN_N = {N_("off"), "V1", "V2", "V3", "C1", "C2", "C3"};
     for (int n = 0; n < nc; n++) {
         const J &c = ctls->a[(size_t)n];
         const int i = (int)num(&c, "i"), key = (int)num(&c, "key"), chn = (int)num(&c, "channel", -1);
@@ -217,6 +338,7 @@ inline void draw_control(App &a)
         return;
     const float RX = IP ? X0 : X0 + LW + 10, RW = X1 - RX, RB = IP ? 44 : 32, LB = IP ? 44 : 30;
     look::tray(a, RX, Y0, RW, Y1 - Y0, 9);
+    PhoneBodyScope body(a, PH, "ctroutes", RX + 2, Y0 + 2, RX + RW - 2, Y1 - 2);   // (the phone's: buttons alone, scrolling)
     text(a, a.font, 14, heading(a, RX + 12, Y0 + 10, T("ROUTES"), "ct:routes"), Y0 + 11, LCD, T("the keyboard's controls, rewritten first"));   // i18n-skip (the help key)
     float ry = Y0 + 40;
     if (!nr) {

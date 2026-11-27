@@ -2,6 +2,7 @@
 // (kit.h) over each, its look the web kit's -- a 270-degree ring that fills
 // (from the top when centred), a fader's slot and cap, an LCD field.
 #pragma once
+#include <set>
 
 #include <functional>
 
@@ -28,10 +29,22 @@ inline void bubble(App &a, const std::string &s)
 
 // A KNOB: v01 its position (0..1); size its diameter (design px). Returns
 // the gesture's flags; v01 moved by the finger
+// (a knob, fader or field drawn in a scrolling phone body: never meant to be -- said once, counted)
+inline void no_drag_in_body(App &a, const char *id)
+{
+    if (!a.vbody)
+        return;
+    static std::set<std::string> said;
+    a.drag_in_body++;
+    if (said.insert(id).second)
+        fprintf(stderr, "nui: DRAG CONTROL IN A SCROLLING BODY: %s\n", id);
+}
+
 inline int knob(App &a, const char *id, float cx, float cy, float size, float &v01, const std::string &label,
                 const std::string &value, bool centred = false, const std::vector<float> &detents = {}, float label_w = 0,
                 bool own = false, bool sheet = true)
 {
+    no_drag_in_body(a, id);
     const float r = size / 2;
     Range g;
     g.lo = 0;
@@ -86,6 +99,7 @@ inline int knob(App &a, const char *id, float cx, float cy, float size, float &v
 inline int fader(App &a, const char *id, float cx, float y, float h, float &v, float lo, float hi, float step,
                  const std::vector<float> &detents, const std::string &label, const std::string &value)
 {
+    no_drag_in_body(a, id);
     Range g;
     g.lo = lo;
     g.hi = hi;
@@ -121,6 +135,7 @@ inline int fader(App &a, const char *id, float cx, float y, float h, float &v, f
 inline int lcd_field(App &a, const char *id, float x, float y, float w, float h, float &v, float lo, float hi,
                      const std::string &label, const std::string &value, bool sel, float big = 21, float unit = 1)
 {
+    no_drag_in_body(a, id);
     Range g;
     g.lo = lo;
     g.hi = hi;
@@ -181,7 +196,7 @@ inline int scroll_list(App &a, const std::string &id, float x, float y, float w,
         if (t.moved) {      // (by the finger's motion; what the list's ends stop goes on to a scrolled card)
             const float want = scroll - ImGui::GetIO().MouseDelta.y / a.k;
             scroll = std::max(0.0f, std::min(want, std::max(0.0f, content - hgt)));
-            if (a.vcard)
+            if (a.vcard || a.vbody)
                 a.vcard_push += want - scroll;
         }
     }

@@ -625,5 +625,11 @@
  "{0} bars of {1} beats at {2} bpm: {3} seconds, every lane from the start.": "{0} mesures de {1} temps à {2} bpm : {3} secondes, chaque piste depuis le début.",
  "A drifting lane is written as it drifts, so the file will not loop evenly.": "Une piste qui dérive est écrite comme elle dérive : le fichier ne bouclera pas proprement.",
  "Saved {0} in the Sequences folder: on the FILES card.": "{0} enregistré dans le dossier Sequences : sur la carte FICHIERS.",
- "Not saved: {0}": "Non enregistré : {0}"
+ "Not saved: {0}": "Non enregistré : {0}",
+ "REMOVE…": "RETIRER…",
+ "None yet: + ADD A CONTROL puts one here.": "Aucun pour l'instant : + AJOUTER UNE COMMANDE en place un ici.",
+ "{0} of {1}": "{0} sur {1}",
+ "KNOBS": "BOUTONS",
+ "send: {0}": "envoi : {0}",
+ "MODULE": "MODULE"
 }

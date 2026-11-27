@@ -64,6 +64,10 @@ struct App {
     //  (vcard_push, card units, + down), and a button's press turned into the card's drag)
     float vcard_push = 0;
     bool vcard_grab = false;
+    bool vbody = false;                 // (a phone page's body scrolling -- phone_body: buttons and lists only)
+    int drag_in_body = 0;               // (a knob, fader or field drawn in one: never meant to be -- the tours count them)
+    int script_page = -1;               // (a test's "page N": the next phone_pages' page, as if tapped)
+    float body_dy = 0;                  // (a phone body's scroll: what it draws is that much higher on the screen -- the audit's)
     float W = 1920, H = 1080, ts = 1.0f;
     float lh(float size) const;         // (a line of text at size: its height in design units)
     J parts, meters, build;
@@ -259,8 +263,8 @@ inline Audit &audit()
 inline void audit_box(const App &a, float x, float y, float w, float h)
 {
     Audit &A = audit();
-    if (A.on)
-        A.boxes.push_back({x, y, x + w, y + h, ""});
+    if (A.on)                           // (where it shows: a scrolled body's, that much higher)
+        A.boxes.push_back({x, y - a.body_dy, x + w, y + h - a.body_dy, ""});
 }
 inline void audit_text(App &a, ImFont *f, float size, float x, float y, const std::string &s)
 {
@@ -273,7 +277,7 @@ inline void audit_text(App &a, ImFont *f, float size, float x, float y, const st
     const ImVec2 p0 = P(a, x, y), p1 = P(a, x + w, y + h);
     if (p0.x < c0.x - 1 || p0.y < c0.y - 1 || p1.x > c1.x + 1 || p1.y > c1.y + 1)
         return;
-    A.texts.push_back({x, y, x + w, y + h, s});
+    A.texts.push_back({x, y - a.body_dy, x + w, y + h - a.body_dy, s});
 }
 inline void text(App &a, ImFont *f, float size, float x, float y, ImU32 col, const std::string &s)
 {
@@ -431,11 +435,117 @@ inline bool drag_is_scroll(const App &a)
 //  scroll, the item let go unpressed; called just after the item)
 inline void tap_yields(App &a)
 {
-    if (a.vcard && ImGui::IsItemActive() && drag_is_scroll(a)) {
+    if ((a.vcard || a.vbody) && ImGui::IsItemActive() && drag_is_scroll(a)) {
         ImGui::ClearActiveID();
         a.vcard_grab = true;
     }
 }
+
+// A PHONE PAGE's BODY THAT SCROLLS (y0..y1, x0..x1): only a page of buttons and lists -- a knob,
+// fader or field is never drawn in one (they count themselves: a.drag_in_body). Its tabs stay where
+// they are, above it. Dragged where no control is (or a button's press drawn along), or the wheel;
+// its reach is what it drew last frame. Between phone_body_begin and phone_body_end the card draws
+// as it would unscrolled.
+struct PhoneBody {
+    std::string key;
+    ImVec2 org0;
+    int vtx0 = 0;
+    float x0 = 0, y0 = 0, x1 = 0, y1 = 0, vmax = 0, sc = 0;
+};
+inline std::map<std::string, float> &phone_body_scroll()
+{
+    static std::map<std::string, float> m;
+    return m;
+}
+inline std::map<std::string, float> &phone_body_foot()
+{
+    static std::map<std::string, float> m;
+    return m;
+}
+inline PhoneBody phone_body_begin(App &a, const std::string &key, float x0, float y0, float x1, float y1)
+{
+    PhoneBody b;
+    b.key = key;
+    b.x0 = x0, b.y0 = y0, b.x1 = x1, b.y1 = y1;
+    const auto ft = phone_body_foot().find(key);
+    const float content = ft != phone_body_foot().end() ? ft->second - y0 + 8 : y1 - y0;
+    b.vmax = std::max(0.0f, content - (y1 - y0));
+    float &sc = phone_body_scroll()[key];
+    if (const char *s0 = getenv("NUI_CARD_SCROLL"))     // (the tour's: shown scrolled to its foot)
+        sc = (float)atof(s0) * b.vmax;
+    sc = std::max(0.0f, std::min(sc, b.vmax));
+    b.sc = sc;
+    ImGui::PushClipRect(P(a, x0, y0), P(a, x1, y1), true);
+    b.org0 = a.org;
+    a.org.y = std::floor(a.org.y - sc * a.k);
+    a.vbody = true;
+    a.body_dy = sc;
+    a.vcard_push = 0;
+    a.vcard_grab = false;
+    b.vtx0 = dl()->VtxBuffer.Size;
+    return b;
+}
+inline void phone_body_end(App &a, PhoneBody &b)
+{
+    static std::string dragging;
+    static float sy0 = 0, ss0 = 0;
+    float &sc = phone_body_scroll()[b.key];
+    const ImGuiIO &io = ImGui::GetIO();
+    const float my = (io.MousePos.y - b.org0.y) / a.k, mx = (io.MousePos.x - b.org0.x) / a.k;
+    const bool in = mx >= b.x0 && mx < b.x1 && my >= b.y0 && my < b.y1;
+    if ((ImGui::IsMouseClicked(0) && in && !ImGui::IsAnyItemActive()) || (a.vcard_grab && dragging != b.key)) {
+        dragging = b.key;
+        sy0 = my;
+        ss0 = sc;
+    }
+    if (dragging == b.key && ImGui::IsMouseDown(0))
+        sc = std::max(0.0f, std::min(b.vmax, ss0 - (my - sy0)));
+    else if (dragging == b.key)
+        dragging.clear();
+    if (a.vcard_push != 0)              // (what a list in it could not scroll: the body's)
+        sc = std::max(0.0f, std::min(b.vmax, sc + a.vcard_push));
+    if (in && io.MouseWheel != 0 && !ImGui::IsAnyItemHovered())
+        sc = std::max(0.0f, std::min(b.vmax, sc - io.MouseWheel * 40));
+    if (dragging == b.key)
+        a.animate = true;
+    {
+        float lo = 0;
+        const ImDrawList *d = dl();
+        for (int i = b.vtx0; i < d->VtxBuffer.Size; i++)
+            lo = std::max(lo, d->VtxBuffer[i].pos.y);
+        const float foot = lo > 0 ? (lo - a.org.y) / a.k : b.y0;
+        float &f = phone_body_foot()[b.key];
+        if (std::fabs(f - foot) > 1)
+            a.animate = true;           // (its reach changed: drawn again with it)
+        f = foot;
+    }
+    a.org = b.org0;
+    a.vbody = false;
+    a.body_dy = 0;
+    a.vcard_push = 0;
+    ImGui::PopClipRect();
+    if (b.vmax > 0) {                   // (its place: a rail at its right edge)
+        const float h = b.y1 - b.y0 - 4, th = std::max(30.0f, h * h / (h + b.vmax));
+        rect(a, b.x1 - 4, b.y0 + 2, 3, h, IM_COL32(0x2b, 0x2f, 0x34, 255), 1.5f);
+        rect(a, b.x1 - 4, b.y0 + 2 + (h - th) * sc / b.vmax, 3, th, SILK_DIM, 1.5f);
+    }
+}
+// (a body for the rest of a scope: ended however the card's drawing leaves it -- its returns too)
+struct PhoneBodyScope {
+    App &a;
+    PhoneBody b;
+    bool on;
+    PhoneBodyScope(App &a_, bool on_, const std::string &key, float x0, float y0, float x1, float y1) : a(a_), on(on_)
+    {
+        if (on)
+            b = phone_body_begin(a, key, x0, y0, x1, y1);
+    }
+    ~PhoneBodyScope()
+    {
+        if (on)
+            phone_body_end(a, b);
+    }
+};
 
 }  // namespace nui
 // (the hardware's look: after the primitives above, which it draws with; every
@@ -518,6 +628,38 @@ inline float heading(App &a, float x, float y, const std::string &t, const std::
     text_c(a, a.bold, 14, qx + r, y, held ? LCD : SILK_DIM, "?");
     return qx + 2 * r + 12;
 }
+
+// THE PHONE's PAGE KEYS, in a card's heading row (y 112, 40 tall, from TX): each as wide as its
+// word; the words a size smaller where a language's do not fit before x1. The page tapped, else -1
+inline int phone_pages(App &a, const std::string &id, float TX, const std::vector<std::string> &names, int page, float x1 = 818)
+{
+    float size = 21, pad = 28, tot = 0;
+    for (int pass = 0; pass < 3; pass++) {
+        tot = 0;
+        for (const auto &n : names)
+            tot += text_w(a, a.font, size, n) + pad + 4;
+        if (TX + 6 + tot <= x1)
+            break;
+        if (pass == 0)
+            size = 14;
+        else
+            pad = 14;
+    }
+    float x = TX + 6;
+    int hit = -1;
+    if (a.script_page >= 0 && a.script_page < (int)names.size()) {
+        hit = a.script_page;            // (a test's: the page asked, its key's place in any language)
+        a.script_page = -1;
+    }
+    for (size_t i = 0; i < names.size(); i++) {
+        const float w = text_w(a, a.font, size, names[i]) + pad;
+        if (button(a, (id + std::to_string(i)).c_str(), x, 112, w, 40, names[i], (int)i == page, true, size))
+            hit = (int)i;
+        x += w + 4;
+    }
+    return hit;
+}
+
 
 // ---- the formats (the retired web interface's)
 inline std::string pad2(int n)

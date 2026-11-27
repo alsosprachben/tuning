@@ -11,7 +11,8 @@
 //
 // TESTS (NUI_SCRIPT=FILE): a line each, "wait MS", "tap X Y" (a finger down
 // and up there, in the 1920x1080 design's units), "shot PATH" (the frame as
-// a PPM), "key ctrl+q" (a key pressed through SDL's queue), "quit" -- with
+// a PPM), "key ctrl+q" (a key pressed through SDL's queue), "page N" (a phone
+// card's page, by number), "quit" -- with
 // SDL_VIDEODRIVER=offscreen, headless.
 #include <SDL3/SDL.h>
 #ifdef __APPLE__
@@ -231,7 +232,7 @@ static void draw(App &a)
     static const std::set<std::string> TAB_READY = {"parts", "library", "synth", "stops", "piano", "drums", "kits", "seq", "keys", "amp", "effects", "matrix", "tuning", "control", "scenes", "files", "setup"};
     // (on the phone, a card not laid out for its height: the iPad's height, the
     //  phone's width, scrolled -- a drag on the card's empty ground, or the wheel)
-    static const std::set<std::string> PHONE_READY = {"parts", "library", "synth", "stops", "amp", "piano", "matrix", "tuning", "keys", "drums", "kits", "seq"};
+    static const std::set<std::string> PHONE_READY = {"parts", "library", "synth", "stops", "amp", "piano", "matrix", "tuning", "keys", "drums", "kits", "seq", "setup", "effects", "control", "files", "scenes"};
     static std::map<std::string, float> card_scroll, card_foot;     // (the foot: as drawn last frame, in iPad units)
     const bool virt = a.ph && !PHONE_READY.count(a.card);
     const ImVec2 org0 = a.org;
@@ -323,6 +324,16 @@ static void draw(App &a)
             draw_kits(a);
         else if (a.card == "seq")
             draw_seq(a);
+        else if (a.card == "setup")
+            draw_setup(a);
+        else if (a.card == "effects")
+            draw_effects(a);
+        else if (a.card == "control")
+            draw_control(a);
+        else if (a.card == "files")
+            draw_files(a);
+        else if (a.card == "scenes")
+            draw_scenes(a);
     }
     if (virt) {                         // (the scrolled card's place: a rail at its right edge)
         // (its scroll: a touch on the card that no control took, dragged; or the wheel off a control --
@@ -546,6 +557,8 @@ static std::vector<Step> load_script(const char *path)
             s >> st.ms;
         else if (st.op == "shot" || st.op == "key")   // (key ctrl+q: a key pressed, its modifier held -- through SDL's queue)
             s >> st.arg;
+        else if (st.op == "page")             // (page N: the phone card's page N, wherever its key is in this language)
+            s >> st.ms;
         else if (st.op == "call")             // (call JSON: an API call, as a card makes it -- the rest of the line)
             std::getline(s >> std::ws, st.arg);
         if (!st.op.empty() && st.op[0] != '#')
@@ -749,6 +762,8 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
             } else if (st.op == "shot") {
                 shot_path = home_path(st.arg);
                 shot_in = 3;
+            } else if (st.op == "page") {
+                a.script_page = st.ms;
             } else if (st.op == "key") {
                 SDL_Event k{};
                 k.type = SDL_EVENT_KEY_DOWN;

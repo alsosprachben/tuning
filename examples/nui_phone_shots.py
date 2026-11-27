@@ -9,7 +9,7 @@ only = sys.argv[4].split(',') if len(sys.argv) > 4 else None
 os.makedirs(out, exist_ok=True)
 nvx = os.path.expanduser('~/nvx/live.nvx')
 ps = T.picks(nvx)
-sess = os.path.join(out, 'session.json'); open(sess, 'w').write('{}\n')
+sess = os.path.join(out, 'session.json'); open(sess, 'w').write(('{"language": "%s"}' % os.environ['PHONE_LANG'] if os.environ.get('PHONE_LANG') else '{}') + '\n')
 cw = (804 - 32) / 5
 CARDS = ['parts', 'scenes', 'library', 'synth', 'stops', 'piano', 'drums', 'kits', 'seq', 'keys', 'amp', 'effects', 'matrix', 'tuning', 'control', 'files', 'setup']
 def card(c): i = CARDS.index(c); return 'tap %.0f %.0f' % (14 + (i % 5) * (cw + 8) + cw / 2, 114 + (i // 5) * 64 + 28)
@@ -43,15 +43,36 @@ STATES = [  # (shot, patch, card, taps after opening)
     ('seq_pick', dict(program=0, drums=True), 'seq', [(74, 361)]),
     ('seq_timing', dict(program=0, drums=True), 'seq', [(752, 175)]),
     ('seq_save', dict(program=0, drums=True), 'seq', [(745, 132)]),
-    ('effects_p2', dict(program=0, variation=0), 'effects', [P3[1]]), ('effects_p3', dict(program=0, variation=0), 'effects', [P3[2]]),
-    ('control_p2', dict(program=0, variation=0), 'control', [P3[1]]), ('control_p3', dict(program=0, variation=0), 'control', [P3[2]]),
     ('tuning', dict(program=0, variation=0), 'tuning', [(128, 132)]),
     ('tuning_p2', dict(program=0, variation=0), 'tuning', [(204, 132)]),
     ('tuning_p3', dict(program=0, variation=0), 'tuning', [(284, 132)]),
-    ('files_p2', dict(program=0, variation=0), 'files', [P2[1]]), ('setup_p2', dict(program=0, variation=0), 'setup', [P2[1]]),
-    ('scenes', dict(program=0, variation=0), 'scenes', []), ('matrix', dict(program=0, variation=0), 'matrix', [(156, 132)]),
+    ('matrix', dict(program=0, variation=0), 'matrix', [(156, 132)]),
+    ('setup_input', dict(program=0, variation=0), 'setup', ['page 0']),
+    ('setup_module', dict(program=0, variation=0), 'setup', ['page 1']),
+    ('setup_sound', dict(program=0, variation=0), 'setup', ['page 2']),
+    ('setup_room', dict(program=0, variation=0), 'setup', ['page 3']),
+    ('setup_timing', dict(program=0, variation=0), 'setup', ['page 4']),
+    ('setup_touch', dict(program=0, variation=0), 'setup', ['page 5']),
+    ('effects_type', dict(program=0, variation=0), 'effects', ['call {"call":"efx_send","kind":"t","a":4,"b":0}', 'page 0']),
+    ('effects_knobs', dict(program=0, variation=0), 'effects', ['call {"call":"efx_send","kind":"t","a":4,"b":0}', 'page 1']),
+    ('effects_knobs2', dict(program=0, variation=0), 'effects', ['call {"call":"efx_send","kind":"t","a":4,"b":0}', 'page 1', (780, 183)]),
+    ('effects_rotary', dict(program=0, variation=0), 'effects', ['call {"call":"efx_send","kind":"t","a":3,"b":0}', 'page 1']),
+    ('effects_reverb', dict(program=0, variation=0), 'effects', ['page 2']),
+    ('effects_chorus', dict(program=0, variation=0), 'effects', ['page 3']),
+    ('effects_delay', dict(program=0, variation=0), 'effects', ['page 4']),
+    ('effects_eq', dict(program=0, variation=0), 'effects', ['page 5']),
+    ('control_controls', dict(program=0, variation=0), 'control', ['call {"call":"control_add","key":1,"channel":-1}', 'call {"call":"control_add","key":64,"channel":-1}', 'call {"call":"control_add","key":11,"channel":-1}', 'call {"call":"control_add","key":7,"channel":-1}', 'call {"call":"control_add","key":10,"channel":-1}', 'call {"call":"control_add","key":74,"channel":-1}', 'call {"call":"control_add","key":71,"channel":-1}', 'page 0']),
+    ('control_controls2', dict(program=0, variation=0), 'control', ['page 0', (738, 367)]),
+    ('control_remove', dict(program=0, variation=0), 'control', ['page 0', (696, 262)]),
+    ('control_add', dict(program=0, variation=0), 'control', ['page 0', (696, 262), (696, 214)]),
+    ('control_routes', dict(program=0, variation=0), 'control', [(696, 214), 'page 1']),
+    ('control_metronome', dict(program=0, variation=0), 'control', ['page 2']),
+    ('files_choose', dict(program=0, variation=0), 'files', ['page 0']),
+    ('files_play', dict(program=0, variation=0), 'files', ['page 1']),
+    ('scenes', dict(program=0, variation=0), 'scenes', []),
     ('matrix_p2', dict(program=0, variation=0), 'matrix', [(276, 132)]),
     ('matrix_p3', dict(program=0, variation=0), 'matrix', [(384, 132)]),
+    ('scenes_name', dict(program=0, variation=0), 'scenes', [(213, 356)]),
 ]
 steps, shots = ['wait 3000'], []
 for name, want, c, taps in STATES:
@@ -60,12 +81,13 @@ for name, want, c, taps in STATES:
     n = name + ('_foot' if foot else '')
     shots.append(n)
     steps += ['call {"call":"part_pick","row":0,"pick":%d}' % T.pick_for(ps, want), 'wait 600', 'tap 81 78', 'wait 300', card(c), 'wait 500']
-    for t in taps:
-        steps += ['tap %d %d' % t, 'wait 400']
+    for t in taps:                    # (a tap's place, or a step as it is: "page 3", a call)
+        steps += (['tap %d %d' % t] if isinstance(t, tuple) else [t]) + ['wait 400']
     steps += ['wait 300', 'shot ' + os.path.join(out, n + '.ppm')]
 steps += ['quit']
 sc = os.path.join(out, 'script%d.txt' % foot); open(sc, 'w').write('\n'.join(steps) + '\n')
-env = dict(os.environ, NUI_LAYOUT='phone', SDL_VIDEODRIVER='offscreen', NUI_SIZE='2868x1320', NUI_SAFE='186,0,2496,1257',
+env = dict(os.environ, NUI_LAYOUT='phone', SDL_VIDEODRIVER='offscreen', NUI_SIZE=os.environ.get('SZ', '2868x1320'),
+           NUI_SAFE=os.environ.get('SAFE', '186,0,2496,1257'),
            NUI_SCRIPT=sc, NUI_TEXT_AUDIT=os.path.join(out, 'audit%d.txt' % foot))
 if foot: env['NUI_CARD_SCROLL'] = '1'
 subprocess.run([os.path.join(S, 'wt_panel', 'nvlive'), nvx, '--session=' + sess, '--app-windowed', '--midi=/dev/null',

@@ -625,5 +625,11 @@
  "{0} bars of {1} beats at {2} bpm: {3} seconds, every lane from the start.": "{1}拍 × {0}小節、{2} bpm:{3}秒。すべてのレーンを頭から。",
  "A drifting lane is written as it drifts, so the file will not loop evenly.": "ドリフトするレーンはずれたまま書かれるので、ファイルはきれいにはループしません。",
  "Saved {0} in the Sequences folder: on the FILES card.": "{0} を Sequences フォルダに保存しました。ファイルのカードにあります。",
- "Not saved: {0}": "保存できませんでした:{0}"
+ "Not saved: {0}": "保存できませんでした:{0}",
+ "REMOVE…": "削除…",
+ "None yet: + ADD A CONTROL puts one here.": "まだありません。「+ コントロールを追加」でここに置けます。",
+ "{0} of {1}": "{0} / {1}",
+ "KNOBS": "つまみ",
+ "send: {0}": "送り:{0}",
+ "MODULE": "モジュール"
 }

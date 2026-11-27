@@ -54,13 +54,21 @@ inline void draw_setup(App &a)
         U.open = false;
         setup_card(a, true);
     }
-    // (the iPad's: its card from y 210 to card_y1 + 6, three pages -- the input; the sound; the touch)
-    const bool IP = a.tab;
-    static int page = 0;
-    const float X0 = IP ? 20 : 34, X1 = IP ? (a.ph ? 818 : 1113) : 1886, Y0 = IP ? 266 : 394, Y1 = card_y1(a), HY = IP ? 224 : 356;
+    // (the iPad's: its card from y 210 to card_y1 + 6, three pages -- the input; the sound; the touch.
+    //  The phone's: six, each the card's height, none scrolled where a knob or field is -- the input
+    //  and the Messenger; the module; the sound's knobs; the room, the standard and the language;
+    //  borrowed time; the touch. The pages of buttons alone scroll under their keys where they must)
+    const bool IP = a.tab, PH = a.ph;
+    static int page = 0, ppage = 0;
+    const float X0 = PH ? 14 : IP ? 20 : 34, X1 = IP ? (PH ? 818 : 1113) : 1886, Y0 = PH ? 160 : IP ? 266 : 394, Y1 = card_y1(a),
+                HY = PH ? 120 : IP ? 224 : 356;
     const float LH = a.lh(14) + (IP ? 3 : 4);
     const float TX = heading(a, X0, HY, T("SETUP"), "setup");
-    if (IP)
+    if (PH) {
+        const int h = phone_pages(a, "suppage", TX, {T("INPUT"), T("MODULE"), T("SOUND"), T("ROOM"), T("TIMING"), T("TOUCH")}, ppage);
+        if (h >= 0)
+            ppage = h;
+    } else if (IP)
         for (int pg = 0; pg < 3; pg++) {
             const std::string id = "supage" + std::to_string(pg);
             if (button(a, id.c_str(), page_kx(a, 3, pg, 300), 216, page_kw(a, 3), 44, pg == 2 ? T("TOUCH") : pg ? T("SOUND") : T("INPUT"),
@@ -93,14 +101,24 @@ inline void draw_setup(App &a)
     };
 
     // MIDI IN, PLAY AS A MODULE, THE MESSENGER
-    const float AW = IP ? X1 - X0 : 760, BW = IP ? (a.ph ? 540 : 690) : 640, gap = IP ? 6 : 10, AX = X0, BX = IP ? X0 : AX + AW + gap,
-                CX = BX + BW + gap, CW = X1 - CX;
-    const bool show_in = !IP || page == 0, show_snd = !IP || page == 1, show_touch = !IP || page == 2;
-    for (const auto &b : {std::pair<float, float>{AX, AW}, {BX, BW}, {CX, CW}}) {
-        if ((b.first == AX && b.second == AW && !show_in && !show_touch) || (!(b.first == AX && b.second == AW) && !show_snd))
-            continue;
-        look::tray(a, b.first, Y0, b.second, Y1 - Y0, 9);
-    }
+    const float AW = IP ? X1 - X0 : 760, BW = PH ? X1 - X0 : IP ? 690 : 640, gap = IP ? 6 : 10, AX = X0, BX = IP ? X0 : AX + AW + gap,
+                CX = PH ? X0 : BX + BW + gap, CW = X1 - CX;
+    // (what shows: the phone's page its own part of the iPad's)
+    const bool show_in = PH ? ppage <= 1 : !IP || page == 0, show_snd = PH ? ppage >= 2 && ppage <= 4 : !IP || page == 1,
+               show_touch = PH ? ppage == 5 : !IP || page == 2;
+    const bool p_dev = !PH || ppage == 0, p_mod = !PH || ppage == 1, p_knobs = !PH || ppage == 2, p_room = !PH || ppage == 3,
+               p_rub = !PH || ppage == 4;
+    if (PH)
+        look::tray(a, X0, Y0, X1 - X0, Y1 - Y0, 9);
+    else
+        for (const auto &b : {std::pair<float, float>{AX, AW}, {BX, BW}, {CX, CW}}) {
+            if ((b.first == AX && b.second == AW && !show_in && !show_touch) || (!(b.first == AX && b.second == AW) && !show_snd))
+                continue;
+            look::tray(a, b.first, Y0, b.second, Y1 - Y0, 9);
+        }
+    // (the phone's pages of buttons alone: their body scrolls, under the keys)
+    PhoneBodyScope body(a, PH && (ppage == 0 || ppage == 1 || ppage == 3 || ppage == 4), "su" + std::to_string(ppage), X0 + 2,
+                        Y0 + 2, X1 - 2, Y1 - 2);
     auto head = [&](float x, float &y, const char *h, const char *sub, const char *key) {
         const float hx = heading(a, x + 12, y, h, key);
         if (sub)
@@ -109,6 +127,7 @@ inline void draw_setup(App &a)
     };
     float y = Y0 + 10;
     if (show_in) {
+    if (p_dev) {
     head(AX, y, T("MIDI IN"), T("several at once, merged; kept in the session"), "su:midi");   // i18n-skip (the help key)
     const J *ins = U.s.get("inputs");
     if (!ins || !ins->is(J::ARR) || ins->a.empty()) {
@@ -139,6 +158,8 @@ inline void draw_setup(App &a)
         y += 22;
     }
     y += 10;
+    }
+    if (p_mod) {
     head(AX, y, T("PLAY AS A MODULE"), T("a sequencer or DAW sending whole songs"), "su:module");   // i18n-skip (the help key)
     {
         static const std::vector<std::pair<std::string, std::string>> MODS = {
@@ -177,6 +198,8 @@ inline void draw_setup(App &a)
         }
     }
     y += 10;
+    }
+    if (p_dev) {
     head(AX, y, T("THE MESSENGER"), nullptr, "su:msgr");   // i18n-skip (the help key)
     {
         const J *m = U.s.get("messenger");
@@ -193,7 +216,7 @@ inline void draw_setup(App &a)
             U.s.o["messenger"].o[k] = sess::boolean(!v);
         }
     }
-
+    }
     }
     if (show_touch) {
     y = IP ? Y0 + 10 : y + 10;          // (the laptop's: under the Messenger; the iPad's: a page of its own)
@@ -222,7 +245,8 @@ inline void draw_setup(App &a)
     if (!show_snd)
         return;
     y = Y0 + 10;
-    head(BX, y, T("SOUND"), T("every part"), "su:sound");   // i18n-skip (the help key)
+    if (p_knobs || p_room)
+        head(BX, y, T("SOUND"), T("every part"), "su:sound");   // i18n-skip (the help key)
     struct Gl {
         int i;
         const char *label;
@@ -234,7 +258,7 @@ inline void draw_setup(App &a)
                                {5, N_("Aftertouch"), 0, 24, 0.5, 0}, {14, N_("Stand-in"), 0, 100, 5, 5}};
     const int NK = IP ? 8 : 4;          // (the iPad's eight to a row)
     const float kcw = (BW - 24) / NK;
-    for (int k = 0; k < 8; k++) {
+    for (int k = 0; k < 8 && p_knobs; k++) {
         const Gl &q = GLOB[k];
         const int n = (int)std::lround((q.hi - q.lo) / q.step);
         std::vector<int> vals = irange(0, n);
@@ -265,6 +289,7 @@ inline void draw_setup(App &a)
             call(a, "{\"call\":\"global_set\",\"i\":" + std::to_string(q.i) + ",\"v\":" + jnum(std::round((q.lo + picked * q.step) * 1e4) / 1e4) + "}");
         }
     }
+    if (p_knobs) {
     y += IP ? 116 : 240;
     {
         const bool gpu = gv(6) > 0.5, tail = gv(7) > 0.5;
@@ -274,6 +299,8 @@ inline void draw_setup(App &a)
         else if (h == 1)
             gset(7, tail ? 0 : 1);
     }
+    }
+    if (p_room) {
     y += 6;
     text(a, a.bold, 14, BX + 12, y, SILK, T("THE ROOM"));
     y += IP ? 18 : 24;
@@ -327,6 +354,9 @@ inline void draw_setup(App &a)
             lang_apply(a);
         }
     }
+    }
+    if (!p_rub)
+        return;
 
     // BORROWED TIME (rubato)
     y = Y0 + 10;

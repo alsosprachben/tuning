@@ -106,8 +106,9 @@ inline void draw_scenes(App &a)
         lib_load(a);
     if (!C.s.is(J::OBJ))
         sc_take(call(a, "{\"call\":\"scenes\",\"open\":1}"));
-    const bool IP = a.tab;              // (the iPad's: its card from y 210 to card_y1 + 6)
-    const float X0 = IP ? 20 : 34, X1 = IP ? (a.ph ? 818 : 1113) : 1886, Y0 = IP ? 260 : 394, Y1 = card_y1(a), HY = IP ? 224 : 356;
+    const bool IP = a.tab, PH = a.ph;   // (the iPad's: its card from y 210 to card_y1 + 6; the phone's its own height)
+    const float X0 = PH ? 14 : IP ? 20 : 34, X1 = IP ? (PH ? 818 : 1113) : 1886, Y0 = PH ? 156 : IP ? 260 : 394, Y1 = card_y1(a),
+                HY = PH ? 120 : IP ? 224 : 356;
     const float LH = a.lh(14) + (IP ? 3 : 4);
     heading(a, X0, HY, T("SCENES"), "scenes");
     if (!C.s.is(J::OBJ))
@@ -121,13 +122,14 @@ inline void draw_scenes(App &a)
 
     // A NAME, typed on the screen's own keys (or a keyboard's)
     if (!C.naming.empty()) {
-        const float W = IP ? (a.ph ? 700 : 760) : 900, x = ((IP ? (a.ph ? 832 : 1133) : 1920) - W) / 2;
-        look::module(a, x - 20, Y0, W + 40, Y1 - Y0, 10);
-        const float NY = Y0 + (IP ? 30 : 44), NH = IP ? 48 : 56;
-        text(a, a.bold, 14, x, Y0 + (IP ? 10 : 16), SILK, C.naming == "preset_save" ? T("SAVE THIS SETUP AS") : T("SAVE THE CONTROLS AS"));
-        look::lcd_window(a, x, NY, W, NH, true);
-        look::lcd_text(a, 28, x + 14, NY + (NH - a.lh(28)) / 2, LCD, C.name + "_");
-        look::glass(a, x, NY, W, NH);
+        // (the phone's: the card's whole height -- the name and CANCEL on a row, the keys under them, their SAVE)
+        const float W = IP ? (PH ? 700 : 760) : 900, x = ((IP ? (PH ? 832 : 1133) : 1920) - W) / 2, NTOP = PH ? 106 : Y0;
+        look::module(a, x - 20, NTOP, W + 40, Y1 - NTOP, 10);
+        const float NY = PH ? NTOP + 26 : Y0 + (IP ? 30 : 44), NH = PH ? 40 : IP ? 48 : 56, NW = PH ? W - 112 : W;
+        text(a, a.bold, 14, x, PH ? NTOP + 6 : Y0 + (IP ? 10 : 16), SILK, C.naming == "preset_save" ? T("SAVE THIS SETUP AS") : T("SAVE THE CONTROLS AS"));
+        look::lcd_window(a, x, NY, NW, NH, true);
+        look::lcd_text(a, PH ? 21 : 28, x + 14, NY + (NH - a.lh(PH ? 21 : 28)) / 2, LCD, C.name + "_");
+        look::glass(a, x, NY, NW, NH);
         ImGuiIO &io = ImGui::GetIO();
         for (int i = 0; i < io.InputQueueCharacters.Size; i++) {
             const ImWchar c = io.InputQueueCharacters[i];
@@ -141,8 +143,9 @@ inline void draw_scenes(App &a)
             C.naming.clear();
             return;
         }
-        save = osk(a, C.name, x, NY + NH + (IP ? 20 : 30), W, true, T("SAVE")) || save;
-        if (button(a, "nmcancel", x, Y1 - (IP ? 50 : 64), 200, IP ? 44 : 46, T("CANCEL"), false, true, IP ? 21 : 14)) {
+        save = osk(a, C.name, x, NY + NH + (PH ? 8 : IP ? 20 : 30), W, true, T("SAVE")) || save;
+        if (button(a, "nmcancel", PH ? x + W - 104 : x, PH ? NY : Y1 - (IP ? 50 : 64), PH ? 104 : 200, PH ? NH : IP ? 44 : 46, T("CANCEL"), false, true,
+                   IP ? 21 : 14)) {
             C.naming.clear();
             return;
         }
@@ -151,7 +154,7 @@ inline void draw_scenes(App &a)
             nm.pop_back();
         while (!nm.empty() && nm[0] == ' ')
             nm.erase(0, 1);
-        if (button(a, "nmsave", x + W - 200, Y1 - (IP ? 50 : 64), 200, IP ? 44 : 46, T("SAVE"), !nm.empty(), !nm.empty(), IP ? 21 : 14) ||
+        if ((!PH && button(a, "nmsave", x + W - 200, Y1 - (IP ? 50 : 64), 200, IP ? 44 : 46, T("SAVE"), !nm.empty(), !nm.empty(), IP ? 21 : 14)) ||
             (save && !nm.empty())) {
             const std::string c = C.naming;
             C.naming.clear();
