@@ -3489,6 +3489,21 @@ void nv_song_cab_resolve(void *s, int (*cb)(void *, int, int, int *), void *ctx)
         }
 }
 
+// EVERY MELODIC NOTE's CLASS through cb (a part's knobs: each key's class
+// to its voiced copy, Cache::cab_prep's -- a cabinet note's too, its speaker kept)
+void nv_song_class_remap(void *s, int (*cb)(void *, int), void *ctx)
+{
+    nv::Song *g = (nv::Song *)s;
+    for (auto &e : g->notes)
+        if (!e.drum && e.kover < 0) {
+            const int q = e.kidx(), r = cb(ctx, q);
+            if (r != q) {
+                e.kover = r;
+                g->mix.clear();
+            }
+        }
+}
+
 void nv_song_msgr(void *s, long long ch, double t, int knob, double v)
 {
     ((nv::Song *)s)->msgr.push_back(nv::Song::Msgr{ch, t, knob, v});

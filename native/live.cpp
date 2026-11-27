@@ -69,6 +69,7 @@ void nv_song_kits_n(void *s, const double *f0, const double *seat, int n);
 void nv_song_strokes_k(void *s, const NoteClass *const *K, const int *kind, const double *par);
 void nv_song_vars(void *s, int nent, const int *nls, const int *ls, const double *trim, const int *gs, const int *gm2);
 void nv_song_cab_resolve(void *s, int (*cb)(void *, int, int, int *), void *ctx);
+void nv_song_class_remap(void *s, int (*cb)(void *, int), void *ctx);
 void nv_song_slot_organs(void *s, int n, const OrganSpec *const *so);
 void nv_song_slot_orgs(void *s, int n, const int *off, const OrganSpec *const *og);
 void nv_log_n(long n, const double *x, double *out);
@@ -656,7 +657,13 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
         nv_song_slot_orgs(song, (int)g_slot_organ.size(), g_slot_off.data(), g_slot_og.data());
     }
     nv_midi_song(m, song, trim);
-    if (g_tmpl_cabk)                        // (its cabinet's voices: the note to its class's, Cache::cab_prep's)
+    if (g_tmpl_cabk && (g_tmpl_var >> 20))  // (its knobs' voices: every note to its class's copy)
+        nv_song_class_remap(song, [](void *ctx, int q) {
+            const auto &mp = *(const std::map<int, int> *)ctx;
+            auto it = mp.find(q);
+            return it == mp.end() ? q : it->second;
+        }, (void *)g_tmpl_cabk);
+    else if (g_tmpl_cabk)                   // (its cabinet's voices: the note to its class's, Cache::cab_prep's)
         nv_song_cab_resolve(song, [](void *ctx, int q, int, int *) {
             const auto &mp = *(const std::map<int, int> *)ctx;
             auto it = mp.find(q);
@@ -1698,7 +1705,7 @@ struct Cache {
                 continue;
             auto it = cabk.find(q);
             if (it == cabk.end()) {
-                const NoteClass *d = nv_variant(K[q], c);       // (its pickup's, then its cabinet's)
+                const NoteClass *d = nv_voice_variant(nv_variant(K[q], c), var >> 20);    // (its pickup's, its cabinet's, then its knobs')
                 if (d == K[q] || K.size() >= K.capacity())
                     continue;
                 K.push_back(d);
@@ -2895,6 +2902,132 @@ const NoteClass *nv_pk_variant(const NoteClass *k, int p)
 const NoteClass *nv_variant(const NoteClass *k, int code)
 {
     return nv_cab_variant(nv_pk_variant(k, (code >> 4) & 7), code & 15);
+}
+
+int nv_voicing_knobs(const NoteClass *k, double *v0)
+{
+    if (!k)
+        return 0;
+    const VoiceSnap &s = k->tmpl;
+    if (s.kind != 0 || !s.hammer_model)
+        return 0;
+    int m = 1 << NV_VK_HAMMER;
+    v0[NV_VK_HAMMER] = s.hm_logk;
+    if (s.hm_core_mm > 0.0 || s.hm_core_edge_mm > 0.0) {
+        m |= 1 << NV_VK_WEAR;
+        v0[NV_VK_WEAR] = s.hm_core_mm;
+    }
+    m |= 1 << NV_VK_STRIKE;
+    v0[NV_VK_STRIKE] = s.sp_curve_set ? 1.0 / s.sp_curve[0] : s.strike_point;
+    if (k->detune_hi > 0.0) {
+        m |= 1 << NV_VK_UNISON;
+        v0[NV_VK_UNISON] = k->detune_hi;
+    }
+    if (s.board_kind == 0 && s.lid_db != 0.0) {
+        m |= 1 << NV_VK_LID;
+        v0[NV_VK_LID] = s.lid_db;
+    }
+    if (s.board_kind == 0 || s.board_kind == 1) {
+        m |= 1 << NV_VK_BOARD;
+        v0[NV_VK_BOARD] = s.board_high_hz;
+    }
+    if (s.board_kind == 2) {
+        m |= 1 << NV_VK_PICKUP;
+        v0[NV_VK_PICKUP] = s.bridge_corner_hz;
+    }
+    return m;
+}
+
+// (piano_knobs.piano_class, in place: what each knob moves -- the class's
+// own fields, and its template's where a note's setup reads them from there)
+void nv_voicing_apply(NoteClass *d, const double *t, int mask)
+{
+    double v0[NV_VK_N];
+    mask &= nv_voicing_knobs(d, v0);
+    VoiceSnap &s = d->tmpl;
+    if (mask >> NV_VK_HAMMER & 1)
+        s.hm_logk += t[NV_VK_HAMMER];
+    if (mask >> NV_VK_WEAR & 1) {
+        s.hm_core_mm *= t[NV_VK_WEAR];
+        s.hm_core_edge_mm *= t[NV_VK_WEAR];
+    }
+    if (mask >> NV_VK_STRIKE & 1) {
+        if (s.sp_curve_set) {
+            for (int i = 0; i < 3; i++)
+                s.sp_curve[i] /= t[NV_VK_STRIKE];
+            // (the prototype's own point, as its constructor set it from the curve: nv_voice_init's)
+            const double f = s.frequency_x * pow(2.0, s.octave_position);
+            const int midi = (int)rint(69.0 + 12.0 * log(f / 440.0) / log(2.0));
+            const double oo = (midi - 69) / 12.0, sp = 1.0 / (s.sp_curve[0] + s.sp_curve[1] * oo + s.sp_curve[2] * oo * oo);
+            s.strike_point = 0.5 < sp ? 0.5 : (0.02 > sp ? 0.02 : sp);
+        } else
+            s.strike_point *= t[NV_VK_STRIKE];
+    }
+    if (mask >> NV_VK_UNISON & 1) {
+        d->detune_lo *= t[NV_VK_UNISON];
+        d->detune_hi *= t[NV_VK_UNISON];
+        d->init.detune_lo *= t[NV_VK_UNISON];
+        d->init.detune_hi *= t[NV_VK_UNISON];
+    }
+    if (mask >> NV_VK_LID & 1)
+        s.lid_db += t[NV_VK_LID];
+    if (mask >> NV_VK_BOARD & 1)
+        s.board_high_hz *= t[NV_VK_BOARD];
+    if (mask >> NV_VK_PICKUP & 1)
+        s.bridge_corner_hz *= t[NV_VK_PICKUP];
+    if (mask)
+        nv_hammer_note(&s);                 // (its prototype's hammer shares: the export's, of the moved class)
+}
+
+size_t nv_noteclass_size(void) { return sizeof(NoteClass); }
+
+// THE SETTINGS NAMED: each distinct (transform, mask) its id, for as long as
+// the process runs (a variation key holds 11 bits of it)
+static std::mutex g_vc_mu;
+static std::vector<std::pair<std::array<double, NV_VK_N>, int>> g_vc_set(1);       // ([0] none)
+int nv_voicing_id(const double *t, int mask)
+{
+    mask &= (1 << NV_VK_N) - 1;
+    if (!mask)
+        return 0;
+    std::array<double, NV_VK_N> a{};
+    for (int i = 0; i < NV_VK_N; i++)
+        a[i] = (mask >> i & 1) ? t[i] : 0.0;
+    std::lock_guard<std::mutex> lk(g_vc_mu);
+    for (size_t i = 1; i < g_vc_set.size(); i++)
+        if (g_vc_set[i].second == mask && g_vc_set[i].first == a)
+            return (int)i;
+    if (g_vc_set.size() >= 2048)
+        return -1;                          // (full: the caller keeps what it had)
+    g_vc_set.emplace_back(a, mask);
+    return (int)g_vc_set.size() - 1;
+}
+
+// A VOICE THROUGH SETTING vid: its class copied and moved, kept -- made
+// again when the class it came from has changed since (a room's fields
+// written into every class: the copy's would be the old room's); a copy
+// replaced is kept too (a cache built from it may still hold it)
+struct VoicedClass {
+    std::unique_ptr<NoteClass> base, made;
+};
+static std::map<std::pair<const NoteClass *, int>, VoicedClass> g_vc_made;
+static std::vector<std::unique_ptr<NoteClass>> g_vc_old;
+const NoteClass *nv_voice_variant(const NoteClass *k, int vid)
+{
+    if (!k || vid <= 0)
+        return k;
+    std::lock_guard<std::mutex> lk(g_vc_mu);
+    if ((size_t)vid >= g_vc_set.size())
+        return k;
+    VoicedClass &e = g_vc_made[std::make_pair(k, vid)];
+    if (e.made && memcmp(e.base.get(), k, sizeof(NoteClass)) == 0)
+        return e.made.get();
+    if (e.made)
+        g_vc_old.push_back(std::move(e.made));
+    e.base.reset(new NoteClass(*k));
+    e.made.reset(new NoteClass(*k));
+    nv_voicing_apply(e.made.get(), g_vc_set[(size_t)vid].first.data(), g_vc_set[(size_t)vid].second);
+    return e.made.get();
 }
 int nv_tcache_var(void *h) { return ((nv::live::Cache *)h)->var; }
 

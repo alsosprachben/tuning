@@ -1953,6 +1953,16 @@ static void hm_key(const VoiceSnap *s, double fn, double key[13])
     memcpy(key, k2, sizeof(k2));
 }
 
+/* the hammer's shares for a template snapshot as its class's export made
+   them (its prototype note: Python's p._hammer_gain(1)) -- a class moved by
+   a piano's knobs (nv_voicing_apply) made again as its export would make it */
+static void hm_note(VoiceSnap *s);
+void nv_hammer_note(VoiceSnap *s)
+{
+    if (s->hammer_model)
+        hm_note(s);
+}
+
 /* THE WHOLE PIANO'S TABLE AHEAD OF THE NOTES: every key A0-C8 at every level,
    to a partial count that covers a tuning half a semitone flat -- what a live
    host calls once the voice is loaded (off the audio thread), so no note-on

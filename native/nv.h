@@ -2044,6 +2044,22 @@ const NoteClass *nv_pk_variant(const NoteClass *k, int p);
 /* a variation key's VARIANT CODE (its bits 12-19 over 12: the cabinet in
    the low 4, the pickup in the next 3) -- the pickup's, then the cabinet's */
 const NoteClass *nv_variant(const NoteClass *k, int code);
+/* A PIANO's KNOBS (piano_knobs.py, the reference): the physical controls a
+   GrandPianoProperties voice offers -- HAMMER (the felt's log10 stiffness),
+   WEAR (its worn hard layer, mm), STRIKE (the strike point's ratio at A4),
+   UNISON (the strings' spread, cents), LID (dB), BOARD (the soundboard's
+   top, Hz), PICKUP (the electric grand's piezo corner, Hz). knobs: the
+   mask k has, v0[NV_VK_N] its values. A setting is a transform against a
+   class: t[i] an offset (HAMMER, LID) or a ratio (the rest), mask the knobs
+   set; apply edits d in place; an id (1..2047, 0 none) names a setting for
+   a variation key's bits 20-30, and variant is k through it (made once) */
+enum { NV_VK_HAMMER, NV_VK_WEAR, NV_VK_STRIKE, NV_VK_UNISON, NV_VK_LID, NV_VK_BOARD, NV_VK_PICKUP, NV_VK_N };
+int nv_voicing_knobs(const NoteClass *k, double *v0);
+void nv_voicing_apply(NoteClass *d, const double *t, int mask);
+int nv_voicing_id(const double *t, int mask);
+const NoteClass *nv_voice_variant(const NoteClass *k, int vid);
+size_t nv_noteclass_size(void);
+void nv_hammer_note(VoiceSnap *s);
 int nv_song_note_bank(void *s, int bsel);
 int nv_song_kidx(void *s, int i);
 int nv_song_tone(void *s, int i);
