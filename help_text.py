@@ -366,6 +366,23 @@ HELP = {
      'terms': [['Pedals', 'Soft, sostenuto and sustain, as on a grand piano.'],
                ['Dampers', "Where each key's damper sits on its strings."],
                ['Pedal key', 'A key on the keyboard that works as the sustain pedal.']]},
+    'voice': {'title': 'Voice',
+     'intro': "The selected part's instrument as the physics it is modelled by: each knob a physical part of it, in "
+              "its own units. Each starts at the voice's own value. Turn one and the part's sound is built again "
+              "through it, which takes a second or two; the notes after that have it. Double-tap a knob to put it "
+              "back. A new program puts every knob back. Pianos have knobs first.",
+     'terms': [['FELT', "The hammer felt's stiffness, against the program's own (x1). Harder felt is brighter; softer "
+                        "is darker."],
+               ['FELT LEFT', "How much soft felt is left over a worn hammer's hard layer, in millimetres. Thin, a "
+                             "hard blow presses through to it and the note rings bright; then even a softer felt "
+                             "brightens, as it lets the blow reach the layer. Thick, a fresh hammer that never does."],
+               ['STRIKE POINT', "Where the hammer meets the string, as a share of its length (1/7.4: a 7.4th of the "
+                                "way along). The partials with a node there are not struck."],
+               ['UNISON', "How far apart a note's strings are tuned, in cents. 0 is perfectly in tune."],
+               ['LID', "The grand's lid, as a lift of the treble: shut is darker, open is brighter."],
+               ['SOUNDBOARD', "The highest frequency the soundboard radiates well. Lower is darker."],
+               ['PICKUP', "The electric grand's piezo pickup: the top of its range. Lower is darker."],
+               ['ALL AS THE VOICE', "Puts every knob back to the voice's own value."]]},
     'piano:pedals': {'title': 'Pedals',
      'intro': 'Tap a pedal to press it; tap again to let it up.',
      'terms': [['SOFT', 'Una corda: the hammers strike fewer strings, softer and darker.'],
@@ -930,6 +947,7 @@ HELP_TOC = [['Start here', ['basics']],
  ['Stops', ['stops', 'drive', 'rotary']],
  ['Amp', ['amp', 'pickup', 'drive', 'cabinet', 'rotary', 'spectra', 'couplers']],
  ['Piano', ['piano', 'piano:pedals', 'piano:dampers', 'piano:key']],
+ ['Voice', ['voice']],
  ['Drums', ['drums']],
  ['Kits', ['kits', 'drums:user']],
  ['Seq', ['seq']],

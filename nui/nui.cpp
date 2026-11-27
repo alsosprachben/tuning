@@ -48,6 +48,7 @@
 #include "keys.h"
 #include "effects.h"
 #include "amp.h"
+#include "voice.h"
 #include "matrix.h"
 #include "tuning.h"
 #include "control.h"
@@ -77,13 +78,13 @@ std::string lang_system()
 // (SCENES after PARTS: a setup's parts arranged, then saved and brought back -- Ben 2026-11-25)
 static const char *CARDS[][2] = {{"parts", N_("PARTS")}, {"scenes", N_("SCENES")}, {"library", N_("LIBRARY")},
                                  {"synth", N_("SYNTH")}, {"stops", N_("STOPS")}, {"piano", N_("PIANO")},
-                                 {"drums", N_("DRUMS")}, {"kits", N_("KITS")}, {"seq", N_("SEQ")}, {"keys", N_("KEYS")}, {"amp", N_("AMP")}, {"effects", N_("EFFECTS")},
+                                 {"voice", N_("VOICE")}, {"drums", N_("DRUMS")}, {"kits", N_("KITS")}, {"seq", N_("SEQ")}, {"keys", N_("KEYS")}, {"amp", N_("AMP")}, {"effects", N_("EFFECTS")},
                                  {"matrix", N_("MATRIX")}, {"tuning", N_("TUNING")}, {"control", N_("CONTROL")},
                                  {"files", N_("FILES")}, {"setup", N_("SETUP")}};
 // (each card's name on its tab, where a language may need a short form: the catalogue's "tab|..." texts)
 [[maybe_unused]] static const char *TAB_NAMES[] = {
     NC_("tab", "PARTS"), NC_("tab", "SCENES"), NC_("tab", "LIBRARY"), NC_("tab", "SYNTH"),   NC_("tab", "STOPS"),
-    NC_("tab", "PIANO"), NC_("tab", "DRUMS"),  NC_("tab", "KITS"),    NC_("tab", "SEQ"),     NC_("tab", "KEYS"),    NC_("tab", "AMP"),     NC_("tab", "EFFECTS"),
+    NC_("tab", "PIANO"), NC_("tab", "VOICE"), NC_("tab", "DRUMS"),  NC_("tab", "KITS"),    NC_("tab", "SEQ"),     NC_("tab", "KEYS"),    NC_("tab", "AMP"),     NC_("tab", "EFFECTS"),
     NC_("tab", "MATRIX"), NC_("tab", "TUNING"), NC_("tab", "CONTROL"), NC_("tab", "FILES"), NC_("tab", "SETUP")};
 
 
@@ -214,6 +215,7 @@ static void draw(App &a)
         look::module(a, 14, 338, 1892, a.H - 352, 10.0f);     // (to the window's foot: 728 at 1080)
     }
     piano_card(a, a.card == "piano");   // (the engine pushes the pedals only while it is open)
+    voice_card(a, a.card == "voice");   // (...and the part's knobs)
     if (a.card != "amp")
         amp_open(a, false);             // (...and the amp's only while its card is)
     drums_card(a, a.card == "drums" || a.card == "kits" || a.card == "seq");   // (...and the kit and its hits)
@@ -229,10 +231,10 @@ static void draw(App &a)
     files_card(a, a.card == "files");
     setup_card(a, a.card == "setup");
     // (on the iPad, a card not yet laid out for it says so)
-    static const std::set<std::string> TAB_READY = {"parts", "library", "synth", "stops", "piano", "drums", "kits", "seq", "keys", "amp", "effects", "matrix", "tuning", "control", "scenes", "files", "setup"};
+    static const std::set<std::string> TAB_READY = {"parts", "library", "synth", "stops", "piano", "voice", "drums", "kits", "seq", "keys", "amp", "effects", "matrix", "tuning", "control", "scenes", "files", "setup"};
     // (on the phone, a card not laid out for its height: the iPad's height, the
     //  phone's width, scrolled -- a drag on the card's empty ground, or the wheel)
-    static const std::set<std::string> PHONE_READY = {"parts", "library", "synth", "stops", "amp", "piano", "matrix", "tuning", "keys", "drums", "kits", "seq", "setup", "effects", "control", "files", "scenes"};
+    static const std::set<std::string> PHONE_READY = {"parts", "library", "synth", "stops", "amp", "piano", "voice", "matrix", "tuning", "keys", "drums", "kits", "seq", "setup", "effects", "control", "files", "scenes"};
     static std::map<std::string, float> card_scroll, card_foot;     // (the foot: as drawn last frame, in iPad units)
     const bool virt = a.ph && !PHONE_READY.count(a.card);
     const ImVec2 org0 = a.org;
@@ -267,6 +269,8 @@ static void draw(App &a)
         draw_stops(a);
     } else if (a.card == "piano") {
         draw_piano(a);
+    } else if (a.card == "voice") {
+        draw_voice(a);
     } else if (a.card == "drums") {
         draw_drums(a);
     } else if (a.card == "kits") {
@@ -312,6 +316,8 @@ static void draw(App &a)
             draw_amp(a);
         else if (a.card == "piano")
             draw_piano(a);
+        else if (a.card == "voice")
+            draw_voice(a);
         else if (a.card == "matrix")
             draw_matrix(a);
         else if (a.card == "tuning")
@@ -455,6 +461,10 @@ static bool poll(App &a)
     }
     if (const J *x = m.get("piano")) {
         piano_take(a, *x);
+        changed = true;
+    }
+    if (const J *x = m.get("voicing")) {   // (the VOICE card's: the part's knobs, its rebuild)
+        voice_take(a, *x);
         changed = true;
     }
     if (const J *x = m.get("amp")) {       // (the AMP card's: its valve, its Leslie, as a wheel or a file moves them)

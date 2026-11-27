@@ -25,7 +25,7 @@ import sys
 HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, HERE)
 
-CARDS = ["parts", "scenes", "library", "synth", "stops", "piano", "drums", "kits", "seq", "keys", "amp", "effects", "matrix",
+CARDS = ["parts", "scenes", "library", "synth", "stops", "piano", "voice", "drums", "kits", "seq", "keys", "amp", "effects", "matrix",
          "tuning", "control", "files", "setup"]
 # (each state: the patch put on part 1, and the cards whose look it changes -- every card for the first)
 STATES = [
@@ -34,7 +34,9 @@ STATES = [
     ("drawbar", dict(program=16, variation=0), ["stops", "amp", "piano"]),
     ("church", dict(program=19, variation=0), ["stops"]),
     ("harmonium", dict(program=20, variation=0), ["stops"]),
-    ("piano", dict(program=0, variation=0), ["piano", "amp", "library"]),
+    ("piano", dict(program=0, variation=0), ["piano", "voice", "amp", "library"]),
+    ("upright", dict(program=1, variation=0), ["voice"]),
+    ("cp80", dict(program=2, variation=0), ["voice"]),
     ("guitar", dict(program=27, variation=0), ["amp"]),
     ("kit", dict(program=0, drums=True), ["drums", "kits", "seq", "piano", "synth", "parts"]),
     ("userkit", dict(program=64, drums=True), ["drums", "kits"]),

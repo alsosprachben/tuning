@@ -377,6 +377,7 @@ J voicing_of(nv_host *h, int row)
         k.o["name"] = sess::str(NAMES[i]);
         k.o["v"] = sess::real(v[i]);
         k.o["v0"] = sess::real(v0[i]);
+        k.o["cap"] = sess::real(cap[i]);
         k.o["lo"] = sess::real(lo);
         k.o["hi"] = sess::real(hi);
         k.o["log"] = sess::boolean(lg);

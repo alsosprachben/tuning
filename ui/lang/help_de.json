@@ -3658,5 +3658,49 @@
  "seq/terms/16/1": {
   "en": "Writes the pattern as a MIDI file: BARS bars of BEATS A BAR beats, every lane from the start, with the tempo, the kit, and a user set's settings. It goes in the Sequences folder, on the FILES card, to play, render or take into another program. Swing, NUDGE and ACCENT are written as they play; a drifting lane is written as it drifts.",
   "t": "Schreibt das Muster als MIDI-Datei: TAKTE Takte zu SCHLÄGE JE TAKT Schlägen, jede Spur vom Anfang, mit Tempo, Set und den Einstellungen eines User-Sets. Sie landet im Ordner Sequences auf der Karte DATEIEN, zum Abspielen, Rendern oder für ein anderes Programm. Swing, VERSATZ und AKZENT werden geschrieben, wie sie klingen; eine driftende Spur, wie sie driftet."
+ },
+ "voice/title": {
+  "en": "Voice",
+  "t": "Stimme"
+ },
+ "toc/voice": {
+  "en": "Voice",
+  "t": "Stimme"
+ },
+ "voice/intro": {
+  "en": "The selected part's instrument as the physics it is modelled by: each knob a physical part of it, in its own units. Each starts at the voice's own value. Turn one and the part's sound is built again through it, which takes a second or two; the notes after that have it. Double-tap a knob to put it back. A new program puts every knob back. Pianos have knobs first.",
+  "t": "Das Instrument des gewählten Parts als die Physik, nach der es modelliert ist: jeder Regler ein physikalischer Teil davon, in seinen eigenen Einheiten. Jeder beginnt beim eigenen Wert der Stimme. Drehst du einen, wird der Klang des Parts damit neu gebaut, was ein, zwei Sekunden dauert; die Töne danach haben ihn. Doppeltippen setzt einen Regler zurück. Ein neues Programm setzt alle Regler zurück. Klaviere haben als Erste Regler."
+ },
+ "voice/terms/0/1": {
+  "en": "The hammer felt's stiffness, against the program's own (x1). Harder felt is brighter; softer is darker.",
+  "t": "Die Härte des Hammerfilzes, verglichen mit der des Programms (x1). Härterer Filz klingt heller, weicherer dunkler."
+ },
+ "voice/terms/1/1": {
+  "en": "How much soft felt is left over a worn hammer's hard layer, in millimetres. Thin, a hard blow presses through to it and the note rings bright; then even a softer felt brightens, as it lets the blow reach the layer. Thick, a fresh hammer that never does.",
+  "t": "Wie viel weicher Filz über der harten Schicht eines abgenutzten Hammers übrig ist, in Millimetern. Ist er dünn, drückt ein harter Schlag bis zu ihr durch und der Ton klingt hell; dann macht sogar weicherer Filz heller, weil er den Schlag die Schicht erreichen lässt. Ist er dick, ist es ein neuer Hammer, der das nie tut."
+ },
+ "voice/terms/2/1": {
+  "en": "Where the hammer meets the string, as a share of its length (1/7.4: a 7.4th of the way along). The partials with a node there are not struck.",
+  "t": "Wo der Hammer die Saite trifft, als Anteil ihrer Länge (1/7.4: ein 7,4tel der Länge). Die Teiltöne mit einem Knoten dort werden nicht angeschlagen."
+ },
+ "voice/terms/3/1": {
+  "en": "How far apart a note's strings are tuned, in cents. 0 is perfectly in tune.",
+  "t": "Wie weit die Saiten eines Tons auseinander gestimmt sind, in Cent. 0 ist vollkommen rein."
+ },
+ "voice/terms/4/1": {
+  "en": "The grand's lid, as a lift of the treble: shut is darker, open is brighter.",
+  "t": "Der Deckel des Flügels, als Anhebung der Höhen: geschlossen dunkler, offen heller."
+ },
+ "voice/terms/5/1": {
+  "en": "The highest frequency the soundboard radiates well. Lower is darker.",
+  "t": "Die höchste Frequenz, die der Resonanzboden gut abstrahlt. Tiefer ist dunkler."
+ },
+ "voice/terms/6/1": {
+  "en": "The electric grand's piezo pickup: the top of its range. Lower is darker.",
+  "t": "Der Piezo-Tonabnehmer des E-Flügels: die Obergrenze seines Bereichs. Tiefer ist dunkler."
+ },
+ "voice/terms/7/1": {
+  "en": "Puts every knob back to the voice's own value.",
+  "t": "Setzt jeden Regler auf den eigenen Wert der Stimme zurück."
  }
 }

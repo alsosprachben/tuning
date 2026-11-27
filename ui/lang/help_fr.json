@@ -3658,5 +3658,49 @@
  "seq/terms/16/1": {
   "en": "Writes the pattern as a MIDI file: BARS bars of BEATS A BAR beats, every lane from the start, with the tempo, the kit, and a user set's settings. It goes in the Sequences folder, on the FILES card, to play, render or take into another program. Swing, NUDGE and ACCENT are written as they play; a drifting lane is written as it drifts.",
   "t": "Écrit le motif en fichier MIDI : MESURES mesures de TEMPS PAR MESURE temps, chaque piste depuis le début, avec le tempo, le kit et les réglages d'un kit utilisateur. Il va dans le dossier Sequences, sur la carte FICHIERS, pour le jouer, le rendre ou l'emporter dans un autre logiciel. Le swing, le DÉCALAGE et l'ACCENT sont écrits comme ils jouent ; une piste qui dérive, comme elle dérive."
+ },
+ "voice/title": {
+  "en": "Voice",
+  "t": "Voix"
+ },
+ "toc/voice": {
+  "en": "Voice",
+  "t": "Voix"
+ },
+ "voice/intro": {
+  "en": "The selected part's instrument as the physics it is modelled by: each knob a physical part of it, in its own units. Each starts at the voice's own value. Turn one and the part's sound is built again through it, which takes a second or two; the notes after that have it. Double-tap a knob to put it back. A new program puts every knob back. Pianos have knobs first.",
+  "t": "L'instrument de la partie choisie tel que la physique le modélise : chaque bouton une partie physique de l'instrument, dans ses propres unités. Chacun part de la valeur propre de la voix. En tourner un reconstruit le son de la partie avec lui, ce qui prend une ou deux secondes ; les notes suivantes l'ont. Touchez deux fois un bouton pour le remettre. Un nouveau programme remet tous les boutons. Les pianos ont des boutons en premier."
+ },
+ "voice/terms/0/1": {
+  "en": "The hammer felt's stiffness, against the program's own (x1). Harder felt is brighter; softer is darker.",
+  "t": "La raideur du feutre du marteau, par rapport à celle du programme (x1). Un feutre plus dur est plus brillant ; plus souple, plus sombre."
+ },
+ "voice/terms/1/1": {
+  "en": "How much soft felt is left over a worn hammer's hard layer, in millimetres. Thin, a hard blow presses through to it and the note rings bright; then even a softer felt brightens, as it lets the blow reach the layer. Thick, a fresh hammer that never does.",
+  "t": "Combien de feutre souple reste au-dessus de la couche dure d'un marteau usé, en millimètres. Mince, un coup fort l'atteint et la note sonne brillante ; alors même un feutre plus souple éclaircit, car il laisse le coup atteindre la couche. Épais, c'est un marteau neuf qui ne l'atteint jamais."
+ },
+ "voice/terms/2/1": {
+  "en": "Where the hammer meets the string, as a share of its length (1/7.4: a 7.4th of the way along). The partials with a node there are not struck.",
+  "t": "Là où le marteau frappe la corde, en fraction de sa longueur (1/7.4 : à un 7,4e de la longueur). Les partiels qui ont un nœud à cet endroit ne sont pas excités."
+ },
+ "voice/terms/3/1": {
+  "en": "How far apart a note's strings are tuned, in cents. 0 is perfectly in tune.",
+  "t": "L'écart d'accord entre les cordes d'une note, en cents. 0 est parfaitement juste."
+ },
+ "voice/terms/4/1": {
+  "en": "The grand's lid, as a lift of the treble: shut is darker, open is brighter.",
+  "t": "Le couvercle du piano à queue, comme une hausse des aigus : fermé plus sombre, ouvert plus brillant."
+ },
+ "voice/terms/5/1": {
+  "en": "The highest frequency the soundboard radiates well. Lower is darker.",
+  "t": "La plus haute fréquence que la table d'harmonie rayonne bien. Plus bas, plus sombre."
+ },
+ "voice/terms/6/1": {
+  "en": "The electric grand's piezo pickup: the top of its range. Lower is darker.",
+  "t": "Le micro piézo du piano à queue électrique : le haut de sa plage. Plus bas, plus sombre."
+ },
+ "voice/terms/7/1": {
+  "en": "Puts every knob back to the voice's own value.",
+  "t": "Remet chaque bouton à la valeur propre de la voix."
  }
 }
