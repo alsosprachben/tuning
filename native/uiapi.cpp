@@ -316,6 +316,78 @@ bool pedals_of(nv_host *h, int channel, int out[3])
 // to C8: 1 on the string, 0 lifted -- the bass's bite later), the keys held
 // as the sustain pedal (routes from a key to CC64; pushed into, the dampers
 // lowered), and whether the sympathetic strings ring (the first part's)
+// THE VOICE CARD's (a piano's knobs, piano_knobs.py): each knob the part's
+// voice offers -- its value (its own, or the voice's), the voice's, its
+// range (round its program's plain voice; log: a ratio's, turned in octaves),
+// whether it is the part's own, and its words in its units -- and whether
+// the part's patch is being built through a setting just made
+J voicing_of(nv_host *h, int row)
+{
+    J o = sess::obj();
+    int n = nv_host_parts(h, nullptr, 0);
+    std::vector<nv_host_partinfo> ps((size_t)std::max(0, n));
+    n = nv_host_parts(h, ps.data(), n);
+    const bool has = row >= 0 && row < n;
+    o.o["row"] = sess::integer(row);
+    o.o["part"] = sess::str(has ? ps[(size_t)row].name : "");
+    o.o["program"] = sess::integer(has ? ps[(size_t)row].program : -1);
+    o.o["variation"] = sess::integer(has ? ps[(size_t)row].variation : 0);
+    double v[NV_VK_N] = {0}, v0[NV_VK_N] = {0}, cap[NV_VK_N] = {0};
+    int own = 0, building = 0;
+    const int have = has ? nv_host_voicing(h, row, v, v0, cap, &own, &building) : 0;
+    o.o["building"] = sess::boolean(building != 0);
+    J ks = sess::arr();
+    static const char *NAMES[NV_VK_N] = {"felt", "felt_left", "strike", "unison", "lid", "board", "pickup"};
+    for (int i = 0; have > 0 && i < NV_VK_N; i++) {
+        if (!(have >> i & 1))
+            continue;
+        double lo = 0, hi = 1;
+        bool lg = false;
+        char t[48];
+        switch (i) {
+        case NV_VK_HAMMER:  // (the felt's log10 stiffness: a decade and a half either way of the program's)
+            lo = cap[i] - 1.5, hi = cap[i] + 1.5;
+            snprintf(t, sizeof t, "x%.2g", pow(10.0, v[i] - cap[i]));
+            break;
+        case NV_VK_WEAR:    // (the soft felt left over the hard layer, mm: worn thin to a fresh hammer's)
+            lo = cap[i] * 0.3, hi = cap[i] * 20.0, lg = true;
+            snprintf(t, sizeof t, "%.2f mm", v[i]);
+            break;
+        case NV_VK_STRIKE:  // (the strike point at A4, a ratio of the string)
+            lo = 1.0 / 12.0, hi = 1.0 / 5.0;
+            snprintf(t, sizeof t, "1/%.1f", 1.0 / std::max(1e-6, v[i]));
+            break;
+        case NV_VK_UNISON:  // (the strings' spread, cents: in tune to three times the program's)
+            lo = 0.0, hi = std::max(6.0, 3.0 * cap[i]);
+            snprintf(t, sizeof t, "%.1f c", v[i]);
+            break;
+        case NV_VK_LID:     // (the open lid's shelf, dB: shut to over open)
+            lo = -9.0, hi = 3.0;
+            snprintf(t, sizeof t, "%+.1f dB", v[i]);
+            break;
+        default:            // (the soundboard's top, the piezo's corner, Hz: an octave either way)
+            lo = cap[i] * 0.5, hi = cap[i] * 2.0, lg = true;
+            snprintf(t, sizeof t, "%.1f kHz", v[i] / 1000.0);
+            break;
+        }
+        lo = std::min(lo, v0[i]);
+        hi = std::max(hi, v0[i]);
+        J k = sess::obj();
+        k.o["k"] = sess::integer(i);
+        k.o["name"] = sess::str(NAMES[i]);
+        k.o["v"] = sess::real(v[i]);
+        k.o["v0"] = sess::real(v0[i]);
+        k.o["lo"] = sess::real(lo);
+        k.o["hi"] = sess::real(hi);
+        k.o["log"] = sess::boolean(lg);
+        k.o["own"] = sess::boolean((own >> i & 1) != 0);
+        k.o["text"] = sess::str(t);
+        ks.a.push_back(k);
+    }
+    o.o["knobs"] = ks;
+    return o;
+}
+
 J piano_of(nv_host *h, int row, int learning)
 {
     J o = sess::obj();
@@ -1201,6 +1273,8 @@ struct nv_ui_watch {
     int row = 0, layer = 0;
     std::string parts_sent, synth_sent, build_sent, stops_sent, piano_sent;
     bool piano = false;                 // (its piano card is open: its pedals read each poll)
+    bool voicing = false;               // (its VOICE card is open: the part's knobs, and its rebuild, read)
+    std::string voicing_sent;
     bool drums = false;                 // (its drums card is open: the kit, and the keys struck)
     bool seq = false;                   // (its SEQ card is open: the sequencer's step, its state when it moves)
     long seq_pos = -2;
@@ -1448,6 +1522,19 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
             w->piano_sent.clear();
         }
         r.o["piano"] = piano_of(h, row, w ? w->learning : 0);
+    } else if (call == "voicing" || call == "voicing_set" || call == "voicing_forget") {
+        // THE VOICE CARD (a piano's knobs): voicing opens it (open 0 shuts it)
+        // and reads the part's; voicing_set turns knob k to v (its units);
+        // voicing_forget puts k back to the voice's (-1 every one)
+        if (call == "voicing" && w)
+            w->voicing = arg_i(q, "open", 1) != 0;
+        if (call == "voicing_set")
+            nv_host_set_voicing(h, row, (int)arg_i(q, "k", -1), arg_d(q, "v", 0.0));
+        else if (call == "voicing_forget")
+            nv_host_forget_voicing(h, row, (int)arg_i(q, "k", -1));
+        if (w)
+            w->voicing_sent.clear();
+        r.o["voicing"] = voicing_of(h, row);
     } else if (call == "pedal_set") {          // the part's sustain (64), sostenuto (66), soft (67)
         const int cc = (int)arg_i(q, "cc", -1);
         int n = nv_host_parts(h, nullptr, 0);
@@ -2314,6 +2401,16 @@ extern "C" char *nv_ui_poll(nv_host *h, nv_ui_watch *w)
         if (es != w->effects_sent) {
             w->effects_sent = es;
             r.o["effects"] = ej;
+            any = true;
+        }
+    }
+    if (w->voicing && w->tick % 4 == 1) {      // (the part's knobs, and its rebuild, while the card is open)
+        J vj = voicing_of(h, w->row);
+        std::string vst;
+        put(vst, vj);
+        if (vst != w->voicing_sent) {
+            w->voicing_sent = vst;
+            r.o["voicing"] = vj;
             any = true;
         }
     }

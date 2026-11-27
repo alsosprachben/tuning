@@ -326,6 +326,14 @@ void nv_host_set_cabinet(nv_host *h, int row, int choice);
 /* ...and its pickup (live.set_pickup), the same way: PICKUP_CHOICES indices */
 int nv_host_pickup(nv_host *h, int row, int *chosen, int *now, int *offer, int cap);
 void nv_host_set_pickup(nv_host *h, int row, int choice);
+/* a part's knobs (a piano's, piano_knobs.py; NV_VK_N of them): the mask its
+   voice offers (0 none, -1 no such row); v[] each one's value (its own where
+   set, else the voice's), v0[] the voice's, cap[] its program's plain voice's
+   (where the ranges sit), *own the mask set, *building its patch on its way;
+   set one (in its units), or put it back to the voice's (knob -1: every one) */
+int nv_host_voicing(nv_host *h, int row, double *v, double *v0, double *cap, int *own, int *building);
+void nv_host_set_voicing(nv_host *h, int row, int knob, double v);
+void nv_host_forget_voicing(nv_host *h, int row, int knob);
 void nv_host_set_drive(nv_host *h, int row, double v);
 /* a part's rotor speed (the AMP card's), v as CC80's value -- a Leslie's
    half-moon, a Spectra-Tone's rocker -- straight to its rotors */

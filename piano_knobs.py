@@ -1,7 +1,9 @@
 """THE PIANOS' KNOBS: the physical controls a player turns on a piano voice
 (the GrandPianoProperties family -- the grand, the upright, the honky-tonk,
 the electric grand), each a few of the class's own attributes, in the
-player's terms and units.
+player's terms and units: the felt's stiffness, the felt left over a worn
+hammer's hard layer, the strike point, the unison's spread, the lid, the
+soundboard's top, the electric grand's piezo.
 
 A knob's value is absolute (the felt's log10 stiffness, the strike point's
 ratio, cents, dB, Hz); a part's setting becomes, for each key's class, an
@@ -17,7 +19,11 @@ module is the reference it is checked against (examples/piano_knobs_check.py).
 
 HAMMER, WEAR, STRIKE, UNISON, LID, BOARD, PICKUP = range(7)
 N_KNOBS = 7
-NAMES = ('hammer', 'wear', 'strike', 'unison', 'lid', 'board', 'pickup')
+# (their names in a session -- nv_host::VK_NAMES -- and on the VOICE card:
+# FELT the felt's stiffness, log10 of its K; FELT LEFT the soft felt over a
+# worn hammer's hard layer, mm at the worn keys -- thin, a soft felt bottoms
+# out on it and brightens; thick, a fresh hammer that never does)
+NAMES = ('felt', 'felt_left', 'strike', 'unison', 'lid', 'board', 'pickup')
 # (how a knob's value moves the class: an offset, or a ratio)
 OFFSET = frozenset((HAMMER, LID))
 

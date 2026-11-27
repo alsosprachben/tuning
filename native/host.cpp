@@ -1310,8 +1310,8 @@ int nv_host::open(int argc, char **argv)
                     (a == 83 ? pa.cab : pa.pk) = b ? b : -1;
                 }
                 const bool w = pa.want >= 0;
-                const int p = w ? pa.want : pa.program, v = with_cab(p, w ? pa.want_var : pa.var, std::max(0, pa.cab),
-                                                                     std::max(0, pa.pk));
+                const int p = w ? pa.want : pa.program, v = with_voice(with_cab(p, w ? pa.want_var : pa.var, std::max(0, pa.cab),
+                                                                                std::max(0, pa.pk)), pa.vid);
                 if (!pa.is(p, false, v))
                     ask(i, p, false, v);
             }
@@ -1896,9 +1896,10 @@ int nv_host::open(int argc, char **argv)
                 continue;
             // (its cabinet and pickup back to the voice's own -- live's on_midi:
             //  a program change is another instrument; CC83, CC85 after it choose again)
-            if (pa.cab >= 0 || pa.pk >= 0) {
+            if (pa.cab >= 0 || pa.pk >= 0 || pa.vmask) {     // (...and its knobs: another instrument's)
                 std::lock_guard<std::mutex> lk(parts_mu);
                 pats[i].cab = pats[i].pk = -1;
+                pats[i].vmask = pats[i].vid = 0;
             }
             const int pv = pa.drums ? 0 : with_cab(prog & 127, var, 0, 0);
             // a drum set in the map, where it has its own (live's kit_in_map:
@@ -1921,9 +1922,10 @@ int nv_host::open(int argc, char **argv)
         for (size_t i = 0; i < pats.size(); i++) {
             if (pats[i].gone)
                 continue;
-            if (pats[i].cab >= 0 || pats[i].pk >= 0) {      // (its cabinet and pickup the voice's own)
+            if (pats[i].cab >= 0 || pats[i].pk >= 0 || pats[i].vmask) {     // (its cabinet, pickup and knobs the voice's own)
                 std::lock_guard<std::mutex> lk(parts_mu);
                 pats[i].cab = pats[i].pk = -1;
+                pats[i].vmask = pats[i].vid = 0;
             }
             if (!pats[i].is(0, pats[i].drums, 0))
                 ask(i, 0, pats[i].drums, 0);
@@ -3767,9 +3769,10 @@ void nv_host::pick_row(size_t row, int sp)
     post([this, row, sp](long long) {
         if (row >= pats.size() || pats[row].gone)
             return;
-        {                                       // (a pick is a program change: its cabinet and pickup the voice's own)
+        {                                       // (a pick is a program change: its cabinet, pickup and knobs the voice's own)
             std::lock_guard<std::mutex> lk(parts_mu);
             pats[row].cab = pats[row].pk = -1;
+            pats[row].vmask = pats[row].vid = 0;
         }
         const PartAt &pa = pats[row];
         if (sp >= 256) {                        // (a variation: its program under its bank)
@@ -3934,8 +3937,8 @@ void nv_host::set_cabinet(size_t row, int choice)
         if (pa.drums)
             return;
         const bool w = pa.want >= 0;
-        const int p = w ? pa.want : pa.program, v = with_cab(p, w ? pa.want_var : pa.var, std::max(0, choice),
-                                                             std::max(0, pa.pk));
+        const int p = w ? pa.want : pa.program, v = with_voice(with_cab(p, w ? pa.want_var : pa.var, std::max(0, choice),
+                                                                        std::max(0, pa.pk)), pa.vid);
         if (!pa.is(p, false, v))
             ask(row, p, false, v);
     });
@@ -3960,11 +3963,85 @@ void nv_host::set_pickup(size_t row, int choice)
         if (pa.drums)
             return;
         const bool w = pa.want >= 0;
-        const int p = w ? pa.want : pa.program, v = with_cab(p, w ? pa.want_var : pa.var, std::max(0, pa.cab),
-                                                             std::max(0, choice));
+        const int p = w ? pa.want : pa.program, v = with_voice(with_cab(p, w ? pa.want_var : pa.var, std::max(0, pa.cab),
+                                                                        std::max(0, choice)), pa.vid);
         if (!pa.is(p, false, v))
             ask(row, p, false, v);
     });
+}
+
+// A PART's KNOBS (a piano's): the setting against the class its variation
+// sounds at key 60 (piano_knobs.transforms) -- an offset for the felt and
+// the lid, a ratio for the rest -- named by an id (nv_voicing_id)
+int nv_host::voicing_vid(int p, int v, const std::array<double, NV_VK_N> &vk, int vmask) const
+{
+    double v0[NV_VK_N], t[NV_VK_N] = {0};
+    const NoteClass *k = cls60 ? cls60(p & 127, v & 4095) : nullptr;
+    const int have = k ? nv_voicing_knobs(k, v0) : 0;
+    int m = 0;
+    for (int i = 0; i < NV_VK_N; i++) {
+        if (!((vmask & have) >> i & 1))
+            continue;
+        if (i == NV_VK_HAMMER || i == NV_VK_LID)
+            t[i] = vk[(size_t)i] - v0[i];
+        else if (v0[i] > 0.0)
+            t[i] = vk[(size_t)i] / v0[i];
+        else
+            continue;
+        m |= 1 << i;
+    }
+    return nv_voicing_id(t, m);
+}
+
+void nv_host::set_voicing(size_t row, int knob, double v, bool forget)
+{
+    if (!E.has_prog || knob < -1 || knob >= NV_VK_N)
+        return;
+    post([this, row, knob, v, forget](long long) {
+        if (row >= pats.size() || pats[row].gone || pats[row].drums)
+            return;
+        std::array<double, NV_VK_N> vk = pats[row].vk;
+        int vmask = pats[row].vmask;
+        if (forget)
+            vmask &= knob < 0 ? 0 : ~(1 << knob);
+        else if (knob >= 0) {
+            vk[(size_t)knob] = v;
+            vmask |= 1 << knob;
+        }
+        voicing_apply(row, vk, vmask);
+    });
+}
+
+void nv_host::set_voicings(size_t row, const std::array<double, NV_VK_N> &vk, int vmask)
+{
+    if (!E.has_prog)
+        return;
+    post([this, row, vk, vmask](long long) {
+        if (row < pats.size() && !pats[row].gone && !pats[row].drums)
+            voicing_apply(row, vk, vmask);
+    });
+}
+
+// (the part's knobs now these: its setting's id, and its patch rebuilt through it)
+void nv_host::voicing_apply(size_t row, const std::array<double, NV_VK_N> &vk, int vmask)
+{
+    {
+        PartAt &pa = pats[row];
+        const bool w = pa.want >= 0;
+        const int p = w ? pa.want : pa.program, cur = w ? pa.want_var : pa.var;
+        const int vid = voicing_vid(p, cur, vk, vmask);
+        if (vid < 0)
+            return;                             // (no more ids: as it was)
+        {
+            std::lock_guard<std::mutex> lk(parts_mu);
+            pa.vk = vk;
+            pa.vmask = vmask;
+            pa.vid = vid;
+        }
+        const int nv = with_voice(cur, vid);
+        if (!pa.is(p, false, nv))
+            ask(row, p, false, nv);
+    }
 }
 
 void nv_host::part_rotary(size_t row, int mode, double sep)
@@ -4364,6 +4441,9 @@ void nv_host::part_added(const PartSpec &sp, void *c)
     pa.drive = sp.drive;
     pa.cab = sp.cab;
     pa.pk = sp.pk;
+    pa.vk = sp.vk;                              // (its knobs: its key's bits 20-30 already the setting's)
+    pa.vmask = sp.vmask;
+    pa.vid = sp.drums ? 0 : (sp.var >> 20) & 2047;
     std::lock_guard<std::mutex> lk(parts_mu);
     pats.push_back(pa);                         // (reserved: the builder may be reading the rest)
 }
@@ -4387,6 +4467,8 @@ static nv_host::PartSpec spec_of(const nv_host::PartAt &pa)
     sp.drive = pa.drive;
     sp.cab = pa.cab;
     sp.pk = pa.pk;
+    sp.vk = pa.vk;
+    sp.vmask = pa.vmask;
     return sp;
 }
 

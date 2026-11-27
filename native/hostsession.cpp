@@ -677,6 +677,21 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
                 sp.pk = pu && pu->is(sess::J::STR) ? pk_index(pu->s) : -1;
                 if (!sp.drums)
                     sp.var = with_cab(sp.program, sp.var, std::max(0, sp.cab), std::max(0, sp.pk));
+                // ITS KNOBS (a piano's: piano_knobs.NAMES, each in its units), the
+                // setting's id over its key's bit 20 -- an added part's patch built through it
+                if (const sess::J *vo = sp.drums ? nullptr : pd.get("voicing"))
+                    if (vo->is(sess::J::OBJ))
+                        for (int vi = 0; vi < NV_VK_N; vi++)
+                            if (const sess::J *x = vo->get(VK_NAMES[vi]))
+                                if (x->is(sess::J::NUM)) {
+                                    sp.vk[(size_t)vi] = x->d();
+                                    sp.vmask |= 1 << vi;
+                                }
+                if (sp.vmask) {
+                    const int vid = voicing_vid(sp.program, sp.var, sp.vk, sp.vmask);
+                    if (vid > 0)
+                        sp.var = with_voice(sp.var, vid);
+                }
                 const sess::J *dr = pd.get("drive");    // (an organ's drive knob: live's Part.drive; absent, the voice's)
                 sp.drive = dr && dr->is(sess::J::NUM) ? std::max(0.0, dr->d()) : -1.0;
                 const sess::J *cm = pd.get("cc_map");   // (a Messenger read on it: nvlive reads one on every part)
@@ -731,6 +746,8 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
                         set_cabinet(0, sp.cab);
                     if (sp.pk >= 0 && !sp.drums)
                         set_pickup(0, sp.pk);
+                    if (sp.vmask && !sp.drums)
+                        set_voicings(0, sp.vk, sp.vmask);
                 }
                 if (at_start)                   // (else after the pick's swap, below: a new program clears it)
                     part_drive(0, sp.drive);
@@ -744,6 +761,8 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
                         set_cabinet(0, sp.cab);
                     if (sp.pk >= 0 && !sp.drums)
                         set_pickup(0, sp.pk);
+                    if (sp.vmask && !sp.drums)
+                        set_voicings(0, sp.vk, sp.vmask);
                     if (sp.drive >= 0.0) {      // (its drive knob, behind the swap that brings its program in)
                         const double dv = sp.drive;
                         {
@@ -1025,6 +1044,14 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
             pd.o["pickup"] = sess::str(PK_NAMES[pa.pk]);
         else
             pd.o.erase("pickup");
+        if (pa.vmask && !pa.drums) {            // (its knobs, a piano's: each set one by name, in its units)
+            sess::J vo = sess::obj();
+            for (int vi = 0; vi < NV_VK_N; vi++)
+                if (pa.vmask >> vi & 1)
+                    vo.o[nv_host::VK_NAMES[vi]] = sess::real(pa.vk[(size_t)vi]);
+            pd.o["voicing"] = vo;
+        } else
+            pd.o.erase("voicing");
         if (pa.rot_mode >= 0)                   // (its rotary heard, live's likewise: only when set)
             pd.o["rotary"] = sess::str(pa.rot_mode ? "mics" : "room");
         else
@@ -1890,6 +1917,55 @@ int nv_host_cabinet(nv_host *h, int row, int *chosen, int *now, int *offer, int 
             n++;
         }
     return n;
+}
+int nv_host_voicing(nv_host *h, int row, double *v, double *v0, double *cap, int *own, int *building)
+{
+    size_t i;
+    if (!row_index(h, row, i))
+        return -1;
+    int p, var, vmask;
+    bool dr;
+    std::array<double, NV_VK_N> vk;
+    {
+        std::lock_guard<std::mutex> lk(h->parts_mu);
+        if (i >= h->pats.size())
+            return -1;
+        const nv_host::PartAt &pa = h->pats[i];
+        const bool w = pa.want >= 0;
+        p = w ? pa.want : pa.program;
+        var = w ? pa.want_var : pa.var;
+        dr = w ? pa.want_dr : pa.drums;
+        vk = pa.vk;
+        vmask = pa.vmask;
+        *building = w ? 1 : 0;
+    }
+    *own = 0;
+    if (dr || !h->cls60)
+        return 0;
+    const NoteClass *k = h->cls60(p & 127, var & 4095), *kc = h->cls60(p & 127, 0);
+    const int have = k ? nv_voicing_knobs(k, v0) : 0;
+    double c0[NV_VK_N];
+    const int hc = kc ? nv_voicing_knobs(kc, c0) : 0;
+    for (int j = 0; j < NV_VK_N; j++) {
+        if (!(have >> j & 1))
+            continue;
+        cap[j] = (hc >> j & 1) ? c0[j] : v0[j];
+        v[j] = (vmask >> j & 1) ? vk[(size_t)j] : v0[j];
+    }
+    *own = vmask & have;
+    return have;
+}
+void nv_host_set_voicing(nv_host *h, int row, int knob, double v)
+{
+    size_t i;
+    if (row_index(h, row, i) && knob >= 0 && knob < NV_VK_N)
+        h->set_voicing(i, knob, v, false);
+}
+void nv_host_forget_voicing(nv_host *h, int row, int knob)
+{
+    size_t i;
+    if (row_index(h, row, i))
+        h->set_voicing(i, knob, 0.0, true);
 }
 void nv_host_set_cabinet(nv_host *h, int row, int choice)
 {

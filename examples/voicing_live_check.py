@@ -1,0 +1,142 @@
+"""A PIANO's KNOBS, LIVE (piano_knobs.py; the host's set_voicing): through the
+host library in step (ctypes, no device), a part on the grand --
+
+- its knobs as the VOICE card reads them (voicing): the grand's seven, each
+  at the voice's value, none its own, the patch not building;
+- a knob turned (voicing_set): the patch rebuilt (seen building, then in), the
+  knob its own at the value set, and the note struck after it changed the
+  way the knob says -- the felt harder: brighter; the lid shut: darker;
+- put back (voicing_forget): the note as it was before any knob moved;
+- a program change: the knobs gone (another instrument's, as a cabinet's).
+
+Brightness is the spectrum's centroid over a note's first 0.4 s.
+
+    python3 examples/voicing_live_check.py EXPORT.nvx
+"""
+import ctypes
+import json
+import os
+import sys
+import time
+
+import numpy as np
+
+HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+sys.path.insert(0, HERE)
+
+
+def main(argv):
+    nvx = argv[1]
+    import native as N
+    d = N.lib()
+    vp, cp, ci = ctypes.c_void_p, ctypes.c_char_p, ctypes.c_int
+    d.nv_host_open_args.restype = vp
+    d.nv_host_open_args.argtypes = [ci, ctypes.POINTER(cp), cp, ci]
+    for f, a in (("nv_host_start", [vp]), ("nv_host_block", [vp]), ("nv_host_rate", [vp]),
+                 ("nv_host_render", [vp, vp, vp, ci]), ("nv_host_midi", [vp, ctypes.c_char_p, ci])):
+        getattr(d, f).argtypes = a
+    d.nv_ui_watch_new.restype = vp
+    d.nv_ui_call.restype = ctypes.c_void_p
+    d.nv_ui_call.argtypes = [vp, vp, cp]
+    d.nv_ui_free.argtypes = [vp]
+    av = [b"nvlive", nvx.encode(), b"--program=0", b"--cpu", b"--no-pipeline", b"--no-register",
+          b"--no-drums", b"--reg-sync", b"--no-governor"]
+    h = d.nv_host_open_args(len(av), (cp * len(av))(*av), ctypes.create_string_buffer(256), 256)
+    assert h, "the host refused"
+    d.nv_host_start(h)
+    w = d.nv_ui_watch_new()
+    blk, sr = d.nv_host_block(h), d.nv_host_rate(h)
+    L = np.zeros(blk, np.float32)
+    R = np.zeros(blk, np.float32)
+
+    def call(o):
+        p = d.nv_ui_call(h, w, json.dumps(o).encode())
+        r = json.loads(ctypes.string_at(p).decode())
+        d.nv_ui_free(p)
+        return r
+
+    def render(sec):
+        out = []
+        for _ in range(max(1, int(sec * sr) // blk)):
+            d.nv_host_render(h, L.ctypes.data, R.ctypes.data, blk)
+            out.append(L + R)
+        return np.concatenate(out)
+
+    def strike(key, vel=100):
+        d.nv_host_midi(h, bytes([0x90, key, vel]), 3)
+        x = render(0.5)
+        d.nv_host_midi(h, bytes([0x80, key, 0]), 3)
+        render(1.0)
+        return x
+
+    def bright(x):
+        x = x[:int(0.4 * sr)] * np.hanning(int(0.4 * sr))
+        s = np.abs(np.fft.rfft(x)) ** 2
+        f = np.fft.rfftfreq(len(x), 1.0 / sr)
+        return float((s * f).sum() / max(1e-30, s.sum()))
+
+    def settle(k=None):
+        """until the patch is in: (its knobs then, the seconds it took, whether
+        it was seen building) -- k: the knob just set, its own once posted"""
+        t0, saw = time.time(), False
+        while time.time() - t0 < 60:
+            render(0.02)
+            v = call({"call": "voicing", "row": 0})["voicing"]
+            saw = saw or v["building"]
+            mine = k is None or any(x["k"] == k and x["own"] for x in v["knobs"])
+            if mine and not v["building"] and (saw or k is None or time.time() - t0 > 2.0):
+                return v, time.time() - t0, saw
+        return v, None, saw
+
+    render(1.0)
+    bad = 0
+    v = call({"call": "voicing", "row": 0})["voicing"]
+    names = [k["name"] for k in v["knobs"]]
+    ok = names == ["felt", "felt_left", "strike", "unison", "lid", "board"] and not any(k["own"] for k in v["knobs"])
+    ok = ok and all(abs(k["v"] - k["v0"]) < 1e-12 and k["lo"] <= k["v"] <= k["hi"] for k in v["knobs"])
+    print("the grand's knobs:", ", ".join("%s %s" % (k["name"], k["text"]) for k in v["knobs"]), "ok" if ok else "WRONG")
+    bad += not ok
+    kn = {k["name"]: k for k in v["knobs"]}
+    base = {key: bright(strike(key)) for key in (60, 84)}
+    print("plain: brightness %s" % ", ".join("key %d %.0f Hz" % kv for kv in base.items()))
+
+    def case(name, k, val, key, darker):
+        nonlocal bad
+        call({"call": "voicing_set", "row": 0, "k": k, "v": val})
+        v, took, b0 = settle(k)
+        own = [x for x in v["knobs"] if x["k"] == k][0]
+        b = bright(strike(key))
+        moved = b < base[key] if darker else b > base[key]
+        ok = b0 and took is not None and own["own"] and abs(own["v"] - val) < 1e-9 and moved
+        print("%-14s building %s, rebuilt in %s s, its own %s at %s; key %d brightness %.0f Hz (plain %.0f)  %s" % (
+            name, b0, "%.1f" % took if took is not None else "never", own["own"], own["text"], key, b, base[key],
+            "ok" if ok else "WRONG"))
+        bad += not ok
+        call({"call": "voicing_forget", "row": 0, "k": -1})
+        render(0.1)
+        settle()
+
+    case("felt harder", 0, kn["felt"]["v0"] + 1.0, 84, False)
+    case("lid shut", 4, -9.0, 84, True)
+    case("board lower", 5, kn["board"]["v0"] * 0.5, 60, True)
+    after = {key: bright(strike(key)) for key in (60, 84)}
+    v = call({"call": "voicing", "row": 0})["voicing"]
+    ok = all(abs(after[k] - base[k]) < 0.005 * base[k] for k in base) and not any(x["own"] for x in v["knobs"])
+    print("put back: brightness %s  %s" % (", ".join("key %d %.0f Hz" % kv for kv in after.items()), "ok" if ok else "WRONG"))
+    bad += not ok
+    # A PROGRAM CHANGE is another instrument: its knobs go (as its cabinet does)
+    call({"call": "voicing_set", "row": 0, "k": 4, "v": -6.0})
+    settle(4)
+    d.nv_host_midi(h, bytes([0xC0, 0]), 2)
+    render(0.2)
+    v, took, _ = settle()
+    ok = not any(x["own"] for x in v["knobs"])
+    print("program change: its knobs %s  %s" % ("gone" if ok else "kept", "ok" if ok else "WRONG"))
+    bad += not ok
+    print("%d wrong" % bad)
+    sys.stdout.flush()
+    os._exit(bad)
+
+
+if __name__ == '__main__':
+    main(sys.argv)

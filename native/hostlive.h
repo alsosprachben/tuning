@@ -1203,6 +1203,10 @@ struct nv_host {
         double drive = -1.0;                    // an organ's drive knob (live's Part.drive: <0 the voice's)
         int cab = -1;                           // its cabinet, chosen (live's Part.cab: a CAB_CHOICES index, -1 none)
         int pk = -1;                            // its pickup, chosen (live's Part.pk: a PICKUP_CHOICES index, -1 none)
+        // ITS KNOBS (a piano's: piano_knobs.py) -- each set one's value (vmask),
+        // and the setting's id riding its variation key's bits 20-30 (0 none)
+        std::array<double, NV_VK_N> vk{};
+        int vmask = 0, vid = 0;
         bool is(int prog, bool dr, int v) const
         {
             return want >= 0 ? want == prog && want_dr == dr && want_var == v
@@ -1404,13 +1408,14 @@ struct nv_host {
     // (a variation's VARIANT -- patch_map.cab_key's cabinet over its bit 12,
     // pk_key's pickup over bit 16: 8 bits -- in bits 22-29 of its own, past
     // the variation's 14; the room over them, in bit 32 on: a 64-bit key)
-    static const int KEY_CAB_SHIFT = 22, KEY_ROOM_SHIFT = 32;
+    static const int KEY_CAB_SHIFT = 22, KEY_ROOM_SHIFT = 32, KEY_VOICE_SHIFT = 44;   // (a piano's knobs' id: bits 20-30 of the key's variation)
     long long ckey(int prog, bool dr, int var) const
     {
         const long long k = dr && prog >= 128 ? 256LL * (4096 + prog) + 128
                                               : 256LL * (var & 4095) + (dr ? 128 : 0) + (prog & 127)
                                                 + ((long long)((var >> 12) & 255) << KEY_CAB_SHIFT);
-        return k + ((long long)key_room << KEY_ROOM_SHIFT);
+        return k + ((long long)key_room << KEY_ROOM_SHIFT)
+               + (dr ? 0LL : (long long)((var >> 20) & 2047) << KEY_VOICE_SHIFT);
     }
     int room_key_of(const std::string &name) const;
     // a file's notes scanned (fileplay, --test --file-octaves): only their
@@ -1583,6 +1588,8 @@ struct nv_host {
         double drive = -1.0;                // (an organ's drive knob: <0 the voice's)
         int cab = -1;                       // (its cabinet, chosen: a CAB_CHOICES index, -1 none)
         int pk = -1;                        // (its pickup, chosen: a PICKUP_CHOICES index, -1 none)
+        std::array<double, NV_VK_N> vk{};   // (its knobs: each set one's value, vmask which)
+        int vmask = 0;
         std::vector<std::string> drawn;     // (an organ's stops by name: a session's or preset's; none the voice's)
     };
     std::vector<PartSpec> add_req;
@@ -1601,6 +1608,18 @@ struct nv_host {
     void part_rotary(size_t row, int mode, double sep);     // (live.set_rotary: -1 its own way, 0 room, 1 mics)
     void set_cabinet(size_t row, int choice);               // (live.set_cabinet: a CAB_CHOICES index, -1 none)
     void set_pickup(size_t row, int choice);                // (live.set_pickup: a PICKUP_CHOICES index, -1 none)
+    // A PART's KNOBS (a piano's, piano_knobs.py): knob i to v (its own, in
+    // the knob's units), or back to its voice's (forget; i -1 every one) --
+    // its patch rebuilt through the setting, as a cabinet rebuilds one
+    void set_voicing(size_t row, int knob, double v, bool forget);
+    void set_voicings(size_t row, const std::array<double, NV_VK_N> &vk, int vmask);     // (every knob at once: a session's)
+    void voicing_apply(size_t row, const std::array<double, NV_VK_N> &vk, int vmask);
+    // (the knobs' names in a session: piano_knobs.NAMES)
+    static constexpr const char *VK_NAMES[NV_VK_N] = {"felt", "felt_left", "strike", "unison", "lid", "board", "pickup"};
+    // (variation key v of program p through knob values vk, vmask: the setting's
+    //  id against its key-60 class -- 0 none, -1 no more ids)
+    int voicing_vid(int p, int v, const std::array<double, NV_VK_N> &vk, int vmask) const;
+    static int with_voice(int v, int vid) { return (v & 0xFFFFF) | (vid > 0 ? vid << 20 : 0); }
     void rotary_refresh();                          // (the host's copies from the parts': a CC82 may have moved them)
     std::chrono::steady_clock::time_point rotary_read{};
     void part_drive(size_t row, double v);          // (an organ's drive knob, live.set_drive: <0 the voice's)
