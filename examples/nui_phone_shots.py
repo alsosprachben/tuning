@@ -49,6 +49,7 @@ STATES = [  # (shot, patch, card, taps after opening)
     ('tuning', dict(program=0, variation=0), 'tuning', [(128, 132)]),
     ('tuning_p2', dict(program=0, variation=0), 'tuning', [(204, 132)]),
     ('tuning_p3', dict(program=0, variation=0), 'tuning', [(284, 132)]),
+    ('tuning_part', dict(program=0, variation=40), 'tuning', [(128, 132), (411, 222)]),
     ('matrix', dict(program=0, variation=0), 'matrix', [(156, 132)]),
     ('setup_input', dict(program=0, variation=0), 'setup', ['page 0']),
     ('setup_module', dict(program=0, variation=0), 'setup', ['page 1']),

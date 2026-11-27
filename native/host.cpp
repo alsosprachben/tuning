@@ -706,6 +706,30 @@ int nv_host::open(int argc, char **argv)
             return 1;
         }
     }
+    // the entry a variation key selects for a program (live.cpp's var_entry): 0 none
+    var_entry_of = [&](int p, int v) -> int {
+        v &= 4095;                              // (a cabinet choice over bit 12: the variation's entry -- its voice the cache's)
+        if (!v || E.vgs.empty() || p < 0 || p > 127)
+            return 0;
+        int msb = v & 0x7F, mp = v >> 7;
+        if (!msb)
+            return 0;
+        int bs = 1 + 128 * (mp >= 1 && mp <= 4 ? mp : 0) + msb;
+        return E.vgs[((size_t)((bs - 1) / 128) * 128 + p) * 128 + (bs - 1) % 128];
+    };
+    // the class a program's variation sounds at key 60 (live's Patch pc)
+    cls60 = [&](int prog, int var) -> const NoteClass * {
+        int cq = -1;
+        int en = var ? var_entry_of(prog & 127, var) : 0;
+        if (en > 0 && en < (int)E.vents.size() && !E.vents[en].ls.empty()) {
+            const auto &l = E.vents[en].ls[0];
+            int k = 60 + l[1];
+            cq = k >= 0 && k <= 127 ? E.vmap[128 * (size_t)l[0] + k] : -1;
+        } else if (!var) {
+            cq = E.cmap[128 * (prog & 127) + 60];
+        }
+        return cq >= 0 ? (const NoteClass *)E.classes[cq].data() : nullptr;
+    };
     // THE TUNER (native/tuner.cpp): --tuner=NAME in place of the export's (its
     // --tuner, else live's gm2) -- any of midilib's, `hybrid@D:466`,
     // `raga:todi@c#` -- at --a=HZ or --c=HZ (tunelib.set_reference); the
@@ -756,7 +780,50 @@ int nv_host::open(int argc, char **argv)
     ptab = std::vector<std::vector<double>>(128);
     psa = std::vector<int>(128, -1); pnsw = std::vector<int>(128, 0);
     psw = std::vector<std::array<double, 12>>(128);
-    tune_for = [&](int prog, bool dr) -> const double * {
+    // A PART'S TUNING (live.tuner_for: Ben, 2026-11-27): its own, where the
+    // player chose one (the tuner name riding its settings' id, bits 20-30 of
+    // the variation key: "rig" the rig's), else the Eastern tuning for an
+    // Indian voice (below), else its voice's natural tuner (NoteClass ntuner:
+    // blockrender.natural_spec) at the rig's A4 (name~Hz) -- the name, ""
+    // the rig's own table
+    tuning_of = [&](int prog, bool dr, int var) -> std::string {
+        if (dr)
+            return "";
+        char a4[40];
+        snprintf(a4, sizeof a4, "~%.17g", E.freq[69]);
+        const int vid = (var >> 20) & 2047, tid = vid ? nv_voicing_tid(vid) : 0;
+        if (tid > 0) {
+            const std::string own = nv_tuner_name(tid);
+            if (own == "rig")
+                return "";
+            return own.find_first_of(":~") != std::string::npos || own.compare(0, 5, "raga:") == 0 ? own : own + a4;
+        }
+        const NoteClass *k = cls60(prog & 127, var & 4095);
+        if (!k || !natural_on || !k->ntuner[0] || (k->indian && (raga_sa >= 0 || !east.empty())))
+            return "";
+        const std::string nt(k->ntuner, strnlen(k->ntuner, sizeof k->ntuner));
+        if (tl_.substr(0, tl_.find_first_of("~:@")) == nt)
+            return "";                          // (the rig's tuner is its own already)
+        return nt + a4;
+    };
+    tune_for = [&](int prog, bool dr, int var) -> const double * {
+        const std::string sp = tuning_of(prog, dr, var);
+        if (!sp.empty()) {
+            auto it = ttab.find(sp);
+            if (it == ttab.end()) {
+                double F[128];
+                int have[128];
+                std::vector<double> f;
+                if (nv_tuning_table(sp.c_str(), -1, 0.0, F, have) == 0)
+                    for (int n = 0; n < 128; n++)
+                        f.push_back(have[n] ? F[n] : 0.0);
+                else
+                    fprintf(stderr, "nvlive: tuning %s: not one nvlive can make -- the rig's\n", sp.c_str());
+                it = ttab.emplace(sp, f).first;
+            }
+            if (!it->second.empty())
+                return it->second.data();
+        }
         int p = prog & 127;
         if (raga_sa >= 0 || east.empty() || dr)
             return E.freq.data();
@@ -782,10 +849,11 @@ int nv_host::open(int argc, char **argv)
     tl_ = tname;
     for (char &ch_ : tl_)
         ch_ = (char)tolower((unsigned char)ch_);
-    raga_for = [&](void *c, int prog, bool dr) {
+    raga_for = [&](void *c, int prog, bool dr, int var) {
         int p = prog & 127;
-        // ...and a gm2 patch: its tuner gm2's, not the secondary tuning's (live.tuner_for)
-        nv_tcache_set_gm2(c, tl_ == "gm2" && !(!dr && psa[p] >= 0));
+        // ...and a gm2 patch: its tuner gm2's, not the secondary tuning's nor a
+        // part's own (live.tuner_for)
+        nv_tcache_set_gm2(c, tl_ == "gm2" && !(!dr && psa[p] >= 0) && tuning_of(prog, dr, var).empty());
         if (raga_sa >= 0)
             nv_tcache_set_raga(c, raga_sa, raga_sw, raga_nsw);
         else if (!dr && psa[p] >= 0)
@@ -883,8 +951,8 @@ int nv_host::open(int argc, char **argv)
         t.room_bands[i] = E.k[K_BANDS + i];
     t.reflect = E.k[K_REFLECT] != 0.0;
     t.fixed_touch = 1;                          // live builds its templates at fixed touch
-    cache = nv_tcache_new(K.data(), &t, tune_for(program, drums), E.trim.data(), E.kind.data(), E.fin.data(), E.k[K_REG_SCALE], E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_BETA], BLK, E.k[K_RING_FLOOR], E.k[K_RING_MAX], E.k[K_KNEE], E.k[K_LN10_20], E.k[K_XDEC], SR);
-    raga_for(cache, program, drums);
+    cache = nv_tcache_new(K.data(), &t, tune_for(program, drums, drums ? 0 : atoi(opt(argc, argv, "bank", "0").c_str())), E.trim.data(), E.kind.data(), E.fin.data(), E.k[K_REG_SCALE], E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_BETA], BLK, E.k[K_RING_FLOOR], E.k[K_RING_MAX], E.k[K_KNEE], E.k[K_LN10_20], E.k[K_XDEC], SR);
+    raga_for(cache, program, drums, drums ? 0 : atoi(opt(argc, argv, "bank", "0").c_str()));
     // --bank=V: the part's variation (live.Patch's: map x 128 + bank, an unbuilt one the capital tone)
     bank = drums ? 0 : atoi(opt(argc, argv, "bank", "0").c_str());
     if (bank)
@@ -1345,17 +1413,6 @@ int nv_host::open(int argc, char **argv)
         }
         return true;
     };
-    // the entry a variation key selects for a program (live.cpp's var_entry): 0 none
-    var_entry_of = [&](int p, int v) -> int {
-        v &= 4095;                              // (a cabinet choice over bit 12: the variation's entry -- its voice the cache's)
-        if (!v || E.vgs.empty() || p < 0 || p > 127)
-            return 0;
-        int msb = v & 0x7F, mp = v >> 7;
-        if (!msb)
-            return 0;
-        int bs = 1 + 128 * (mp >= 1 && mp <= 4 ? mp : 0) + msb;
-        return E.vgs[((size_t)((bs - 1) / 128) * 128 + p) * 128 + (bs - 1) % 128];
-    };
     // the cabinets a program's variation offers a part (its key-60 class's cab_mask)
     cab_mask_of = [&](int p, int v) -> int {
         const NoteClass *k = cls60(p & 127, v & 4095);
@@ -1364,19 +1421,6 @@ int nv_host::open(int argc, char **argv)
     pk_mask_of = [&](int p, int v) -> int {
         const NoteClass *k = cls60(p & 127, v & 4095);
         return k ? k->pk_mask : 0;
-    };
-    // the class a program's variation sounds at key 60 (live's Patch pc)
-    cls60 = [&](int prog, int var) -> const NoteClass * {
-        int cq = -1;
-        int en = var ? var_entry_of(prog & 127, var) : 0;
-        if (en > 0 && en < (int)E.vents.size() && !E.vents[en].ls.empty()) {
-            const auto &l = E.vents[en].ls[0];
-            int k = 60 + l[1];
-            cq = k >= 0 && k <= 127 ? E.vmap[128 * (size_t)l[0] + k] : -1;
-        } else if (!var) {
-            cq = E.cmap[128 * (prog & 127) + 60];
-        }
-        return cq >= 0 ? (const NoteClass *)E.classes[cq].data() : nullptr;
     };
     // THE PUNGI's DRONE PATCH (live's Patch.drone_note_patch): its own
     // variation's templates over the choices' range (drone_note_choices)
@@ -1394,10 +1438,10 @@ int nv_host::open(int argc, char **argv)
         const int *pq = prec(prog, dv);
         if (!pq[0] || var_entry_of(prog & 127, dv) <= 0)
             return nullptr;
-        void *c = nv_tcache_new(K.data(), &t, tune_for(prog, false), E.trim.data(), E.kind.data(), E.fin.data(),
+        void *c = nv_tcache_new(K.data(), &t, tune_for(prog, false, dv), E.trim.data(), E.kind.data(), E.fin.data(),
                                 E.k[K_REG_SCALE], E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_BETA], BLK, E.k[K_RING_FLOOR],
                                 E.k[K_RING_MAX], E.k[K_KNEE], E.k[K_LN10_20], E.k[K_XDEC], SR);
-        raga_for(c, prog, false);
+        raga_for(c, prog, false, dv);
         nv_tcache_set_var(c, dv);
         int lo = 127, hi = 0;
         for (int q = 0; q < k->n_dchoice; q++) {
@@ -1460,10 +1504,10 @@ int nv_host::open(int argc, char **argv)
             native = false;
         if (!native)
             return nullptr;
-        void *c = nv_tcache_new(K.data(), &t, tune_for(prog, dr), E.trim.data(), E.kind.data(), E.fin.data(),
+        void *c = nv_tcache_new(K.data(), &t, tune_for(prog, dr, dr ? 0 : var), E.trim.data(), E.kind.data(), E.fin.data(),
                                 E.k[K_REG_SCALE], E.k[K_FULL], E.k[K_RESIDUAL], E.k[K_BETA], BLK, E.k[K_RING_FLOOR],
                                 E.k[K_RING_MAX], E.k[K_KNEE], E.k[K_LN10_20], E.k[K_XDEC], SR);
-        raga_for(c, prog, dr);
+        raga_for(c, prog, dr, dr ? 0 : var);
         if (var)
             nv_tcache_set_var(c, var);
         // ITS ROOM (A5): with a budget, the patches no part plays let go first --
@@ -1896,10 +1940,11 @@ int nv_host::open(int argc, char **argv)
                 continue;
             // (its cabinet and pickup back to the voice's own -- live's on_midi:
             //  a program change is another instrument; CC83, CC85 after it choose again)
-            if (pa.cab >= 0 || pa.pk >= 0 || pa.vmask) {     // (...and its knobs: another instrument's)
+            if (pa.cab >= 0 || pa.pk >= 0 || pa.vmask || !pa.own.empty()) {     // (...and its knobs and tuning: another instrument's)
                 std::lock_guard<std::mutex> lk(parts_mu);
                 pats[i].cab = pats[i].pk = -1;
                 pats[i].vmask = pats[i].vid = 0;
+                pats[i].own.clear();
             }
             const int pv = pa.drums ? 0 : with_cab(prog & 127, var, 0, 0);
             // a drum set in the map, where it has its own (live's kit_in_map:
@@ -1922,10 +1967,11 @@ int nv_host::open(int argc, char **argv)
         for (size_t i = 0; i < pats.size(); i++) {
             if (pats[i].gone)
                 continue;
-            if (pats[i].cab >= 0 || pats[i].pk >= 0 || pats[i].vmask) {     // (its cabinet, pickup and knobs the voice's own)
+            if (pats[i].cab >= 0 || pats[i].pk >= 0 || pats[i].vmask || !pats[i].own.empty()) {     // (its cabinet, pickup, knobs and tuning the voice's own)
                 std::lock_guard<std::mutex> lk(parts_mu);
                 pats[i].cab = pats[i].pk = -1;
                 pats[i].vmask = pats[i].vid = 0;
+                pats[i].own.clear();
             }
             if (!pats[i].is(0, pats[i].drums, 0))
                 ask(i, 0, pats[i].drums, 0);
@@ -2278,6 +2324,7 @@ int nv_host::open(int argc, char **argv)
         psa.assign(128, -1);
         pnsw.assign(128, 0);
         retuned.assign(128, 0);                 // (each program's free strings, at the new pitches)
+        ttab.clear();                           // (the parts' own and natural tunings: at the new A)
         std::vector<void *> old_;               // (the old patches: let go once nothing plays them)
         {
             std::lock_guard<std::mutex> lk(cmu);
@@ -2292,6 +2339,31 @@ int nv_host::open(int argc, char **argv)
             tuner_now = name;
         }
         retune_bank = true;
+        for (size_t i = 0; i < pats.size(); i++) {
+            const PartAt &pa = pats[i];
+            if (pa.gone)
+                continue;
+            void *c = build(pa.posted, pa.drums, pa.drums ? 0 : pa.posted_var);
+            if (c)
+                give(i, pa.posted, pa.drums, pa.drums ? 0 : pa.posted_var, c);
+        }
+        return true;
+    };
+    // NATURAL TUNINGS, switched (live.NATURAL_TUNINGS): every patch let go
+    // and the parts' built again, as a tuner's switch does
+    natural_switch = [&](bool on, const std::function<void(size_t, int, bool, int, void *)> &give) -> bool {
+        if (on == natural_on)
+            return false;
+        natural_on = on;
+        std::vector<void *> old_;
+        {
+            std::lock_guard<std::mutex> lk(cmu);
+            for (auto &kv : caches)
+                old_.push_back(kv.second);
+            caches.clear();
+            cache_used.clear();
+        }
+        retire(old_);
         for (size_t i = 0; i < pats.size(); i++) {
             const PartAt &pa = pats[i];
             if (pa.gone)
@@ -2944,11 +3016,11 @@ void nv_host::start()
             {
                 std::unique_lock<std::mutex> lk(bmu);
                 bcv.wait_for(lk, std::chrono::milliseconds(100),
-                             [&] { return !breq.empty() || !room_req.empty() || !tuner_req.empty() || east_req_set
+                             [&] { return !breq.empty() || !room_req.empty() || !tuner_req.empty() || east_req_set || nat_req >= 0
                                           || !add_req.empty() || !dreq.empty() || fill_req || prebuild_req || g_stop
                                           || !miss_req.empty() || !fills.empty(); });
                 rq.swap(breq);
-                builder_busy = !rq.empty() || !room_req.empty() || !tuner_req.empty() || east_req_set || !add_req.empty()
+                builder_busy = !rq.empty() || !room_req.empty() || !tuner_req.empty() || east_req_set || nat_req >= 0 || !add_req.empty()
                                || prebuild_req || fill_req;
             }
             {                                           // A HELD NOTE's TEMPLATE (A5's on demand), first
@@ -3056,6 +3128,24 @@ void nv_host::start()
                                               std::chrono::steady_clock::now() - t0).count()) + " ms");
                 else if (tn != tuner_now)
                     note("tuner " + tn + ": not one nvlive can make");
+            }
+            int nr = -1;                                // NATURAL TUNINGS on or off, after a tuner
+            {
+                std::lock_guard<std::mutex> lk(bmu);
+                std::swap(nr, nat_req);
+            }
+            if (nr >= 0) {
+                auto t0 = std::chrono::steady_clock::now();
+                int nb_ = 0;
+                if (natural_switch(nr != 0, [&](size_t i_, int p_, bool d_, int v_, void *c_) {
+                        std::lock_guard<std::mutex> lk(bmu);
+                        bdone.push_back(std::make_pair(Req{i_, p_, d_, v_}, c_));
+                        nb_++;
+                    }))
+                    note(std::string("natural tunings ") + (nr ? "on" : "off") + ": " + std::to_string(nb_)
+                         + " patch(es) built in "
+                         + std::to_string((int)std::chrono::duration<double, std::milli>(
+                                              std::chrono::steady_clock::now() - t0).count()) + " ms");
             }
             std::string es;                             // THE EASTERN TUNING (livetui's E), after a tuner
             bool eset = false;
@@ -3769,10 +3859,11 @@ void nv_host::pick_row(size_t row, int sp)
     post([this, row, sp](long long) {
         if (row >= pats.size() || pats[row].gone)
             return;
-        {                                       // (a pick is a program change: its cabinet, pickup and knobs the voice's own)
+        {                                       // (a pick is a program change: its cabinet, pickup, knobs and tuning the voice's own)
             std::lock_guard<std::mutex> lk(parts_mu);
             pats[row].cab = pats[row].pk = -1;
             pats[row].vmask = pats[row].vid = 0;
+            pats[row].own.clear();
         }
         const PartAt &pa = pats[row];
         if (sp >= 256) {                        // (a variation: its program under its bank)
@@ -3973,7 +4064,7 @@ void nv_host::set_pickup(size_t row, int choice)
 // A PART's KNOBS (a piano's): the setting against the class its variation
 // sounds at key 60 (piano_knobs.transforms) -- an offset for the felt and
 // the lid, a ratio for the rest -- named by an id (nv_voicing_id)
-int nv_host::voicing_vid(int p, int v, const std::array<double, NV_VK_N> &vk, int vmask) const
+int nv_host::voicing_vid(int p, int v, const std::array<double, NV_VK_N> &vk, int vmask, const std::string &own) const
 {
     double v0[NV_VK_N], t[NV_VK_N] = {0};
     const NoteClass *k = cls60 ? cls60(p & 127, v & 4095) : nullptr;
@@ -3990,7 +4081,7 @@ int nv_host::voicing_vid(int p, int v, const std::array<double, NV_VK_N> &vk, in
             continue;
         m |= 1 << i;
     }
-    return nv_voicing_id(t, m);
+    return nv_voicing_id_t(t, m, nv_tuner_id(own.c_str()));      // (...and the part's own tuning, by name)
 }
 
 void nv_host::set_voicing(size_t row, int knob, double v, bool forget)
@@ -4022,6 +4113,58 @@ void nv_host::set_voicings(size_t row, const std::array<double, NV_VK_N> &vk, in
     });
 }
 
+// A PART's OWN TUNING (live.set_part_tuner): "" its voice's natural one,
+// "rig" the rig's, else a tuner's name -- with its knobs, one setting's id,
+// and its patch rebuilt in it
+void nv_host::set_part_tuner(size_t row, const std::string &own)
+{
+    if (!E.has_prog)
+        return;
+    post([this, row, own](long long) {
+        if (row >= pats.size() || pats[row].gone || pats[row].drums)
+            return;
+        {
+            std::lock_guard<std::mutex> lk(parts_mu);
+            pats[row].own = own;
+        }
+        voicing_apply(row, pats[row].vk, pats[row].vmask);
+    });
+}
+
+// THE TUNING A PART PLAYS (the card's THIS PART): its own choice, and the
+// name it resolves to ("" the rig's) -- on the builder's tables, read here
+std::string nv_host::part_tuning_of(size_t row, std::string *own, std::string *nat)
+{
+    int p, v;
+    bool dr;
+    {
+        std::lock_guard<std::mutex> lk(parts_mu);
+        if (row >= pats.size() || pats[row].gone)
+            return "";
+        const PartAt &pa = pats[row];
+        p = pa.want >= 0 ? pa.want : pa.program;
+        v = pa.want >= 0 ? pa.want_var : pa.var;
+        dr = pa.want >= 0 ? pa.want_dr : pa.drums;
+        if (own)
+            *own = pa.own;
+    }
+    if (nat) {                                  // (its voice's natural tuner, by name: "" none)
+        const NoteClass *k = dr || !cls60 ? nullptr : cls60(p & 127, v & 4095);
+        *nat = k && k->ntuner[0] ? std::string(k->ntuner, strnlen(k->ntuner, sizeof k->ntuner)) : std::string();
+    }
+    return tuning_of ? tuning_of(p, dr, v) : std::string();
+}
+
+void nv_host::set_natural(bool on)
+{
+    {
+        std::lock_guard<std::mutex> lk(bmu);
+        nat_req = on ? 1 : 0;
+        nat_asked = on;
+    }
+    bcv.notify_one();
+}
+
 // (the part's knobs now these: its setting's id, and its patch rebuilt through it)
 void nv_host::voicing_apply(size_t row, const std::array<double, NV_VK_N> &vk, int vmask)
 {
@@ -4029,7 +4172,7 @@ void nv_host::voicing_apply(size_t row, const std::array<double, NV_VK_N> &vk, i
         PartAt &pa = pats[row];
         const bool w = pa.want >= 0;
         const int p = w ? pa.want : pa.program, cur = w ? pa.want_var : pa.var;
-        const int vid = voicing_vid(p, cur, vk, vmask);
+        const int vid = voicing_vid(p, cur, vk, vmask, pa.own);
         if (vid < 0)
             return;                             // (no more ids: as it was)
         {
@@ -4453,6 +4596,7 @@ void nv_host::part_added(const PartSpec &sp, void *c)
     pa.pk = sp.pk;
     pa.vk = sp.vk;                              // (its knobs: its key's bits 20-30 already the setting's)
     pa.vmask = sp.vmask;
+    pa.own = sp.drums ? std::string() : sp.own;
     pa.vid = sp.drums ? 0 : (sp.var >> 20) & 2047;
     std::lock_guard<std::mutex> lk(parts_mu);
     pats.push_back(pa);                         // (reserved: the builder may be reading the rest)
@@ -4479,6 +4623,7 @@ static nv_host::PartSpec spec_of(const nv_host::PartAt &pa)
     sp.pk = pa.pk;
     sp.vk = pa.vk;
     sp.vmask = pa.vmask;
+    sp.own = pa.own;
     return sp;
 }
 
@@ -4608,7 +4753,7 @@ int nv_host::building()
     std::lock_guard<std::mutex> lk(bmu);
     return n + (int)breq.size() + (int)bdone.size() + (room_req.empty() ? 0 : 1) + (tuner_req.empty() ? 0 : 1)
            + (prebuild_req ? 1 : 0) + (fill_req ? 1 : 0) + (int)miss_req.size() + (int)fill_n.load()
-           + (east_req_set ? 1 : 0) + (int)add_req.size() + (int)add_done.size();
+           + (east_req_set ? 1 : 0) + (nat_req >= 0 ? 1 : 0) + (int)add_req.size() + (int)add_done.size();
 }
 
 // ---- THE C API (host.h): over nv_host, as nvlive drives it ----

@@ -660,5 +660,18 @@
  "The reed's rest off the plate's slot. Further off, more bark at every touch.": "Le repos de la lame hors de la fente de la plaque. Plus loin, plus de mordant à chaque toucher.",
  "The tine to the pickup. Closer is louder and barks sooner.": "Du tine au micro. Plus près, plus fort et mordant plus tôt.",
  "How far the hammer throws the tine or reed. Wider barks and buzzes.": "Jusqu'où le marteau lance le tine ou la lame. Plus large, ça mord et grésille.",
- "The tone bar's ring in the attack: the bell.": "La résonance de la barre de ton dans l'attaque : la cloche."
+ "The tone bar's ring in the attack: the bell.": "La résonance de la barre de ton dans l'attaque : la cloche.",
+ "On": "Oui",
+ "Every part": "Toutes les parties",
+ "this part": "cette partie",
+ "The rig's": "Celui du rig",
+ "As the instrument": "Comme l'instrument",
+ "Which parts": "Quelles parties",
+ "Natural tunings": "Accords propres",
+ "the rig's tuning, the parts' own unchosen": "l'accord du rig ; les parties sans choix propre",
+ "none of its own: the rig's": "aucun propre : celui du rig",
+ "{0}, while natural tunings are on": "{0}, tant que les accords propres sont actifs",
+ "each instrument in its own tuning": "chaque instrument dans son propre accord",
+ "every voice in the rig's tuning": "chaque voix dans l'accord du rig",
+ "this part plays {0}": "cette partie joue {0}"
 }

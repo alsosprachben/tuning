@@ -816,9 +816,27 @@ J tuning_shape(const std::string &name)
 // THE TUNING CARD's: the tuner asked for and the one playing (they differ
 // while the builder makes the patches again in it), its shape, the Eastern
 // spec; the tuners, the raga systems and ragas once (lists: the first answer's)
-J tuning_of(nv_host *h, bool lists)
+J tuning_of(nv_host *h, bool lists, int row = -1)
 {
     J o = sess::obj();
+    o.o["natural"] = sess::boolean(nv_host_natural(h) != 0);
+    if (row >= 0) {                             // THIS PART: its own choice, what it plays, its voice's own
+        char own[128] = {}, plays[160] = {}, nat[64] = {};
+        nv_host_part_tuning(h, row, own, sizeof own, plays, sizeof plays);
+        nv_host_part_natural(h, row, nat, sizeof nat);
+        J p = sess::obj();
+        p.o["row"] = sess::integer(row);
+        p.o["own"] = sess::str(own);
+        std::string pl = plays;                 // (by its tuner's name: "pleyel~440" is the pleyel)
+        p.o["plays"] = sess::str(pl.substr(0, pl.find('~')));
+        if (!pl.empty())                        // (its shape, as it sounds: at the rig's A; "" the rig's own)
+            p.o["shape"] = tuning_shape(pl);
+        p.o["natural"] = sess::str(nat);
+        char nm[160] = {};
+        nv_host_voicing_name(h, row, nm, sizeof nm);
+        p.o["name"] = sess::str(nm);
+        o.o["part"] = p;
+    }
     std::string asked, now;
     {
         std::lock_guard<std::mutex> lk(h->bmu);
@@ -1326,6 +1344,7 @@ struct nv_ui_watch {
     long long route_learn_t = 0;
     int learnt[2] = {0, -1};            // (what it caught: kind, number)
     std::string tuning_sent;
+    int tuning_row = -1;                // (the part the tuning card's THIS PART row is about)
     std::string matrix_sent;
     int cmx_learn = 0;                  // (CC1 (4) or CC2 (5) learnt from the next controller moved, since then)
     long long cmx_learn_t = 0;
@@ -1868,8 +1887,10 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         if (w) {
             w->tuning = arg_i(q, "open", 1) != 0;
             w->tuning_sent.clear();
+            if (q.get("row"))
+                w->tuning_row = arg_i(q, "row", -1);
         }
-        r.o["tuning"] = tuning_of(h, arg_i(q, "lists", 0) != 0);
+        r.o["tuning"] = tuning_of(h, arg_i(q, "lists", 0) != 0, w ? w->tuning_row : arg_i(q, "row", -1));
     } else if (call == "tuner_set" || call == "eastern_set") {     // name (a tuner) / spec ("" off)
         const J *v = q.get(call == "tuner_set" ? "name" : "spec");
         const std::string t = v && v->is(J::STR) ? v->s : "";
@@ -1883,7 +1904,21 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         }
         if (w)
             w->tuning_sent.clear();
-        r.o["tuning"] = tuning_of(h, false);
+        r.o["tuning"] = tuning_of(h, false, w ? w->tuning_row : -1);
+    } else if (call == "part_tuner_set") {     // row, name: a part's own tuning ("" its voice's, "rig" the rig's)
+        const J *v = q.get("name");
+        const int row = arg_i(q, "row", -1);
+        nv_host_set_part_tuner(h, row, v && v->is(J::STR) ? v->s.c_str() : "");
+        if (w) {
+            w->tuning_row = row;
+            w->tuning_sent.clear();
+        }
+        r.o["tuning"] = tuning_of(h, false, row);
+    } else if (call == "natural_set") {        // on: natural tunings (every voice its own) or all in the rig's
+        nv_host_set_natural(h, arg_i(q, "on", 1));
+        if (w)
+            w->tuning_sent.clear();
+        r.o["tuning"] = tuning_of(h, false, w ? w->tuning_row : -1);
     } else if (call == "control") {            // the card opened (or shut: open false); kinds: 1 for the controls one may add
         if (w) {
             w->control = arg_i(q, "open", 1) != 0;
@@ -2391,7 +2426,7 @@ extern "C" char *nv_ui_poll(nv_host *h, nv_ui_watch *w)
         }
     }
     if (w->tuning && w->tick % 6 == 4) {       // (the tuner built: asked and playing the same)
-        J tj = tuning_of(h, false);
+        J tj = tuning_of(h, false, w->tuning_row);
         std::string ts;
         put(ts, tj);
         if (ts != w->tuning_sent) {

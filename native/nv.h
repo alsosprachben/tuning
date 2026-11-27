@@ -1482,6 +1482,7 @@ typedef struct NoteClass {
     int ring_nown;                  // the note's own modes' ratios (mode_ratios, or 1 and 2)
     double ring_own[16];
     int indian;                     // tuning_family 'indian': the secondary tuning's table (FREQ_E)
+    char ntuner[24];                // natural_tuner: its own temperament's tuner name ("" the rig's)
     // ...BY COINCIDENCE (sym_kind 3, a fixed set: sym_pitch the strings'
     // offsets from sym_tonic -- Sa's, under a raga -- sym_d each one's level,
     // 10^(dB/20)): sym_g the gain, sym_wmin the pluck's spread (Hz)
@@ -2068,6 +2069,12 @@ static inline int nv_voicing_offset(int i)
 int nv_voicing_knobs(const NoteClass *k, double *v0);
 void nv_voicing_apply(NoteClass *d, const double *t, int mask);
 int nv_voicing_id(const double *t, int mask);
+/* ...and with a part's own tuning (a tuner name's id, nv_tuner_id; 0 none):
+   the part's settings, knobs and tuning, one id */
+int nv_voicing_id_t(const double *t, int mask, int tid);
+int nv_voicing_tid(int vid);
+int nv_tuner_id(const char *name);          /* a name's id for as long as the process runs (0: "") */
+const char *nv_tuner_name(int tid);
 const NoteClass *nv_voice_variant(const NoteClass *k, int vid);
 size_t nv_noteclass_size(void);
 void nv_hammer_note(VoiceSnap *s);

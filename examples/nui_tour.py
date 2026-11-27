@@ -38,7 +38,7 @@ STATES = [
     ("upright", dict(program=1, variation=0), ["voice"]),
     ("cp80", dict(program=2, variation=0), ["voice"]),
     ("rhodes", dict(program=4, variation=0), ["voice"]),
-    ("fortepiano", dict(program=0, variation=40), ["voice", "piano"]),
+    ("fortepiano", dict(program=0, variation=40), ["voice", "piano", "tuning"]),
     ("wurli", dict(program=5, variation=0), ["voice"]),
     ("guitar", dict(program=27, variation=0), ["amp"]),
     ("kit", dict(program=0, drums=True), ["drums", "kits", "seq", "piano", "synth", "parts"]),
@@ -49,6 +49,8 @@ STATES = [
 
 # (more of a card, by taps in the layout's design units, for the first state only)
 EXTRA = {
+    ("laptop", "tuning", "fortepiano"): [("part", [(560, 456)])],       # (THIS PART: the fortepiano's own)
+    ("ipad", "tuning", "fortepiano"): [("part", [(465, 328)])],
     ("ipad", "synth", "lead"): [("page2", [(617, 235)])],
     ("ipad", "setup", "lead"): [("touch", [(787, 238)])],
     ("ipad", "kits", "kit"): [("key", [(400, 284)])],

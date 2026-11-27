@@ -238,6 +238,15 @@ void nv_host_set_tuner(nv_host *h, const char *name);
    every Indian voice's part; its systems and ragas (NULL past the last) */
 int nv_host_eastern(nv_host *h, char *out, int cap);
 void nv_host_set_eastern(nv_host *h, const char *spec);
+/* A PART's TUNING (live.tuner_for): its own choice into own ("" its voice's
+   natural one, "rig" the rig's, a tuner's name) and the name it plays as the
+   return's text ("" the rig's tuner); set one ("" back to its voice's);
+   natural tunings on (1) or off -- every voice in the rig's tuner */
+int nv_host_part_tuning(nv_host *h, int row, char *own, int ocap, char *out, int cap);
+void nv_host_set_part_tuner(nv_host *h, int row, const char *own);
+int nv_host_natural(nv_host *h);
+int nv_host_part_natural(nv_host *h, int row, char *out, int cap);    /* its voice's natural tuner ("" none) */
+void nv_host_set_natural(nv_host *h, int on);
 const char *nv_raga_system_name(int i);
 const char *nv_raga_name(int i, int *n, const int **idx);
 

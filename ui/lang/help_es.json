@@ -140,8 +140,8 @@
   "t": "AFINACIÓN"
  },
  "basics/terms/17/1": {
-  "en": "The tuning every part plays in, and the Indian voices' raga tuning.",
-  "t": "La afinación en la que tocan todas las partes, y la afinación de raga de las voces indias."
+  "en": "The tunings the parts play in: the rig's, an instrument's own, a part's choice; and the Indian voices' raga tuning.",
+  "t": "Las afinaciones en que tocan las partes: la del equipo, la propia de un instrumento, la elegida para una parte; y la afinación de raga de las voces indias."
  },
  "basics/terms/18/0": {
   "en": "CONTROL",
@@ -1996,8 +1996,8 @@
   "t": "Afinación"
  },
  "tuning/intro": {
-  "en": "The tuning every part plays in. Tap one and every part's sounds are built again in it (the display shows BUILDING); notes already sounding keep the old tuning.",
-  "t": "La afinación en la que tocan todas las partes. Toca una y los sonidos de todas las partes se vuelven a construir en ella (la pantalla muestra CONSTRUYENDO); las notas que ya suenan conservan la afinación anterior."
+  "en": "The tunings the parts play in. Under Every part, tap one and every part's sounds are built again in it (the display shows BUILDING); notes already sounding keep the old tuning. Some instruments have a tuning of their own -- the harpsichord and the pipe organ the hybrid mean, the fortepiano the Pleyel -- and play it at the rig's A while Natural tunings is on. Under This part, choose the selected part's own.",
+  "t": "Las afinaciones en que tocan las partes. En Todas las partes, toca una y los sonidos de todas las partes se construyen de nuevo en ella (la pantalla muestra CONSTRUYENDO); las notas que ya suenan conservan la afinación anterior. Algunos instrumentos tienen afinación propia -- el clave y el órgano de tubos la media híbrida, el fortepiano la de Pleyel -- y la tocan en el La del equipo mientras Afinaciones propias esté activo. En Esta parte, elige la afinación propia de la parte seleccionada."
  },
  "tuning/terms/0/0": {
   "en": "Concert pitch, A=440",
@@ -3722,5 +3722,21 @@
  "voice/terms/11/1": {
   "en": "The Rhodes tone bar's ring in the attack, the bell, in dB against the program's own.",
   "t": "El sonido de la barra tonal del Rhodes en el ataque, la campana, en dB frente al valor propio del programa."
+ },
+ "tuning/terms/6/1": {
+  "en": "Every part: the tiles set the rig's tuning. This part: they set the selected part's own, kept until its program changes.",
+  "t": "Todas las partes: las fichas fijan la afinación del equipo. Esta parte: fijan la propia de la parte seleccionada, hasta que cambie su programa."
+ },
+ "tuning/terms/7/1": {
+  "en": "On: an instrument with a tuning of its own plays it, at the rig's A. Off: every voice in the rig's tuning.",
+  "t": "Sí: un instrumento con afinación propia la toca, en el La del equipo. No: cada voz en la afinación del equipo."
+ },
+ "tuning/terms/8/1": {
+  "en": "As the instrument: its own tuning, or the rig's where it has none. The rig's: the rig's tuning, whatever the instrument. Or any tuning below, at the rig's A.",
+  "t": "Como el instrumento: su afinación propia, o la del equipo si no tiene. La del equipo: la afinación del equipo, sea cual sea el instrumento. O cualquier afinación de abajo, en el La del equipo."
+ },
+ "tuning/terms/9/1": {
+  "en": "The Pleyel: the French aural tuning of the 1840s (Cordier's reconstruction), worked out on that piano's strings.",
+  "t": "Pleyel: la afinación francesa de oído de la década de 1840 (reconstrucción de Cordier), calculada sobre las cuerdas de ese piano."
  }
 }

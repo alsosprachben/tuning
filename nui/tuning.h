@@ -17,6 +17,8 @@ struct TuningUi {
     std::vector<std::string> systems, ragas;
     std::string pending;                // (the tuner asked for, till the engine has it)
     std::string east_mine;              // (the eastern spec this screen set, held a moment)
+    int scope = 0;                      // (the tiles choose for: 0 every part, the rig; 1 the selected part)
+    int row = -1;                       // (the part THIS PART is about: the engine's answers')
     double east_until = 0;
     float scroll = 0;
 };
@@ -184,8 +186,11 @@ inline std::string east_spec(const East &p)
 inline void draw_tuning(App &a)
 {
     TuningUi &T = g_tn;
-    if (!T.t.is(J::OBJ))
-        tn_take(call(a, "{\"call\":\"tuning\",\"open\":1,\"lists\":1}"));
+    if (!T.t.is(J::OBJ) || T.row != a.row) {
+        T.row = a.row;
+        tn_take(call(a, "{\"call\":\"tuning\",\"open\":1,\"lists\":" + std::string(T.lists ? "0" : "1") + ",\"row\":" +
+                           std::to_string(a.row) + "}"));
+    }
     // (the iPad's: its card from y 210 to card_y1 + 6, two pages -- the tuners and their shape; the Eastern tuning)
     const bool IP = a.tab, PH = a.ph;   // (the phone's: its card from 106, three pages -- the tuners, their shape, the Eastern)
     static int page = 0, tpage = 0;
@@ -204,7 +209,7 @@ inline void draw_tuning(App &a)
             px_ += w + 4;
         }
     } else
-        text(a, a.font, 14, TX, HY + 1, OWN, nui::T("every part"));
+        text(a, a.font, 14, TX, HY + 1, OWN, T.scope ? nui::T("this part") : nui::T("every part"));
     if (IP && !PH)
         for (int pg = 0; pg < 2; pg++) {
             const std::string id = "tnpage" + std::to_string(pg);
@@ -217,7 +222,13 @@ inline void draw_tuning(App &a)
     if (T.pending == tuner)
         T.pending.clear();
     const bool building = tuner != now;
-    const std::string info = building ? TF("building the patches in {0}\xe2\x80\xa6", {tuner_words(tuner, "").first})
+    // THIS PART (the selected one): its own choice ("" its instrument's,
+    // "rig"), what it plays ("" the rig's), its instrument's own tuner
+    const J *pt = T.t.get("part");
+    const std::string p_own = str(pt, "own"), p_plays = str(pt, "plays"), p_nat = str(pt, "natural");
+    const bool natural = num(&T.t, "natural", 1) != 0;
+    const std::string info = T.scope ? TF("this part plays {0}", {tuner_words(p_plays.empty() ? now : p_plays, "").first})
+                           : building ? TF("building the patches in {0}\xe2\x80\xa6", {tuner_words(tuner, "").first})
                                       : TF("playing {0}", {tuner_words(now, "").first});
     const std::string info_ = fit(a, a.font, 14, info, IP ? 300 : 900);
     text(a, a.font, 14, X1 - text_w(a, a.font, 14, info_), PH ? 147 : HY + 1, building ? OWN : SILK_DIM, info_);
@@ -231,6 +242,27 @@ inline void draw_tuning(App &a)
         {N_("Pure octaves: pipes"), {"hybridharm", "hybridharm440", "hybridmean"}},
         {N_("Period pianos"), {"pleyel"}}};
     std::vector<std::pair<std::string, std::vector<const std::pair<std::string, std::string> *>>> groups;
+    // (the card's own tiles, before the tuners: which parts the tiles choose
+    // for; this part's two of its own; natural tunings on or off -- a key
+    // with '@', its name and line after it, a tab between)
+    static std::vector<std::pair<std::string, std::string>> mine;
+    mine.clear();
+    mine.reserve(8);
+    const std::string pname = str(pt, "name");
+    mine.push_back({"@every", std::string(nui::T("Every part")) + "\t" + nui::T("the rig's tuning, the parts' own unchosen")});
+    mine.push_back({"@this", std::string(nui::T("This part")) + "\t" + (pname.empty() ? std::string() : pname)});
+    mine.push_back({"@inst", std::string(nui::T("As the instrument")) + "\t" +
+                                 (p_nat.empty() ? std::string(nui::T("none of its own: the rig's"))
+                                  : !natural ? TF("{0}, while natural tunings are on", {tuner_words(p_nat, "").first})
+                                             : tuner_words(p_nat, "").first)});
+    mine.push_back({"@rig", std::string(nui::T("The rig's")) + "\t" + tuner_words(now, "").first});
+    mine.push_back({"@nat1", std::string(nui::T("On")) + "\t" + nui::T("each instrument in its own tuning")});
+    mine.push_back({"@nat0", std::string(nui::T("Off")) + "\t" + nui::T("every voice in the rig's tuning")});
+    groups.push_back({N_("Which parts"), {&mine[0], &mine[1]}});
+    if (T.scope)
+        groups.push_back({N_("This part"), {&mine[2], &mine[3]}});
+    else
+        groups.push_back({N_("Natural tunings"), {&mine[4], &mine[5]}});
     std::set<std::string> named;
     for (const auto &g : GROUPS) {
         std::vector<const std::pair<std::string, std::string> *> v;
@@ -248,7 +280,8 @@ inline void draw_tuning(App &a)
             raga.push_back(&t);
         else if (!named.count(t.first))
             other.push_back(&t);
-    groups.push_back({N_("Indian, every part"), raga});
+    if (!T.scope)                       // (a raga: the rig's, every part -- the Eastern tuning is a part's)
+        groups.push_back({N_("Indian, every part"), raga});
     groups.push_back({N_("Other systems"), other});
     const float LW = PH ? X1 - X0 : IP ? 600 : 1070, cols = IP && !PH ? 2 : 3, gap = 8, tw = (LW - 10 - gap * (cols - 1)) / cols, th = 64, hh = 30;
     // (the layout, then the touch, then the drawing)
@@ -273,8 +306,18 @@ inline void draw_tuning(App &a)
     if (scroll_area(a, "tnlist", X0, Y0, LW, Y1 - Y0, cy, T.scroll, tap))
         for (const Tile &t : tiles)
             if (tap.x >= t.x && tap.x < t.x + tw && tap.y >= t.y && tap.y < t.y + th) {
-                T.pending = t.t->first;
-                tn_take(call(a, "{\"call\":\"tuner_set\",\"name\":\"" + t.t->first + "\"}"));
+                const std::string &k = t.t->first;
+                if (k == "@every" || k == "@this")
+                    T.scope = k == "@this";
+                else if (k == "@nat1" || k == "@nat0")
+                    tn_take(call(a, std::string("{\"call\":\"natural_set\",\"on\":") + (k == "@nat1" ? "1" : "0") + "}"));
+                else if (T.scope)       // (this part's: "" its instrument's, "rig", a tuner)
+                    tn_take(call(a, "{\"call\":\"part_tuner_set\",\"row\":" + std::to_string(a.row) + ",\"name\":\"" +
+                                        (k == "@inst" ? std::string() : k == "@rig" ? std::string("rig") : k) + "\"}"));
+                else {
+                    T.pending = k;
+                    tn_take(call(a, "{\"call\":\"tuner_set\",\"name\":\"" + k + "\"}"));
+                }
             }
     dl()->PushClipRect(P(a, X0, Y0), P(a, X0 + LW, Y1), true);
     for (const auto &h : heads) {
@@ -287,11 +330,29 @@ inline void draw_tuning(App &a)
         const float x = X0 + t.x, y = Y0 + t.y - T.scroll;
         if (y + th < Y0 || y > Y1)
             continue;
-        const bool cur = t.t->first == tuner && !building, pend = t.t->first == tuner && building || t.t->first == T.pending;
+        const std::string &k = t.t->first;
+        const bool special = k[0] == '@';
+        bool cur, pend;
+        if (special) {
+            cur = k == "@every" ? !T.scope : k == "@this" ? T.scope != 0 : k == "@inst" ? p_own.empty()
+                : k == "@rig" ? p_own == "rig" : k == "@nat1" ? natural : !natural;
+            pend = false;
+        } else if (T.scope) {
+            cur = k == p_own;
+            pend = false;
+        } else {
+            cur = k == tuner && !building;
+            pend = (k == tuner && building) || k == T.pending;
+        }
         look::chip(a, x, y, tw, th, cur);
         if (pend)
             frame(a, x, y, tw, th, LCD, 8, 2.0f);
-        const auto nm = tuner_words(t.t->first, t.t->second);
+        std::pair<std::string, std::string> nm;
+        if (special) {
+            const size_t tb = t.t->second.find('\t');
+            nm = {t.t->second.substr(0, tb), tb == std::string::npos ? std::string() : t.t->second.substr(tb + 1)};
+        } else
+            nm = tuner_words(k, t.t->second);
         text(a, a.font, 14, x + 10, y + (IP ? 6 : 8), cur ? LCD_BG : LCD, fit(a, a.font, 14, nm.first, tw - 20));
         const auto ls = wrap_max(a, a.font, 14, nm.second, tw - 20, 2);
         for (size_t i = 0; i < ls.size(); i++)
@@ -305,9 +366,11 @@ inline void draw_tuning(App &a)
     if (PH ? tpage == 1 : (!IP || page == 0)) {
     look::tray(a, SX, Y0, SW, SH, 9);
     const float tsx = heading(a, SX + 12, Y0 + 10, nui::T("THE TUNING"), "tn:shape");   // i18n-skip (a help key)
-    const J *shape = T.t.get("shape");
+    // (this part's shape where it plays its own -- else the rig's)
+    const bool pshape = T.scope && pt && pt->get("shape");
+    const J *shape = pshape ? pt->get("shape") : T.t.get("shape");
     const double a4 = num(shape, "a4");
-    text(a, a.font, 14, tsx, Y0 + 11, LCD, tuner_words(tuner, "").first + (a4 > 0 ? " \xc2\xb7 A4 = " + jnum(a4) + " Hz" : ""));
+    text(a, a.font, 14, tsx, Y0 + 11, LCD, tuner_words(pshape ? p_plays : tuner, "").first + (a4 > 0 ? " \xc2\xb7 A4 = " + jnum(a4) + " Hz" : ""));
     const J *cents = shape ? shape->get("cents") : nullptr;
     auto cv = [&](int n, double &v) {
         if (!cents || !cents->is(J::ARR) || n >= (int)cents->a.size() || !cents->a[(size_t)n].is(J::NUM))

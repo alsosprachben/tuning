@@ -140,8 +140,8 @@
   "t": "ACCORDAGE"
  },
  "basics/terms/17/1": {
-  "en": "The tuning every part plays in, and the Indian voices' raga tuning.",
-  "t": "L'accordage dans lequel jouent toutes les parties, et l'accordage de raga des voix indiennes."
+  "en": "The tunings the parts play in: the rig's, an instrument's own, a part's choice; and the Indian voices' raga tuning.",
+  "t": "Les accords dans lesquels jouent les parties : celui du rig, celui propre à un instrument, le choix d'une partie ; et l'accord de raga des voix indiennes."
  },
  "basics/terms/18/0": {
   "en": "CONTROL",
@@ -1996,8 +1996,8 @@
   "t": "Accordage"
  },
  "tuning/intro": {
-  "en": "The tuning every part plays in. Tap one and every part's sounds are built again in it (the display shows BUILDING); notes already sounding keep the old tuning.",
-  "t": "L'accordage dans lequel jouent toutes les parties. Touchez-en un et les sons de toutes les parties sont reconstruits dans celui-ci (l'afficheur montre CONSTRUCTION) ; les notes qui sonnent déjà gardent l'ancien accordage."
+  "en": "The tunings the parts play in. Under Every part, tap one and every part's sounds are built again in it (the display shows BUILDING); notes already sounding keep the old tuning. Some instruments have a tuning of their own -- the harpsichord and the pipe organ the hybrid mean, the fortepiano the Pleyel -- and play it at the rig's A while Natural tunings is on. Under This part, choose the selected part's own.",
+  "t": "Les accords dans lesquels jouent les parties. Sous Toutes les parties, touchez-en un et les sons de toutes les parties sont reconstruits dedans (l'écran affiche CONSTRUCTION) ; les notes qui sonnent déjà gardent l'ancien accord. Certains instruments ont un accord propre -- le clavecin et l'orgue à tuyaux le moyen hybride, le pianoforte celui de Pleyel -- et le jouent au La du rig tant que Accords propres est actif. Sous Cette partie, choisissez l'accord propre de la partie sélectionnée."
  },
  "tuning/terms/0/0": {
   "en": "Concert pitch, A=440",
@@ -3722,5 +3722,21 @@
  "voice/terms/11/1": {
   "en": "The Rhodes tone bar's ring in the attack, the bell, in dB against the program's own.",
   "t": "La résonance de la barre de ton du Rhodes dans l'attaque, la cloche, en dB par rapport à la valeur du programme."
+ },
+ "tuning/terms/6/1": {
+  "en": "Every part: the tiles set the rig's tuning. This part: they set the selected part's own, kept until its program changes.",
+  "t": "Toutes les parties : les tuiles règlent l'accord du rig. Cette partie : elles règlent celui de la partie sélectionnée, jusqu'à ce que son programme change."
+ },
+ "tuning/terms/7/1": {
+  "en": "On: an instrument with a tuning of its own plays it, at the rig's A. Off: every voice in the rig's tuning.",
+  "t": "Oui : un instrument qui a son propre accord le joue, au La du rig. Non : chaque voix dans l'accord du rig."
+ },
+ "tuning/terms/8/1": {
+  "en": "As the instrument: its own tuning, or the rig's where it has none. The rig's: the rig's tuning, whatever the instrument. Or any tuning below, at the rig's A.",
+  "t": "Comme l'instrument : son propre accord, ou celui du rig s'il n'en a pas. Celui du rig : l'accord du rig, quel que soit l'instrument. Ou n'importe quel accord ci-dessous, au La du rig."
+ },
+ "tuning/terms/9/1": {
+  "en": "The Pleyel: the French aural tuning of the 1840s (Cordier's reconstruction), worked out on that piano's strings.",
+  "t": "Pleyel : l'accord à l'oreille français des années 1840 (reconstitution de Cordier), calculé sur les cordes de ce piano."
  }
 }

@@ -140,8 +140,8 @@
   "t": "チューニング"
  },
  "basics/terms/17/1": {
-  "en": "The tuning every part plays in, and the Indian voices' raga tuning.",
-  "t": "全パートが演奏する音律と、インドの音色のラーガ・チューニング。"
+  "en": "The tunings the parts play in: the rig's, an instrument's own, a part's choice; and the Indian voices' raga tuning.",
+  "t": "パートが演奏する調律：リグの調律、楽器固有の調律、パートごとの選択。そしてインドの音色のラーガ調律。"
  },
  "basics/terms/18/0": {
   "en": "CONTROL",
@@ -1996,8 +1996,8 @@
   "t": "チューニング"
  },
  "tuning/intro": {
-  "en": "The tuning every part plays in. Tap one and every part's sounds are built again in it (the display shows BUILDING); notes already sounding keep the old tuning.",
-  "t": "全パートが演奏する音律です。1つタップすると、全パートの音がその音律で構築し直されます（ディスプレイに BUILDING と表示されます）。すでに鳴っているノートは元の音律のままです。"
+  "en": "The tunings the parts play in. Under Every part, tap one and every part's sounds are built again in it (the display shows BUILDING); notes already sounding keep the old tuning. Some instruments have a tuning of their own -- the harpsichord and the pipe organ the hybrid mean, the fortepiano the Pleyel -- and play it at the rig's A while Natural tunings is on. Under This part, choose the selected part's own.",
+  "t": "パートが演奏する調律。「全パート」で一つをタップすると、全パートの音がその調律で作り直されます（表示はBUILDING）。鳴っている音は前の調律のままです。固有の調律を持つ楽器もあります（チェンバロとパイプオルガンはハイブリッド・ミーン、フォルテピアノはプレイエル）。「楽器固有の調律」がオンの間、リグのAでそれを演奏します。「このパート」では選んだパート自身の調律を選べます。"
  },
  "tuning/terms/0/0": {
   "en": "Concert pitch, A=440",
@@ -3722,5 +3722,21 @@
  "voice/terms/11/1": {
   "en": "The Rhodes tone bar's ring in the attack, the bell, in dB against the program's own.",
   "t": "アタックでのローズのトーンバーの響き（ベル）。プログラム本来の値に対するdB。"
+ },
+ "tuning/terms/6/1": {
+  "en": "Every part: the tiles set the rig's tuning. This part: they set the selected part's own, kept until its program changes.",
+  "t": "全パート：タイルでリグの調律を設定します。このパート：選んだパート自身の調律を設定し、プログラムが変わるまで保たれます。"
+ },
+ "tuning/terms/7/1": {
+  "en": "On: an instrument with a tuning of its own plays it, at the rig's A. Off: every voice in the rig's tuning.",
+  "t": "オン：固有の調律を持つ楽器はそれを、リグのAで演奏します。オフ：全ボイスがリグの調律です。"
+ },
+ "tuning/terms/8/1": {
+  "en": "As the instrument: its own tuning, or the rig's where it has none. The rig's: the rig's tuning, whatever the instrument. Or any tuning below, at the rig's A.",
+  "t": "楽器どおり：楽器固有の調律、なければリグの調律。リグの：楽器にかかわらずリグの調律。または下の任意の調律を、リグのAで。"
+ },
+ "tuning/terms/9/1": {
+  "en": "The Pleyel: the French aural tuning of the 1840s (Cordier's reconstruction), worked out on that piano's strings.",
+  "t": "プレイエル：1840年代フランスの聴覚調律（コルディエの復元）を、そのピアノの弦で計算したもの。"
  }
 }

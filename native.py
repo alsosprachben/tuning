@@ -296,7 +296,7 @@ class NoteClass(ctypes.Structure):
                    ('sym_kind', I), ('sym_n', I), ('sym_top', I), ('sym_nobend', I), ('sym_floor', C),
                    ('sym_pitch', I * 32), ('sym_d', C * 32), ('sym_cents', C * 32),
                    ('ring_n', I), ('ring_hz', C * 48), ('ring_db', C * 48), ('ring_dps', C * 48),
-                   ('ring_skip', C), ('ring_nown', I), ('ring_own', C * 16), ('indian', I),
+                   ('ring_skip', C), ('ring_nown', I), ('ring_own', C * 16), ('indian', I), ('ntuner', ctypes.c_char * 24),
                    ('sym_tonic', I), ('sym_g', C), ('sym_wmin', C), ('meend', I),
                    ('meend_range', C), ('meend_strength', C), ('meend_tonic', I), ('key_pan_spread', C), ('seat_pan', C),
                    ('n_grain', I), ('grain', (C * 9) * 8),
@@ -4134,6 +4134,7 @@ def note_class(cls):
         if _dp and not k.cho_send:
             k.pair_set, k.pair_lo, k.pair_hi = 1, float(_dp[0]), float(_dp[1])
         k.indian = int(getattr(cls, 'tuning_family', None) == 'indian')     # (FREQ_E's)
+        k.ntuner = (getattr(cls, 'natural_tuner', None) or '').encode()[:23]    # (blockrender.natural_spec's)
         k.meend = int(bool(getattr(cls, 'bend_detents', False)))
         k.meend_range = float(getattr(cls, 'bend_range_semitones', T.BEND_RANGE_SEMITONES))
         k.meend_strength = float(getattr(cls, 'meend_strength', 0.6))

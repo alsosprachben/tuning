@@ -660,5 +660,18 @@
  "The reed's rest off the plate's slot. Further off, more bark at every touch.": "リードがプレートのスロットからずれた静止位置。離すほどどのタッチでも唸る。",
  "The tine to the pickup. Closer is louder and barks sooner.": "トーンとピックアップの距離。近いほど大きく、早く唸る。",
  "How far the hammer throws the tine or reed. Wider barks and buzzes.": "ハンマーがトーンやリードを振る幅。広いほど唸り、ビリつく。",
- "The tone bar's ring in the attack: the bell.": "アタックでのトーンバーの響き、ベルの音。"
+ "The tone bar's ring in the attack: the bell.": "アタックでのトーンバーの響き、ベルの音。",
+ "On": "オン",
+ "Every part": "全パート",
+ "this part": "このパート",
+ "The rig's": "リグの",
+ "As the instrument": "楽器どおり",
+ "Which parts": "対象パート",
+ "Natural tunings": "楽器固有の調律",
+ "the rig's tuning, the parts' own unchosen": "リグの調律。個別に選んでいないパート",
+ "none of its own: the rig's": "固有の調律なし：リグの調律",
+ "{0}, while natural tunings are on": "{0}（楽器固有の調律がオンのとき）",
+ "each instrument in its own tuning": "各楽器を固有の調律で",
+ "every voice in the rig's tuning": "全ボイスをリグの調律で",
+ "this part plays {0}": "このパートは{0}"
 }

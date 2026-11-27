@@ -507,6 +507,18 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
             if (want != cur)
                 set_eastern(want);
         }
+        // ...NATURAL TUNINGS (absent: on)
+        {
+            const sess::J *nt = setup.get("natural_tunings");
+            const bool want = !(nt && nt->is(sess::J::BOOL) && !nt->b);
+            bool cur;
+            {
+                std::lock_guard<std::mutex> lk(bmu);
+                cur = nat_asked;
+            }
+            if (want != cur)
+                set_natural(want);
+        }
         // ...THE TUNER (the first part's, live's per part; nvlive's one)
         const sess::J *ps = setup.get("parts");
         const sess::J *tn = ps && ps->is(sess::J::ARR) && !ps->a.empty() ? ps->a[0].get("tuner") : nullptr;
@@ -687,8 +699,12 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
                                     sp.vk[(size_t)vi] = x->d();
                                     sp.vmask |= 1 << vi;
                                 }
-                if (sp.vmask) {
-                    const int vid = voicing_vid(sp.program, sp.var, sp.vk, sp.vmask);
+                // ...AND ITS OWN TUNING (live's Part.own_tuner: absent, its voice's), in the same id
+                if (const sess::J *ot = sp.drums ? nullptr : pd.get("own_tuner"))
+                    if (ot->is(sess::J::STR))
+                        sp.own = ot->s;
+                if (sp.vmask || !sp.own.empty()) {
+                    const int vid = voicing_vid(sp.program, sp.var, sp.vk, sp.vmask, sp.own);
                     if (vid > 0)
                         sp.var = with_voice(sp.var, vid);
                 }
@@ -748,6 +764,8 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
                         set_pickup(0, sp.pk);
                     if (sp.vmask && !sp.drums)
                         set_voicings(0, sp.vk, sp.vmask);
+                    if (!sp.own.empty() && !sp.drums)
+                        set_part_tuner(0, sp.own);
                 }
                 if (at_start)                   // (else after the pick's swap, below: a new program clears it)
                     part_drive(0, sp.drive);
@@ -763,6 +781,8 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
                         set_pickup(0, sp.pk);
                     if (sp.vmask && !sp.drums)
                         set_voicings(0, sp.vk, sp.vmask);
+                    if (!sp.own.empty() && !sp.drums)
+                        set_part_tuner(0, sp.own);
                     if (sp.drive >= 0.0) {      // (its drive knob, behind the swap that brings its program in)
                         const double dv = sp.drive;
                         {
@@ -874,6 +894,10 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
     {                                           // the rig's Eastern tuning (live.preset_from's: "" off)
         std::lock_guard<std::mutex> lk(bmu);
         j.o["eastern"] = sess::str(east_req_set ? east_asked : east_now);
+        if (!nat_asked)                         // (natural tunings: saved only when off)
+            j.o["natural_tunings"] = sess::boolean(false);
+        else
+            j.o.erase("natural_tunings");
     }
     {                                           // the on-screen controls (live's screen_controls, as dicts)
         sess::J cs = sess::arr();
@@ -1052,6 +1076,10 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
             pd.o["voicing"] = vo;
         } else
             pd.o.erase("voicing");
+        if (!pa.own.empty() && !pa.drums)       // (its own tuning: only when chosen)
+            pd.o["own_tuner"] = sess::str(pa.own);
+        else
+            pd.o.erase("own_tuner");
         if (pa.rot_mode >= 0)                   // (its rotary heard, live's likewise: only when set)
             pd.o["rotary"] = sess::str(pa.rot_mode ? "mics" : "room");
         else
@@ -1724,6 +1752,40 @@ int nv_host_eastern(nv_host *h, char *out, int cap)
 }
 
 void nv_host_set_eastern(nv_host *h, const char *spec) { h->set_eastern(spec ? spec : ""); }
+
+// A PART's TUNING: its own choice into own ("" its voice's natural one,
+// "rig", a tuner's name), and the name it plays (the return's text: "" the
+// rig's tuner)
+int nv_host_part_tuning(nv_host *h, int row, char *own, int ocap, char *out, int cap)
+{
+    std::string o;
+    const std::string r = row >= 0 ? h->part_tuning_of((size_t)row, &o) : std::string();
+    if (own && ocap > 0)
+        copy_out(o, own, ocap);
+    return copy_out(r, out, cap);
+}
+
+int nv_host_part_natural(nv_host *h, int row, char *out, int cap)
+{
+    std::string n;
+    if (row >= 0)
+        h->part_tuning_of((size_t)row, nullptr, &n);
+    return copy_out(n, out, cap);
+}
+
+void nv_host_set_part_tuner(nv_host *h, int row, const char *own)
+{
+    if (row >= 0)
+        h->set_part_tuner((size_t)row, own ? own : "");
+}
+
+int nv_host_natural(nv_host *h)
+{
+    std::lock_guard<std::mutex> lk(h->bmu);
+    return h->nat_req >= 0 ? h->nat_req : h->nat_asked ? 1 : 0;
+}
+
+void nv_host_set_natural(nv_host *h, int on) { h->set_natural(on != 0); }
 
 }  // extern "C"
 

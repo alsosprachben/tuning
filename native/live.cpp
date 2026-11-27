@@ -23,6 +23,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <map>
+#include <string>
 #include <tuple>
 #include <type_traits>
 #include <vector>
@@ -3020,24 +3021,55 @@ size_t nv_noteclass_size(void) { return sizeof(NoteClass); }
 
 // THE SETTINGS NAMED: each distinct (transform, mask) its id, for as long as
 // the process runs (a variation key holds 11 bits of it)
+// -- and the part's own tuning with them (Ben, 2026-11-27: a part's tuning;
+// the id rides the patch key as the knobs do, and a program change clears
+// both): a tuner name's id, tid
 static std::mutex g_vc_mu;
-static std::vector<std::pair<std::array<double, NV_VK_N>, int>> g_vc_set(1);       // ([0] none)
-int nv_voicing_id(const double *t, int mask)
+struct VcSet {
+    std::array<double, NV_VK_N> t;
+    int mask, tid;
+};
+static std::vector<VcSet> g_vc_set(1);      // ([0] none)
+static std::vector<std::string> g_tn_set(1);    // (tuner names by id: [0] "")
+int nv_tuner_id(const char *name)
+{
+    if (!name || !*name)
+        return 0;
+    std::lock_guard<std::mutex> lk(g_vc_mu);
+    for (size_t i = 1; i < g_tn_set.size(); i++)
+        if (g_tn_set[i] == name)
+            return (int)i;
+    g_tn_set.emplace_back(name);
+    return (int)g_tn_set.size() - 1;
+}
+const char *nv_tuner_name(int tid)
+{
+    std::lock_guard<std::mutex> lk(g_vc_mu);
+    return tid > 0 && (size_t)tid < g_tn_set.size() ? g_tn_set[(size_t)tid].c_str() : "";
+}
+int nv_voicing_id_t(const double *t, int mask, int tid)
 {
     mask &= (1 << NV_VK_N) - 1;
-    if (!mask)
+    if (!mask && tid <= 0)
         return 0;
     std::array<double, NV_VK_N> a{};
     for (int i = 0; i < NV_VK_N; i++)
         a[i] = (mask >> i & 1) ? t[i] : 0.0;
+    tid = std::max(0, tid);
     std::lock_guard<std::mutex> lk(g_vc_mu);
     for (size_t i = 1; i < g_vc_set.size(); i++)
-        if (g_vc_set[i].second == mask && g_vc_set[i].first == a)
+        if (g_vc_set[i].mask == mask && g_vc_set[i].tid == tid && g_vc_set[i].t == a)
             return (int)i;
     if (g_vc_set.size() >= 2048)
         return -1;                          // (full: the caller keeps what it had)
-    g_vc_set.emplace_back(a, mask);
+    g_vc_set.push_back(VcSet{a, mask, tid});
     return (int)g_vc_set.size() - 1;
+}
+int nv_voicing_id(const double *t, int mask) { return nv_voicing_id_t(t, mask, 0); }
+int nv_voicing_tid(int vid)
+{
+    std::lock_guard<std::mutex> lk(g_vc_mu);
+    return vid > 0 && (size_t)vid < g_vc_set.size() ? g_vc_set[(size_t)vid].tid : 0;
 }
 
 // A VOICE THROUGH SETTING vid: its class copied and moved, kept -- made
@@ -3054,8 +3086,8 @@ const NoteClass *nv_voice_variant(const NoteClass *k, int vid)
     if (!k || vid <= 0)
         return k;
     std::lock_guard<std::mutex> lk(g_vc_mu);
-    if ((size_t)vid >= g_vc_set.size())
-        return k;
+    if ((size_t)vid >= g_vc_set.size() || !g_vc_set[(size_t)vid].mask)
+        return k;                           // (a tuning alone moves no class: its cache's table)
     VoicedClass &e = g_vc_made[std::make_pair(k, vid)];
     if (e.made && memcmp(e.base.get(), k, sizeof(NoteClass)) == 0)
         return e.made.get();
@@ -3063,7 +3095,7 @@ const NoteClass *nv_voice_variant(const NoteClass *k, int vid)
         g_vc_old.push_back(std::move(e.made));
     e.base.reset(new NoteClass(*k));
     e.made.reset(new NoteClass(*k));
-    nv_voicing_apply(e.made.get(), g_vc_set[(size_t)vid].first.data(), g_vc_set[(size_t)vid].second);
+    nv_voicing_apply(e.made.get(), g_vc_set[(size_t)vid].t.data(), g_vc_set[(size_t)vid].mask);
     return e.made.get();
 }
 int nv_tcache_var(void *h) { return ((nv::live::Cache *)h)->var; }

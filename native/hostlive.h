@@ -1207,6 +1207,9 @@ struct nv_host {
         // and the setting's id riding its variation key's bits 20-30 (0 none)
         std::array<double, NV_VK_N> vk{};
         int vmask = 0, vid = 0;
+        // ITS OWN TUNING (live's Part.own_tuner: "" its voice's natural one,
+        // "rig" the rig's, a tuner's name), in the setting's id with the knobs
+        std::string own;
         bool is(int prog, bool dr, int v) const
         {
             return want >= 0 ? want == prog && want_dr == dr && want_var == v
@@ -1259,9 +1262,16 @@ struct nv_host {
     std::vector<int> psa;
     std::vector<int> pnsw;
     std::vector<std::array<double, 12>> psw;
-    std::function<const double *(int prog, bool dr)> tune_for;
+    std::function<const double *(int prog, bool dr, int var)> tune_for;
     std::string tl_;
-    std::function<void(void *c, int prog, bool dr)> raga_for;
+    std::function<void(void *c, int prog, bool dr, int var)> raga_for;
+    // A PART'S TUNING (live.tuner_for): the name a (program, drums, variation
+    // key) plays -- its own, its voice's natural one -- "" the rig's; each
+    // name's table (the builder's, cleared by a tuner's switch); natural
+    // tunings on (live.NATURAL_TUNINGS: the builder's)
+    std::function<std::string(int prog, bool dr, int var)> tuning_of;
+    std::map<std::string, std::vector<double>> ttab;
+    bool natural_on = true;
     std::vector<char> retuned;
     std::function<void(int p)> retune;
     std::vector<int> kmap;
@@ -1555,6 +1565,15 @@ struct nv_host {
     bool east_req_set = false;
     void set_eastern(const std::string &spec);
     bool east_part(int prog, bool drums);             // does this voice play the Eastern tuning now
+    // NATURAL TUNINGS, switched (the TUNING card's): every patch built again,
+    // on the builder; a part's own tuning (set_part_tuner: "" its voice's,
+    // "rig", a tuner's name) and the name it resolves to
+    std::function<bool(bool on, const std::function<void(size_t, int, bool, int, void *)> &give)> natural_switch;
+    int nat_req = -1;                                 // (under bmu: -1 none asked)
+    bool nat_asked = true;                            // (the panel's, for the session)
+    void set_natural(bool on);
+    void set_part_tuner(size_t row, const std::string &own);
+    std::string part_tuning_of(size_t row, std::string *own = nullptr, std::string *nat = nullptr);
     // THE SCENE (live.scene_from): each channel's captured controls as they
     // reached the part (the audio thread's), an event put past the routes
     std::map<std::pair<int, int>, int> chanlatch;
@@ -1590,6 +1609,7 @@ struct nv_host {
         int pk = -1;                        // (its pickup, chosen: a PICKUP_CHOICES index, -1 none)
         std::array<double, NV_VK_N> vk{};   // (its knobs: each set one's value, vmask which)
         int vmask = 0;
+        std::string own;                    // (its own tuning: "" its voice's)
         std::vector<std::string> drawn;     // (an organ's stops by name: a session's or preset's; none the voice's)
     };
     std::vector<PartSpec> add_req;
@@ -1620,7 +1640,7 @@ struct nv_host {
                                                             "tine", "gap", "swing", "tonebar", "reed"};
     // (variation key v of program p through knob values vk, vmask: the setting's
     //  id against its key-60 class -- 0 none, -1 no more ids)
-    int voicing_vid(int p, int v, const std::array<double, NV_VK_N> &vk, int vmask) const;
+    int voicing_vid(int p, int v, const std::array<double, NV_VK_N> &vk, int vmask, const std::string &own = "") const;
     static int with_voice(int v, int vid) { return (v & 0xFFFFF) | (vid > 0 ? vid << 20 : 0); }
     void rotary_refresh();                          // (the host's copies from the parts': a CC82 may have moved them)
     std::chrono::steady_clock::time_point rotary_read{};

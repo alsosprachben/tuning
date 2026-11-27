@@ -660,5 +660,18 @@
  "The reed's rest off the plate's slot. Further off, more bark at every touch.": "Die Ruhelage der Zunge neben dem Schlitz der Platte. Weiter weg mehr Biss bei jedem Anschlag.",
  "The tine to the pickup. Closer is louder and barks sooner.": "Vom Tine zum Tonabnehmer. Näher ist lauter und beißt früher.",
  "How far the hammer throws the tine or reed. Wider barks and buzzes.": "Wie weit der Hammer Tine oder Zunge auslenkt. Weiter beißt und schnarrt.",
- "The tone bar's ring in the attack: the bell.": "Das Klingen des Tonbalkens im Anschlag: die Glocke."
+ "The tone bar's ring in the attack: the bell.": "Das Klingen des Tonbalkens im Anschlag: die Glocke.",
+ "On": "An",
+ "Every part": "Alle Parts",
+ "this part": "dieser Part",
+ "The rig's": "Die des Rigs",
+ "As the instrument": "Wie das Instrument",
+ "Which parts": "Welche Parts",
+ "Natural tunings": "Eigene Stimmungen",
+ "the rig's tuning, the parts' own unchosen": "die Stimmung des Rigs; die Parts ohne eigene Wahl",
+ "none of its own: the rig's": "keine eigene: die des Rigs",
+ "{0}, while natural tunings are on": "{0}, solange eigene Stimmungen an sind",
+ "each instrument in its own tuning": "jedes Instrument in seiner eigenen Stimmung",
+ "every voice in the rig's tuning": "jede Stimme in der Stimmung des Rigs",
+ "this part plays {0}": "dieser Part spielt {0}"
 }

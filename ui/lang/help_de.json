@@ -140,8 +140,8 @@
   "t": "STIMMUNG"
  },
  "basics/terms/17/1": {
-  "en": "The tuning every part plays in, and the Indian voices' raga tuning.",
-  "t": "Die Stimmung, in der alle Parts spielen, und die Raga-Stimmung der indischen Stimmen."
+  "en": "The tunings the parts play in: the rig's, an instrument's own, a part's choice; and the Indian voices' raga tuning.",
+  "t": "Die Stimmungen, in denen die Parts spielen: die des Rigs, die eigene eines Instruments, die Wahl eines Parts; und die Raga-Stimmung der indischen Stimmen."
  },
  "basics/terms/18/0": {
   "en": "CONTROL",
@@ -1996,8 +1996,8 @@
   "t": "Stimmung"
  },
  "tuning/intro": {
-  "en": "The tuning every part plays in. Tap one and every part's sounds are built again in it (the display shows BUILDING); notes already sounding keep the old tuning.",
-  "t": "Die Stimmung, in der alle Parts spielen. Tippe eine an, und die Klänge aller Parts werden darin neu gebaut (das Display zeigt BAUT); bereits klingende Noten behalten die alte Stimmung."
+  "en": "The tunings the parts play in. Under Every part, tap one and every part's sounds are built again in it (the display shows BUILDING); notes already sounding keep the old tuning. Some instruments have a tuning of their own -- the harpsichord and the pipe organ the hybrid mean, the fortepiano the Pleyel -- and play it at the rig's A while Natural tunings is on. Under This part, choose the selected part's own.",
+  "t": "Die Stimmungen, in denen die Parts spielen. Unter Alle Parts tippe eine an, und die Klänge aller Parts werden darin neu gebaut (das Display zeigt BAUT); bereits klingende Noten behalten die alte Stimmung. Manche Instrumente haben eine eigene Stimmung -- Cembalo und Pfeifenorgel die hybride Mitteltönigkeit, das Hammerklavier die Pleyel-Stimmung -- und spielen sie auf dem A des Rigs, solange Eigene Stimmungen an ist. Unter Dieser Part wählst du die eigene Stimmung des gewählten Parts."
  },
  "tuning/terms/0/0": {
   "en": "Concert pitch, A=440",
@@ -3722,5 +3722,21 @@
  "voice/terms/11/1": {
   "en": "The Rhodes tone bar's ring in the attack, the bell, in dB against the program's own.",
   "t": "Das Klingen des Rhodes-Tonbalkens im Anschlag, die Glocke, in dB gegenüber dem eigenen Wert des Programms."
+ },
+ "tuning/terms/6/1": {
+  "en": "Every part: the tiles set the rig's tuning. This part: they set the selected part's own, kept until its program changes.",
+  "t": "Alle Parts: Die Kacheln stellen die Stimmung des Rigs ein. Dieser Part: Sie stellen die eigene des gewählten Parts ein, bis sein Programm wechselt."
+ },
+ "tuning/terms/7/1": {
+  "en": "On: an instrument with a tuning of its own plays it, at the rig's A. Off: every voice in the rig's tuning.",
+  "t": "An: Ein Instrument mit eigener Stimmung spielt sie, auf dem A des Rigs. Aus: jede Stimme in der Stimmung des Rigs."
+ },
+ "tuning/terms/8/1": {
+  "en": "As the instrument: its own tuning, or the rig's where it has none. The rig's: the rig's tuning, whatever the instrument. Or any tuning below, at the rig's A.",
+  "t": "Wie das Instrument: seine eigene Stimmung, oder die des Rigs, wo es keine hat. Die des Rigs: die Stimmung des Rigs, gleich welches Instrument. Oder jede Stimmung darunter, auf dem A des Rigs."
+ },
+ "tuning/terms/9/1": {
+  "en": "The Pleyel: the French aural tuning of the 1840s (Cordier's reconstruction), worked out on that piano's strings.",
+  "t": "Pleyel: die französische Gehörstimmung der 1840er Jahre (nach Cordiers Rekonstruktion), auf den Saiten dieses Klaviers berechnet."
  }
 }

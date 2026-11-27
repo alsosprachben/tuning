@@ -35,7 +35,7 @@ HELP = {
                ['AMP', "The selected part's speaker, its pickups, its valve's drive, and a rotary speaker's rotors."],
                ['EFFECTS', 'The insertion effect, and the reverb, chorus, delay and EQ every part shares.'],
                ['MATRIX', 'What the wheels, aftertouch and two controllers move on the selected part.'],
-               ['TUNING', "The tuning every part plays in, and the Indian voices' raga tuning."],
+               ['TUNING', "The tunings the parts play in: the rig's, an instrument's own, a part's choice; and the Indian voices' raga tuning."],
                ['CONTROL',
                 "Controls on the screen for what the keyboard lacks, routes that rewrite the keyboard's own, the "
                 'metronome and the GS reset.'],
@@ -583,8 +583,7 @@ HELP = {
                ['A lit row name', 'That controller moves something.'],
                ["Set by a file's GM2 messages", 'Settings a file made with GM2 messages: shown, not changed here.']]},
     'tuning': {'title': 'Tuning',
-     'intro': "The tuning every part plays in. Tap one and every part's sounds are built again in it (the display shows "
-              'BUILDING); notes already sounding keep the old tuning.',
+     'intro': "The tunings the parts play in. Under Every part, tap one and every part's sounds are built again in it (the display shows BUILDING); notes already sounding keep the old tuning. Some instruments have a tuning of their own -- the harpsichord and the pipe organ the hybrid mean, the fortepiano the Pleyel -- and play it at the rig's A while Natural tunings is on. Under This part, choose the selected part's own.",
      'terms': [['Concert pitch, A=440',
                 'Modern pitch. gm2 is the default: equal temperament at A=440, and a file can retune it with its own '
                 'tuning messages.'],
@@ -592,7 +591,11 @@ HELP = {
                ['Pure octaves: pipes', 'Tunings with unstretched octaves, for the pipe organ.'],
                ['Indian, every part', 'Every part in a raga tuning.'],
                ['Other systems', 'The rest.'],
-               ['Lit / blinking', 'Lit is playing now; blinking is being built.']]},
+               ['Lit / blinking', 'Lit is playing now; blinking is being built.'],
+               ['Which parts', "Every part: the tiles set the rig's tuning. This part: they set the selected part's own, kept until its program changes."],
+               ['Natural tunings', "On: an instrument with a tuning of its own plays it, at the rig's A. Off: every voice in the rig's tuning."],
+               ['This part', "As the instrument: its own tuning, or the rig's where it has none. The rig's: the rig's tuning, whatever the instrument. Or any tuning below, at the rig's A."],
+               ['Period pianos', "The Pleyel: the French aural tuning of the 1840s (Cordier's reconstruction), worked out on that piano's strings."]]},
     'tn:shape': {'title': "The tuning's shape",
      'intro': 'How the chosen tuning differs from equal temperament.',
      'terms': [['C4 to B4',
