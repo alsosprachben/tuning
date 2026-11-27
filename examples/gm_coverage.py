@@ -1247,6 +1247,11 @@ def stops():
 # rated here as a program is. Every key of patch_map.VARIATIONS must be rated
 # and nothing else may be -- checked when the page is built, as STOP_RATED is.
 VAR_RATED = {
+    (0, 40): (2, "the FORTEPIANO (tonelib.PleyelProperties), a tone of our own map: a Paris Pleyel grand of the "
+                 "1840s, Chopin's, built from what is published -- its strings from no. 14174's measured scale "
+                 "(examples/pleyel_scale.py: tension 533 N, B by key), its stringing from no. 9486, its hammers "
+                 "scaled to the strings and its felt softer; no openly licensed recording of a piano of the "
+                 "period was found to fit or check it against, so theory, for Ben's ear"),
     (16, 41): (4, "the DIVIDER ORGAN'S LOWER MANUAL (tonelib.DividerLowerProperties), a tone of our own map: Ben's "
                   "Wurlitzer 4500's lower STRAF board as its circuit (its 1965 schematic: each tab's network, its own "
                   "flute filters; examples/wurlitzer_circuit.py --lower), each tab's source searched and its level "
