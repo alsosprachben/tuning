@@ -1790,6 +1790,9 @@ struct nv_host {
     //  interface reads and sets it, the session save reads it -- under lang_mu)
     std::string lang;
     std::mutex lang_mu;
+    // (the interface's own preferences, the session's "ui": {"touch": {...}, ...} -- the engine keeps
+    //  them whole for the interface; under lang_mu too)
+    sess::J ui;
     double rub_frac = 0.75;                 // (of a callback's length: how long it waits)
     std::thread rub_thread;
     std::atomic<bool> rub_stop{false};

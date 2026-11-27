@@ -8,6 +8,7 @@
 #include "app.h"
 #include "effects.h"
 #include "files.h"
+#include "touchvel.h"
 
 namespace nui {
 
@@ -53,16 +54,17 @@ inline void draw_setup(App &a)
         U.open = false;
         setup_card(a, true);
     }
-    // (the iPad's: its card from y 210 to card_y1 + 6, two pages -- the input; the sound)
+    // (the iPad's: its card from y 210 to card_y1 + 6, three pages -- the input; the sound; the touch)
     const bool IP = a.tab;
     static int page = 0;
     const float X0 = IP ? 20 : 34, X1 = IP ? (a.ph ? 818 : 1113) : 1886, Y0 = IP ? 266 : 394, Y1 = card_y1(a), HY = IP ? 224 : 356;
     const float LH = a.lh(14) + (IP ? 3 : 4);
     const float TX = heading(a, X0, HY, T("SETUP"), "setup");
     if (IP)
-        for (int pg = 0; pg < 2; pg++) {
+        for (int pg = 0; pg < 3; pg++) {
             const std::string id = "supage" + std::to_string(pg);
-            if (button(a, id.c_str(), page_kx(a, 2, pg, 300), 216, page_kw(a, 2), 44, pg ? T("SOUND") : T("INPUT"), page == pg, true, 21))
+            if (button(a, id.c_str(), page_kx(a, 3, pg, 300), 216, page_kw(a, 3), 44, pg == 2 ? T("TOUCH") : pg ? T("SOUND") : T("INPUT"),
+                       page == pg, true, 21))
                 page = pg;
         }
     if (!U.s.is(J::OBJ))
@@ -73,8 +75,8 @@ inline void draw_setup(App &a)
     if (IP) {                           // (shorter, beside the pages)
         char sh[160];
         snprintf(sh, sizeof sh, T("%.0f Hz \xc2\xb7 %.0f frames"), rate, block);
-        if (!a.ph)
-            text(a, a.font, 14, 700, HY + 1, SILK_DIM, sh);
+        if (!a.ph)                      // (beside the heading: the pages take the middle)
+            text(a, a.font, 14, TX, HY + 1, SILK_DIM, fit(a, a.font, 14, sh, page_kx(a, 3, 0, 300) - TX - 8));
     } else
         text(a, a.font, 14, TX, HY + 1, SILK_DIM, inf);
     const J *g = U.s.get("globals");
@@ -93,9 +95,9 @@ inline void draw_setup(App &a)
     // MIDI IN, PLAY AS A MODULE, THE MESSENGER
     const float AW = IP ? X1 - X0 : 760, BW = IP ? (a.ph ? 540 : 690) : 640, gap = IP ? 6 : 10, AX = X0, BX = IP ? X0 : AX + AW + gap,
                 CX = BX + BW + gap, CW = X1 - CX;
-    const bool show_in = !IP || page == 0, show_snd = !IP || page == 1;
+    const bool show_in = !IP || page == 0, show_snd = !IP || page == 1, show_touch = !IP || page == 2;
     for (const auto &b : {std::pair<float, float>{AX, AW}, {BX, BW}, {CX, CW}}) {
-        if ((b.first == AX && b.second == AW && !show_in) || (!(b.first == AX && b.second == AW) && !show_snd))
+        if ((b.first == AX && b.second == AW && !show_in && !show_touch) || (!(b.first == AX && b.second == AW) && !show_snd))
             continue;
         look::tray(a, b.first, Y0, b.second, Y1 - Y0, 9);
     }
@@ -192,6 +194,29 @@ inline void draw_setup(App &a)
         }
     }
 
+    }
+    if (show_touch) {
+    y = IP ? Y0 + 10 : y + 10;          // (the laptop's: under the Messenger; the iPad's: a page of its own)
+    // TOUCH: how hard a finger plays the Keys card and the Drums pads (either may keep its own: its VEL);
+    // beside the settings, a strip to try them -- its foot the hard end, as a key's front edge
+    head(AX, y, T("TOUCH"), T("how hard a finger plays the keys and the pads"), "su:touch");   // i18n-skip (the help key)
+    {
+        const float SWD = IP ? 120 : 150, sx = AX + AW - 12 - SWD, sy = y, sh = IP ? 150 : 170;
+        if (touch_panel(a, "sutv", g_touch.all, nullptr, AX + 12, y, sx - AX - 36))
+            touch_save(a);
+        static int tried = -1;
+        ImGui::SetCursorScreenPos(P(a, sx, sy));
+        ImGui::InvisibleButton("sutvtry", ImVec2(SWD * a.k, sh * a.k));
+        if (ImGui::IsItemActive()) {
+            const float my = (ImGui::GetIO().MousePos.y - a.org.y) / a.k;
+            tried = touch_velocity_by(g_touch.all, (my - sy) / sh);
+        }
+        look::white_key(a, sx, sy, SWD, sh, tried >= 0 ? look::mix(KEY_W, IM_COL32(0xf3, 0xc8, 0x78, 255), tried / 127.0f) : KEY_W);
+        text_c(a, a.font, 14, sx + SWD / 2, sy + 10, IM_COL32(0x30, 0x30, 0x30, 255), T("TRY"));
+        if (tried >= 0)
+            text_c(a, a.bold, 21, sx + SWD / 2, sy + sh / 2 - a.lh(21) / 2, IM_COL32(0x26, 0x18, 0x02, 255), std::to_string(tried));
+        y = std::max(y, sy + sh + 8);
+    }
     }
     // SOUND: the globals every part plays through
     if (!show_snd)

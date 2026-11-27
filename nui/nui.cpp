@@ -641,6 +641,7 @@ extern "C" int nui_run(nv_host *h, const char *fonts_dir, int windowed, int (*st
         // THE LANGUAGE: NUI_LANG (the tours'), else the session's, else (auto) the system's first with a table
         std::string lc = getenv("NUI_LANG") ? getenv("NUI_LANG") : str(&hello, "language");
         a.lang_pref = lc.empty() ? "auto" : lc;
+        touch_load(hello.get("ui"));
         lang_apply(a);
     }
     if (const J *ps = call(a, "{\"call\":\"parts\"}").get("parts"))

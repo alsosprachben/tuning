@@ -1261,6 +1261,7 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
         {
             std::lock_guard<std::mutex> lk(h->lang_mu);
             r.o["language"] = sess::str(h->lang);
+            r.o["ui"] = h->ui.is(J::OBJ) ? h->ui : sess::obj();
         }
         r.o["rate"] = sess::integer(nv_host_rate(h));
         r.o["block"] = sess::integer(nv_host_block(h));
@@ -1394,6 +1395,18 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
     } else if (call == "language_set") {     // the interface's language: a code (ja, de ...), or "auto"
         std::lock_guard<std::mutex> lk(h->lang_mu);
         h->lang = arg_s(q, "language");
+    } else if (call == "ui_set") {           // one of the interface's preferences: key, value (any JSON), kept in the session
+        const std::string key = arg_s(q, "key");
+        const J *v = q.get("value");
+        if (key.empty() || !v) {
+            ok = false;
+            r.o["error"] = sess::str("ui_set: key and value");
+        } else {
+            std::lock_guard<std::mutex> lk(h->lang_mu);
+            if (!h->ui.is(J::OBJ))
+                h->ui = sess::obj();
+            h->ui.o[key] = *v;
+        }
     } else if (call == "rubato_set") {         // on: rubato (borrowed time) wanted -- the live loop switches between callbacks
         h->rub_wish = arg_i(q, "on", 1) != 0;
     } else if (call == "global_set") {
@@ -1489,6 +1502,42 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
             }
             const uint8_t m[3] = {(uint8_t)((v ? 0x90 : 0x80) | ch), (uint8_t)key, (uint8_t)(v ? v : 64)};
             nv_host_midi(h, m, 3);
+        }
+    } else if (call == "key_ctl") {            // the Keys card's finger drawn along: kind "bend" (semis, of the bend
+                                               //  range: global 3) or "press" (v 0-127, the channel's aftertouch),
+                                               //  on the channel drum_hit "free" plays the part's notes on
+        int n = nv_host_parts(h, nullptr, 0);
+        std::vector<nv_host_partinfo> ps((size_t)std::max(0, n));
+        n = nv_host_parts(h, ps.data(), n);
+        const std::string kind = arg_s(q, "kind");
+        if (row < 0 || row >= n || (kind != "bend" && kind != "press")) {
+            ok = false;
+            r.o["error"] = sess::str("key_ctl: no part " + std::to_string(row) + " or kind " + kind);
+        } else {
+            int ch = ps[(size_t)row].channel;
+            if (ch < 0) {                       // (ALL CH: the channel no other part listens on, as drum_hit's "free")
+                ch = 0;
+                for (int c = 0; c < 16; c++) {
+                    bool taken = c == 9;
+                    for (int i = 0; i < n && !taken; i++)
+                        taken = i != row && ps[(size_t)i].channel == c;
+                    if (!taken) {
+                        ch = c;
+                        break;
+                    }
+                }
+            }
+            if (kind == "bend") {
+                const double range = std::max(0.01, nv_host_global(h, 3));
+                const double semis = q.get("semis") && q.get("semis")->is(J::NUM) ? q.get("semis")->d() : 0.0;
+                const int b = std::max(-8192, std::min(8191, (int)std::lround(semis / range * 8192))) + 8192;
+                const uint8_t m[3] = {(uint8_t)(0xE0 | ch), (uint8_t)(b & 0x7F), (uint8_t)(b >> 7)};
+                nv_host_midi(h, m, 3);
+            } else {
+                const int v = std::max(0, std::min(127, (int)arg_i(q, "v", 0)));
+                const uint8_t m[2] = {(uint8_t)(0xD0 | ch), (uint8_t)v};
+                nv_host_midi(h, m, 2);
+            }
         }
     } else if (call == "udrum_set") {          // a user set's key: code (GS 21's: 0x0B its source set, 0x0C its key...), v
         const int set = (int)arg_i(q, "set", -1), key = (int)arg_i(q, "key", -1), code = (int)arg_i(q, "code", -1);

@@ -533,6 +533,10 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
         std::lock_guard<std::mutex> lk(lang_mu);
         lang = x->s;
     }
+    if ((x = session.get("ui")) && x->is(sess::J::OBJ)) {
+        std::lock_guard<std::mutex> lk(lang_mu);
+        ui = *x;
+    }
     if ((x = session.get("spectra_fast")) && x->is(sess::J::BOOL)) {   // (the Spectra-Tone's rocker, as left)
         const int sf = x->d() != 0.0 ? 1 : 0;
         post([this, sf](long long) { nv_part_set_spectra_fast(part, sf); });
@@ -829,6 +833,8 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
         std::lock_guard<std::mutex> lk(lang_mu);
         if (!lang.empty())
             j.o["language"] = sess::str(lang);
+        if (ui.is(sess::J::OBJ) && !ui.o.empty())
+            j.o["ui"] = ui;
     }
     {                                           // the Spectra-Tone's rocker (live's preset "spectra_fast")
         const int sf = part ? nv_part_spectra_fast(part) : -1;

@@ -44,6 +44,7 @@ STATES = [
 # (more of a card, by taps in the layout's design units, for the first state only)
 EXTRA = {
     ("ipad", "synth", "lead"): [("page2", [(617, 235)])],
+    ("ipad", "setup", "lead"): [("touch", [(787, 238)])],
     ("laptop", "effects", "lead"): [("series", [(138, 542)]), ("multi", [(320, 542)]), ("parallel", [(518, 542)]),
                                     ("delay", [(330, 510)])],
 }

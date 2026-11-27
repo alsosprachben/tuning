@@ -398,8 +398,10 @@ HELP = {
               'from the list.',
      'terms': [['Kits (left)', 'Tap a kit to put it on the selected part.'],
                ['A pad',
-                'Strikes its sound: higher up the pad is harder. Several fingers can play at once. Pads light as the '
-                'keyboard or a file plays them.'],
+                'Strikes its sound, as hard as VEL says: by position, higher up the pad is harder. Several fingers '
+                'can play at once. One finger drawn up or down the pads scrolls them. Pads light as the keyboard or a '
+                'file plays them.'],
+               ['VEL', 'How hard a touch plays the pads: as Setup says, or their own way. See Touch.'],
                ['The key', "Each pad's key name and MIDI number."],
                ['The line', 'Touch a pad for what it is, and the set it borrows from when it does.'],
                ['User Set 1 / 2',
@@ -407,11 +409,31 @@ HELP = {
     'keys': {'title': 'Keys',
      'intro': "A keyboard to touch, playing the selected part: for trying a sound, or showing it, without a keyboard "
               'plugged in.',
-     'terms': [['A key', 'Plays while it is held: nearer its front edge is harder. Every finger plays its own key, so '
-                         'chords work, and sliding along the keys plays each one in turn.'],
+     'terms': [['A key', 'Plays while it is held, as hard as VEL says: by position, nearer its front edge is harder. '
+                         'Every finger plays its own key, so chords work. A held key is lit brighter the harder it was '
+                         'struck.'],
+               ['VEL', 'How hard a touch plays the keys: as Setup says, or their own way. See Touch.'],
                ['\u25c0 OCTAVE / OCTAVE \u25b6', 'Moves the keyboard down or up an octave. Its range is shown between them.'],
                ['SUSTAIN', "The part's sustain pedal: lit, what the keys play rings on. Leaving the card lets it go."],
-               ['How many keys', 'Four octaves on a computer, three on the iPad, two on the phone.']]},
+               ['How many keys', 'Four octaves on a computer, three on the iPad, two on the phone.'],
+               ['A finger drawn along a held key',
+                "Chosen under VEL. GLISSANDO: each key it crosses plays in turn. BEND: drawn sideways it bends the "
+                "part's pitch, a key's width a semitone, up to the bend range on the Setup card; the latest finger "
+                'bends, and lifting it lets the pitch back. AFTERTOUCH: drawn toward the front edge it presses the key '
+                'harder (the channel\'s aftertouch, the deepest finger\'s), for the sounds that answer it.']]},
+    'su:touch': {'title': 'Touch',
+     'intro': 'How hard a finger plays the Keys card and the Drums pads. People like it different ways, so there is a '
+              'choice. Setup sets it for both; either card can keep its own instead, from its VEL. Kept in the session.',
+     'terms': [['FIXED', 'Every note plays at one velocity, VELOCITY (1 to 127), wherever it is touched.'],
+               ['POSITION', "Where the finger lands: a key's front edge and a pad's top play hardest."],
+               ['SOFT END / HARD END', 'The velocities at the two ends. Drag up or down to change them; hold to type one.'],
+               ['SOFT / LINEAR / HARD',
+                'The curve between them. SOFT keeps most of the touch quiet and saves the loud notes for the hard end; '
+                'HARD plays loud sooner; LINEAR is even.'],
+               ['REVERSE', 'Swaps the ends: the back of a key, or the foot of a pad, plays hardest.'],
+               ['TRY', 'Touch the strip to see the velocity a touch there would play: its foot is the hard end.'],
+               ['AS SETUP', "On a card's VEL: the card plays as Setup says. FIXED or POSITION there gives the card its "
+                            'own.']]},
     'drums:user': {'title': "A user set's key",
      'intro': 'Where the touched pad gets its sound.',
      'terms': [['The sets (left)', 'Choose the kit to take the sound from.'],
@@ -859,7 +881,7 @@ HELP_TOC = [['Start here', ['basics']],
  ['Tuning', ['tuning', 'tn:shape', 'tn:east']],
  ['Control', ['control', 'ct:strip', 'ct:routes', 'ct:new', 'sc:metro', 'sc:gs']],
  ['Files', ['files', 'fl:browse', 'fl:file', 'fl:mode', 'fl:vel', 'fl:play', 'fl:render']],
- ['Setup', ['setup', 'su:midi', 'su:module', 'su:msgr', 'su:sound', 'su:rubato']],
+ ['Setup', ['setup', 'su:midi', 'su:module', 'su:msgr', 'su:touch', 'su:sound', 'su:rubato']],
  ['About', ['credits']]]
 
 # THE FILES CARD's AUDIO PLAYER (2026-11-26)

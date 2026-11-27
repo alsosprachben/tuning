@@ -102,6 +102,19 @@ struct App {
 // ---- THE ENGINE's CALLS (uiapi's): a request, its answer
 inline J call(App &a, const std::string &req)
 {
+    static const char *log = getenv("NUI_LOG_CALLS");     // (the tests': each call holding one of its words -- "a,b" -- to stderr)
+    if (log && *log) {
+        const std::string l = log;
+        for (size_t i = 0, j; i <= l.size(); i = j + 1) {
+            j = l.find(',', i);
+            if (j == std::string::npos)
+                j = l.size();
+            if (j > i && req.find(l.substr(i, j - i)) != std::string::npos) {
+                fprintf(stderr, "nui: call %s\n", req.c_str());
+                break;
+            }
+        }
+    }
     J r;
     if (char *s = nv_ui_call(a.h, a.w, req.c_str())) {
         sess::parse(s, r);
