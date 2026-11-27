@@ -41,6 +41,7 @@
 #include "stops.h"
 #include "piano.h"
 #include "drums.h"
+#include "kits.h"
 #include "keys.h"
 #include "effects.h"
 #include "amp.h"
@@ -73,13 +74,13 @@ std::string lang_system()
 // (SCENES after PARTS: a setup's parts arranged, then saved and brought back -- Ben 2026-11-25)
 static const char *CARDS[][2] = {{"parts", N_("PARTS")}, {"scenes", N_("SCENES")}, {"library", N_("LIBRARY")},
                                  {"synth", N_("SYNTH")}, {"stops", N_("STOPS")}, {"piano", N_("PIANO")},
-                                 {"drums", N_("DRUMS")}, {"keys", N_("KEYS")}, {"amp", N_("AMP")}, {"effects", N_("EFFECTS")},
+                                 {"drums", N_("DRUMS")}, {"kits", N_("KITS")}, {"keys", N_("KEYS")}, {"amp", N_("AMP")}, {"effects", N_("EFFECTS")},
                                  {"matrix", N_("MATRIX")}, {"tuning", N_("TUNING")}, {"control", N_("CONTROL")},
                                  {"files", N_("FILES")}, {"setup", N_("SETUP")}};
 // (each card's name on its tab, where a language may need a short form: the catalogue's "tab|..." texts)
 [[maybe_unused]] static const char *TAB_NAMES[] = {
     NC_("tab", "PARTS"), NC_("tab", "SCENES"), NC_("tab", "LIBRARY"), NC_("tab", "SYNTH"),   NC_("tab", "STOPS"),
-    NC_("tab", "PIANO"), NC_("tab", "DRUMS"),  NC_("tab", "KEYS"),    NC_("tab", "AMP"),     NC_("tab", "EFFECTS"),
+    NC_("tab", "PIANO"), NC_("tab", "DRUMS"),  NC_("tab", "KITS"),    NC_("tab", "KEYS"),    NC_("tab", "AMP"),     NC_("tab", "EFFECTS"),
     NC_("tab", "MATRIX"), NC_("tab", "TUNING"), NC_("tab", "CONTROL"), NC_("tab", "FILES"), NC_("tab", "SETUP")};
 
 
@@ -208,7 +209,9 @@ static void draw(App &a)
     piano_card(a, a.card == "piano");   // (the engine pushes the pedals only while it is open)
     if (a.card != "amp")
         amp_open(a, false);             // (...and the amp's only while its card is)
-    drums_card(a, a.card == "drums");   // (...and the kit and its hits)
+    drums_card(a, a.card == "drums" || a.card == "kits");   // (...and the kit and its hits)
+    if (a.card != "drums" && !g_drums.F.held.empty())
+        drums_release(a);               // (the pads left: what they held let go)
     keys_card(a, a.card == "keys");     // (shut: what it held let go)
     effects_card(a, a.card == "effects");
     matrix_card(a, a.card == "matrix");
@@ -218,10 +221,10 @@ static void draw(App &a)
     files_card(a, a.card == "files");
     setup_card(a, a.card == "setup");
     // (on the iPad, a card not yet laid out for it says so)
-    static const std::set<std::string> TAB_READY = {"parts", "library", "synth", "stops", "piano", "drums", "keys", "amp", "effects", "matrix", "tuning", "control", "scenes", "files", "setup"};
+    static const std::set<std::string> TAB_READY = {"parts", "library", "synth", "stops", "piano", "drums", "kits", "keys", "amp", "effects", "matrix", "tuning", "control", "scenes", "files", "setup"};
     // (on the phone, a card not laid out for its height: the iPad's height, the
     //  phone's width, scrolled -- a drag on the card's empty ground, or the wheel)
-    static const std::set<std::string> PHONE_READY = {"parts", "library", "synth", "stops", "amp", "piano", "matrix", "tuning", "keys"};
+    static const std::set<std::string> PHONE_READY = {"parts", "library", "synth", "stops", "amp", "piano", "matrix", "tuning", "keys", "drums", "kits"};
     static std::map<std::string, float> card_scroll, card_foot;     // (the foot: as drawn last frame, in iPad units)
     const bool virt = a.ph && !PHONE_READY.count(a.card);
     const ImVec2 org0 = a.org;
@@ -258,6 +261,8 @@ static void draw(App &a)
         draw_piano(a);
     } else if (a.card == "drums") {
         draw_drums(a);
+    } else if (a.card == "kits") {
+        draw_kits(a);
     } else if (a.card == "keys") {
         draw_keys_card(a);
     } else if (a.card == "amp") {
@@ -303,6 +308,10 @@ static void draw(App &a)
             draw_tuning(a);
         else if (a.card == "keys")
             draw_keys_card(a);
+        else if (a.card == "drums")
+            draw_drums(a);
+        else if (a.card == "kits")
+            draw_kits(a);
     }
     if (virt) {                         // (the scrolled card's place: a rail at its right edge)
         // (its scroll: a touch on the card that no control took, dragged; or the wheel off a control --

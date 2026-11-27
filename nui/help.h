@@ -69,7 +69,7 @@ inline const J *group_of(const std::string &k)
 inline std::string card_of(const std::string &k)
 {
     static const std::map<std::string, std::string> C = {
-        {"synth", "synth"}, {"drive", "stops"},   {"stops", "stops"},     {"piano", "piano"},     {"drums", "drums"},
+        {"synth", "synth"}, {"drive", "stops"},   {"stops", "stops"},     {"piano", "piano"},     {"drums", "drums"}, {"kits", "kits"}, {"seq", "seq"},
         {"fx", "effects"},  {"effects", "effects"}, {"matrix", "matrix"}, {"tn", "tuning"},       {"tuning", "tuning"},
         {"ct", "control"},  {"control", "control"}, {"sc", "scenes"},     {"scenes", "scenes"},   {"su", "setup"},
         {"setup", "setup"}, {"parts", "parts"},   {"library", "library"}, {"fl", "files"},        {"files", "files"}};

@@ -1520,72 +1520,64 @@
   "t": "Drums"
  },
  "drums/intro": {
-  "en": "The selected part's drum kit as pads, grouped by kind. A part that is not a drum kit can be given one from the list.",
-  "t": "Das Drumset des gewählten Parts als Pads, nach Art gruppiert. Ein Part, der kein Drumset ist, kann eines aus der Liste bekommen."
+  "en": "The selected part's drum kit as pads, grouped by kind, across the whole card: a drum machine's buttons. The kits, and what each sound is, are on the KITS card.",
+  "t": "Das Drumset des gewählten Parts als Pads, nach Art gruppiert, über die ganze Karte: die Tasten einer Drum-Machine. Die Sets und was jeder Klang ist, stehen auf der Karte SETS."
  },
  "drums/terms/0/0": {
-  "en": "Kits (left)",
-  "t": "Sets (links)"
- },
- "drums/terms/0/1": {
-  "en": "Tap a kit to put it on the selected part.",
-  "t": "Tippe ein Set an, um es auf den gewählten Part zu legen."
- },
- "drums/terms/1/0": {
   "en": "A pad",
   "t": "Ein Pad"
  },
+ "drums/terms/0/1": {
+  "en": "Strikes its sound, as hard as VEL says: by position, higher up the pad is harder. Several fingers can play at once. Pads light as the keyboard, a file or the sequencer plays them.",
+  "t": "Schlägt seinen Klang an, so stark wie VEL sagt: nach Position ist weiter oben stärker. Mehrere Finger können zugleich spielen. Pads leuchten, wenn das Keyboard, eine Datei oder der Sequencer sie spielt."
+ },
+ "drums/terms/1/0": {
+  "en": "The strip (right)",
+  "t": "Der Streifen (rechts)"
+ },
  "drums/terms/1/1": {
-  "en": "Strikes its sound, as hard as VEL says: by position, higher up the pad is harder. Several fingers can play at once. One finger drawn up or down the pads scrolls them. Pads light as the keyboard or a file plays them.",
-  "t": "Spielt seinen Klang, so stark wie VEL es sagt: nach Position ist es oben auf dem Pad stärker. Mehrere Finger können zugleich spielen. Ein Finger, auf- oder abwärts über die Pads gezogen, scrollt sie. Pads leuchten, wenn das Keyboard oder eine Datei sie spielt."
+  "en": "Drag along it to scroll the pads without striking one. A finger drawn up or down the pads scrolls them too, but the pad it landed on sounds first.",
+  "t": "Daran entlang ziehen scrollt die Pads, ohne eins anzuschlagen. Ein Finger, der über die Pads auf- oder abwärts gezogen wird, scrollt sie auch, aber das Pad, auf dem er landet, klingt zuerst."
  },
  "drums/terms/3/0": {
+  "en": "KITS ▸",
+  "t": "SETS ▸"
+ },
+ "drums/terms/3/1": {
+  "en": "The KITS card: choose a kit, see what each sound is, build a user set.",
+  "t": "Die Karte SETS: ein Set wählen, sehen was jeder Klang ist, ein User-Set bauen."
+ },
+ "drums/terms/4/0": {
   "en": "The key",
   "t": "Die Taste"
  },
- "drums/terms/3/1": {
-  "en": "Each pad's key name and MIDI number.",
-  "t": "Tastenname und MIDI-Nummer jedes Pads."
- },
- "drums/terms/4/0": {
-  "en": "The line",
-  "t": "Die Zeile"
- },
  "drums/terms/4/1": {
-  "en": "Touch a pad for what it is, and the set it borrows from when it does.",
-  "t": "Berühre ein Pad, um zu sehen, was es ist, und von welchem Set es gegebenenfalls entlehnt ist."
- },
- "drums/terms/5/0": {
-  "en": "User Set 1 / 2",
-  "t": "User Set 1 / 2"
- },
- "drums/terms/5/1": {
-  "en": "Kits you build yourself: each key takes its sound from any key of any kit. Touch a pad to choose.",
-  "t": "Sets, die du selbst baust: Jede Taste nimmt ihren Klang von einer beliebigen Taste eines beliebigen Sets. Berühre ein Pad, um zu wählen."
+  "en": "Each pad's key name.",
+  "t": "Der Tastenname jedes Pads."
  },
  "drums:user/title": {
   "en": "A user set's key",
-  "t": "Eine Taste eines User-Sets"
+  "t": "Taste eines User-Sets"
  },
  "drums:user/intro": {
-  "en": "Where the touched pad gets its sound.",
-  "t": "Woher das berührte Pad seinen Klang bekommt."
+  "en": "Where the chosen key gets its sound, and how it plays it.",
+  "t": "Woher die gewählte Taste ihren Klang nimmt und wie sie ihn spielt."
  },
  "drums:user/terms/0/0": {
-  "en": "The sets (left)",
-  "t": "Die Sets (links)"
+  "en": "ITS SOUND FROM",
+  "t": "KLANG AUS"
  },
  "drums:user/terms/0/1": {
-  "en": "Choose the kit to take the sound from.",
-  "t": "Wähl das Set, aus dem der Klang kommen soll."
+  "en": "The sets (left): choose the kit to take the sound from. The keys (right): tap the sound you want. It plays once and the key keeps it.",
+  "t": "Die Sets (links): wähle das Set, aus dem der Klang kommt. Die Tasten (rechts): tippe den gewünschten Klang an. Er spielt einmal und die Taste behält ihn."
  },
  "drums:user/terms/1/0": {
-  "en": "The keys (right)",
-  "t": "Die Tasten (rechts)"
+  "en": "PITCH",
+  "t": "TONHÖHE"
  },
  "drums:user/terms/1/1": {
-  "en": "Tap the sound you want. It plays once and the pad keeps it.",
-  "t": "Tippe den gewünschten Klang an. Er spielt einmal, und das Pad behält ihn."
+  "en": "Up or down from the sound as recorded, in semitones (GS: the play note).",
+  "t": "Auf- oder abwärts vom aufgenommenen Klang, in Halbtönen (GS: Play Note)."
  },
  "effects/title": {
   "en": "Effects",
@@ -3365,7 +3357,7 @@
  },
  "drums/terms/2/1": {
   "en": "How hard a touch plays the pads: as Setup says, or their own way. See Touch.",
-  "t": "Wie stark ein Tipp die Pads spielt: wie im Setup, oder auf ihre eigene Art. Siehe Anschlag."
+  "t": "Wie stark eine Berührung die Pads spielt: wie Setup sagt, oder auf eigene Art. Siehe Berührung."
  },
  "keys/terms/1/0": {
   "en": "VEL",
@@ -3426,5 +3418,97 @@
  "keys/terms/5/1": {
   "en": "Chosen under VEL. GLISSANDO: each key it crosses plays in turn. BEND: drawn sideways it bends the part's pitch, a key's width a semitone, up to the bend range on the Setup card; the latest finger bends, and lifting it lets the pitch back. AFTERTOUCH: drawn toward the front edge it presses the key harder (the channel's aftertouch, the deepest finger's), for the sounds that answer it.",
   "t": "Unter VEL gewählt. GLISSANDO: jede Taste, über die er fährt, spielt der Reihe nach. BEND: seitwärts gezogen biegt er die Tonhöhe des Parts, eine Tastenbreite ein Halbton, bis zum Bend-Bereich auf der Setup-Karte; der zuletzt aufgesetzte Finger biegt, und beim Abheben kehrt die Tonhöhe zurück. AFTERTOUCH: zur Vorderkante gezogen drückt er die Taste stärker (der Aftertouch des Kanals, vom tiefsten Finger), für die Klänge, die darauf antworten."
+ },
+ "kits/title": {
+  "en": "Kits",
+  "t": "Sets"
+ },
+ "kits/intro": {
+  "en": "The drum library: the kits, the keys of the selected part's kit, and what each key is.",
+  "t": "Die Drum-Bibliothek: die Sets, die Tasten des Sets des gewählten Parts und was jede Taste ist."
+ },
+ "kits/terms/0/0": {
+  "en": "Kits (left)",
+  "t": "Sets (links)"
+ },
+ "kits/terms/0/1": {
+  "en": "Tap a kit to put it on the selected part.",
+  "t": "Tippe ein Set an, um es auf den gewählten Part zu legen."
+ },
+ "kits/terms/1/0": {
+  "en": "Keys (middle)",
+  "t": "Tasten (Mitte)"
+ },
+ "kits/terms/1/1": {
+  "en": "The kit's keys: note, MIDI number and name. Tap one to hear it and read about it.",
+  "t": "Die Tasten des Sets: Note, MIDI-Nummer und Name. Antippen, um sie zu hören und mehr zu lesen."
+ },
+ "kits/terms/2/0": {
+  "en": "The key (right)",
+  "t": "Die Taste (rechts)"
+ },
+ "kits/terms/2/1": {
+  "en": "What the sound is, and the kit it borrows from when it does.",
+  "t": "Was der Klang ist, und das Set, aus dem er stammt, wenn er entliehen ist."
+ },
+ "kits/terms/3/0": {
+  "en": "User Set 1 / 2",
+  "t": "User Set 1 / 2"
+ },
+ "kits/terms/3/1": {
+  "en": "Kits you build yourself: each key takes its sound from any key of any kit, with its own pitch, level and pan. Choose a key, then its sound.",
+  "t": "Sets, die du selbst baust: jede Taste nimmt ihren Klang von einer beliebigen Taste eines beliebigen Sets, mit eigener Tonhöhe, eigenem Pegel und Pan. Wähle eine Taste, dann ihren Klang."
+ },
+ "kits/terms/4/0": {
+  "en": "DRUMS ▸",
+  "t": "DRUMS ▸"
+ },
+ "kits/terms/4/1": {
+  "en": "Back to the pads.",
+  "t": "Zurück zu den Pads."
+ },
+ "drums:user/terms/2/0": {
+  "en": "LEVEL",
+  "t": "PEGEL"
+ },
+ "drums:user/terms/2/1": {
+  "en": "The key's own level, 0 to 127. A dash: the kit's own.",
+  "t": "Der eigene Pegel der Taste, 0 bis 127. Ein Strich: der des Sets."
+ },
+ "drums:user/terms/3/0": {
+  "en": "PAN",
+  "t": "PAN"
+ },
+ "drums:user/terms/3/1": {
+  "en": "Left to right; \"random\" moves each hit somewhere new. A dash: the kit's own.",
+  "t": "Links nach rechts; „zufällig“ setzt jeden Schlag woanders hin. Ein Strich: der des Sets."
+ },
+ "drums:user/terms/4/0": {
+  "en": "MUTE",
+  "t": "MUTE"
+ },
+ "drums:user/terms/4/1": {
+  "en": "Lit, the key does not play (GS: Rx note on, off).",
+  "t": "Leuchtet sie, spielt die Taste nicht (GS: Rx Note On aus)."
+ },
+ "drums:user/terms/5/0": {
+  "en": "Drag or hold",
+  "t": "Ziehen oder halten"
+ },
+ "drums:user/terms/5/1": {
+  "en": "Drag a value up or down; hold it to type one. The key plays when you let go.",
+  "t": "Einen Wert auf- oder abziehen; halten, um einen einzutippen. Die Taste spielt beim Loslassen."
+ },
+ "drums:user/terms/6/0": {
+  "en": "Kept",
+  "t": "Gespeichert"
+ },
+ "drums:user/terms/6/1": {
+  "en": "User sets are kept in the session, as a GS module keeps them.",
+  "t": "User-Sets bleiben in der Session gespeichert, wie ein GS-Modul sie behält."
+ },
+ "toc/kits": {
+  "en": "Kits",
+  "t": "Sets"
  }
 }

@@ -1520,72 +1520,64 @@
   "t": "ドラム"
  },
  "drums/intro": {
-  "en": "The selected part's drum kit as pads, grouped by kind. A part that is not a drum kit can be given one from the list.",
-  "t": "選択中のパートのドラムセットを、種類ごとにまとめたパッドで表示します。ドラムセットでないパートには、リストからドラムセットを設定できます。"
+  "en": "The selected part's drum kit as pads, grouped by kind, across the whole card: a drum machine's buttons. The kits, and what each sound is, are on the KITS card.",
+  "t": "選択中のパートのドラムキットを、種類ごとのパッドとしてカード全体に並べます。ドラムマシンのボタンです。キットと各音の説明はキットのカードにあります。"
  },
  "drums/terms/0/0": {
-  "en": "Kits (left)",
-  "t": "ドラムセット（左）"
- },
- "drums/terms/0/1": {
-  "en": "Tap a kit to put it on the selected part.",
-  "t": "ドラムセットをタップすると、選択中のパートに設定します。"
- },
- "drums/terms/1/0": {
   "en": "A pad",
   "t": "パッド"
  },
+ "drums/terms/0/1": {
+  "en": "Strikes its sound, as hard as VEL says: by position, higher up the pad is harder. Several fingers can play at once. Pads light as the keyboard, a file or the sequencer plays them.",
+  "t": "VEL の設定どおりの強さで音を鳴らします。位置で決める場合、パッドの上ほど強くなります。複数の指で同時に叩けます。鍵盤やファイル、シーケンサーが鳴らすとパッドが光ります。"
+ },
+ "drums/terms/1/0": {
+  "en": "The strip (right)",
+  "t": "右のつまみ"
+ },
  "drums/terms/1/1": {
-  "en": "Strikes its sound, as hard as VEL says: by position, higher up the pad is harder. Several fingers can play at once. One finger drawn up or down the pads scrolls them. Pads light as the keyboard or a file plays them.",
-  "t": "その音を鳴らします。強さは VEL の設定どおりで、位置ならパッドの上ほど強くなります。複数の指で同時に叩けます。1本の指でパッドを上下になぞるとスクロールします。鍵盤やファイルが鳴らすとパッドが光ります。"
+  "en": "Drag along it to scroll the pads without striking one. A finger drawn up or down the pads scrolls them too, but the pad it landed on sounds first.",
+  "t": "なぞるとパッドを鳴らさずにスクロールします。パッドの上を指で上下になぞってもスクロールしますが、最初に触れたパッドは鳴ります。"
  },
  "drums/terms/3/0": {
-  "en": "The key",
-  "t": "鍵盤"
+  "en": "KITS ▸",
+  "t": "キット ▸"
  },
  "drums/terms/3/1": {
-  "en": "Each pad's key name and MIDI number.",
-  "t": "各パッドの鍵盤名と MIDI 番号です。"
+  "en": "The KITS card: choose a kit, see what each sound is, build a user set.",
+  "t": "キットのカードへ。キットを選び、各音を調べ、ユーザーセットを作ります。"
  },
  "drums/terms/4/0": {
-  "en": "The line",
-  "t": "行"
+  "en": "The key",
+  "t": "キー名"
  },
  "drums/terms/4/1": {
-  "en": "Touch a pad for what it is, and the set it borrows from when it does.",
-  "t": "パッドに触れると、その説明と、借りている場合は借り元のセットが表示されます。"
- },
- "drums/terms/5/0": {
-  "en": "User Set 1 / 2",
-  "t": "User Set 1 / 2"
- },
- "drums/terms/5/1": {
-  "en": "Kits you build yourself: each key takes its sound from any key of any kit. Touch a pad to choose.",
-  "t": "自分で組むドラムセットです。各鍵盤に、どのドラムセットのどの鍵盤の音でも割り当てられます。パッドに触れて選びます。"
+  "en": "Each pad's key name.",
+  "t": "各パッドのキー名。"
  },
  "drums:user/title": {
   "en": "A user set's key",
-  "t": "ユーザーセットの鍵盤"
+  "t": "ユーザーセットのキー"
  },
  "drums:user/intro": {
-  "en": "Where the touched pad gets its sound.",
-  "t": "触れたパッドの音をどこから取るか。"
+  "en": "Where the chosen key gets its sound, and how it plays it.",
+  "t": "選んだキーの音の出どころと、その鳴らし方。"
  },
  "drums:user/terms/0/0": {
-  "en": "The sets (left)",
-  "t": "セット（左）"
+  "en": "ITS SOUND FROM",
+  "t": "音の出どころ"
  },
  "drums:user/terms/0/1": {
-  "en": "Choose the kit to take the sound from.",
-  "t": "音を取るドラムセットを選びます。"
+  "en": "The sets (left): choose the kit to take the sound from. The keys (right): tap the sound you want. It plays once and the key keeps it.",
+  "t": "セット(左):音を取るキットを選びます。キー(右):使いたい音をタップします。一度鳴り、キーがその音を保持します。"
  },
  "drums:user/terms/1/0": {
-  "en": "The keys (right)",
-  "t": "鍵盤（右）"
+  "en": "PITCH",
+  "t": "ピッチ"
  },
  "drums:user/terms/1/1": {
-  "en": "Tap the sound you want. It plays once and the pad keeps it.",
-  "t": "使いたい音をタップします。一度鳴り、パッドがその音を保持します。"
+  "en": "Up or down from the sound as recorded, in semitones (GS: the play note).",
+  "t": "録音された音から上下に半音単位で(GS: プレイノート)。"
  },
  "effects/title": {
   "en": "Effects",
@@ -3365,7 +3357,7 @@
  },
  "drums/terms/2/1": {
   "en": "How hard a touch plays the pads: as Setup says, or their own way. See Touch.",
-  "t": "パッドをタッチする強さ：設定どおり、またはパッド独自の設定。「タッチ」を参照。"
+  "t": "タッチでパッドを鳴らす強さ。セットアップのとおりか、パッド独自の設定か。「タッチ」を参照。"
  },
  "keys/terms/1/0": {
   "en": "VEL",
@@ -3426,5 +3418,97 @@
  "keys/terms/5/1": {
   "en": "Chosen under VEL. GLISSANDO: each key it crosses plays in turn. BEND: drawn sideways it bends the part's pitch, a key's width a semitone, up to the bend range on the Setup card; the latest finger bends, and lifting it lets the pitch back. AFTERTOUCH: drawn toward the front edge it presses the key harder (the channel's aftertouch, the deepest finger's), for the sounds that answer it.",
   "t": "VEL の中で選びます。グリッサンド：通った鍵盤が順に鳴ります。ベンド：横に動かすとパートの音程が曲がり、鍵盤1つ分で半音、設定カードのベンド幅までです。最後に置いた指が曲げ、離すと音程が戻ります。アフタータッチ：手前に動かすと鍵盤を強く押したことになります（チャンネルのアフタータッチ、いちばん深い指の値）。それに応える音色で効きます。"
+ },
+ "kits/title": {
+  "en": "Kits",
+  "t": "キット"
+ },
+ "kits/intro": {
+  "en": "The drum library: the kits, the keys of the selected part's kit, and what each key is.",
+  "t": "ドラムのライブラリ。キットの一覧、選択中のパートのキットのキー、そして各キーの説明。"
+ },
+ "kits/terms/0/0": {
+  "en": "Kits (left)",
+  "t": "キット(左)"
+ },
+ "kits/terms/0/1": {
+  "en": "Tap a kit to put it on the selected part.",
+  "t": "タップすると選択中のパートにそのキットを設定します。"
+ },
+ "kits/terms/1/0": {
+  "en": "Keys (middle)",
+  "t": "キー(中央)"
+ },
+ "kits/terms/1/1": {
+  "en": "The kit's keys: note, MIDI number and name. Tap one to hear it and read about it.",
+  "t": "キットのキー:音名、MIDI番号、名前。タップすると鳴り、説明が出ます。"
+ },
+ "kits/terms/2/0": {
+  "en": "The key (right)",
+  "t": "キー(右)"
+ },
+ "kits/terms/2/1": {
+  "en": "What the sound is, and the kit it borrows from when it does.",
+  "t": "その音が何か、そして別のキットから借りている場合はそのキット。"
+ },
+ "kits/terms/3/0": {
+  "en": "User Set 1 / 2",
+  "t": "ユーザーセット 1 / 2"
+ },
+ "kits/terms/3/1": {
+  "en": "Kits you build yourself: each key takes its sound from any key of any kit, with its own pitch, level and pan. Choose a key, then its sound.",
+  "t": "自分で作るキット。各キーはどのキットのどのキーの音でも使え、ピッチ、レベル、パンを個別に設定できます。キーを選び、次に音を選びます。"
+ },
+ "kits/terms/4/0": {
+  "en": "DRUMS ▸",
+  "t": "ドラム ▸"
+ },
+ "kits/terms/4/1": {
+  "en": "Back to the pads.",
+  "t": "パッドに戻ります。"
+ },
+ "drums:user/terms/2/0": {
+  "en": "LEVEL",
+  "t": "レベル"
+ },
+ "drums:user/terms/2/1": {
+  "en": "The key's own level, 0 to 127. A dash: the kit's own.",
+  "t": "キー独自のレベル、0〜127。ダッシュはキットのまま。"
+ },
+ "drums:user/terms/3/0": {
+  "en": "PAN",
+  "t": "パン"
+ },
+ "drums:user/terms/3/1": {
+  "en": "Left to right; \"random\" moves each hit somewhere new. A dash: the kit's own.",
+  "t": "左から右へ。「ランダム」は打つたびに位置が変わります。ダッシュはキットのまま。"
+ },
+ "drums:user/terms/4/0": {
+  "en": "MUTE",
+  "t": "ミュート"
+ },
+ "drums:user/terms/4/1": {
+  "en": "Lit, the key does not play (GS: Rx note on, off).",
+  "t": "点灯中はそのキーが鳴りません(GS: Rx ノートオン オフ)。"
+ },
+ "drums:user/terms/5/0": {
+  "en": "Drag or hold",
+  "t": "ドラッグか長押し"
+ },
+ "drums:user/terms/5/1": {
+  "en": "Drag a value up or down; hold it to type one. The key plays when you let go.",
+  "t": "値を上下にドラッグ、長押しで数値入力。離すとキーが鳴ります。"
+ },
+ "drums:user/terms/6/0": {
+  "en": "Kept",
+  "t": "保存"
+ },
+ "drums:user/terms/6/1": {
+  "en": "User sets are kept in the session, as a GS module keeps them.",
+  "t": "ユーザーセットは、GS音源と同じようにセッションに保存されます。"
+ },
+ "toc/kits": {
+  "en": "Kits",
+  "t": "キット"
  }
 }

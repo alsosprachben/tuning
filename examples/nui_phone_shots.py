@@ -11,7 +11,7 @@ nvx = os.path.expanduser('~/nvx/live.nvx')
 ps = T.picks(nvx)
 sess = os.path.join(out, 'session.json'); open(sess, 'w').write('{}\n')
 cw = (804 - 32) / 5
-CARDS = ['parts', 'scenes', 'library', 'synth', 'stops', 'piano', 'drums', 'keys', 'amp', 'effects', 'matrix', 'tuning', 'control', 'files', 'setup']
+CARDS = ['parts', 'scenes', 'library', 'synth', 'stops', 'piano', 'drums', 'kits', 'keys', 'amp', 'effects', 'matrix', 'tuning', 'control', 'files', 'setup']
 def card(c): i = CARDS.index(c); return 'tap %.0f %.0f' % (14 + (i % 5) * (cw + 8) + cw / 2, 114 + (i // 5) * 64 + 28)
 P2, P3 = [(580, 134), (740, 134)], [(495, 134), (625, 134), (755, 134)]
 STATES = [  # (shot, patch, card, taps after opening)
@@ -36,6 +36,9 @@ STATES = [  # (shot, patch, card, taps after opening)
     ('amp_guitar_p3', dict(program=27, variation=0), 'amp', [(270, 132)]),
     ('piano_piano', dict(program=0, variation=0), 'piano', [(122, 132)]),
     ('piano_piano_p2', dict(program=0, variation=0), 'piano', [(214, 132)]), ('drums_kit', dict(program=0, drums=True), 'drums', []),
+    ('kits_kit', dict(program=0, drums=True), 'kits', [(320, 230)]),
+    ('kits_user', dict(program=64, drums=True), 'kits', [(320, 180), (514, 236), (680, 236)]),
+    ('drums_user', dict(program=64, drums=True), 'drums', []),
     ('effects_p2', dict(program=0, variation=0), 'effects', [P3[1]]), ('effects_p3', dict(program=0, variation=0), 'effects', [P3[2]]),
     ('control_p2', dict(program=0, variation=0), 'control', [P3[1]]), ('control_p3', dict(program=0, variation=0), 'control', [P3[2]]),
     ('tuning', dict(program=0, variation=0), 'tuning', [(128, 132)]),
