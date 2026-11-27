@@ -615,5 +615,11 @@
  "HITS": "GOLPES",
  "ROTATE": "ROTAR",
  "LANE {0}: ITS DRUM": "CARRIL {0}: SU TAMBOR",
- "none: the lane rests": "ninguno: el carril descansa"
+ "none: the lane rests": "ninguno: el carril descansa",
+ "SYNC": "SINCRO",
+ "PATTERN": "PATRÓN",
+ "TIMING": "TIEMPO",
+ "NUDGE": "EMPUJE",
+ "DRIFT": "DERIVA",
+ "ACCENT": "ACENTO"
 }

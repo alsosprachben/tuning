@@ -433,6 +433,19 @@ HELP = {
                ['STEPS / HITS', "The lane's length (1 to 32) and how many of its steps strike."],
                ['ROTATE', 'Starts the pattern later by this many steps: the same rhythm, from another place in it.'],
                ['VEL', 'How hard the lane strikes, 1 to 127.'],
+               ['NUDGE',
+                "Moves the lane's notes off its steps, by part of a step: minus is ahead of the beat (pushing), plus "
+                'behind it (laid back). The lit steps are drawn where the notes fall.'],
+               ['DRIFT',
+                'Runs the lane a little faster (plus) or slower (minus) than the tempo, up to 5%, so it slides '
+                "against the other lanes, as in Steve Reich's phase pieces: give two lanes the same drum and pattern "
+                'and drift one by 0.5%. Set it back to 0 and the lane stays where it has slid; SYNC puts it back on '
+                'the beat.'],
+               ['ACCENT', 'Every nth hit of the lane 20 harder (/2: every other one). A dash: none.'],
+               ['SYNC', 'Puts every lane back on the beat at the next step, wherever drift has taken it.'],
+               ['PATTERN / TIMING',
+                "On the iPad and phone: which of the lane's numbers show, its pattern's (STEPS, HITS, ROTATE) or its "
+                "timing's (NUDGE, DRIFT, ACCENT). VEL shows on both."],
                ['MUTE (M)', 'Silences the lane, keeping its pattern.'],
                ['Kept', 'The lanes, tempo and swing are kept in the session. It starts stopped.']]},
     'keys': {'title': 'Keys',

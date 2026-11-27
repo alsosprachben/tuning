@@ -615,5 +615,11 @@
  "HITS": "COUPS",
  "ROTATE": "DÉCALER",
  "LANE {0}: ITS DRUM": "PISTE {0} : SON FÛT",
- "none: the lane rests": "aucun : la piste se tait"
+ "none: the lane rests": "aucun : la piste se tait",
+ "SYNC": "SYNC",
+ "PATTERN": "MOTIF",
+ "TIMING": "TIMING",
+ "NUDGE": "DÉCALAGE",
+ "DRIFT": "DÉRIVE",
+ "ACCENT": "ACCENT"
 }

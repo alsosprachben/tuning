@@ -3592,23 +3592,63 @@
   "t": "レーンが打つ強さ、1〜127。"
  },
  "seq/terms/9/0": {
-  "en": "MUTE (M)",
-  "t": "ミュート (M)"
+  "en": "NUDGE",
+  "t": "ずらし"
  },
  "seq/terms/9/1": {
-  "en": "Silences the lane, keeping its pattern.",
-  "t": "パターンを残したままレーンを消音します。"
+  "en": "Moves the lane's notes off its steps, by part of a step: minus is ahead of the beat (pushing), plus behind it (laid back). The lit steps are drawn where the notes fall.",
+  "t": "レーンの音をステップからステップの一部だけずらします。マイナスは拍より前(突っ込み)、プラスは後ろ(レイドバック)。点灯するステップは音が鳴る位置に描かれます。"
  },
  "seq/terms/10/0": {
-  "en": "Kept",
-  "t": "保存"
+  "en": "DRIFT",
+  "t": "ドリフト"
  },
  "seq/terms/10/1": {
-  "en": "The lanes, tempo and swing are kept in the session. It starts stopped.",
-  "t": "レーン、テンポ、スウィングはセッションに保存されます。開いたときは停止しています。"
+  "en": "Runs the lane a little faster (plus) or slower (minus) than the tempo, up to 5%, so it slides against the other lanes, as in Steve Reich's phase pieces: give two lanes the same drum and pattern and drift one by 0.5%. Set it back to 0 and the lane stays where it has slid; SYNC puts it back on the beat.",
+  "t": "レーンをテンポより少し速く(プラス)または遅く(マイナス)、最大5%で走らせ、ほかのレーンに対してずれていきます。スティーヴ・ライヒのフェイズ作品のように、2つのレーンに同じドラムとパターンを与え、片方を0.5%ずらしてみてください。0に戻すとレーンはずれた位置のまま。「同期」で拍に戻ります。"
  },
  "toc/seq": {
   "en": "Seq",
   "t": "シーケンサー"
+ },
+ "seq/terms/11/0": {
+  "en": "ACCENT",
+  "t": "アクセント"
+ },
+ "seq/terms/11/1": {
+  "en": "Every nth hit of the lane 20 harder (/2: every other one). A dash: none.",
+  "t": "レーンの n 打ごとに20強く(/2 なら1つおき)。ダッシュはなし。"
+ },
+ "seq/terms/12/0": {
+  "en": "SYNC",
+  "t": "同期"
+ },
+ "seq/terms/12/1": {
+  "en": "Puts every lane back on the beat at the next step, wherever drift has taken it.",
+  "t": "ドリフトでどこにずれていても、次のステップで全レーンを拍に戻します。"
+ },
+ "seq/terms/13/0": {
+  "en": "PATTERN / TIMING",
+  "t": "パターン / タイミング"
+ },
+ "seq/terms/13/1": {
+  "en": "On the iPad and phone: which of the lane's numbers show, its pattern's (STEPS, HITS, ROTATE) or its timing's (NUDGE, DRIFT, ACCENT). VEL shows on both.",
+  "t": "iPad と電話で、レーンのどの数値を表示するか。パターン(ステップ、打数、回転)かタイミング(ずらし、ドリフト、アクセント)か。VEL は両方に出ます。"
+ },
+ "seq/terms/14/0": {
+  "en": "MUTE (M)",
+  "t": "ミュート (M)"
+ },
+ "seq/terms/14/1": {
+  "en": "Silences the lane, keeping its pattern.",
+  "t": "パターンを残したままレーンを消音します。"
+ },
+ "seq/terms/15/0": {
+  "en": "Kept",
+  "t": "保存"
+ },
+ "seq/terms/15/1": {
+  "en": "The lanes, tempo and swing are kept in the session. It starts stopped.",
+  "t": "レーン、テンポ、スウィングはセッションに保存されます。開いたときは停止しています。"
  }
 }

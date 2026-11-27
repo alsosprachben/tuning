@@ -3592,23 +3592,63 @@
   "t": "Con qué fuerza golpea el carril, de 1 a 127."
  },
  "seq/terms/9/0": {
-  "en": "MUTE (M)",
-  "t": "SILENCIO (M)"
+  "en": "NUDGE",
+  "t": "EMPUJE"
  },
  "seq/terms/9/1": {
-  "en": "Silences the lane, keeping its pattern.",
-  "t": "Silencia el carril conservando su patrón."
+  "en": "Moves the lane's notes off its steps, by part of a step: minus is ahead of the beat (pushing), plus behind it (laid back). The lit steps are drawn where the notes fall.",
+  "t": "Mueve las notas del carril una fracción de paso: menos es antes del pulso (empujando), más detrás (relajado). Los pasos encendidos se dibujan donde caen las notas."
  },
  "seq/terms/10/0": {
-  "en": "Kept",
-  "t": "Guardado"
+  "en": "DRIFT",
+  "t": "DERIVA"
  },
  "seq/terms/10/1": {
-  "en": "The lanes, tempo and swing are kept in the session. It starts stopped.",
-  "t": "Los carriles, el tempo y el swing se guardan en la sesión. Empieza parado."
+  "en": "Runs the lane a little faster (plus) or slower (minus) than the tempo, up to 5%, so it slides against the other lanes, as in Steve Reich's phase pieces: give two lanes the same drum and pattern and drift one by 0.5%. Set it back to 0 and the lane stays where it has slid; SYNC puts it back on the beat.",
+  "t": "Hace que el carril vaya un poco más rápido (más) o más lento (menos) que el tempo, hasta un 5 %, para que se deslice contra los demás carriles, como en las piezas de fase de Steve Reich: da a dos carriles el mismo tambor y patrón y haz derivar uno un 0,5 %. De vuelta a 0, el carril se queda donde se deslizó; SINCRO lo devuelve al pulso."
  },
  "toc/seq": {
   "en": "Seq",
   "t": "Sec"
+ },
+ "seq/terms/11/0": {
+  "en": "ACCENT",
+  "t": "ACENTO"
+ },
+ "seq/terms/11/1": {
+  "en": "Every nth hit of the lane 20 harder (/2: every other one). A dash: none.",
+  "t": "Cada n-ésimo golpe del carril 20 más fuerte (/2: uno sí, uno no). Un guion: ninguno."
+ },
+ "seq/terms/12/0": {
+  "en": "SYNC",
+  "t": "SINCRO"
+ },
+ "seq/terms/12/1": {
+  "en": "Puts every lane back on the beat at the next step, wherever drift has taken it.",
+  "t": "Devuelve todos los carriles al pulso en el siguiente paso, adonde sea que la deriva los haya llevado."
+ },
+ "seq/terms/13/0": {
+  "en": "PATTERN / TIMING",
+  "t": "PATRÓN / TIEMPO"
+ },
+ "seq/terms/13/1": {
+  "en": "On the iPad and phone: which of the lane's numbers show, its pattern's (STEPS, HITS, ROTATE) or its timing's (NUDGE, DRIFT, ACCENT). VEL shows on both.",
+  "t": "En el iPad y el teléfono: qué números del carril se ven, los del patrón (PASOS, GOLPES, ROTAR) o los del tiempo (EMPUJE, DERIVA, ACENTO). VEL aparece en ambos."
+ },
+ "seq/terms/14/0": {
+  "en": "MUTE (M)",
+  "t": "SILENCIO (M)"
+ },
+ "seq/terms/14/1": {
+  "en": "Silences the lane, keeping its pattern.",
+  "t": "Silencia el carril conservando su patrón."
+ },
+ "seq/terms/15/0": {
+  "en": "Kept",
+  "t": "Guardado"
+ },
+ "seq/terms/15/1": {
+  "en": "The lanes, tempo and swing are kept in the session. It starts stopped.",
+  "t": "Los carriles, el tempo y el swing se guardan en la sesión. Empieza parado."
  }
 }

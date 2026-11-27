@@ -615,5 +615,11 @@
  "HITS": "SCHLÄGE",
  "ROTATE": "DREHEN",
  "LANE {0}: ITS DRUM": "SPUR {0}: IHR DRUM",
- "none: the lane rests": "keiner: die Spur pausiert"
+ "none: the lane rests": "keiner: die Spur pausiert",
+ "SYNC": "SYNC",
+ "PATTERN": "MUSTER",
+ "TIMING": "TIMING",
+ "NUDGE": "VERSATZ",
+ "DRIFT": "DRIFT",
+ "ACCENT": "AKZENT"
 }

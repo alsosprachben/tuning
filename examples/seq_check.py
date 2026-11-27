@@ -7,6 +7,11 @@ host library (ctypes, in step: no device, the blocks as fast as they go):
 - SWING: every step struck, swing 66 -- each pair's second step late by
   (2*0.66 - 1) of a step, the gaps alternating 1.32 and 0.68 of a step;
 - E(3,8): the lane's notes where Bjorklund puts them (steps 0, 3, 6);
+- NUDGE: a lane on the beats, another two steps later nudged a quarter step
+  ahead -- 1.75 and 2.25 steps apart;
+- DRIFT (Reich's phasing): a lane 1 % fast -- its beats 23762.4 samples
+  apart, not 24000; set back to 0, it keeps the offset it slid to (a beat
+  apart again, off the grid); then SYNC: on the beat's grid again;
 - THE METRONOME's CLOCK: clicking alone, then the sequencer started (empty
   lanes: its clock the click's), then stopped -- every click a beat apart
   throughout, no beat lost or doubled at either change (a click is a noise
@@ -40,10 +45,12 @@ def onsets(x, mingap):
     env = np.array([np.sqrt(np.mean(x[i * hop:i * hop + win] ** 2)) for i in range(n)])
     rise = np.zeros(n)
     rise[4:] = env[4:] - env[:-4]
+    ratio = np.zeros(n)                 # (a strike multiplies the level; a piano's own swell does not)
+    ratio[6:] = env[6:] / (env[:-6] + 1e-6 * env.max())
     thr = 0.3 * rise.max()
     coarse, last = [], -10 ** 9
     for i in range(n):
-        if rise[i] > thr and i * hop - last > mingap and rise[i] >= rise[max(0, i - 8):i + 9].max():
+        if rise[i] > thr and ratio[i] > 2.0 and i * hop - last > mingap and rise[i] >= rise[max(0, i - 8):i + 9].max():
             coarse.append(i * hop)
             last = i * hop
     if not coarse:
@@ -114,10 +121,11 @@ def main(argv):
             out.append(L + R)
         return np.concatenate(out)
 
-    def lanes(*spec):          # (lane: key, steps, hits, rot; the rest emptied)
+    def lanes(*spec):          # (lane: key, steps, hits, rot[, nudge, drift]; the rest emptied)
         for i in range(8):
-            k, n, kk, r = spec[i] if i < len(spec) else (-1, 16, 0, 0)
-            for f, v in (("key", k), ("steps", n), ("hits", kk), ("rot", r), ("mute", 0), ("accent", 0), ("vel", 100)):
+            k, n, kk, r, nu, dr = (tuple(spec[i]) + (0, 0))[:6] if i < len(spec) else (-1, 16, 0, 0, 0, 0)
+            for f, v in (("key", k), ("steps", n), ("hits", kk), ("rot", r), ("mute", 0), ("accent", 0), ("vel", 100),
+                         ("nudge", nu), ("drift", dr)):
                 call({"call": "seq_set", "lane": i, "f": f, "v": v})
 
     render(LEAD * blk / sr)
@@ -134,6 +142,8 @@ def main(argv):
             print(name, "peak %.4f" % np.abs(x).max(), "run:", json.dumps(r0)[:300], "pos then:", r1.get("seq_pos"))
         render(1.5)
         on = onsets(x, int(0.6 * min(want_gaps)))
+        if os.environ.get("SEQ_DEBUG"):
+            np.save(os.path.join(os.environ["SEQ_DEBUG"], name.replace("(", "").replace(")", "").replace(",", "_") + ".npy"), x)
         g = np.diff(on)
         n = min(len(g), 3 * len(want_gaps))
         want = np.array([want_gaps[i % len(want_gaps)] for i in range(n)])
@@ -158,6 +168,37 @@ def main(argv):
     call({"call": "seq_set", "lane": -1, "f": "swing", "v": 50})
     lanes((60, 8, 3, 0))
     case("E(3,8)", [3 * step, 3 * step, 2 * step], 6.2)
+
+    # NUDGE: on the beats, and two steps later a quarter step ahead
+    step = sr * 60.0 / (120 * 4)
+    call({"call": "seq_set", "lane": -1, "f": "bpm", "v": 120})
+    lanes((60, 16, 4, 0), (60, 16, 4, 2, -25))
+    case("nudge", [1.75 * step, 2.25 * step], 3.2)
+    # DRIFT (Reich's): one lane 1 % fast; then not (it keeps where it slid); then SYNC (back on the beat)
+    lanes((60, 16, 4, 0, 0, 10))
+    call({"call": "seq_run", "on": 1, "ch": 0})
+    xs = [render(3.0)]
+    call({"call": "seq_set", "lane": 0, "f": "drift", "v": 0})
+    xs.append(render(3.0))
+    call({"call": "seq_set", "lane": -1, "f": "sync", "v": 1})
+    xs.append(render(3.0))
+    call({"call": "seq_run", "on": 0})
+    render(1.5)
+    x = np.concatenate(xs)
+    on = onsets(x, 12000)
+    first, n1 = on[0], len(xs[0])
+    part = [[o for o in on if lo + 6000 < o < hi] for lo, hi in ((-6000, n1), (n1, 2 * n1), (2 * n1, 3 * n1))]
+    ph = lambda o: ((o - first) + 12000) % 24000 - 12000     # (off the beat's grid)
+    g0 = np.diff(part[0])
+    want = 4 * step / 1.01
+    ok0 = len(g0) >= 3 and np.abs(g0 - want).max() <= 2
+    held = [ph(o) for o in part[1]]
+    ok1 = len(held) >= 3 and max(held) - min(held) <= 2 and abs(held[0]) > 500
+    synced = [ph(o) for o in part[2][1:]]
+    ok2 = len(synced) >= 3 and max(abs(p) for p in synced) <= 2
+    bad += not (ok0 and ok1 and ok2)
+    print("drift     1%% fast: gaps %s want %.1f %s; held: off the grid by %s %s; SYNC: %s %s" % (
+        list(g0), want, "ok" if ok0 else "WRONG", held, "ok" if ok1 else "WRONG", synced, "ok" if ok2 else "WRONG"))
 
     # THE METRONOME: built, then clicking alone for 2 s, on the sequencer's clock (empty lanes)
     # for 2 s, alone again for 2 s -- a click every beat throughout, none lost or doubled at

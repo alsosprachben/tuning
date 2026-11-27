@@ -3592,23 +3592,63 @@
   "t": "Wie stark die Spur anschlägt, 1 bis 127."
  },
  "seq/terms/9/0": {
-  "en": "MUTE (M)",
-  "t": "MUTE (M)"
+  "en": "NUDGE",
+  "t": "VERSATZ"
  },
  "seq/terms/9/1": {
-  "en": "Silences the lane, keeping its pattern.",
-  "t": "Schaltet die Spur stumm und behält ihr Muster."
+  "en": "Moves the lane's notes off its steps, by part of a step: minus is ahead of the beat (pushing), plus behind it (laid back). The lit steps are drawn where the notes fall.",
+  "t": "Verschiebt die Noten der Spur um einen Teil eines Steps: minus ist vor dem Schlag (treibend), plus dahinter (laid back). Die leuchtenden Steps stehen dort, wo die Noten fallen."
  },
  "seq/terms/10/0": {
-  "en": "Kept",
-  "t": "Gespeichert"
+  "en": "DRIFT",
+  "t": "DRIFT"
  },
  "seq/terms/10/1": {
-  "en": "The lanes, tempo and swing are kept in the session. It starts stopped.",
-  "t": "Spuren, Tempo und Swing bleiben in der Session gespeichert. Er startet angehalten."
+  "en": "Runs the lane a little faster (plus) or slower (minus) than the tempo, up to 5%, so it slides against the other lanes, as in Steve Reich's phase pieces: give two lanes the same drum and pattern and drift one by 0.5%. Set it back to 0 and the lane stays where it has slid; SYNC puts it back on the beat.",
+  "t": "Lässt die Spur etwas schneller (plus) oder langsamer (minus) als das Tempo laufen, bis 5 %, sodass sie gegen die anderen Spuren gleitet, wie in Steve Reichs Phasenstücken: gib zwei Spuren dieselbe Trommel und dasselbe Muster und lass eine um 0,5 % driften. Zurück auf 0 bleibt die Spur, wo sie hingeglitten ist; SYNC setzt sie zurück auf den Schlag."
  },
  "toc/seq": {
   "en": "Seq",
   "t": "Seq"
+ },
+ "seq/terms/11/0": {
+  "en": "ACCENT",
+  "t": "AKZENT"
+ },
+ "seq/terms/11/1": {
+  "en": "Every nth hit of the lane 20 harder (/2: every other one). A dash: none.",
+  "t": "Jeder n-te Schlag der Spur 20 stärker (/2: jeder zweite). Ein Strich: keiner."
+ },
+ "seq/terms/12/0": {
+  "en": "SYNC",
+  "t": "SYNC"
+ },
+ "seq/terms/12/1": {
+  "en": "Puts every lane back on the beat at the next step, wherever drift has taken it.",
+  "t": "Setzt jede Spur beim nächsten Step zurück auf den Schlag, wohin die Drift sie auch gebracht hat."
+ },
+ "seq/terms/13/0": {
+  "en": "PATTERN / TIMING",
+  "t": "MUSTER / TIMING"
+ },
+ "seq/terms/13/1": {
+  "en": "On the iPad and phone: which of the lane's numbers show, its pattern's (STEPS, HITS, ROTATE) or its timing's (NUDGE, DRIFT, ACCENT). VEL shows on both.",
+  "t": "Auf iPad und Telefon: welche Zahlen der Spur zu sehen sind, die des Musters (STEPS, SCHLÄGE, DREHEN) oder die des Timings (VERSATZ, DRIFT, AKZENT). VEL steht auf beiden."
+ },
+ "seq/terms/14/0": {
+  "en": "MUTE (M)",
+  "t": "MUTE (M)"
+ },
+ "seq/terms/14/1": {
+  "en": "Silences the lane, keeping its pattern.",
+  "t": "Schaltet die Spur stumm und behält ihr Muster."
+ },
+ "seq/terms/15/0": {
+  "en": "Kept",
+  "t": "Gespeichert"
+ },
+ "seq/terms/15/1": {
+  "en": "The lanes, tempo and swing are kept in the session. It starts stopped.",
+  "t": "Spuren, Tempo und Swing bleiben in der Session gespeichert. Er startet angehalten."
  }
 }

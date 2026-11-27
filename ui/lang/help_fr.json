@@ -3592,23 +3592,63 @@
   "t": "La force de frappe de la piste, de 1 à 127."
  },
  "seq/terms/9/0": {
-  "en": "MUTE (M)",
-  "t": "MUET (M)"
+  "en": "NUDGE",
+  "t": "DÉCALAGE"
  },
  "seq/terms/9/1": {
-  "en": "Silences the lane, keeping its pattern.",
-  "t": "Rend la piste muette en gardant son motif."
+  "en": "Moves the lane's notes off its steps, by part of a step: minus is ahead of the beat (pushing), plus behind it (laid back). The lit steps are drawn where the notes fall.",
+  "t": "Déplace les notes de la piste d'une fraction de pas : moins est en avance sur le temps (poussé), plus en retard (laid back). Les pas allumés sont dessinés là où tombent les notes."
  },
  "seq/terms/10/0": {
-  "en": "Kept",
-  "t": "Conservé"
+  "en": "DRIFT",
+  "t": "DÉRIVE"
  },
  "seq/terms/10/1": {
-  "en": "The lanes, tempo and swing are kept in the session. It starts stopped.",
-  "t": "Les pistes, le tempo et le swing sont gardés dans la session. Il démarre à l'arrêt."
+  "en": "Runs the lane a little faster (plus) or slower (minus) than the tempo, up to 5%, so it slides against the other lanes, as in Steve Reich's phase pieces: give two lanes the same drum and pattern and drift one by 0.5%. Set it back to 0 and the lane stays where it has slid; SYNC puts it back on the beat.",
+  "t": "Fait jouer la piste un peu plus vite (plus) ou plus lentement (moins) que le tempo, jusqu'à 5 %, pour qu'elle glisse contre les autres pistes, comme dans les pièces de phase de Steve Reich : donnez à deux pistes le même fût et le même motif, et faites dériver l'une de 0,5 %. Revenue à 0, la piste reste où elle a glissé ; SYNC la remet sur le temps."
  },
  "toc/seq": {
   "en": "Seq",
   "t": "Séq"
+ },
+ "seq/terms/11/0": {
+  "en": "ACCENT",
+  "t": "ACCENT"
+ },
+ "seq/terms/11/1": {
+  "en": "Every nth hit of the lane 20 harder (/2: every other one). A dash: none.",
+  "t": "Un coup sur n de la piste 20 plus fort (/2 : un sur deux). Un tiret : aucun."
+ },
+ "seq/terms/12/0": {
+  "en": "SYNC",
+  "t": "SYNC"
+ },
+ "seq/terms/12/1": {
+  "en": "Puts every lane back on the beat at the next step, wherever drift has taken it.",
+  "t": "Remet toutes les pistes sur le temps au pas suivant, où que la dérive les ait menées."
+ },
+ "seq/terms/13/0": {
+  "en": "PATTERN / TIMING",
+  "t": "MOTIF / TIMING"
+ },
+ "seq/terms/13/1": {
+  "en": "On the iPad and phone: which of the lane's numbers show, its pattern's (STEPS, HITS, ROTATE) or its timing's (NUDGE, DRIFT, ACCENT). VEL shows on both.",
+  "t": "Sur l'iPad et le téléphone : quels nombres de la piste s'affichent, ceux du motif (PAS, COUPS, DÉCALER) ou ceux du timing (DÉCALAGE, DÉRIVE, ACCENT). VEL figure sur les deux."
+ },
+ "seq/terms/14/0": {
+  "en": "MUTE (M)",
+  "t": "MUET (M)"
+ },
+ "seq/terms/14/1": {
+  "en": "Silences the lane, keeping its pattern.",
+  "t": "Rend la piste muette en gardant son motif."
+ },
+ "seq/terms/15/0": {
+  "en": "Kept",
+  "t": "Conservé"
+ },
+ "seq/terms/15/1": {
+  "en": "The lanes, tempo and swing are kept in the session. It starts stopped.",
+  "t": "Les pistes, le tempo et le swing sont gardés dans la session. Il démarre à l'arrêt."
  }
 }

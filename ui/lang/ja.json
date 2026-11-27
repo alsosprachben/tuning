@@ -615,5 +615,11 @@
  "HITS": "打数",
  "ROTATE": "回転",
  "LANE {0}: ITS DRUM": "レーン {0}:ドラム",
- "none: the lane rests": "なし:このレーンは休み"
+ "none: the lane rests": "なし:このレーンは休み",
+ "SYNC": "同期",
+ "PATTERN": "パターン",
+ "TIMING": "タイミング",
+ "NUDGE": "ずらし",
+ "DRIFT": "ドリフト",
+ "ACCENT": "アクセント"
 }

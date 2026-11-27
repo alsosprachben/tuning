@@ -13960,18 +13960,35 @@ struct Part {
     // THE SEQUENCER (eucseq.h; the SEQ card): its lanes struck at their steps'
     // own samples, each note through core as a key's would come (the part's
     // key range, velocity sense, a user set's mute), let go at its lane's next
-    // step. Running, it is the metronome's clock too: the click on its beats
-    // (a metronome already ticking: it starts on the next of those beats), so
-    // the two never drift; stopped, the metronome goes on from its beat.
+    // step. The beat its own clock (seq_base, seq_s): running, it is the
+    // metronome's too -- the click on its beats (a metronome already ticking:
+    // it starts on the next of those beats), so the two never drift; stopped,
+    // the metronome goes on from its beat. EACH LANE its own clock beside it
+    // (l_base, l_s): the beat's while its DRIFT is 0, a little faster or slower
+    // when not (Reich's phasing: it slides, and stays where it has slid);
+    // NUDGE places its notes part of a step off its steps; SYNC (and a start)
+    // puts every lane back on the beat. A block's notes are struck in their
+    // samples' order, whichever lane they came from.
     nv::Seq seq;
     bool seq_has = false;                       // (seq_base unset: the next block's start)
-    double seq_base = 0.0;                      // (the sample of step seq_s, straight -- swing added as struck)
+    bool seq_resync = false;                    // (SYNC asked: the lanes onto the beat's next step)
+    double seq_base = 0.0;                      // (the sample of the beat's step seq_s, straight)
     long seq_s = 0;
+    double l_base[nv::SEQ_LANES] = {};          // (each lane's step l_s, straight and un-nudged)
+    long l_s[nv::SEQ_LANES] = {};
     int seq_held[nv::SEQ_LANES] = {-1, -1, -1, -1, -1, -1, -1, -1};
-    std::atomic<long> seq_pos{-1};              // (the step last struck: the card's playhead; -1 stopped)
+    std::atomic<long> seq_pos{-1};              // (the beat's step last passed: -1 stopped)
+    std::atomic<long> l_pos[nv::SEQ_LANES] = {};   // (each lane's step last passed: its playhead)
     std::atomic<unsigned> *hit_ctr = nullptr;   // (the host's key_hits, [16][128]: the pads lit by its notes)
     unsigned char *hit_vel = nullptr;
     std::vector<std::vector<uint8_t>> seq_sxs;  // (none: core's exclusives, for its notes)
+    struct SqEv {
+        long long at;
+        int kind, lane, key, v;                 // (kind 0 a lane's note let go, 1 struck, 2 the click)
+    };
+    enum { SQ_EVS = 512 };
+    SqEv sq_ev[SQ_EVS];
+    int sq_n = 0;
     void seq_note(int ch, int key, int v, long long at)
     {
         Ev e{};
@@ -13986,13 +14003,22 @@ struct Part {
             hit_ctr[ch * 128 + key].fetch_add(1, std::memory_order_relaxed);
         }
     }
+    // (a lane lets its key go -- unless another lane holds the same key: theirs sounds on)
+    void seq_let_go(int l, long long at)
+    {
+        const int k = seq_held[l];
+        if (k < 0)
+            return;
+        seq_held[l] = -1;
+        for (int m = 0; m < nv::SEQ_LANES; m++)
+            if (seq_held[m] == k)
+                return;
+        seq_note(seq.ch, k, 0, at);
+    }
     void seq_release(long long at)
     {
         for (int l = 0; l < nv::SEQ_LANES; l++)
-            if (seq_held[l] >= 0) {
-                seq_note(seq.ch, seq_held[l], 0, at);
-                seq_held[l] = -1;
-            }
+            seq_let_go(l, at);
     }
     void seq_set(const nv::Seq &ns, long long n0)
     {
@@ -14010,56 +14036,103 @@ struct Part {
         if (!was && ns.on) {
             seq_has = false;
             seq_s = 0;
-        }
+        } else if (was && ns.on && ns.sync != seq.sync)
+            seq_resync = true;
         seq = ns;
-        if (!seq.on)
+        if (!seq.on) {
             seq_pos.store(-1, std::memory_order_relaxed);
+            for (auto &p : l_pos)
+                p.store(-1, std::memory_order_relaxed);
+        }
+    }
+    void sq_push(long long at, int kind, int lane, int key, int v)
+    {
+        if (sq_n < SQ_EVS)
+            sq_ev[sq_n++] = SqEv{at, kind, lane, key, v};
     }
     void seq_tick(long long n0, long long frames)
     {
         const double period = rate * 60.0 / (seq.bpm * seq.spb);
+        const double swf = seq.swing / 100.0 * 2.0 - 1.0;       // (the pair's second step: this much of a step late)
+        const bool swings = seq.spb % 2 == 0;
         if (!seq_has || seq_base < (double)n0 - 2 * period) {
-            // (a start: on the metronome's next beat if it is ticking, else now)
+            // (a start: on the metronome's next beat if it is ticking, else now; every lane with it)
             seq_base = metro_bpm > 0.0 && metro_has && metro_next >= (double)n0 ? metro_next : (double)n0;
             seq_s = 0;
             seq_has = true;
+            seq_resync = true;
+        }
+        if (seq_resync) {                       // (every lane onto the beat's next step)
+            for (int l = 0; l < nv::SEQ_LANES; l++) {
+                l_base[l] = seq_base;
+                l_s[l] = seq_s;
+            }
+            seq_resync = false;
         }
         const long long end = n0 + frames;
-        const double sw = (seq.swing / 100.0 * 2.0 - 1.0) * period;     // (the pair's second step: this much late)
+        sq_n = 0;
+        // THE BEAT: the click on its beats
         for (;;) {
-            const double t = seq_base + ((seq_s & 1) && seq.spb % 2 == 0 ? sw : 0.0);
+            const double t = seq_base + ((seq_s & 1) && swings ? swf * period : 0.0);
             if (t >= (double)end)
                 break;
-            const long long at = std::max(n0, (long long)nearbyint(t));
-            if (seq_s % seq.spb == 0 && metro_bpm > 0.0 && metro_pi >= 0) {     // (the metronome's click, on its beat)
+            if (seq_s % seq.spb == 0 && metro_bpm > 0.0 && metro_pi >= 0) {
                 const long beat = seq_s / seq.spb;
-                const bool bell = metro_ring > 0 && beat % metro_ring == 0;
-                Force f(*this, metro_pi);
-                cut_on(9, bell ? 34 : 33, 100, at, false);
-            }
-            for (int l = 0; l < nv::SEQ_LANES; l++) {
-                const nv::SeqLane &L = seq.lane[l];
-                if (seq_held[l] >= 0) {         // (the lane's last note let go at its next step)
-                    seq_note(seq.ch, seq_held[l], 0, at);
-                    seq_held[l] = -1;
-                }
-                if (L.mute || L.key < 0 || L.key > 127 || L.steps <= 0)
-                    continue;
-                const int pos = (int)(seq_s % L.steps);
-                if (!((L.pat >> pos) & 1u))
-                    continue;
-                int v = L.vel;
-                if (L.accent > 0) {
-                    const int nth = __builtin_popcount(L.pat & ((1u << pos) - 1u));
-                    if (nth % L.accent == 0)
-                        v = std::min(127, v + 20);
-                }
-                seq_note(seq.ch, L.key, v, at);
-                seq_held[l] = L.key;
+                sq_push(std::max(n0, (long long)nearbyint(t)), 2, -1, metro_ring > 0 && beat % metro_ring == 0 ? 34 : 33, 100);
             }
             seq_pos.store(seq_s, std::memory_order_relaxed);
             seq_s++;
             seq_base += period;
+        }
+        // EACH LANE on its own clock: its step's let-go and, where it strikes, its note
+        for (int l = 0; l < nv::SEQ_LANES; l++) {
+            const nv::SeqLane &L = seq.lane[l];
+            const double pl = period / (1.0 + L.drift / 1000.0);
+            const double nud = L.nudge / 100.0 * pl;
+            bool holds = seq_held[l] >= 0;
+            for (;;) {
+                const double t = l_base[l] + ((l_s[l] & 1) && swings ? swf * pl : 0.0) + nud;
+                if (t >= (double)end)
+                    break;
+                const long long at = std::max(n0, (long long)nearbyint(t));
+                if (holds) {
+                    sq_push(at, 0, l, -1, 0);
+                    holds = false;
+                }
+                const int pos = L.steps > 0 ? (int)(l_s[l] % L.steps) : 0;
+                if (!L.mute && L.key >= 0 && L.key <= 127 && L.steps > 0 && ((L.pat >> pos) & 1u)) {
+                    int v = L.vel;
+                    if (L.accent > 0 && __builtin_popcount(L.pat & ((1u << pos) - 1u)) % L.accent == 0)
+                        v = std::min(127, v + 20);
+                    sq_push(at, 1, l, L.key, v);
+                    holds = true;
+                }
+                l_pos[l].store(l_s[l], std::memory_order_relaxed);
+                l_s[l]++;
+                l_base[l] += pl;
+            }
+        }
+        // ...struck in their samples' order (a let-go before a strike at one sample)
+        for (int i = 1; i < sq_n; i++) {
+            const SqEv e = sq_ev[i];
+            int j = i - 1;
+            while (j >= 0 && (sq_ev[j].at > e.at || (sq_ev[j].at == e.at && sq_ev[j].kind > e.kind))) {
+                sq_ev[j + 1] = sq_ev[j];
+                j--;
+            }
+            sq_ev[j + 1] = e;
+        }
+        for (int i = 0; i < sq_n; i++) {
+            const SqEv &e = sq_ev[i];
+            if (e.kind == 2) {
+                Force f(*this, metro_pi);
+                cut_on(9, e.key, e.v, e.at, false);
+            } else if (e.kind == 0)
+                seq_let_go(e.lane, e.at);
+            else {
+                seq_note(seq.ch, e.key, e.v, e.at);
+                seq_held[e.lane] = e.key;
+            }
         }
     }
     void metro_tick(long long n0, long long frames)
@@ -14684,6 +14757,12 @@ void nv_part_seq(void *h, const nv::Seq *s, long long n0)
 long nv_part_seq_pos(void *h)
 {
     return ((nv::slab::Part *)h)->seq_pos.load(std::memory_order_relaxed);
+}
+void nv_part_seq_lane_pos(void *h, long *out)
+{
+    nv::slab::Part *P = (nv::slab::Part *)h;
+    for (int l = 0; l < nv::SEQ_LANES; l++)
+        out[l] = P->l_pos[l].load(std::memory_order_relaxed);
 }
 void nv_part_hits_out(void *h, std::atomic<unsigned> *ctr, unsigned char *vel)
 {

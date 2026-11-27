@@ -3,7 +3,9 @@
 // drum key struck on HITS of its STEPS spread as evenly as they go
 // (Bjorklund's E(hits, steps), Toussaint's "Euclidean rhythms"), turned by
 // ROTATE -- each lane its own length, so 16 against 12 against 7 cycle
-// apart. The state as the host keeps it (and the session, "seq"); the
+// apart; NUDGE sets it ahead of or behind the beat by part of a step, DRIFT
+// runs it a little faster or slower than the tempo (Reich's phasing: it
+// slides against the others until SYNC puts it back on the beat). The state as the host keeps it (and the session, "seq"); the
 // patterns are worked out here, off the audio thread, and handed to the
 // slab as bits (slab.cpp's seq_tick steps them at their samples).
 #pragma once
@@ -23,6 +25,9 @@ struct SeqLane {
     int vel = 100;          // 1..127
     int accent = 0;         // every nth hit +20 (0 none)
     int mute = 0;
+    int nudge = 0;          // its notes this far off its steps, % of a step (-50..50: ahead, behind)
+    int drift = 0;          // its own tempo, tenths of a % faster (-50..50: +-5 %) -- Reich's phasing:
+                            //  it slides against the other lanes, a step's lap at a time
     uint32_t pat = 0;       // (bit i: step i struck -- euclid's, filled by seq_patterns)
 };
 struct Seq {
@@ -31,6 +36,7 @@ struct Seq {
     int spb = 4;            // steps a beat (4: sixteenths)
     double swing = 50.0;    // 50 straight .. 75: the second step of each pair this far through the pair
     int ch = 9;             // the channel it plays (the drum part's)
+    int sync = 0;           // (counted up: every lane back on the beat, at the next step)
     SeqLane lane[SEQ_LANES];
 };
 
@@ -82,6 +88,8 @@ inline void seq_patterns(Seq &s)
         l.rot = ((l.rot % l.steps) + l.steps) % l.steps;
         l.vel = std::max(1, std::min(127, l.vel));
         l.accent = std::max(0, std::min(16, l.accent));
+        l.nudge = std::max(-50, std::min(50, l.nudge));
+        l.drift = std::max(-50, std::min(50, l.drift));
         l.pat = euclid(l.hits, l.steps, l.rot);
     }
 }

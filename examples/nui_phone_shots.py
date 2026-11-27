@@ -41,6 +41,7 @@ STATES = [  # (shot, patch, card, taps after opening)
     ('drums_user', dict(program=64, drums=True), 'drums', []),
     ('seq_kit', dict(program=0, drums=True), 'seq', []),
     ('seq_pick', dict(program=0, drums=True), 'seq', [(74, 361)]),
+    ('seq_timing', dict(program=0, drums=True), 'seq', [(752, 175)]),
     ('effects_p2', dict(program=0, variation=0), 'effects', [P3[1]]), ('effects_p3', dict(program=0, variation=0), 'effects', [P3[2]]),
     ('control_p2', dict(program=0, variation=0), 'control', [P3[1]]), ('control_p3', dict(program=0, variation=0), 'control', [P3[2]]),
     ('tuning', dict(program=0, variation=0), 'tuning', [(128, 132)]),

@@ -1480,7 +1480,8 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
     } else if (call == "seq" || call == "seq_set" || call == "seq_run") {
         // THE SEQUENCER (eucseq.h): seq opens the card (open 0 shuts it) and reads the state;
         // seq_set changes one field -- lane -1 the whole's (bpm, spb, swing), else the lane's
-        // (key, steps, hits, rot, vel, accent, mute); seq_run starts it (on 1, on channel ch)
+        // (key, steps, hits, rot, vel, accent, mute, nudge, drift), or "sync" (lane -1: every lane
+        // back on the beat); seq_run starts it (on 1, on channel ch)
         // or stops it (on 0). Each answers with the state, as the push sends it.
         if (call == "seq" && w) {
             w->seq = arg_i(q, "open", 1) != 0;
@@ -1501,12 +1502,15 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
                         S.spb = (int)v;
                     else if (f == "swing")
                         S.swing = v;
+                    else if (f == "sync")       // (every lane back on the beat)
+                        S.sync++;
                     else
                         known = false;
                 } else if (ln < nv::SEQ_LANES) {
                     nv::SeqLane &L = S.lane[ln];
                     int *x = f == "key" ? &L.key : f == "steps" ? &L.steps : f == "hits" ? &L.hits : f == "rot" ? &L.rot
-                           : f == "vel" ? &L.vel : f == "accent" ? &L.accent : f == "mute" ? &L.mute : nullptr;
+                           : f == "vel" ? &L.vel : f == "accent" ? &L.accent : f == "mute" ? &L.mute
+                           : f == "nudge" ? &L.nudge : f == "drift" ? &L.drift : nullptr;
                     if (x)
                         *x = (int)std::lround(v);
                     else
@@ -1537,6 +1541,12 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
             r.o["seq"] = nv::seq_json(h->seq_state);
         }
         r.o["seq_pos"] = sess::integer(nv_part_seq_pos(h->part));
+        long lp[nv::SEQ_LANES];
+        nv_part_seq_lane_pos(h->part, lp);
+        J la = sess::arr();
+        for (long v : lp)
+            la.a.push_back(sess::integer(v));
+        r.o["seq_lpos"] = la;
     } else if (call == "drums") {              // the card opened (or shut: open false); sets: 1 for the user sets' sources
         if (w) {
             w->drums = arg_i(q, "open", 1) != 0;
@@ -2108,9 +2118,18 @@ extern "C" char *nv_ui_poll(nv_host *h, nv_ui_watch *w)
     }
     if (w->seq) {                               // (the sequencer's step as it moves; its state when changed)
         const long sp = nv_part_seq_pos(h->part);
-        if (sp != w->seq_pos) {
-            w->seq_pos = sp;
+        long lp[nv::SEQ_LANES];
+        nv_part_seq_lane_pos(h->part, lp);
+        long sig = sp;
+        for (long v : lp)
+            sig = sig * 31 + v;
+        if (sig != w->seq_pos) {                // (the beat's step, and each lane's: they part when one drifts)
+            w->seq_pos = sig;
             r.o["seq_pos"] = sess::integer(sp);
+            J la = sess::arr();
+            for (long v : lp)
+                la.a.push_back(sess::integer(v));
+            r.o["seq_lpos"] = la;
             any = true;
         }
         if (w->tick % 6 == 5) {

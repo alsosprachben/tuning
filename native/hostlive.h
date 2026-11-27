@@ -51,7 +51,7 @@
 #include "eucseq.h"
 
 // THE SEQUENCER's state as JSON (the session's "seq", the seq call's): lanes
-// [key, steps, hits, rot, vel, accent, mute]; a missing field its default's
+// [key, steps, hits, rot, vel, accent, mute, nudge, drift]; a missing field its default's
 namespace nv {
 inline sess::J seq_json(const Seq &s)
 {
@@ -64,7 +64,7 @@ inline sess::J seq_json(const Seq &s)
     sess::J ls = sess::arr();
     for (const SeqLane &l : s.lane) {
         sess::J e = sess::arr();
-        for (int v : {l.key, l.steps, l.hits, l.rot, l.vel, l.accent, l.mute})
+        for (int v : {l.key, l.steps, l.hits, l.rot, l.vel, l.accent, l.mute, l.nudge, l.drift})
             e.a.push_back(sess::integer(v));
         ls.a.push_back(e);
     }
@@ -96,6 +96,10 @@ inline void seq_from(Seq &s, const sess::J &o)
             l.vel = (int)e.a[4].i(l.vel);
             l.accent = (int)e.a[5].i(l.accent);
             l.mute = (int)e.a[6].i(l.mute);
+            if (e.a.size() >= 9) {
+                l.nudge = (int)e.a[7].i(l.nudge);
+                l.drift = (int)e.a[8].i(l.drift);
+            }
         }
     seq_patterns(s);
 }
@@ -164,6 +168,7 @@ void nv_part_chanstate(void *h, double *out);
 void nv_part_metronome(void *h, int pi, double bpm, int ring);
 void nv_part_seq(void *h, const nv::Seq *s, long long n0);
 long nv_part_seq_pos(void *h);
+void nv_part_seq_lane_pos(void *h, long *out);
 void nv_part_hits_out(void *h, std::atomic<unsigned> *ctr, unsigned char *vel);
 int nv_part_synth_get(void *h, int pi, int layer, double *pn, char *own);
 int nv_part_synth_set(void *h, int pi, int layer, int knob, double v);
