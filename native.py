@@ -737,6 +737,7 @@ def _load():
                                       ctypes.c_void_p]),
             ('nv_lreg_free', None, [ctypes.c_void_p]),
             ('nv_song_new', ctypes.c_void_p, []), ('nv_song_free', None, [ctypes.c_void_p]),
+            ('nv_song_natural', None, [ctypes.c_void_p, I, ctypes.c_char_p, ctypes.c_char_p]),
             ('nv_song_cc', None, [ctypes.c_void_p, LL, C, I, I]),
             ('nv_song_note', None, [ctypes.c_void_p, LL, I, C, C, I, C, C, C, C, I, I]),
             ('nv_play', I, [ctypes.c_void_p, ctypes.c_void_p, ctypes.POINTER(NoteIn), D, I,

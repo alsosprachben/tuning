@@ -513,7 +513,7 @@ def tuning_table(name):
 # the command line, or TUNING_NATURAL=0, plays every class in the render's.
 NATURAL = os.environ.get('TUNING_NATURAL', '1').lower() not in ('0', 'off', 'no', '')
 _NATURAL_TABLES = {}        # natural_spec -> its table
-_RIG = [None, None, None]   # the render's table, tuner name and natural switch, as _prepare set them
+_RIG = [None, None, None, set()]   # the render's table, tuner name, natural switch, gm2's first tables' ids (_prepare)
 
 
 def natural_spec(pc, rig, rig_name=None, on=None):
@@ -546,12 +546,36 @@ def natural_table(pc, rig, rig_name=None, on=None):
 
 def natural_for(pc, tab):
     """natural_table for a note whose channel table is tab: only where tab is
-    the render's own (not a file's MTS store)."""
-    return natural_table(pc, tab, _RIG[1], _RIG[2]) if tab is not None and tab is _RIG[0] else None
+    the render's own, or gm2's store as it starts (a channel the file has not
+    retuned: its timeline's first table, _RIG[3])."""
+    if tab is None or not (tab is _RIG[0] or id(tab) in _RIG[3]):
+        return None
+    return natural_table(pc, _RIG[0], _RIG[1], _RIG[2])
 
 
 def is_natural(tab):
     return any(tab is t for t in _NATURAL_TABLES.values())
+
+
+_NATURAL_NAMES = []
+
+
+def natural_names():
+    """Every tuner name a class names as its natural one (tonelib)."""
+    if not _NATURAL_NAMES:
+        import inspect
+        _NATURAL_NAMES.extend(sorted({getattr(c, 'natural_tuner', None) for _, c in inspect.getmembers(T, inspect.isclass)}
+                                     - {None}))
+    return _NATURAL_NAMES
+
+
+def natural_song(song):
+    """The engine's song told the natural tunings this render plays
+    (native/channel.cpp nv_song_natural: its classes' tables, as natural_for)."""
+    _on = NATURAL if _RIG[2] is None else _RIG[2]
+    import native as _NVN
+    _NVN.lib().nv_song_natural(song.p, 1 if _on else 0, str(_RIG[1] or '').encode(),
+                              "\n".join(natural_names()).encode())
 
 
 def _lyric_vowels(path, language=None):
@@ -8357,6 +8381,7 @@ def _prepare(path, tuner='hybrid440', sink=None, natural=None):
     _pwseq = _sys['pwseq']
 
     _MTS_TL = _prep_gm2_store(_sys, gmon, notes, rpns, tuner)
+    _RIG[3] = {id(_tl[0][1]) for _tl in _MTS_TL.values() if _tl}      # (natural_for: a channel not retuned)
 
     # Read by helpers made below and filled by the note loop: bound here so a
     # pass that makes a helper can hand it the object.
@@ -8701,6 +8726,8 @@ def _prepare(path, tuner='hybrid440', sink=None, natural=None):
                 for (_c, _k), _ts in _SINGLE.items():
                     for _t in _ts:
                         _SONG.add_single(_c, _k, _t)
+    if _SONG is not None:
+        natural_song(_SONG)
     if _SONG is not None and rankev_of:
         _organ_rows_check(_SONG, rankev_of, Grows, Srows, sh, wrow_of, BRrows, BCrows, _BLrows, nblk)
     # Occurrence index per (channel, note) in ONSET order -- the same key
@@ -10908,7 +10935,7 @@ if __name__=="__main__":
         if k.strip().lower() not in ('a','c') or not v:
             raise SystemExit("pitch reference must be a=<hz> or c=<hz>, e.g. a=432")
         midilib.set_reference(**{k.strip().lower(): float(v)})
-    # blockrender.py IN.mid OUT.wav [tuner] [a=440]
+    # blockrender.py IN.mid OUT.wav [tuner] [a=440] [eastern=SPEC] [natural=0]
     #                [--stems DIR | --objects DIR [--by-source]] [--no-reflect]
     mode = None; outdir = None
     for i, a in enumerate(sys.argv):

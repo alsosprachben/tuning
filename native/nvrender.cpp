@@ -217,6 +217,7 @@ int nv_midi_has_pn(void *p);
 double nv_midi_pn_attr(void *p, int ch, int note, double on);
 int nv_midi_pn(void *p, int which, int ch, int note, double *t, double *v, int cap);
 void nv_song_note_table(void *s, long long ch, double t, int indian, double *out);
+void nv_song_natural(void *s, int on, const char *rig, const char *names);
 int nv_meend_note(const double *wt, const int *wp, int nw, double on, double off, double nc, const double *sw,
                   int nsw, double rst, double strength, long nblk, int blk, double sr, double *r0, float *BR,
                   double *BC);
@@ -1062,7 +1063,7 @@ static bool write_wav(const char *path, const float *L, const float *R, long n, 
 static int run(int argc, char **argv)
 {
     if (argc < 4) {
-        fprintf(stderr, "usage: nvrender EXPORT.nvx IN.mid OUT.wav [--tuner=NAME [--a=HZ | --c=HZ]]\n");
+        fprintf(stderr, "usage: nvrender EXPORT.nvx IN.mid OUT.wav [--tuner=NAME [--a=HZ | --c=HZ]] [--natural=0]\n");
         return 1;
     }
     Export E;
@@ -1095,6 +1096,10 @@ static int run(int argc, char **argv)
         if (nc->sl != sl)
             nc->sl = sl;
     }
+    // NATURAL TUNINGS on, unless TUNING_NATURAL=0 or --natural=0 (blockrender.NATURAL)
+    static bool g_natural = true;
+    if (const char *tn_ = nv_env("TUNING_NATURAL"))
+        g_natural = !(!strcmp(tn_, "0") || !strcmp(tn_, "off") || !strcmp(tn_, "no") || !*tn_);
     // THE TUNER, if named: its table in place of the export's
     std::string tname, ra, rc, east = nv_env("TUNING_EASTERN") ? nv_env("TUNING_EASTERN") : "";
     long win = 0;                           // --window=W: the table rendered W samples at a time
@@ -1113,6 +1118,8 @@ static int run(int argc, char **argv)
             g_gpu = g_stream = true;        // (the GPU renders the stream's windows: streamrender's gpu=)
         else if (!strncmp(argv[i], "--eastern=", 10))
             east = argv[i] + 10;
+        else if (!strncmp(argv[i], "--natural=", 10))
+            g_natural = strcmp(argv[i] + 10, "0") && strcmp(argv[i] + 10, "off");
         else if (!strncmp(argv[i], "--a=", 4))
             ra = argv[i] + 4;
         else if (!strncmp(argv[i], "--c=", 4))
@@ -1578,6 +1585,20 @@ static int run(int argc, char **argv)
             nv_raga_info(tl.c_str(), 0.0, FE, have, &sa, sw, &nsw);
             nv_song_eastern(song, nullptr, 1, sa, sw, nsw);
         }
+    }
+    // NATURAL TUNINGS (blockrender.natural_for): the classes' own tuners, each
+    // at the song's A4 (--natural=0, TUNING_NATURAL=0: every class in the render's)
+    {
+        std::set<std::string> nm;
+        for (const ClassRef &c : E.classes) {
+            const NoteClass *k = (const NoteClass *)c.data();
+            if (k->ntuner[0])
+                nm.insert(std::string(k->ntuner, strnlen(k->ntuner, sizeof k->ntuner)));
+        }
+        std::string all;
+        for (const std::string &x : nm)
+            all += (all.empty() ? "" : "\n") + x;
+        nv_song_natural(song, g_natural ? 1 : 0, tname.c_str(), all.c_str());
     }
     nv_song_kits_n(song, E.kit_f0.data(), E.kit_seat.data(), (int)E.kit_f0.size());
     nv_song_chokes_n(song, E.kit_choke.data(), (int)E.kit_f0.size());

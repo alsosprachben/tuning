@@ -814,7 +814,7 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
             const bool own = k->amp_drive != 0.0;
             double r0 = own ? k->amp_reference : (k->amp_reference != 0.0 ? k->amp_reference : 0.2289);
             double ref = 0.0, pl[6];
-            if (r0 != 0.0 && nv_song_pitch_level_k(song, played[j], k->init.effort_tilt != 0.0, k->indian, pl)) {
+            if (r0 != 0.0 && nv_song_pitch_level_k(song, played[j], k->init.effort_tilt != 0.0, nv_song_tcode(song, k), pl)) {
                 double cv = pl[3], eg = 1.0;
                 if (k->organ && k->organ->swells)   // (an organ's CC7 its swell: the note at 1, trimmed)
                     cv = 1.0 * nv_song_note_trim(song, played[j]);
@@ -851,7 +851,7 @@ long long nv_prepare(void *song, const NoteClass *const *K, const NoteIn *tmpl, 
             const bool vown = k && k->amp_drive != 0.0;
             double pl[6];
             if ((vown || fb_[1] != 0.0) && k
-                && nv_song_pitch_level_k(song, played[j], k->init.effort_tilt != 0.0, k->indian, pl)) {
+                && nv_song_pitch_level_k(song, played[j], k->init.effort_tilt != 0.0, nv_song_tcode(song, k), pl)) {
                 double cv = pl[3];
                 if (k->organ && k->organ->swells)
                     cv = 1.0 * nv_song_note_trim(song, played[j]);

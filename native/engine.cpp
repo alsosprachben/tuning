@@ -1321,7 +1321,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         n.ring_on = 0;
         if (k->ring_n) {                    // ITS OTHER STRINGS, tuned as the notes are (_note_ring)
             double rtab[128];
-            nv_song_note_table(song, ch, dv[0], k->indian, rtab);
+            nv_song_note_table(song, ch, dv[0], nv_song_tcode(song, k), rtab);
             n.ring_on = 1;
             for (int q = 0; q < k->ring_n; q++) {
                 double hf = k->ring_hz[q];
@@ -1445,7 +1445,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         if (is_gl && glv[1] > 0.0 && glv[2] >= 0.0) {
             double stau = glv[3] * glv[1] * 0.75;
             double tab[128];
-            nv_song_note_table(song, ch, dv[0], k->indian, tab);
+            nv_song_note_table(song, ch, dv[0], nv_song_tcode(song, k), tab);
             int pv = (int)glv[2];
             if (stau > 2e-3 && tab[pv] > 0.0) {
                 n.gl[0] = tab[iv[0]] / tab[pv] - 1.0;
@@ -1455,7 +1455,7 @@ int nv_play(void *song, const NoteClass *const *K, const NoteIn *tmpl, const dou
         }
         if (n.gl[0] == 0.0 && src >= 0 && k->glide_mech) {
             double tab[128];
-            nv_song_note_table(song, ch, dv[0], k->indian, tab);
+            nv_song_note_table(song, ch, dv[0], nv_song_tcode(song, k), tab);
             if (src < 128 && tab[src] > 0.0
                 && (std::isnan(k->glide_reach) || std::abs(iv[0] - src) <= k->glide_reach + 1e-9)) {
                 double ft = tab[iv[0]], fs = tab[src];

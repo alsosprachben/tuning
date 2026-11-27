@@ -831,10 +831,12 @@ struct Render {
         std::string exe = nv_self_exe();
         exe = exe.substr(0, exe.rfind('/') + 1);
         std::string tuner, east;
+        bool natural = true;
         {
             std::lock_guard<std::mutex> lk(h->bmu);
             tuner = h->tuner_now;
             east = h->east_now;
+            natural = h->nat_asked;             // (natural tunings: the rig's switch)
         }
         // (the as-heard render's session: this one's, the file's parts in)
         J st = h->session_state(h->E.routes);
@@ -926,6 +928,8 @@ struct Render {
                 common.push_back("--tuner=" + tuner);
             if (!east.empty())
                 common.push_back("--eastern=" + east);
+            if (!natural)
+                common.push_back("--natural=0");
             // (streamed: the render reads the song first and, where it cannot stream,
             // stops saying why (--stream-only: exit 3) -- asked before a whole render,
             // with no pass of its own to find out)

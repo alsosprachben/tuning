@@ -1203,9 +1203,9 @@ struct RegFeed {
         rk += 100000;
     if (!chans.count(rk)) {
         double pl[6];
-        nv_song_pitch_level_k(song, i, k->init.effort_tilt != 0.0, k->indian, pl);
+        nv_song_pitch_level_k(song, i, k->init.effort_tilt != 0.0, nv_song_tcode(song, k), pl);
         double tab[128];
-        nv_song_note_table(song, ch, dv[0], k->indian, tab);
+        nv_song_note_table(song, ch, dv[0], nv_song_tcode(song, k), tab);
         VoiceInit c = k->init;
         double det = 1.0;
         int c1;
@@ -1544,7 +1544,7 @@ static void sym_strike(void *song, const NoteClass *k, const NoteIn *tmpl, long 
         f0 = pymin(f0, rows[NC * r + C_nf]);
     }
     double tab[128];
-    nv_song_note_table(song, ch, nmin / sr, k->indian, tab);   // (_F_SYM)
+    nv_song_note_table(song, ch, nmin / sr, nv_song_tcode(song, k), tab);   // (_F_SYM)
     // _nearest_key: the table's key nearest f0 in cents (the first of equals)
     int drv = -1;
     double bd = 0.0;

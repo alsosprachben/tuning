@@ -1872,9 +1872,41 @@ struct Song {
     int raga_sa = -1;
     bool raga_on = false;
     std::vector<double> raga_sw;
-    const std::vector<double> &note_table(long long c, double t, bool indian) const
+    // NATURAL TUNINGS (blockrender.natural_for): a class with a natural tuner
+    // plays its table at the render's A4 (name~Hz), on a channel whose tuning
+    // the file does not own (the render's own table, not an MTS store) --
+    // each named one made when the song is told (nv_song_natural), so a
+    // note's table is a lookup: its class's code (tcode) 0 the channel's, 1
+    // the Eastern (an 'indian' class), 2 + i natural table i
+    bool natural_on = false;
+    std::map<std::string, int> nat_ix;
+    std::vector<std::vector<double>> nat;
+    int tcode(const NoteClass *K) const
     {
-        return indian && !freq_e.empty() ? freq_e : table(c, t);
+        if (!K)
+            return 0;
+        if (K->indian)
+            return 1;
+        if (!natural_on || !K->ntuner[0])
+            return 0;
+        auto it = nat_ix.find(std::string(K->ntuner, strnlen(K->ntuner, sizeof K->ntuner)));
+        return it == nat_ix.end() ? 0 : 2 + it->second;
+    }
+    const std::vector<double> &note_table(long long c, double t, int code) const
+    {
+        if (code == 1)
+            return !freq_e.empty() ? freq_e : table(c, t);
+        const std::vector<double> &tab = table(c, t);
+        if (code < 2 || (size_t)(code - 2) >= nat.size())
+            return tab;
+        // (a channel the file has not retuned: the render's own table, or gm2's
+        //  store as it starts -- its timeline's first)
+        bool own = &tab == &freq;
+        if (!own) {
+            auto it = mts.find(c);
+            own = it != mts.end() && !it->second.empty() && &tab == &it->second[0].second;
+        }
+        return own ? nat[(size_t)(code - 2)] : tab;
     }
 
     // _note_class_and_pitch for a melodic note with none of its extras (no
@@ -1885,7 +1917,7 @@ struct Song {
     double scaled(long long c, int note, double on, const NoteClass *K, double f0) const
     {
         const int st = K->scale_tonic;
-        double tonic = note_table(c, on, K->indian != 0)[st] * (K->sounding_oct != 0.0 ? pow(2.0, K->sounding_oct) : 1.0);
+        double tonic = note_table(c, on, tcode(K))[st] * (K->sounding_oct != 0.0 ? pow(2.0, K->sounding_oct) : 1.0);
         auto b = btun.find(c);
         tonic = tonic * ((b != btun.end() && b->second != 0.0) ? b->second : 1.0);
         auto o = otun.find(c);
@@ -1896,14 +1928,14 @@ struct Song {
         return f0;
     }
 
-    double pitch(long long c, int note, double on, bool indian = false, double so = 0.0) const
+    double pitch(long long c, int note, double on, int code = 0, double so = 0.0) const
     {
         // MIDI 2.0's per-note pitch is absolute and outranks the tuner, MTS and
         // the channel's scale (M2-104 7.4.15); its bend, the static bend and the
         // channel's tuning still offset it
         auto pq = pn.find(NoteKey{c, note, on});
         const bool own = pq != pn.end() && !std::isnan(pq->second[0]);
-        double f0 = own ? 440.0 * pow(2.0, (pq->second[0] - 69.0) / 12.0) : note_table(c, on, indian)[note];
+        double f0 = own ? 440.0 * pow(2.0, (pq->second[0] - 69.0) / 12.0) : note_table(c, on, code)[note];
         if (pq != pn.end())
             f0 *= pq->second[1];
         auto mp = mpe.find(NoteKey{c, note, on});
@@ -3998,6 +4030,47 @@ int nv_song_meend_row(void *s, int i, double *row)
 }
 
 int nv_song_has_eastern(void *s) { return !((nv::Song *)s)->freq_e.empty(); }
+
+// NATURAL TUNINGS on for this song (blockrender.natural_for): each of the
+// tuner names NAMES ('\n' between) the song's classes may name, its table at
+// the song's A4 -- unless it is the render's own tuner RIG (any pitch). The
+// song's table first (nv_song_tuning).
+int nv_tuning_table(const char *name, int ref_note, double ref_hz, double *out, int *have);    // (tuner.cpp)
+void nv_song_natural(void *s, int on, const char *rig, const char *names)
+{
+    nv::Song *S = (nv::Song *)s;
+    S->natural_on = on != 0;
+    S->nat_ix.clear();
+    S->nat.clear();
+    if (!on || !names || S->freq.size() < 70 || !(S->freq[69] > 0.0))
+        return;
+    std::string r = rig ? rig : "";
+    for (char &c : r)
+        c = (char)tolower((unsigned char)c);
+    r = r.substr(0, r.find_first_of("~:@"));
+    std::string all = names;
+    size_t a = 0;
+    while (a <= all.size()) {
+        size_t b = all.find('\n', a);
+        const std::string nm = all.substr(a, b == std::string::npos ? std::string::npos : b - a);
+        a = b == std::string::npos ? all.size() + 1 : b + 1;
+        if (nm.empty() || nm == r || S->nat_ix.count(nm))
+            continue;
+        char spec[96];
+        snprintf(spec, sizeof spec, "%s~%.17g", nm.c_str(), S->freq[69]);
+        double F[128];
+        int have[128];
+        if (nv_tuning_table(spec, -1, 0.0, F, have) != 0)
+            continue;
+        std::vector<double> t(128, 0.0);
+        for (int n = 0; n < 128; n++)
+            t[(size_t)n] = have[n] ? F[n] : 0.0;
+        S->nat_ix[nm] = (int)S->nat.size();
+        S->nat.push_back(t);
+    }
+}
+
+int nv_song_tcode(void *s, const NoteClass *K) { return ((nv::Song *)s)->tcode(K); }
 int nv_song_raga_sw(void *s, double *sw) {
     const nv::Song *S = (nv::Song *)s;
     if (!S->raga_on)
@@ -4009,7 +4082,7 @@ int nv_song_raga_sw(void *s, double *sw) {
 
 void nv_song_note_table(void *s, long long ch, double t, int indian, double *out)
 {
-    const std::vector<double> &tab = ((nv::Song *)s)->note_table(ch, t, indian != 0);
+    const std::vector<double> &tab = ((nv::Song *)s)->note_table(ch, t, indian);
     for (int k = 0; k < 128; k++)
         out[k] = tab[k];
 }
@@ -4064,8 +4137,8 @@ int nv_song_pitch_level_k(void *s, int i, int effort_tilt, int indian, double *o
 
 int nv_song_pitch_level_kc(void *s, int i, int effort_tilt, const NoteClass *K, double *out)
 {
-    int r = nv_song_pitch_level_ks(s, i, effort_tilt, K->indian, K->sounding_oct, out);
     const nv::Song *S = (nv::Song *)s;
+    int r = nv_song_pitch_level_ks(s, i, effort_tilt, S->tcode(K), K->sounding_oct, out);
     if (r == 2 && K->sounding_oct != 0.0)
         out[0] *= pow(2.0, K->sounding_oct);   // a drum's sounding octaves (the helicopter's rotor), after its stroke's pitch
     if (r == 1 && K->scale_n && K->scale_tonic >= 0 && K->scale_tonic < 128)
@@ -4123,7 +4196,7 @@ int nv_song_pitch_level_ks(void *s, int i, int effort_tilt, int indian, double s
         }
         r = 2;
     } else {
-        out[0] = S->pitch(ch, note, on, indian != 0, so);
+        out[0] = S->pitch(ch, note, on, indian, so);       // (indian: the class's table code, tcode)
     }
     out[1] = e.vel;
     out[2] = e.pan;

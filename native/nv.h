@@ -1886,6 +1886,12 @@ void nv_bend_fader_channels(const int *fch, int n);
 int nv_bend_stream(void *midi, int ch, int with_master, double bend_range, double *t, double *r, int cap);
 void nv_bend_rows(const double *t, const double *r, int n, long nblk, int blk, double sr, float *BR, double *BC);
 void nv_song_note_table(void *s, long long ch, double t, int indian, double *out);
+/* NATURAL TUNINGS (blockrender.natural_for): on, the render's tuner's name,
+   the tuner names the classes may name ('\n' between); a class's table code
+   for the calls above that take `indian` (0 the channel's, 1 the Eastern, 2+
+   a natural tuning's) */
+void nv_song_natural(void *s, int on, const char *rig, const char *names);
+int nv_song_tcode(void *s, const NoteClass *K);
 /* THE DRIVER OF A CHANNEL's STRINGS (sympathetic._coupling's: _SYM_CH's
    props, its first note's voice): a VoiceSnap's room, once a mix channel,
    NULL after; read back (NULL none); and all forgotten (a play again) */
