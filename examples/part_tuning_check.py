@@ -215,6 +215,34 @@ def main(argv):
     print("each tuning's own A again: A4 %.3f Hz  %s" % (fa, "ok" if ok else "WRONG"))
     bad += not ok
     notes += 1
+    # THE RIG ON EACH INSTRUMENT's OWN OCTAVES (chains/<bridge>/own): the
+    # fortepiano set to the rig's plays the chains on its own strings' law
+    # (its token in the name), C7 against A4 as that table has it
+    call({"call": "tuner_set", "name": "chains/pure/own/fourth@bb"})
+    call({"call": "part_tuner_set", "row": 0, "name": "rig"})
+    render(0.2)
+    t0 = time.time()
+    p = {}
+    while time.time() - t0 < 120:
+        p = settle()
+        if p.get("plays", "").startswith("chains/pure/b0x="):
+            break
+    pl = p.get("plays", "")
+    tab = N.tuning_table(pl + "~%r" % 440.0) if pl else {}
+    if tab:
+        fa, la = pitch(69, tab[69])
+        fc, lc = pitch(96, tab[96])
+        heard, want = cents(fc, fa), cents(tab[96], tab[69])
+        ok = pl.startswith("chains/pure/b0x=") and abs(heard - want) < 1.0 and la > -80 and lc > -80
+    else:
+        heard = want = float("nan")
+        ok = False
+    print("own octaves, the fortepiano: plays %s...; C7 over A4 %+.2f c heard, %+.2f c in its table  %s"
+          % (pl[:24], heard, want, "ok" if ok else "WRONG"))
+    bad += not ok
+    notes += 2
+    call({"call": "tuner_set", "name": "gm2"})
+    settle()
     # A PRESET keeps a part's own tuning and natural tunings off (saved by
     # name: own_tuner, natural_tunings), and brings them back
     d.nv_host_preset_save.argtypes = d.nv_host_preset_load.argtypes = [vp, cp, cp, ci]

@@ -156,6 +156,25 @@ def main():
                      ("hybridmean", "chains/mean@c:415")):
         a, b = N.tuning_table(old, reference=None), N.tuning_table(var, reference=None)
         expect("%s = %s (worst key, Hz)" % (old, var), max(abs(a[n] - b[n]) for n in range(128)), 0.0)
+    # EACH INSTRUMENT's OWN OCTAVES: the classes with strings of their own are
+    # the same by Python's test (tunelib.chain_law_token: a piano) and by what
+    # the engine sees (nv_class_law_token: kind 0, a dynamic B, law 0-2, the
+    # hammer model) -- over every class
+    import inspect
+    import tonelib as TO
+    import tunelib as TU
+    odd = []
+    for _, c in inspect.getmembers(TO, inspect.isclass):
+        if not hasattr(c, 'inharmonicity_dynamic'):
+            continue
+        try:
+            k = N.kit_drum(c)
+        except Exception:
+            continue
+        seen = bool(k == 0 and c.inharmonicity_dynamic and N._b_law(c) in (0, 1, 2) and getattr(c, 'hammer_model', None))
+        if seen != (TU.chain_law_token(c) is not None):
+            odd.append(c.__name__)
+    expect("classes the two tests see differently (%s)" % ",".join(odd[:3]), len(odd), 0)
     print("chains: %s" % ("all as proved" if not bad else "%d MISSED" % bad))
     return 1 if bad else 0
 

@@ -44,6 +44,13 @@ def main(argv):
     specs += ["chains/%s/%s/%s@%s" % (b, o, r, k) for b in ("pure", "mean", "395.5") for o in ("piano", "middle")
               for r in ("fifth", "fourth", "octaves") for k in keys]
     specs += ["chains/pure/pure/octaves@d", "chains/mean/pure/fourth@c", "chains/pure/middle/fourth@bb:415"]
+    # ...on each piano class's own strings (tunelib.chain_law_token), and "own" unresolved (pure)
+    laws = [TL.chain_law_token(getattr(TL, c)) for c in ("GrandPianoProperties", "UprightPianoProperties",
+                                                         "PleyelProperties", "ElectricGrandProperties")]
+    specs += ["chains/%s/%s/%s@%s" % (b, w, r, k) for b in ("pure", "mean") for w in laws
+              for r in ("fifth", "fourth", "octaves") for k in ("c", "g", "bb", "f#")]
+    specs += ["chains/pure/own@bb", "chains/mean/own/fourth@g", "chains/pure/%s:415" % laws[0]]
+    specs += ["chains/pure/b0=1,2,3@c", "chains/pure/b3=1,2,3,4,5@c", "chains/pure/b1y=1,2,3,4,5@c"]   # refused
     specs += ["chains/pure/organ@c", "chains/pure/piano@h", "chains/pure/piano/third@c", "chains/pure/piano/fifth/x"]   # refused
     specs += ["chains/384.3", "chains/407.9", "chains/abc", "chains/", "chains/pure@h"]   # refused
     specs += ["even@d", "pyth:466", "hybrid@h", "nosuch", "hybrid:abc"]          # refused

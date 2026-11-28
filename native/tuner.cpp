@@ -27,6 +27,7 @@
 // Bit for bit blockrender.tuning_table's (examples/tuner_check.py): libm's
 // pow, log and sqrt where Python calls them, its order of operations.
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <cstring>
@@ -104,9 +105,64 @@ static double grand_coeff(double x)
     return a + b * x + c * x * x + (d / x) + (e / (x * x));
 }
 static double ratio2(double coeff) { return 2.0 * (1.0 + 0.5 * 3.0 * coeff); }    // (inharmonicity_coefficient_ratio(2, c))
+// A CLASS's OWN STRINGS (tunelib.chain_law_token: b<law>[x]=<numbers>):
+// voice.c law_B's arithmetic -- 0 the polynomial (floor 27.5 Hz), 1 a
+// two-part power law, 2 the polynomial times (long/short)^4; x the stiff
+// string's 2nd partial exactly. law -1: path.py's fitted grand, first order
+struct ChainLaw {
+    int law = -1;
+    bool exact = false;
+    double p[8] = {};
+    double B(double x) const
+    {
+        if (law < 0)
+            return grand_coeff(x);
+        if (law == 1)
+            return x < p[4] ? p[0] * pow(x, p[1]) : p[2] * pow(x, p[3]);
+        const double xl = x < 27.5 ? 27.5 : x;
+        double y = p[0] + p[1] * xl + p[2] * xl * xl + (p[3] / xl) + (p[4] / (xl * xl));
+        if (law == 2) {
+            const double f = x > 1e-6 ? x : 1e-6;
+            const double long_ = std::min(p[5] / f, p[6]), short_ = std::min(p[5] / f, p[7]);
+            y = y * pow(long_ / short_, 4.0);
+        }
+        return y;
+    }
+    double ratio(double coeff) const
+    {
+        return exact ? 2.0 * sqrt((1.0 + 4.0 * coeff) / (1.0 + coeff)) : ratio2(coeff);
+    }
+};
+// a law token taken apart; false if it is not one
+static bool chain_law(const std::string &tok, ChainLaw *L)
+{
+    const size_t eq = tok.find('=');
+    if (eq == std::string::npos || eq < 2 || tok[0] != 'b' || tok[1] < '0' || tok[1] > '2')
+        return false;
+    const std::string head = tok.substr(0, eq);
+    if (head.size() > 3 || (head.size() == 3 && head[2] != 'x'))
+        return false;
+    L->law = tok[1] - '0';
+    L->exact = head.size() == 3;
+    std::string rest = tok.substr(eq + 1);
+    int n = 0;
+    size_t a = 0;
+    while (a <= rest.size() && n < 8) {
+        const size_t b = rest.find(',', a);
+        const std::string t = rest.substr(a, b == std::string::npos ? std::string::npos : b - a);
+        if (!pyfloat(t, &L->p[n]))
+            return false;
+        n++;
+        if (b == std::string::npos)
+            break;
+        a = b + 1;
+    }
+    return n == (L->law == 2 ? 8 : 5) && rest.find(',', 0) != std::string::npos;
+}
 struct ChainGen {
     double f[150];
     bool set[150];
+    ChainLaw L;
     // Note.rel_tune: child from parent by n/d (along the inharmonicity: an octave)
     void tune(int child, int parent, int n, int d, bool inh = false)
     {
@@ -114,9 +170,9 @@ struct ChainGen {
         if (!inh)
             v = f[parent] * (double)n / (double)d;
         else if (n >= d)
-            v = base * (ratio2(grand_coeff(f[parent])) / 2.0);
+            v = base * (L.ratio(L.B(f[parent])) / 2.0);
         else
-            v = base / (ratio2(grand_coeff(base)) / 2.0);
+            v = base / (L.ratio(L.B(base)) / 2.0);
         f[child] = v;
         set[child] = true;
     }
@@ -127,9 +183,10 @@ static int chain_shift(int s) { return s < 6 ? s : s - 12; }
 // tunelib._chain_gen: the generator's table (keys it tuned), before the
 // reference, for a route (0 fifth, 1 fourth, 2 octaves) from start s; the
 // bridge by `ratio` (pure_ratio: the fourth route's 5/4 as HybridNotes writes it)
-static Table chain_gen(int route, int s, double ratio, bool pure_ratio)
+static Table chain_gen(int route, int s, double ratio, bool pure_ratio, const ChainLaw &law = ChainLaw())
 {
     ChainGen g;
+    g.L = law;
     for (int n = 0; n < 150; n++) {
         g.f[n] = 0.0;
         g.set[n] = false;
@@ -509,13 +566,18 @@ int nv_tuning_table(const char *name, int ref_note, double ref_hz, double *out, 
             }
         }
         const int route = rt == "fifth" ? 0 : rt == "fourth" ? 1 : rt == "octaves" ? 2 : -1;
-        if (!chain_bridge(sp, &Xc) || (oc != "pure" && oc != "piano" && oc != "middle") || route < 0)
+        ChainLaw law;
+        if (oc == "own")                                // (unresolved: pure octaves)
+            oc = "pure";
+        const bool own = oc.size() > 2 && oc[0] == 'b' && oc.find('=') != std::string::npos;
+        if (!chain_bridge(sp, &Xc) || (oc != "pure" && oc != "piano" && oc != "middle" && !own) || route < 0
+            || (own && !chain_law(oc, &law)))
             return -1;
         if (oc == "pure" && route == 2)
             chain_bridge("helm", &Xc);
         if (oc != "pure") {
             const double ratio = sp == "mean" ? pow(80.0 * 81.0, 0.5) / 64.0 : pow(2.0, Xc / 1200.0);
-            Table t = chain_gen(route, has_tonic ? tonic : 0, ratio, sp == "pure");
+            Table t = chain_gen(route, has_tonic ? tonic : 0, ratio, sp == "pure", law);
             const double A = has_pitch ? pitch : 440.0;
             const int rn = ref.on ? ref.note : 69;
             const double rh = ref.on ? ref.hz : A;

@@ -171,7 +171,7 @@ def set_tuner(name):
         if len(parts) > 3:
             raise ValueError("bad chains tuner %r: chains/<bridge>[/<octaves>[/<route>]]" % name)
         spec, octaves, route = (parts + ["pure", "fifth"][len(parts) - 1:])[:3]
-        if octaves != "pure" and octaves in _TL.CHAIN_OCTAVES:
+        if octaves not in ("pure", "own") and (octaves in _TL.CHAIN_OCTAVES or "=" in octaves):
             tuner_class = _TL.chains_tuner(spec, octaves, _KEYS[tonic] if tonic is not None else 0, route)
             tonic = None                # (built there: not moved)
         else:

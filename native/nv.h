@@ -1894,6 +1894,14 @@ void nv_song_note_table(void *s, long long ch, double t, int indian, double *out
    for the calls above that take `indian` (0 the channel's, 1 the Eastern, 2+
    a natural tuning's) */
 void nv_song_natural(void *s, int on, const char *rig, const char *names);
+/* A PIANO's OWN STRINGS as a chains octaves token (tunelib.chain_law_token:
+   b<law>[x]=<numbers>, the class's B law and stretch_exact) into out, its
+   length; 0 where the class is not a piano with a string law (kind 0, a
+   dynamic B, law 0-2, the hammer model) */
+int nv_class_law_token(const NoteClass *K, char *out, int cap);
+/* a tuner name on its instrument's own octaves (chains/<bridge>/own...) with
+   K's token in their place, into out; the name as it is otherwise */
+int nv_own_name(const char *name, const NoteClass *K, char *out, int cap);
 int nv_song_tcode(void *s, const NoteClass *K);
 /* THE DRIVER OF A CHANNEL's STRINGS (sympathetic._coupling's: _SYM_CH's
    props, its first note's voice): a VoiceSnap's room, once a mix channel,

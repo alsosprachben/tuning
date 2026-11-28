@@ -516,17 +516,38 @@ _NATURAL_TABLES = {}        # natural_spec -> its table
 _RIG = [None, None, None, set()]   # the render's table, tuner name, natural switch, gm2's first tables' ids (_prepare)
 
 
+_OWN_RE = re.compile(r'^(chains/[^/@:~]+)/own(?=[/@:~]|$)', re.I)
+
+
+def own_name(name, pc):
+    """A chains name on its instrument's own octaves (chains/<bridge>/own...)
+    for class pc: its strings' law in their place (tunelib.chain_law_token);
+    the name as it is otherwise (own, unresolved, is pure octaves)."""
+    m = _OWN_RE.match(str(name))
+    if not m:
+        return name
+    import tunelib as _TL
+    tok = _TL.chain_law_token(pc)
+    return name if tok is None else m.group(1) + "/" + tok + str(name)[m.end():]
+
+
 def natural_spec(pc, rig, rig_name=None, on=None):
     """The tuner class pc plays by its own nature, as a name: its natural
-    tuner with A4 at rig's (name~Hz); None: rig's own (natural tunings off --
-    ON, else NATURAL -- no natural tuner, or it is the rig's tuner, at any
-    pitch)."""
+    tuner with A4 at rig's (name~Hz); else, where the render's tuner is two
+    chains on each instrument's own octaves, those on pc's strings; None:
+    rig's own (natural tunings off -- ON, else NATURAL -- no natural tuner,
+    or it is the rig's tuner, at any pitch; no strings of its own)."""
     name = getattr(pc, 'natural_tuner', None)
-    if not (NATURAL if on is None else on) or not name or not rig or 69 not in rig:
+    if not rig or 69 not in rig:
         return None
-    if rig_name is not None and re.split(r'[~:@]', str(rig_name).lower())[0] == name:
-        return None
-    return "%s~%r" % (name, float(rig[69]))
+    if (NATURAL if on is None else on) and name and not (
+            rig_name is not None and re.split(r'[~:@]', str(rig_name).lower())[0] == name):
+        return "%s~%r" % (name, float(rig[69]))
+    if rig_name is not None and _OWN_RE.match(str(rig_name)):
+        o = own_name(str(rig_name), pc)
+        if o != str(rig_name):          # (at the render's A4: its pitch in place of the name's)
+            return "%s~%r" % (re.split(r'[~:]', o)[0], float(rig[69]))
+    return None
 
 
 def natural_table(pc, rig, rig_name=None, on=None):

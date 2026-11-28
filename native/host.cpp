@@ -792,18 +792,30 @@ int nv_host::open(int argc, char **argv)
         char a4[40];
         snprintf(a4, sizeof a4, "~%.17g", E.freq[69]);
         const int vid = (var >> 20) & 2047, tid = vid ? nv_voicing_tid(vid) : 0;
+        const NoteClass *k = cls60(prog & 127, var & 4095);
+        // (a chains name on its instrument's own octaves: this class's strings in their place)
+        auto own_of = [&](const std::string &nm) {
+            char b[1024];
+            nv_own_name(nm.c_str(), k, b, sizeof b);
+            return std::string(b);
+        };
+        // THE RIG's, on each instrument's own octaves: a piano's own (blockrender.natural_spec)
+        auto rig_own = [&]() -> std::string {
+            const std::string base = tname.substr(0, tname.find_first_of(":~"));
+            const std::string o = own_of(base);
+            return o == base ? std::string() : o + a4;
+        };
         if (tid > 0) {
             const std::string own = nv_tuner_name(tid);
             if (own == "rig")
-                return "";
-            return own.find_first_of(":~") != std::string::npos || own.compare(0, 5, "raga:") == 0 ? own : own + a4;
+                return rig_own();
+            return own.find_first_of(":~") != std::string::npos || own.compare(0, 5, "raga:") == 0 ? own_of(own) : own_of(own) + a4;
         }
-        const NoteClass *k = cls60(prog & 127, var & 4095);
         if (!k || !natural_on || !k->ntuner[0] || (k->indian && (raga_sa >= 0 || !east.empty())))
-            return "";
+            return k && !(k->indian && (raga_sa >= 0 || !east.empty())) ? rig_own() : std::string();
         const std::string nt(k->ntuner, strnlen(k->ntuner, sizeof k->ntuner));
         if (tl_.substr(0, tl_.find_first_of("~:@")) == nt)
-            return "";                          // (the rig's tuner is its own already)
+            return rig_own();                   // (the rig's tuner is its own already)
         return nt + a4;
     };
     tune_for = [&](int prog, bool dr, int var) -> const double * {

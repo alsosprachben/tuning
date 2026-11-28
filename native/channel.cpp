@@ -24,6 +24,7 @@
 #include <cmath>
 #include <cstring>
 #include <map>
+#include <mutex>
 #include <set>
 #include <string>
 #include <tuple>
@@ -1887,17 +1888,30 @@ struct Song {
             return 0;
         if (K->indian)
             return 1;
-        if (!natural_on || !K->ntuner[0])
-            return 0;
-        auto it = nat_ix.find(std::string(K->ntuner, strnlen(K->ntuner, sizeof K->ntuner)));
-        return it == nat_ix.end() ? 0 : 2 + it->second;
+        if (natural_on && K->ntuner[0]) {
+            auto it = nat_ix.find(std::string(K->ntuner, strnlen(K->ntuner, sizeof K->ntuner)));
+            if (it != nat_ix.end())
+                return 2 + it->second;
+        }
+        return own_code(K);
     }
+    // THE RIG's TUNER ON EACH INSTRUMENT's OWN OCTAVES (blockrender.natural_spec:
+    // chains/<bridge>/own...): a piano class's table on its strings' law, at
+    // the song's A4 -- made the first time a note asks (OWN_MAX of them, kept
+    // where they are: a note's table is read while another class's is made)
+    static const int OWN_MAX = 32;
+    std::string own_rig;                            // (the rig's name, its pitch off; "" not own)
+    mutable std::mutex own_mu;
+    mutable std::map<std::string, int> own_ix;      // (a law token's table)
+    mutable std::array<std::vector<double>, OWN_MAX> own_tab;
+    mutable int own_n = 0;
+    int own_code(const NoteClass *K) const;
     const std::vector<double> &note_table(long long c, double t, int code) const
     {
         if (code == 1)
             return !freq_e.empty() ? freq_e : table(c, t);
         const std::vector<double> &tab = table(c, t);
-        if (code < 2 || (size_t)(code - 2) >= nat.size())
+        if (code < 2 || (size_t)(code - 2) >= nat.size() + OWN_MAX)
             return tab;
         // (a channel the file has not retuned: the render's own table, or gm2's
         //  store as it starts -- its timeline's first)
@@ -1906,7 +1920,9 @@ struct Song {
             auto it = mts.find(c);
             own = it != mts.end() && !it->second.empty() && &tab == &it->second[0].second;
         }
-        return own ? nat[(size_t)(code - 2)] : tab;
+        if (!own)
+            return tab;
+        return (size_t)(code - 2) < nat.size() ? nat[(size_t)(code - 2)] : own_tab[(size_t)(code - 2) - nat.size()];
     }
 
     // _note_class_and_pitch for a melodic note with none of its extras (no
@@ -4042,6 +4058,19 @@ void nv_song_natural(void *s, int on, const char *rig, const char *names)
     S->natural_on = on != 0;
     S->nat_ix.clear();
     S->nat.clear();
+    {                                           // (the rig's own-octave chains: its name, pitch off)
+        std::lock_guard<std::mutex> lk(S->own_mu);
+        S->own_ix.clear();
+        S->own_n = 0;
+        std::string rn = rig ? rig : "", rl = rn;
+        for (char &ch : rl)
+            ch = (char)tolower((unsigned char)ch);
+        const size_t sl = rl.compare(0, 7, "chains/") == 0 ? rl.find('/', 7) : std::string::npos;
+        S->own_rig = sl != std::string::npos && rl.compare(sl, 4, "/own") == 0
+                             && (sl + 4 == rl.size() || strchr("/@:~", rl[sl + 4]))
+                         ? rn.substr(0, rn.find_first_of(":~"))
+                         : std::string();
+    }
     if (!on || !names || S->freq.size() < 70 || !(S->freq[69] > 0.0))
         return;
     std::string r = rig ? rig : "";
@@ -4070,7 +4099,78 @@ void nv_song_natural(void *s, int on, const char *rig, const char *names)
     }
 }
 
+int nv::Song::own_code(const NoteClass *K) const
+{
+    if (own_rig.empty() || freq.size() < 70 || !(freq[69] > 0.0))
+        return 0;
+    char tok[512];
+    if (nv_class_law_token(K, tok, sizeof tok) <= 0)
+        return 0;
+    std::lock_guard<std::mutex> lk(own_mu);
+    auto it = own_ix.find(tok);
+    if (it != own_ix.end())
+        return it->second < 0 ? 0 : 2 + (int)nat.size() + it->second;
+    char nm[1024], spec[1100];
+    nv_own_name(own_rig.c_str(), K, nm, sizeof nm);
+    snprintf(spec, sizeof spec, "%s~%.17g", nm, freq[69]);
+    double F[128];
+    int have[128];
+    if (own_n >= OWN_MAX || nv_tuning_table(spec, -1, 0.0, F, have) != 0) {
+        own_ix[tok] = -1;
+        return 0;
+    }
+    std::vector<double> &t = own_tab[(size_t)own_n];
+    t.assign(128, 0.0);
+    for (int n = 0; n < 128; n++)
+        t[(size_t)n] = have[n] ? F[n] : 0.0;
+    own_ix[tok] = own_n;
+    return 2 + (int)nat.size() + own_n++;
+}
+
 int nv_song_tcode(void *s, const NoteClass *K) { return ((nv::Song *)s)->tcode(K); }
+
+int nv_class_law_token(const NoteClass *K, char *out, int cap)
+{
+    if (!K || K->init.kind != 0 || !K->init.inharmonicity_dynamic || K->init.b_law < 0 || K->init.b_law > 2
+        || !K->tmpl.hammer_model)
+        return 0;
+    const VoiceInit &c = K->init;
+    double p[8];
+    int n;
+    if (c.b_law == 1) {
+        const double q[5] = {c.wound_k, c.wound_p, c.plain_k, c.plain_p, c.break_hz};
+        n = 5;
+        std::copy(q, q + 5, p);
+    } else {
+        const double q[8] = {c.ia, c.ib, c.ic, c.id, c.ie, c.scale_constant_hz_m, c.reference_string_max_m, c.case_string_max_m};
+        n = c.b_law == 2 ? 8 : 5;
+        std::copy(q, q + n, p);
+    }
+    std::string s = "b" + std::to_string(c.b_law) + (K->tmpl.stretch_exact ? "x" : "") + "=";
+    for (int i = 0; i < n; i++) {
+        char b[40];
+        snprintf(b, sizeof b, "%s%.17g", i ? "," : "", p[i]);
+        s += b;
+    }
+    snprintf(out, (size_t)cap, "%s", s.c_str());
+    return (int)s.size();
+}
+
+int nv_own_name(const char *name, const NoteClass *K, char *out, int cap)
+{
+    std::string nm = name ? name : "";
+    std::string lo = nm;
+    for (char &ch : lo)
+        ch = (char)tolower((unsigned char)ch);
+    char tok[512];
+    size_t sl;
+    if (lo.compare(0, 7, "chains/") == 0 && (sl = lo.find('/', 7)) != std::string::npos
+        && lo.compare(sl, 4, "/own") == 0 && (sl + 4 == lo.size() || strchr("/@:~", lo[sl + 4]))
+        && nv_class_law_token(K, tok, sizeof tok) > 0)
+        nm = nm.substr(0, sl + 1) + tok + nm.substr(sl + 4);
+    snprintf(out, (size_t)cap, "%s", nm.c_str());
+    return (int)nm.size();
+}
 int nv_song_raga_sw(void *s, double *sw) {
     const nv::Song *S = (nv::Song *)s;
     if (!S->raga_on)
