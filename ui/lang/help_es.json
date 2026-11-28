@@ -2000,28 +2000,28 @@
   "t": "Las afinaciones en que tocan las partes. En Todas las partes, toca una y los sonidos de todas las partes se construyen de nuevo en ella (la pantalla muestra CONSTRUYENDO); las notas que ya suenan conservan la afinación anterior. Algunos instrumentos tienen afinación propia -- el clave y el órgano de tubos la media híbrida, el fortepiano la de Pleyel -- y la tocan en el La del equipo mientras Afinaciones propias esté activo. En Esta parte, elige la afinación propia de la parte seleccionada."
  },
  "tuning/terms/0/0": {
-  "en": "Concert pitch, A=440",
-  "t": "Diapasón de concierto, A=440"
+  "en": "Clavitone variants",
+  "t": "Variantes Clavitone"
  },
  "tuning/terms/0/1": {
-  "en": "Modern pitch. gm2 is the default: equal temperament at A=440, and a file can retune it with its own tuning messages.",
-  "t": "Diapasón moderno. gm2 es el valor por defecto: temperamento igual a A=440, y un archivo puede reafinarlo con sus propios mensajes de afinación."
+  "en": "Two chains of pure fifths, by name: Baroque, Romantic Meantone, Stretched Helmholtz, and the two for pipes. The CLAVITONE page shows each one's parameters and lets you change them.",
+  "t": "Dos cadenas de quintas puras, por nombre: Barroco, Mesotónico romántico, Helmholtz estirado y las dos para tubos. La página CLAVITONE muestra los parámetros de cada una y permite cambiarlos."
  },
  "tuning/terms/1/0": {
-  "en": "Baroque pitch, A=415",
-  "t": "Diapasón barroco, A=415"
+  "en": "Equal",
+  "t": "Igual"
  },
  "tuning/terms/1/1": {
-  "en": "Half a step lower, with the old temperaments.",
-  "t": "Medio tono más grave, con los temperamentos antiguos."
+  "en": "gm2 is the default: equal temperament, and a file can retune it with its own tuning messages. Equal: equal temperament alone.",
+  "t": "gm2 es la predeterminada: temperamento igual, y un archivo puede reafinarla con sus propios mensajes de afinación. Igual: solo el temperamento igual."
  },
  "tuning/terms/2/0": {
-  "en": "Pure octaves: pipes",
-  "t": "Octavas puras: tubos"
+  "en": "Historical temperaments",
+  "t": "Temperamentos históricos"
  },
  "tuning/terms/2/1": {
-  "en": "Tunings with unstretched octaves, for the pipe organ.",
-  "t": "Afinaciones con octavas sin estirar, para el órgano de tubos."
+  "en": "Werckmeister III, Sankey's Scarlatti tuning, quarter-comma meantone, and pure fifths with the comma in the octaves.",
+  "t": "Werckmeister III, la afinación de Scarlatti de Sankey, el mesotónico de cuarto de coma y quintas puras con la coma en las octavas."
  },
  "tuning/terms/3/0": {
   "en": "Indian, every part",
@@ -3759,54 +3759,6 @@
   "en": "How long the felts on the jacks take to stop a string when the key comes up, every register's: the time to take the first 20 dB. Four real harpsichords measured 19 to 68 ms; a worn or loose felt is slower, and the note rings on after the key.",
   "t": "Cuánto tardan los fieltros de los martinetes en parar una cuerda cuando sube la tecla, en todos los registros: el tiempo de los primeros 20 dB. Cuatro claves reales midieron de 19 a 68 ms; un fieltro gastado o flojo es más lento, y la nota sigue sonando tras la tecla."
  },
- "tn:key/title": {
-  "en": "Your key",
-  "t": "Tu tonalidad"
- },
- "tn:key/intro": {
-  "en": "Two chains of pure fifths on pure octaves, joined by one third, the bridge -- the model behind the hybrid tunings. Choose the key the music centres on, then the bridge. It is for pure octaves: the pipe organ, the harpsichord. Under Every part every part plays it; under This part, the selected part.",
-  "t": "Dos cadenas de quintas puras sobre octavas puras, unidas por una tercera, el puente: el modelo de las afinaciones híbridas. Elige la tonalidad en torno a la que gira la música y luego el puente. Es para octavas puras: el órgano de tubos, el clave. En Todas las partes la tocan todas; en Esta parte, la parte elegida."
- },
- "tn:key/terms/0/0": {
-  "en": "The keys",
-  "t": "Las tonalidades"
- },
- "tn:key/terms/0/1": {
-  "en": "The key the music centres on. Its I, IV, V, iii and vi chords stand on pure fifths, and all six of its chords have the bridge as their major third (in a minor chord, the third above its third); only ii's fifth is narrow.",
-  "t": "La tonalidad en torno a la que gira la música. Sus acordes I, IV, V, iii y vi se apoyan en quintas puras, y sus seis acordes tienen el puente como tercera mayor (en un acorde menor, la tercera sobre su tercera); solo la quinta de ii es estrecha."
- },
- "tn:key/terms/1/0": {
-  "en": "Under each key",
-  "t": "Bajo cada tonalidad"
- },
- "tn:key/terms/1/1": {
-  "en": "Its major third, then its fifth, in cents from pure (5:4 and 3:2). Brightest: pure; lit: within half a syntonic comma.",
-  "t": "Su tercera mayor y luego su quinta, en cents respecto de lo puro (5:4 y 3:2). Más brillante: pura; iluminada: a menos de media coma sintónica."
- },
- "tn:key/terms/2/0": {
-  "en": "BRIDGE THIRD",
-  "t": "TERCERA PUENTE"
- },
- "tn:key/terms/2/1": {
-  "en": "The third that joins the two chains, from Helmholtz's schismatic third up to Even. Pure (5:4): your key's I, IV and V are just, and its ii's fifth is a whole comma narrow. Toward Even, your key gives up purity and the key a tritone away gains the same; at Even the two are alike. Mean is the hybrid mean's tuning. Past Even a bridge would be one below it on the other key, so it stops there.",
-  "t": "La tercera que une las dos cadenas, desde la tercera esquismática de Helmholtz hasta Igual. Pura (5:4): I, IV y V de tu tonalidad son justos, y la quinta de su ii es una coma entera más estrecha. Hacia Igual, tu tonalidad cede pureza y la tonalidad a un tritono gana lo mismo; en Igual las dos son iguales. Media es la afinación de la media híbrida. Más allá de Igual un puente sería uno por debajo en la otra tonalidad, así que se detiene ahí."
- },
- "tn:key/terms/3/0": {
-  "en": "Two keys",
-  "t": "Dos tonalidades"
- },
- "tn:key/terms/3/1": {
-  "en": "Every such tuning serves two keys a tritone apart: yours, and the one shown under it, whose thirds mirror yours. From Mean to Even both are good: eight good thirds in all.",
-  "t": "Toda afinación así sirve a dos tonalidades a un tritono: la tuya y la que se muestra debajo, cuyas terceras reflejan las tuyas. De Media a Igual las dos son buenas: ocho terceras buenas en total."
- },
- "tn:key/terms/4/0": {
-  "en": "The counts",
-  "t": "Los recuentos"
- },
- "tn:key/terms/4/1": {
-  "en": "However a tuning is made, at most 4 of its 12 thirds can be pure and at most 8 within half a comma (proved for pure octaves with no fifth wider than pure).",
-  "t": "Se haga como se haga una afinación, como mucho 4 de sus 12 terceras pueden ser puras y como mucho 8 a menos de media coma (demostrado para octavas puras sin quintas más anchas que puras)."
- },
  "tuning/terms/10/0": {
   "en": "A4 for every tuning",
   "t": "A4 para toda afinación"
@@ -3814,5 +3766,77 @@
  "tuning/terms/10/1": {
   "en": "Concert pitch: one A for every tuning, the rig's and each part's own, in place of each tuning's own A (a baroque tuning's 415, a modern one's 440). Every patch is built again at it.",
   "t": "Diapasón: un La para toda afinación, la del equipo y la propia de cada parte, en lugar del La de cada afinación (415 en una barroca, 440 en una moderna). Todos los sonidos se vuelven a construir con él."
+ },
+ "tn:key/title": {
+  "en": "Clavitone variants",
+  "t": "Variantes Clavitone"
+ },
+ "tn:key/intro": {
+  "en": "Two chains of pure fifths, joined by one third, the bridge: the model behind every Clavitone tuning. Each variant has a name and its parameters, and you can change any of them: the key, the bridge, the octaves and, on stretched octaves, the route between the chains. Under Every part every part plays it; under This part, the selected part.",
+  "t": "Dos cadenas de quintas puras, unidas por una tercera, el puente: el modelo de cada afinación Clavitone. Cada variante tiene un nombre y sus parámetros, y puedes cambiar cualquiera: la tonalidad, el puente, las octavas y, con octavas estiradas, el camino entre las cadenas. En Todas las partes la tocan todas; en Esta parte, la parte elegida."
+ },
+ "tn:key/terms/0/0": {
+  "en": "Variants",
+  "t": "Variantes"
+ },
+ "tn:key/terms/0/1": {
+  "en": "Baroque (pure bridge, G, a piano's octaves); Romantic Meantone (mean bridge, E-flat); Stretched Helmholtz (A, its chains joined by octaves alone); and the two for pipes. A changed parameter makes it your own variant.",
+  "t": "Barroco (puente puro, Sol, octavas de un piano); Mesotónico romántico (puente medio, Mi bemol); Helmholtz estirado (La, sus cadenas unidas solo por octavas); y las dos para tubos. Un parámetro cambiado la convierte en tu propia variante."
+ },
+ "tn:key/terms/1/0": {
+  "en": "The keys",
+  "t": "Las tonalidades"
+ },
+ "tn:key/terms/1/1": {
+  "en": "The key the music centres on. Its I, IV, V, iii and vi chords stand on pure fifths, and all six of its chords have the bridge as their major third; only ii's fifth is narrow.",
+  "t": "La tonalidad en torno a la que gira la música. Sus acordes I, IV, V, iii y vi se apoyan en quintas puras, y sus seis acordes tienen el puente como tercera mayor; solo la quinta de ii es estrecha."
+ },
+ "tn:key/terms/2/0": {
+  "en": "Under each key",
+  "t": "Bajo cada tonalidad"
+ },
+ "tn:key/terms/2/1": {
+  "en": "Its major third, then its fifth, in cents from pure (5:4 and 3:2). On pure octaves, the model's, exact; on stretched ones, read from C4 to C5. Brightest: pure; lit: within half a syntonic comma.",
+  "t": "Su tercera mayor y luego su quinta, en cents respecto de lo puro (5:4 y 3:2). Con octavas puras, las del modelo, exactas; con octavas estiradas, leídas de C4 a C5. Más brillante: pura; iluminada: a menos de media coma sintónica."
+ },
+ "tn:key/terms/3/0": {
+  "en": "BRIDGE THIRD",
+  "t": "TERCERA PUENTE"
+ },
+ "tn:key/terms/3/1": {
+  "en": "The third that joins the chains, from Helmholtz's schismatic third up to Even. Pure: your key's I, IV and V are just, its ii's fifth a whole comma narrow. Toward Even your key gives up purity and the key a tritone away gains the same; Mean is the hybrid mean's.",
+  "t": "La tercera que une las cadenas, desde la tercera esquismática de Helmholtz hasta Igual. Pura: I, IV y V de tu tonalidad son justos y la quinta de su ii es una coma entera más estrecha. Hacia Igual tu tonalidad cede pureza y la tonalidad a un tritono gana lo mismo; Media es la de la media híbrida."
+ },
+ "tn:key/terms/4/0": {
+  "en": "OCTAVES",
+  "t": "OCTAVAS"
+ },
+ "tn:key/terms/4/1": {
+  "en": "Pure, 2:1, for pipes and harpsichords. A piano's: each octave on the lower note's 2nd partial, by the fitted grand. A piano's middle octave repeated by 2:1. Or each instrument's own: every piano part on its own strings' stiffness; the rest pure.",
+  "t": "Puras, 2:1, para tubos y claves. Las de un piano: cada octava sobre el 2.º parcial de la nota inferior, según el piano de cola ajustado. La octava central de un piano repetida por 2:1. O las de cada instrumento: cada parte de piano sobre la rigidez de sus propias cuerdas; el resto puras."
+ },
+ "tn:key/terms/5/0": {
+  "en": "ROUTE",
+  "t": "CAMINO"
+ },
+ "tn:key/terms/5/1": {
+  "en": "On stretched octaves, how chain two is reached: the bridge then a fifth up and two octaves down; the bridge then an octave down and a fourth; or three octaves and no bridge third. Each sends a different share of the comma into the octaves.",
+  "t": "Con octavas estiradas, cómo se llega a la cadena dos: el puente y luego una quinta arriba y dos octavas abajo; el puente y luego una octava abajo y una cuarta; o tres octavas y ninguna tercera puente. Cada uno manda una parte distinta de la coma a las octavas."
+ },
+ "tn:key/terms/6/0": {
+  "en": "Two keys",
+  "t": "Dos tonalidades"
+ },
+ "tn:key/terms/6/1": {
+  "en": "Every such tuning serves two keys a tritone apart: yours, and the one shown under it. From Mean to Even both are good: eight good thirds in all.",
+  "t": "Toda afinación así sirve a dos tonalidades a un tritono: la tuya y la que se muestra debajo. De Media a Igual las dos son buenas: ocho terceras buenas en total."
+ },
+ "tn:key/terms/7/0": {
+  "en": "The counts",
+  "t": "Los recuentos"
+ },
+ "tn:key/terms/7/1": {
+  "en": "However a tuning is made, at most 4 of its 12 thirds can be pure and at most 8 within half a comma (proved for pure octaves with no fifth wider than pure).",
+  "t": "Se haga como se haga una afinación, como mucho 4 de sus 12 terceras pueden ser puras y como mucho 8 a menos de media coma (demostrado para octavas puras sin quintas más anchas que puras)."
  }
 }

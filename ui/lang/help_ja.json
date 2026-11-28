@@ -2000,28 +2000,28 @@
   "t": "パートが演奏する調律。「全パート」で一つをタップすると、全パートの音がその調律で作り直されます（表示はBUILDING）。鳴っている音は前の調律のままです。固有の調律を持つ楽器もあります（チェンバロとパイプオルガンはハイブリッド・ミーン、フォルテピアノはプレイエル）。「楽器固有の調律」がオンの間、リグのAでそれを演奏します。「このパート」では選んだパート自身の調律を選べます。"
  },
  "tuning/terms/0/0": {
-  "en": "Concert pitch, A=440",
-  "t": "標準ピッチ、A=440"
+  "en": "Clavitone variants",
+  "t": "Clavitoneの変種"
  },
  "tuning/terms/0/1": {
-  "en": "Modern pitch. gm2 is the default: equal temperament at A=440, and a file can retune it with its own tuning messages.",
-  "t": "現代のピッチです。gm2 がデフォルトで、A=440 の平均律です。ファイルは独自のチューニングメッセージでこれを変更できます。"
+  "en": "Two chains of pure fifths, by name: Baroque, Romantic Meantone, Stretched Helmholtz, and the two for pipes. The CLAVITONE page shows each one's parameters and lets you change them.",
+  "t": "純正5度の二つの鎖を名前で：バロック、ロマン派ミーントーン、伸ばしたヘルムホルツ、パイプ用の二つ。CLAVITONEページで各変種のパラメーターを見て変えられます。"
  },
  "tuning/terms/1/0": {
-  "en": "Baroque pitch, A=415",
-  "t": "バロックピッチ、A=415"
+  "en": "Equal",
+  "t": "平均律"
  },
  "tuning/terms/1/1": {
-  "en": "Half a step lower, with the old temperaments.",
-  "t": "半音低いピッチで、古い音律を使います。"
+  "en": "gm2 is the default: equal temperament, and a file can retune it with its own tuning messages. Equal: equal temperament alone.",
+  "t": "gm2が既定：平均律で、ファイルは自身の調律メッセージで変えられます。平均律：平均律だけ。"
  },
  "tuning/terms/2/0": {
-  "en": "Pure octaves: pipes",
-  "t": "純正オクターブ：パイプ"
+  "en": "Historical temperaments",
+  "t": "歴史的音律"
  },
  "tuning/terms/2/1": {
-  "en": "Tunings with unstretched octaves, for the pipe organ.",
-  "t": "オクターブを広げない音律で、パイプオルガン用です。"
+  "en": "Werckmeister III, Sankey's Scarlatti tuning, quarter-comma meantone, and pure fifths with the comma in the octaves.",
+  "t": "ヴェルクマイスターIII、サンキーのスカルラッティ調律、1/4コンマ・ミーントーン、コンマをオクターブに入れた純正5度。"
  },
  "tuning/terms/3/0": {
   "en": "Indian, every part",
@@ -3759,54 +3759,6 @@
   "en": "How long the felts on the jacks take to stop a string when the key comes up, every register's: the time to take the first 20 dB. Four real harpsichords measured 19 to 68 ms; a worn or loose felt is slower, and the note rings on after the key.",
   "t": "鍵盤が戻ったとき、ジャックのフェルトが弦を止めるまでの時間（全レジスター）。最初の20 dBまでの時間です。実際のチェンバロ4台で19〜68 msでした。すり減ったり緩んだフェルトは遅く、鍵盤を離したあとも音が残ります。"
  },
- "tn:key/title": {
-  "en": "Your key",
-  "t": "あなたの調"
- },
- "tn:key/intro": {
-  "en": "Two chains of pure fifths on pure octaves, joined by one third, the bridge -- the model behind the hybrid tunings. Choose the key the music centres on, then the bridge. It is for pure octaves: the pipe organ, the harpsichord. Under Every part every part plays it; under This part, the selected part.",
-  "t": "純正オクターブ上の純正5度の二つの鎖を、一つの3度（橋）でつないだもの。ハイブリッド調律の元になっているモデルです。音楽の中心となる調を選び、次に橋を選びます。純正オクターブ向け：パイプオルガン、チェンバロ。全パートでは全パートが、このパートでは選んだパートがこれで鳴ります。"
- },
- "tn:key/terms/0/0": {
-  "en": "The keys",
-  "t": "調"
- },
- "tn:key/terms/0/1": {
-  "en": "The key the music centres on. Its I, IV, V, iii and vi chords stand on pure fifths, and all six of its chords have the bridge as their major third (in a minor chord, the third above its third); only ii's fifth is narrow.",
-  "t": "音楽の中心となる調。そのI・IV・V・iii・viの和音は純正5度の上にあり、六つの和音すべての長3度が橋の3度です（短和音では、その3度の上の3度）。狭いのはiiの5度だけです。"
- },
- "tn:key/terms/1/0": {
-  "en": "Under each key",
-  "t": "各調の下"
- },
- "tn:key/terms/1/1": {
-  "en": "Its major third, then its fifth, in cents from pure (5:4 and 3:2). Brightest: pure; lit: within half a syntonic comma.",
-  "t": "その長3度、次に5度。純正（5:4と3:2）からのセント。最も明るい：純正、点灯：シントニック・コンマの半分以内。"
- },
- "tn:key/terms/2/0": {
-  "en": "BRIDGE THIRD",
-  "t": "橋の3度"
- },
- "tn:key/terms/2/1": {
-  "en": "The third that joins the two chains, from Helmholtz's schismatic third up to Even. Pure (5:4): your key's I, IV and V are just, and its ii's fifth is a whole comma narrow. Toward Even, your key gives up purity and the key a tritone away gains the same; at Even the two are alike. Mean is the hybrid mean's tuning. Past Even a bridge would be one below it on the other key, so it stops there.",
-  "t": "二つの鎖をつなぐ3度。ヘルムホルツのスキスマ的3度から均等まで。純正（5:4）：あなたの調のI・IV・Vは純正で、そのiiの5度はコンマ一つぶん狭くなります。均等に近づくほど、あなたの調は純正さを手放し、三全音離れた調が同じだけ得ます。均等では両者が等しくなります。中間はハイブリッド・ミーンの調律です。均等を超えた橋は、もう一方の調での均等以下の橋と同じ調律になるので、そこで止まります。"
- },
- "tn:key/terms/3/0": {
-  "en": "Two keys",
-  "t": "二つの調"
- },
- "tn:key/terms/3/1": {
-  "en": "Every such tuning serves two keys a tritone apart: yours, and the one shown under it, whose thirds mirror yours. From Mean to Even both are good: eight good thirds in all.",
-  "t": "このような調律はどれも、三全音離れた二つの調に合います。あなたの調と、その下に示す調で、3度は鏡像の関係です。中間から均等までは両方がよく、良い3度は合計八つです。"
- },
- "tn:key/terms/4/0": {
-  "en": "The counts",
-  "t": "数"
- },
- "tn:key/terms/4/1": {
-  "en": "However a tuning is made, at most 4 of its 12 thirds can be pure and at most 8 within half a comma (proved for pure octaves with no fifth wider than pure).",
-  "t": "どう作った調律でも、12の3度のうち純正にできるのは最大4、半コンマ以内は最大8（純正オクターブで、純正より広い5度がない場合に証明済み）。"
- },
  "tuning/terms/10/0": {
   "en": "A4 for every tuning",
   "t": "全調律のA4"
@@ -3814,5 +3766,77 @@
  "tuning/terms/10/1": {
   "en": "Concert pitch: one A for every tuning, the rig's and each part's own, in place of each tuning's own A (a baroque tuning's 415, a modern one's 440). Every patch is built again at it.",
   "t": "コンサートピッチ：リグの調律にも各パート固有の調律にも、各調律自身のA（バロックは415、現代は440）の代わりに一つのAを使います。すべての音色がそのAで作り直されます。"
+ },
+ "tn:key/title": {
+  "en": "Clavitone variants",
+  "t": "Clavitoneの変種"
+ },
+ "tn:key/intro": {
+  "en": "Two chains of pure fifths, joined by one third, the bridge: the model behind every Clavitone tuning. Each variant has a name and its parameters, and you can change any of them: the key, the bridge, the octaves and, on stretched octaves, the route between the chains. Under Every part every part plays it; under This part, the selected part.",
+  "t": "純正5度の二つの鎖を一つの3度（橋）でつないだもの。すべてのClavitone調律の元になるモデルです。各変種には名前とパラメーターがあり、どれでも変えられます：調、橋、オクターブ、そして伸ばしたオクターブでは鎖の間の経路。全パートでは全パートが、このパートでは選んだパートがこれで鳴ります。"
+ },
+ "tn:key/terms/0/0": {
+  "en": "Variants",
+  "t": "変種"
+ },
+ "tn:key/terms/0/1": {
+  "en": "Baroque (pure bridge, G, a piano's octaves); Romantic Meantone (mean bridge, E-flat); Stretched Helmholtz (A, its chains joined by octaves alone); and the two for pipes. A changed parameter makes it your own variant.",
+  "t": "バロック（純正の橋、ト、ピアノのオクターブ）、ロマン派ミーントーン（中間の橋、変ホ）、伸ばしたヘルムホルツ（イ、鎖をオクターブだけでつなぐ）、そしてパイプ用の二つ。パラメーターを変えるとあなた独自の変種になります。"
+ },
+ "tn:key/terms/1/0": {
+  "en": "The keys",
+  "t": "調"
+ },
+ "tn:key/terms/1/1": {
+  "en": "The key the music centres on. Its I, IV, V, iii and vi chords stand on pure fifths, and all six of its chords have the bridge as their major third; only ii's fifth is narrow.",
+  "t": "音楽の中心となる調。そのI・IV・V・iii・viの和音は純正5度の上にあり、六つの和音すべての長3度が橋の3度です。狭いのはiiの5度だけです。"
+ },
+ "tn:key/terms/2/0": {
+  "en": "Under each key",
+  "t": "各調の下"
+ },
+ "tn:key/terms/2/1": {
+  "en": "Its major third, then its fifth, in cents from pure (5:4 and 3:2). On pure octaves, the model's, exact; on stretched ones, read from C4 to C5. Brightest: pure; lit: within half a syntonic comma.",
+  "t": "その長3度、次に5度。純正（5:4と3:2）からのセント。純正オクターブではモデルの値（正確）、伸ばしたオクターブではC4〜C5で読み取り。最も明るい：純正、点灯：シントニック・コンマの半分以内。"
+ },
+ "tn:key/terms/3/0": {
+  "en": "BRIDGE THIRD",
+  "t": "橋の3度"
+ },
+ "tn:key/terms/3/1": {
+  "en": "The third that joins the chains, from Helmholtz's schismatic third up to Even. Pure: your key's I, IV and V are just, its ii's fifth a whole comma narrow. Toward Even your key gives up purity and the key a tritone away gains the same; Mean is the hybrid mean's.",
+  "t": "鎖をつなぐ3度。ヘルムホルツのスキスマ的3度から均等まで。純正：あなたの調のI・IV・Vは純正、そのiiの5度はコンマ一つぶん狭い。均等に近づくほどあなたの調は純正さを手放し、三全音離れた調が同じだけ得ます。中間はハイブリッド・ミーンのものです。"
+ },
+ "tn:key/terms/4/0": {
+  "en": "OCTAVES",
+  "t": "オクターブ"
+ },
+ "tn:key/terms/4/1": {
+  "en": "Pure, 2:1, for pipes and harpsichords. A piano's: each octave on the lower note's 2nd partial, by the fitted grand. A piano's middle octave repeated by 2:1. Or each instrument's own: every piano part on its own strings' stiffness; the rest pure.",
+  "t": "純正 2:1：パイプとチェンバロ向け。ピアノの：各オクターブを下の音の第2部分音に、合わせ込んだグランドで。ピアノの中央オクターブを2:1で繰り返す。または各楽器自身の：各ピアノパートは自身の弦の硬さで、ほかは純正。"
+ },
+ "tn:key/terms/5/0": {
+  "en": "ROUTE",
+  "t": "経路"
+ },
+ "tn:key/terms/5/1": {
+  "en": "On stretched octaves, how chain two is reached: the bridge then a fifth up and two octaves down; the bridge then an octave down and a fourth; or three octaves and no bridge third. Each sends a different share of the comma into the octaves.",
+  "t": "伸ばしたオクターブで第二の鎖に至る道：橋のあと5度上と2オクターブ下、橋のあと1オクターブ下と4度、または3オクターブで橋なし。それぞれコンマの違う分をオクターブに送ります。"
+ },
+ "tn:key/terms/6/0": {
+  "en": "Two keys",
+  "t": "二つの調"
+ },
+ "tn:key/terms/6/1": {
+  "en": "Every such tuning serves two keys a tritone apart: yours, and the one shown under it. From Mean to Even both are good: eight good thirds in all.",
+  "t": "このような調律はどれも、三全音離れた二つの調に合います：あなたの調と、その下に示す調。中間から均等までは両方がよく、良い3度は合計八つです。"
+ },
+ "tn:key/terms/7/0": {
+  "en": "The counts",
+  "t": "数"
+ },
+ "tn:key/terms/7/1": {
+  "en": "However a tuning is made, at most 4 of its 12 thirds can be pure and at most 8 within half a comma (proved for pure octaves with no fifth wider than pure).",
+  "t": "どう作った調律でも、12の3度のうち純正にできるのは最大4、半コンマ以内は最大8（純正オクターブで、純正より広い5度がない場合に証明済み）。"
  }
 }

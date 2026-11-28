@@ -26,7 +26,8 @@ struct TuningUi {
     double bridge = 386.3137138648348;  // (the bridge third, cents: 5:4)
     std::string chains_mine;            // (the chains name this screen set, held a moment)
     double chains_until = 0;
-    int kpage = 0;                      // (the laptop's right tray: 0 the shape, 1 the key)
+    int kpage = 0;                      // (the laptop's right tray: 0 the shape, 1 the Clavitone variants)
+    std::string coct = "pure", croute = "fifth";    // (the octaves and route shown)
 };
 static TuningUi g_tn;
 
@@ -55,13 +56,35 @@ inline const std::vector<ChainBridge> &chain_bridges()
                                                {"mid", N_("Even"), (3600.0 - 4.0 * P) / 2.0}};
     return B;
 }
-// a chains name taken apart: the bridge (cents, at most the midpoint) and the key the card names; false if not one
-inline bool chains_parts(const std::string &name, double *x, int *key)
+// A CHAINS NAME TAKEN APART (chains/<bridge>[/<octaves>[/<route>]]@<start>,
+// or one of the old Clavitone tunings' names, which are variants of it): the
+// bridge (cents, at most the midpoint), the key the card names, the octaves
+// (pure, piano, middle, own: a class's law token is its own) and the route;
+// false if not one
+struct ChainSpec {
+    double x = 0;
+    int key = 0;
+    std::string oct = "pure", route = "fifth";
+};
+inline std::string chains_alias(const std::string &name)
 {
-    if (name.rfind("chains/", 0) != 0)
+    std::string b = name.substr(0, name.find_first_of(":~"));
+    for (char &c : b)
+        c = (char)tolower((unsigned char)c);
+    static const std::map<std::string, std::string> OLD = {
+        {"hybrid", "chains/pure/piano/fourth@bb"}, {"hybrid440", "chains/pure/piano/fourth@bb"},
+        {"hybridharm", "chains/pure/middle/fourth@bb"}, {"hybridharm440", "chains/pure/middle/fourth@bb"},
+        {"hybridmean", "chains/mean@c"}, {"hybridmeanpiano", "chains/mean/piano@c"},
+        {"stretchedhelmholtz", "chains/helm/piano/octaves@c"}};
+    auto it = OLD.find(b);
+    return it != OLD.end() ? it->second : b;
+}
+inline bool chains_parts(const std::string &name, ChainSpec *cs)
+{
+    std::string b = chains_alias(name);
+    if (b.rfind("chains/", 0) != 0)
         return false;
-    std::string b = name.substr(7);
-    b = b.substr(0, b.find_first_of(":~"));
+    b = b.substr(7);
     int start = 0;
     if (const size_t at = b.find('@'); at != std::string::npos) {
         const std::string k = b.substr(at + 1);
@@ -76,32 +99,124 @@ inline bool chains_parts(const std::string &name, double *x, int *key)
             return false;
         b = b.substr(0, at);
     }
+    std::vector<std::string> seg;
+    for (size_t p = 0;;) {
+        const size_t q = b.find('/', p);
+        seg.push_back(b.substr(p, q == std::string::npos ? std::string::npos : q - p));
+        if (q == std::string::npos)
+            break;
+        p = q + 1;
+    }
+    if (seg.size() > 3)
+        return false;
+    ChainSpec c;
+    if (seg.size() > 1)
+        c.oct = seg[1].find('=') != std::string::npos ? "own" : seg[1];
+    if (seg.size() > 2)
+        c.route = seg[2];
+    if (c.oct != "pure" && c.oct != "piano" && c.oct != "middle" && c.oct != "own")
+        return false;
+    if (c.route != "fifth" && c.route != "fourth" && c.route != "octaves")
+        return false;
     static const std::map<std::string, double> NAMED = {
         {"helm", 6000.0 - 8.0 * ch_P()}, {"pure", 1200.0 * std::log2(1.25)}, {"mid", (3600.0 - 4.0 * ch_P()) / 2.0},
         {"mean", 1200.0 * std::log2(std::sqrt(1.25 * 81.0 / 64.0))}, {"pyth", 1200.0 * std::log2(81.0 / 64.0)}};
-    if (auto it = NAMED.find(b); it != NAMED.end())
-        *x = it->second;
+    if (auto it = NAMED.find(seg[0]); it != NAMED.end())
+        c.x = it->second;
     else {
         char *end = nullptr;
-        *x = strtod(b.c_str(), &end);
-        if (b.empty() || *end)
+        c.x = strtod(seg[0].c_str(), &end);
+        if (seg[0].empty() || *end)
             return false;
     }
-    *key = (start + 21) % 12;
-    if (*x > (3600.0 - 4.0 * ch_P()) / 2.0 + 1e-9) {    // (the mirror: the same tuning on the key a tritone away)
-        *x = ch_mirror(*x);
-        *key = (*key + 6) % 12;
+    if (c.route == "octaves")                           // (no bridge third: on pure octaves, the helm's)
+        c.x = NAMED.at("helm");
+    c.key = (start + 21) % 12;
+    if (c.x > (3600.0 - 4.0 * ch_P()) / 2.0 + 1e-9) {   // (the mirror: the same tuning on the key a tritone away)
+        c.x = ch_mirror(c.x);
+        c.key = (c.key + 6) % 12;
     }
+    *cs = c;
     return true;
+}
+inline bool chains_parts(const std::string &name, double *x, int *key)
+{
+    ChainSpec c;
+    if (!chains_parts(name, &c))
+        return false;
+    *x = c.x;
+    *key = c.key;
+    return true;
+}
+inline std::string chains_name(const ChainSpec &c)
+{
+    std::string spec;
+    int sh = 0;
+    for (const auto &cb : chain_bridges())
+        if (std::fabs(c.x - cb.x) < 0.005) {
+            spec = cb.spec;
+            sh = spec == "mean" ? 6 : 0;            // (mean: its own bridge, from the key a tritone away -- exact)
+        }
+    if (c.route == "octaves")
+        spec = "helm", sh = 0;
+    if (spec.empty()) {
+        char b[32];
+        snprintf(b, sizeof b, "%.2f", c.x);
+        spec = b;
+    }
+    std::string n = "chains/" + spec;
+    if (c.oct != "pure" || c.route != "fifth")
+        n += "/" + c.oct;
+    if (c.route != "fifth")
+        n += "/" + c.route;
+    return n + "@" + CH_START[(c.key + 3 + sh) % 12];
 }
 inline std::string chains_name(double x, int key)
 {
+    ChainSpec c;
+    c.x = x;
+    c.key = key;
+    return chains_name(c);
+}
+// THE CLAVITONE VARIANTS, by name: each its parameters (the old tunings, exactly)
+struct ChainVariant {
+    const char *name;
+    const char *bridge;                 // (a chain_bridges spec)
+    int key;
+    const char *oct, *route;
+};
+inline const std::vector<ChainVariant> &chain_variants()
+{
+    static const std::vector<ChainVariant> V = {
+        {N_("Baroque"), "pure", 7, "piano", "fourth"},                       // (hybrid440; hybrid at A 415)
+        {N_("Romantic Meantone"), "mean", 3, "piano", "fifth"},              // (hybridmeanpiano)
+        {N_("Stretched Helmholtz"), "helm", 9, "piano", "octaves"},          // (stretchedhelmholtz)
+        {N_("Baroque for pipes"), "pure", 7, "middle", "fourth"},            // (hybridharm440)
+        {N_("Romantic Meantone for pipes"), "mean", 3, "pure", "fifth"}};    // (hybridmean at 440)
+    return V;
+}
+inline ChainSpec chain_variant_spec(const ChainVariant &v)
+{
+    ChainSpec c;
     for (const auto &cb : chain_bridges())
-        if (std::fabs(x - cb.x) < 0.005)        // (mean: its own bridge, from the key a tritone away -- exact)
-            return std::string("chains/") + cb.spec + "@" + CH_START[(key + 3 + (std::string(cb.spec) == "mean" ? 6 : 0)) % 12];
-    char b[32];
-    snprintf(b, sizeof b, "%.2f", x);
-    return std::string("chains/") + b + "@" + CH_START[(key + 3) % 12];
+        if (std::string(cb.spec) == v.bridge)
+            c.x = cb.x;
+    c.key = v.key;
+    c.oct = v.oct;
+    c.route = v.route;
+    return c;
+}
+// the variant a spec is (its index), else -1: on pure octaves the route is moot but for "octaves"
+inline int chain_variant_of(const ChainSpec &c)
+{
+    const auto &V = chain_variants();
+    for (size_t i = 0; i < V.size(); i++) {
+        const ChainSpec v = chain_variant_spec(V[i]);
+        const bool route = c.route == v.route || (c.oct == "pure" && v.oct == "pure" && c.route != "octaves" && v.route != "octaves");
+        if (std::fabs(c.x - v.x) < 0.006 && c.key == v.key && c.oct == v.oct && route)
+            return (int)i;
+    }
+    return -1;
 }
 // the bridge said: a named one's name, else its cents
 inline std::string chains_bridge_words(double x)
@@ -187,10 +302,17 @@ inline Temper temper_of(const J *shape)
 // A TUNING's NAME AND LINE as a person reads them (about.json's tuners), else the engine's key and words
 inline std::pair<std::string, std::string> tuner_words(const std::string &key, const std::string &engine_words)
 {
-    double cx;
-    int ck;
-    if (chains_parts(key, &cx, &ck))
-        return {TF("Two chains in {0}", {CH_KEY[ck]}), TF("pure fifths and octaves, bridge {0}", {chains_bridge_words(cx)})};
+    if (ChainSpec cs; chains_parts(key, &cs)) {
+        const int v = chain_variant_of(cs);
+        static const std::map<std::string, const char *> OCT = {{"pure", N_("pure octaves")}, {"piano", N_("a piano's octaves")},
+                                                                {"middle", N_("a piano's middle octave, by 2:1")},
+                                                                {"own", N_("each instrument's own octaves")}};
+        const std::string oct = T(OCT.at(cs.oct));
+        if (v >= 0)
+            return {T(chain_variants()[(size_t)v].name), TF("in {0}; {1}", {CH_KEY[cs.key], oct})};
+        return {TF("Clavitone in {0}", {CH_KEY[cs.key]}),
+                cs.route == "octaves" ? TF("joined by three octaves; {0}", {oct}) : TF("bridge {0}; {1}", {chains_bridge_words(cs.x), oct})};
+    }
     LibUi &L = g_lib;
     if (const J *ts = L.about.get("tuners"))
         if (const J *e = ts->get(key.c_str()); e && e->is(J::ARR) && e->a.size() >= 2)
@@ -347,44 +469,61 @@ inline std::string east_spec(const East &p)
     return p.system.empty() ? "" : "raga:" + p.system + (p.raga.empty() ? "" : "/" + p.raga) + "@" + p.sa;
 }
 
-// THE KEY PAGE: two chains of pure fifths on pure octaves, chosen by the
-// key and the bridge (tunelib.ChainsTuner). Each key's third and fifth from
-// pure under its chip; the good thirds counted against their proved
-// ceilings (4 pure, 8 within half a comma); the two keys it serves, a tritone apart.
-// cur the tuning the scope plays now (the rig's, or the part's own); a
-// change asks for chains/<bridge>@<start> for the scope at once
+// THE CLAVITONE VARIANTS (tunelib.ChainsTuner and ChainsPianoTuner): two
+// chains of pure fifths, by name -- Baroque, Romantic Meantone, Stretched
+// Helmholtz, and those for pipes -- each its parameters, all to be changed:
+// the KEY (the chain's position 3: home_key), the BRIDGE third (Helmholtz to
+// Even: above it a bridge is its mirror on the key a tritone away), the
+// OCTAVES (pure; a piano's; a piano's middle by 2:1; each instrument's own)
+// and the ROUTE between the chains on stretched octaves. Each key's third and
+// fifth from pure under its chip: on pure octaves the model's, exact, the
+// counts against their proved ceilings and the two keys served; on stretched
+// ones the table's, read from C4 to C5. cur: the tuning the scope chose (the
+// rig's, the part's own); plays: what the part plays; shape: its table's.
+// part: 1 the variants and the keys, 2 the bridge, octaves and route, 3 both
+// (the phone shows them a page each). A change asks for the name at once
 inline void draw_chains(App &a, float X, float Y, float W, float H, const std::string &cur, const std::string &plays, const J *shape,
-                        bool scope)
+                        bool scope, int part = 3)
 {
     TuningUi &T = g_tn;
     const bool PH = a.ph, IP = a.tab;
     look::tray(a, X, Y, W, H, 9);
-    const float hx = heading(a, X + 12, Y + 10, nui::T("YOUR KEY"), "tn:key");   // i18n-skip (a help key)
-    text(a, a.font, 14, hx, Y + 11, LCD, fit(a, a.font, 14, nui::T("two chains of pure fifths, pure octaves"), W - (hx - X) - 12));
-    // (the tuning playing: two chains if its table is, whatever its name -- unless this screen asked
-    //  for chains a moment ago, or there is no table to read yet)
+    // (what plays: by its name -- the scope's choice, else what the part plays -- or, on pure octaves, by
+    //  its table whatever its name; this screen's ask held a moment)
     const Temper tt = temper_of(shape);
-    double cx = 0;
-    int ck = 0;
+    ChainSpec cs;
     bool playing;
     if (!T.chains_mine.empty() && ImGui::GetTime() < T.chains_until)
-        playing = chains_parts(T.chains_mine, &cx, &ck);
-    else if (tt.ok) {
-        playing = tt.chains;
-        cx = tt.x;
-        ck = tt.key;
-    } else
-        playing = chains_parts(cur, &cx, &ck);
-    if (playing && !a.K.active) {
-        T.ckey = ck;
-        T.bridge = cx;
+        playing = chains_parts(T.chains_mine, &cs);
+    else if (chains_parts(cur, &cs) || chains_parts(plays, &cs))
+        playing = true;
+    else if ((playing = tt.ok && tt.chains)) {
+        cs.x = tt.x;
+        cs.key = tt.key;
     }
+    if (playing && !a.K.active) {
+        T.ckey = cs.key;
+        T.bridge = cs.x;
+        T.coct = cs.oct;
+        T.croute = cs.route;
+    }
+    ChainSpec want;
+    want.x = T.bridge;
+    want.key = T.ckey;
+    want.oct = T.coct;
+    want.route = T.croute;
+    const int var = playing ? chain_variant_of(want) : -1;
+    const float hx = heading(a, X + 12, Y + 10, nui::T("CLAVITONE"), "tn:key");   // i18n-skip (a help key)
+    text(a, a.font, 14, hx, Y + 11, LCD,
+         fit(a, a.font, 14, !playing ? std::string(nui::T("two chains of pure fifths"))
+                            : var >= 0 ? std::string(nui::T(chain_variants()[(size_t)var].name))
+                                       : std::string(nui::T("your own variant")),
+             W - (hx - X) - 12));
     const auto &B = chain_bridges();
     const float lo = (float)B.front().x, hi = (float)B.back().x;
     bool ask = false;
-    // the keys, and under each its third and fifth
-    const float kx = X + 12, kw = (W - 24) / 12, kh = PH ? 40 : IP ? 44 : 38, ky = Y + 40;
-    double th[12], fi[12];
+    const float kx = X + 12;
+    float y = Y + 40;
     // (cents from pure: whole cents from 10 up -- five figures would crowd the laptop's columns)
     auto cents = [](double v) {
         char b[16];
@@ -393,107 +532,184 @@ inline void draw_chains(App &a, float X, float Y, float W, float H, const std::s
         snprintf(b, sizeof b, std::fabs(v) < 9.95 ? "%+.1f" : "%+.0f", v);
         return std::string(b);
     };
-    // (two chains: the model, exact; another tuning: its table's)
-    const bool table = !playing && tt.ok;
-    if (table)
-        for (int i = 0; i < 12; i++) {
-            th[i] = tt.th[i];
-            fi[i] = tt.fi[i];
-        }
-    else
-        chains_model(T.bridge, (T.ckey + 3) % 12, th, fi);
     const double half = 1200.0 * std::log2(81.0 / 80.0) / 2;
-    for (int i = 0; i < 12; i++) {
-        const std::string id = "tnck" + std::to_string(i);
-        if (button(a, id.c_str(), kx + i * kw + 2, ky, kw - 4, kh, CH_KEY[i], playing && i == T.ckey, true, PH ? 21 : 14)) {
-            T.ckey = i;
-            ask = true;
+    if (part & 1) {
+        // THE VARIANTS, by name
+        {
+            std::vector<std::string> w;
+            std::vector<bool> lit;
+            for (size_t i = 0; i < chain_variants().size(); i++) {
+                w.push_back(nui::T(chain_variants()[i].name));
+                lit.push_back((int)i == var);
+            }
+            const int h = flow_buttons(a, "tncv", kx, y, W - 24, w, lit, 30);
+            if (h >= 0) {
+                const ChainSpec v = chain_variant_spec(chain_variants()[(size_t)h]);
+                T.bridge = v.x;
+                T.ckey = v.key;
+                T.coct = v.oct;
+                T.croute = v.route;
+                ask = true;
+            }
         }
-        text_c(a, a.font, 14, kx + i * kw + kw / 2, ky + kh + 6, th[i] <= 1e-4 ? OWN : th[i] <= half + 1e-4 ? LCD : SILK_DIM, cents(th[i]));
-        text_c(a, a.font, 14, kx + i * kw + kw / 2, ky + kh + 8 + a.lh(14), std::fabs(fi[i]) < 1e-4 ? SILK_DIM : LCD, cents(fi[i]));
-    }
-    const float ry = ky + kh + 6;
-    // (the rows' names at the left edge would crowd the C chip's: said in the line below instead)
-    float ty = ry + 2 * a.lh(14) + 10;
-    if (!PH) {                          // (the phone's card is too short for it: its help says it)
-        for (const auto &l : wrap(a, a.font, 14, nui::T("under each key: its third, then its fifth, cents from pure"), W - 24)) {
-            text(a, a.font, 14, kx, ty, SILK_DIM, l);
-            ty += a.lh(14) + 3;
+        // THE KEYS, and under each its third and fifth: on pure octaves the model's (exact); else the table's
+        const float kw = (W - 24) / 12, kh = PH ? 40 : IP ? 44 : 38, ky = y;
+        double th[12], fi[12];
+        const bool stretched = playing ? (T.coct != "pure" && tt.ok && !tt.pure) : false;
+        const bool table = (!playing || stretched) && tt.ok;
+        if (table)
+            for (int i = 0; i < 12; i++) {
+                th[i] = tt.th[i];
+                fi[i] = tt.fi[i];
+            }
+        else
+            chains_model(T.bridge, (T.ckey + 3) % 12, th, fi);
+        for (int i = 0; i < 12; i++) {
+            const std::string id = "tnck" + std::to_string(i);
+            if (button(a, id.c_str(), kx + i * kw + 2, ky, kw - 4, kh, CH_KEY[i], playing && i == T.ckey, true, PH ? 21 : 14)) {
+                T.ckey = i;
+                ask = true;
+            }
+            text_c(a, a.font, 14, kx + i * kw + kw / 2, ky + kh + 6, th[i] <= 1e-4 ? OWN : th[i] <= half + 1e-4 ? LCD : SILK_DIM, cents(th[i]));
+            text_c(a, a.font, 14, kx + i * kw + kw / 2, ky + kh + 8 + a.lh(14), std::fabs(fi[i]) < 1e-4 ? SILK_DIM : LCD, cents(fi[i]));
         }
-        ty += 7;
-    }
-    // the bridge: a knob, its named stops under it
-    // (its column as wide as its label or its widest value: they hang under it)
-    float kcw = 0;
-    for (const auto &cb : B)
-        kcw = std::max(kcw, text_w(a, a.font, 14, nui::T(cb.name)));
-    kcw = std::max({PH ? 76.0f : IP ? 100.0f : 84.0f, text_w(a, a.bold, 14, nui::T("BRIDGE THIRD")), kcw, text_w(a, a.font, 14, "407.82 c")}) + 12;
-    const float ksz = PH ? 76 : IP ? 100 : 84, kcx = X + W - 12 - kcw / 2, kcy = ty + ksz / 2;
-    float v01 = (float)((T.bridge - lo) / (hi - lo));
-    std::vector<float> dets;
-    for (const auto &cb : B)
-        dets.push_back((float)((cb.x - lo) / (hi - lo)));
-    const int f = knob(a, "tnbridge", kcx, kcy, ksz, v01, nui::T("BRIDGE THIRD"), chains_bridge_words(lo + v01 * (hi - lo)), false, dets, 0, false);
-    if (f & (K_CHANGED | K_RESET)) {
-        double xb = std::round((lo + v01 * (double)(hi - lo)) * 100.0) / 100.0;
-        for (const auto &cb : B)
-            if (std::fabs(xb - cb.x) < 0.006)
-                xb = cb.x;
-        T.bridge = std::max(B.front().x, std::min(B.back().x, xb));
-    }
-    if ((f & (K_ENDED | K_RESET)) || ((f & K_CHANGED) && !(f & K_ACTIVE)))
-        ask = true;
-    // the counts, and the two keys served
-    const float lw = kcx - kcw / 2 - 12 - kx;
-    int n0 = 0, n8 = 0;
-    for (int i = 0; i < 12; i++) {
-        n0 += th[i] <= 1e-4;
-        n8 += th[i] <= half + 1e-4;
-    }
-    // the two keys served (home_key, far_key): the near key's I, IV and V thirds the bridge, its ii's
-    // fifth the near gap; the far key's (a tritone up) the mirror and the other gap. Lit while good
-    const int far = (T.ckey + 6) % 12;
-    const double P = ch_P(), L = 1200.0 * std::log2(1.25);
-    const double near3 = T.bridge - L, far3 = ch_mirror(T.bridge) - L;
-    const double near_ii = T.bridge + 2400.0 - 4.0 * P, far_ii = 6000.0 - 8.0 * P - T.bridge;
-    std::vector<std::pair<std::string, ImU32>> lines;
-    // (the ceilings are proved for pure octaves with no fifth wider than pure)
-    const std::string counts = (table && (!tt.pure || tt.wide))
-                                   ? TF("{0} pure thirds; {1} within half a comma", {std::to_string(n0), std::to_string(n8)})
-                                   : TF("{0} pure thirds (at most 4); {1} within half a comma (at most 8)", {std::to_string(n0), std::to_string(n8)});
-    if (table) {                        // (another tuning: what it is, then its counts)
-        const std::string nm = tuner_words(plays, "").first;
-        lines.push_back({tt.pure ? TF("{0} is not two chains of pure fifths", {nm}) : TF("{0}: stretched octaves, read from C4 to C5", {nm}), SILK_DIM});
-        lines.push_back({counts, LCD});
-    } else {
-        lines.push_back({counts, LCD});
-        lines.push_back({TF("{0} major: I, IV, V thirds {1}; ii's fifth {2}", {CH_KEY[T.ckey], cents(near3), cents(near_ii)}), near3 <= half + 1e-6 ? LCD : SILK_DIM});
-        if (playing || !PH)             // (the phone's card is short: the hint in the far key's place)
-            lines.push_back({TF("{0} major: I, IV, V thirds {1}; ii's fifth {2}", {CH_KEY[far], cents(far3), cents(far_ii)}), far3 <= half + 1e-6 ? LCD : SILK_DIM});
-    }
-    if (!playing)
-        lines.push_back({scope ? nui::T("tap a key to play it on this part") : nui::T("tap a key to play it on every part"), OWN});
-    for (const auto &l : lines)
-        for (const auto &w : wrap(a, a.font, 14, l.first, lw)) {
-            text(a, a.font, 14, kx, ty, l.second, w);
-            ty += a.lh(14) + 3;
+        y = ky + kh + 6 + 2 * a.lh(14) + 10;
+        if (!PH) {                      // (the phone's card is too short for it: its help says it)
+            for (const auto &l : wrap(a, a.font, 14, nui::T("under each key: its third, then its fifth, cents from pure"), W - 24)) {
+                text(a, a.font, 14, kx, y, SILK_DIM, l);
+                y += a.lh(14) + 3;
+            }
+            y += 7;
         }
-    // the named bridges, as buttons too (a knob's detents are found by feel)
-    // (four across, or two by two where a language's name would not fit)
-    float nw = 0;
-    for (const auto &cb : B)
-        nw = std::max(nw, text_w(a, a.bold, PH ? 21 : 14, nui::T(cb.name)));
-    const int cols = nw + 16 <= (lw - 3 * 6) / 4 ? 4 : 2;
-    const float by = ty + 6, bh = PH ? 40 : IP ? 44 : 36, bw = (lw - (cols - 1) * 6) / cols;
-    for (size_t i = 0; i < B.size(); i++) {
-        const std::string id = "tncb" + std::to_string(i);
-        if (button(a, id.c_str(), kx + (i % cols) * (bw + 6), by + (i / cols) * (bh + 6), bw, bh, nui::T(B[i].name), playing && std::fabs(T.bridge - B[i].x) < 0.006, true, PH ? 21 : 14)) {
-            T.bridge = B[i].x;
-            ask = true;
+        // THE COUNTS, and the two keys served (home_key, far_key)
+        int n0 = 0, n8 = 0;
+        for (int i = 0; i < 12; i++) {
+            n0 += th[i] <= 1e-4;
+            n8 += th[i] <= half + 1e-4;
         }
+        const int far = (T.ckey + 6) % 12;
+        const double P = ch_P();
+        std::vector<std::pair<std::string, ImU32>> lines;
+        // (the ceilings are proved for pure octaves with no fifth wider than pure)
+        const bool proved = !table || (tt.pure && !tt.wide);
+        const std::string counts = proved ? TF("{0} pure thirds (at most 4); {1} within half a comma (at most 8)", {std::to_string(n0), std::to_string(n8)})
+                                          : TF("{0} pure thirds; {1} within half a comma", {std::to_string(n0), std::to_string(n8)});
+        auto keyline = [&](int k, int gap) {    // (a key's I, IV and V thirds and its ii's fifth, from the readouts)
+            const double t1 = th[k], t4 = th[(k + 5) % 12], t5 = th[(k + 7) % 12], ii = fi[(k + 2) % 12];
+            const bool same = std::fabs(t1 - t4) < 0.05 && std::fabs(t1 - t5) < 0.05;
+            const std::string t = same ? cents(t1) : cents(t1) + "/" + cents(t4) + "/" + cents(t5);
+            (void)gap;
+            return std::make_pair(TF("{0} major: I, IV, V thirds {1}; ii's fifth {2}", {CH_KEY[k], t, cents(ii)}),
+                                  std::max({t1, t4, t5}) <= half + 1e-6 ? LCD : SILK_DIM);
+        };
+        if (!playing && tt.ok) {        // (another tuning: what it is, then its counts)
+            const std::string nm = tuner_words(plays, "").first;
+            lines.push_back({tt.pure ? TF("{0} is not two chains of pure fifths", {nm}) : TF("{0}: stretched octaves, read from C4 to C5", {nm}), SILK_DIM});
+            lines.push_back({counts, LCD});
+        } else {
+            if (stretched)
+                lines.push_back({nui::T("stretched octaves: read from C4 to C5"), SILK_DIM});
+            else if (playing && T.coct == "own")
+                lines.push_back({nui::T("each piano on its own strings; shown here on pure octaves"), SILK_DIM});
+            lines.push_back({counts, LCD});
+            lines.push_back(keyline(T.ckey, 0));
+            if (!PH)                    // (the phone's card is short: the far key in the help)
+                lines.push_back(keyline(far, 1));
+            (void)P;
+        }
+        if (!playing)
+            lines.push_back({scope ? nui::T("tap a variant or a key to play it on this part") : nui::T("tap a variant or a key to play it on every part"), OWN});
+        for (const auto &l : lines)
+            for (const auto &w : wrap(a, a.font, 14, l.first, W - 24)) {
+                text(a, a.font, 14, kx, y, l.second, w);
+                y += a.lh(14) + 3;
+            }
+        y += 8;
+    }
+    if (part & 2) {
+        // THE BRIDGE: a knob, its named stops beside it (none on the octaves route: three octaves join the chains)
+        const float rowh = PH ? 40 : IP ? 44 : 30;
+        if (T.croute == "octaves") {
+            text(a, a.bold, 14, kx, y, SILK, nui::T("BRIDGE THIRD"));
+            for (const auto &w : wrap(a, a.font, 14, nui::T("none: three octaves join the chains (on pure octaves, Helmholtz's)"), W - 24)) {
+                text(a, a.font, 14, kx + text_w(a, a.bold, 14, nui::T("BRIDGE THIRD")) + 12, y, SILK_DIM, w);
+                y += a.lh(14) + 3;
+            }
+            y += 10;
+        } else {
+            float kcw = 0;
+            for (const auto &cb : B)
+                kcw = std::max(kcw, text_w(a, a.font, 14, nui::T(cb.name)));
+            kcw = std::max({PH ? 76.0f : IP ? 100.0f : 84.0f, text_w(a, a.bold, 14, nui::T("BRIDGE THIRD")), kcw, text_w(a, a.font, 14, "407.82 c")}) + 12;
+            const float ksz = PH ? 70 : IP ? 72 : 76, kcx = X + W - 12 - kcw / 2, kcy = y + ksz / 2;
+            float v01 = (float)((T.bridge - lo) / (hi - lo));
+            std::vector<float> dets;
+            for (const auto &cb : B)
+                dets.push_back((float)((cb.x - lo) / (hi - lo)));
+            const int f = knob(a, "tnbridge", kcx, kcy, ksz, v01, nui::T("BRIDGE THIRD"), chains_bridge_words(lo + v01 * (hi - lo)), false, dets, 0, false);
+            if (f & (K_CHANGED | K_RESET)) {
+                double xb = std::round((lo + v01 * (double)(hi - lo)) * 100.0) / 100.0;
+                for (const auto &cb : B)
+                    if (std::fabs(xb - cb.x) < 0.006)
+                        xb = cb.x;
+                T.bridge = std::max(B.front().x, std::min(B.back().x, xb));
+            }
+            if ((f & (K_ENDED | K_RESET)) || ((f & K_CHANGED) && !(f & K_ACTIVE)))
+                ask = true;
+            // (the named bridges as buttons too, left of the knob: four across, or two by two)
+            const float lw = kcx - kcw / 2 - 12 - kx;
+            float nw = 0;
+            for (const auto &cb : B)
+                nw = std::max(nw, text_w(a, a.bold, PH ? 21 : 14, nui::T(cb.name)));
+            const int cols = nw + 16 <= (lw - 3 * 6) / 4 ? 4 : 2;
+            const float bh = PH ? 40 : IP ? 44 : 34, bw = (lw - (cols - 1) * 6) / cols;
+            for (size_t i = 0; i < B.size(); i++) {
+                const std::string id = "tncb" + std::to_string(i);
+                if (button(a, id.c_str(), kx + (i % cols) * (bw + 6), y + (i / cols) * (bh + 6), bw, bh, nui::T(B[i].name),
+                           playing && std::fabs(T.bridge - B[i].x) < 0.006, true, PH ? 21 : 14)) {
+                    T.bridge = B[i].x;
+                    ask = true;
+                }
+            }
+            y = std::max(y + ((B.size() + cols - 1) / cols) * (bh + 6), kcy + ksz / 2 + 2 * a.lh(14) + 10);
+        }
+        // THE OCTAVES and THE ROUTE: chips, each row its word at the left
+        static const std::vector<std::pair<const char *, const char *>> OCT = {
+            {"pure", N_("pure, 2:1")}, {"piano", N_("a piano's")}, {"middle", N_("a piano's middle, by 2:1")}, {"own", N_("each instrument's own")}};
+        static const std::vector<std::pair<const char *, const char *>> ROUTE = {
+            {"fifth", N_("a fifth up, two octaves down")}, {"fourth", N_("an octave down, a fourth")}, {"octaves", N_("three octaves, no bridge")}};
+        const float lab = std::max(text_w(a, a.bold, 14, nui::T("OCTAVES")), text_w(a, a.bold, 14, nui::T("ROUTE"))) + 14;
+        auto row = [&](const char *word, const char *id, const std::vector<std::pair<const char *, const char *>> &opts, std::string &cur_) {
+            text(a, a.bold, 14, kx, y + (rowh - a.lh(14)) / 2, SILK, nui::T(word));
+            std::vector<std::string> w;
+            std::vector<bool> lit;
+            for (const auto &o : opts) {
+                w.push_back(nui::T(o.second));
+                lit.push_back(playing && cur_ == o.first);
+            }
+            const int h = flow_buttons(a, id, kx + lab, y, W - 24 - lab, w, lit, 30);
+            if (h >= 0 && cur_ != opts[(size_t)h].first) {
+                cur_ = opts[(size_t)h].first;
+                ask = true;
+            }
+        };
+        row(N_("OCTAVES"), "tnoct", OCT, T.coct);
+        row(N_("ROUTE"), "tnrt", ROUTE, T.croute);
+        if (T.coct == "pure")                           // (where the card has room: its help says it too)
+            for (const auto &w : wrap(a, a.font, 14, nui::T("on pure octaves the routes are one tuning (but three octaves: Helmholtz's bridge)"), W - 24)) {
+                if (y + a.lh(14) > Y + H - 6)
+                    break;
+                text(a, a.font, 14, kx, y, SILK_DIM, w);
+                y += a.lh(14) + 3;
+            }
     }
     if (ask) {
-        const std::string nm = chains_name(T.bridge, T.ckey);
+        ChainSpec c;
+        c.x = T.bridge;
+        c.key = T.ckey;
+        c.oct = T.coct;
+        c.route = T.croute;
+        const std::string nm = chains_name(c);
         T.chains_mine = nm;
         T.chains_until = ImGui::GetTime() + 2.0;
         if (scope)
@@ -514,20 +730,20 @@ inline void draw_tuning(App &a)
                            std::to_string(a.row) + "}"));
     }
     // (the iPad's: its card from y 210 to card_y1 + 6, two pages -- the tuners and their shape; the Eastern tuning)
-    const bool IP = a.tab, PH = a.ph;   // (the phone's: its card from 106, four pages -- the tuners, your key, their shape, the Eastern)
+    const bool IP = a.tab, PH = a.ph;   // (the phone's: its card from 106, five pages -- the tuners, the Clavitone variants and their bridge, the shape, the Eastern)
     static int page = 0, tpage = 0;
     const float X0 = PH ? 14 : IP ? 20 : 34, X1 = IP ? (PH ? 818 : 1113) : 1886, Y0 = PH ? 160 : IP ? 266 : 394, Y1 = card_y1(a),
                 HY = PH ? 120 : IP ? 224 : 356;
     const float LH = a.lh(14) + (IP ? 3 : 4);
     const float TX = heading(a, X0, HY, nui::T("TUNING"), "tuning");   // (nui::T: the card's T is its state)
     if (PH) {
-        const int h = phone_pages(a, "tnppage", TX, {nui::T("TUNERS"), nui::T("YOUR KEY"), nui::T("SHAPE"), nui::T("EASTERN")}, tpage);
+        const int h = phone_pages(a, "tnppage", TX, {nui::T("TUNERS"), nui::T("CLAVITONE"), nui::T("BRIDGE THIRD"), nui::T("SHAPE"), nui::T("EASTERN")}, tpage);
         if (h >= 0)
             tpage = h;
     } else
         text(a, a.font, 14, TX, HY + 1, OWN, T.scope ? nui::T("this part") : nui::T("every part"));
     if (IP && !PH) {
-        static const char *PN[3] = {N_("TUNERS"), N_("YOUR KEY"), N_("EASTERN")};
+        static const char *PN[3] = {N_("TUNERS"), N_("CLAVITONE"), N_("EASTERN")};
         for (int pg = 0; pg < 3; pg++) {
             const std::string id = "tnpage" + std::to_string(pg);
             if (button(a, id.c_str(), page_kx(a, 3, pg, 300), 216, page_kw(a, 3), 44, nui::T(PN[pg]), page == pg, true, 21))
@@ -554,18 +770,20 @@ inline void draw_tuning(App &a)
         a.animate = true;
 
     // THE TUNERS, grouped by what they are for
+    // (the Clavitone tunings are its variants, on their own tiles below: their old names kept off the list)
     static const std::vector<std::pair<const char *, std::vector<std::string>>> GROUPS = {
-        {N_("Concert pitch, A=440"), {"gm2", "hybrid440", "hybridmeanpiano", "stretchedhelmholtz", "even"}},
-        {N_("Baroque pitch, A=415"), {"hybrid", "stretch", "werckmeister", "sankey", "meantone"}},
-        {N_("Pure octaves: pipes"), {"hybridharm", "hybridharm440", "hybridmean"}},
+        {N_("Equal"), {"gm2", "even"}},
+        {N_("Historical temperaments"), {"werckmeister", "sankey", "meantone", "stretch"}},
         {N_("Period pianos"), {"pleyel"}}};
+    static const std::vector<std::string> CLAVITONE_OLD = {"hybrid", "hybrid440", "hybridharm", "hybridharm440", "hybridmean",
+                                                            "hybridmeanpiano", "stretchedhelmholtz"};
     std::vector<std::pair<std::string, std::vector<const std::pair<std::string, std::string> *>>> groups;
     // (the card's own tiles, before the tuners: which parts the tiles choose
     // for; this part's two of its own; natural tunings on or off -- a key
     // with '@', its name and line after it, a tab between)
     static std::vector<std::pair<std::string, std::string>> mine;
     mine.clear();
-    mine.reserve(16);                   // (the groups point into it: never past its reserve)
+    mine.reserve(32);                   // (the groups point into it: never past its reserve)
     const std::string pname = str(pt, "name");
     mine.push_back({"@every", std::string(nui::T("Every part")) + "\t" + nui::T("the rig's tuning, the parts' own unchosen")});
     mine.push_back({"@this", std::string(nui::T("This part")) + "\t" + (pname.empty() ? std::string() : pname)});
@@ -585,17 +803,29 @@ inline void draw_tuning(App &a)
     for (const auto &pp : PITCHES)
         mine.push_back({"@cp" + std::to_string(pp.first),
                         (pp.first ? "A = " + std::to_string(pp.first) : std::string(nui::T("Each tuning's own"))) + "\t" + nui::T(pp.second)});
+    // THE CLAVITONE VARIANTS, by name (the CLAVITONE page has their parameters)
+    const size_t cv0 = mine.size();
+    for (size_t i = 0; i < chain_variants().size(); i++) {
+        const ChainSpec v = chain_variant_spec(chain_variants()[i]);
+        mine.push_back({"@cv" + std::to_string(i), std::string(nui::T(chain_variants()[i].name)) + "\t" + tuner_words(chains_name(v), "").second});
+    }
     groups.push_back({N_("Which parts"), {&mine[0], &mine[1]}});
     if (T.scope)
         groups.push_back({N_("This part"), {&mine[2], &mine[3]}});
     else {
         groups.push_back({N_("Natural tunings"), {&mine[4], &mine[5]}});
-        std::vector<const std::pair<std::string, std::string> *> cps;
-        for (size_t i = 6; i < mine.size(); i++)
-            cps.push_back(&mine[i]);
-        groups.push_back({N_("A4 for every tuning"), cps});
+        std::vector<const std::pair<std::string, std::string> *> cps2;
+        for (size_t i = 6; i < cv0; i++)
+            cps2.push_back(&mine[i]);
+        groups.push_back({N_("A4 for every tuning"), cps2});
     }
-    std::set<std::string> named;
+    {
+        std::vector<const std::pair<std::string, std::string> *> cvs;
+        for (size_t i = cv0; i < mine.size(); i++)
+            cvs.push_back(&mine[i]);
+        groups.push_back({N_("Clavitone variants"), cvs});
+    }
+    std::set<std::string> named(CLAVITONE_OLD.begin(), CLAVITONE_OLD.end());
     for (const auto &g : GROUPS) {
         std::vector<const std::pair<std::string, std::string> *> v;
         for (const auto &n : g.second) {
@@ -641,7 +871,17 @@ inline void draw_tuning(App &a)
                 const std::string &k = t.t->first;
                 if (k == "@every" || k == "@this")
                     T.scope = k == "@this";
-                else if (k.rfind("@cp", 0) == 0)
+                else if (k.rfind("@cv", 0) == 0) {     // (a Clavitone variant: its name, for the scope)
+                    const std::string nm = chains_name(chain_variant_spec(chain_variants()[(size_t)atoi(k.c_str() + 3)]));
+                    T.chains_mine = nm;
+                    T.chains_until = ImGui::GetTime() + 2.0;
+                    if (T.scope)
+                        tn_take(call(a, "{\"call\":\"part_tuner_set\",\"row\":" + std::to_string(a.row) + ",\"name\":\"" + nm + "\"}"));
+                    else {
+                        T.pending = nm;
+                        tn_take(call(a, "{\"call\":\"tuner_set\",\"name\":\"" + nm + "\"}"));
+                    }
+                } else if (k.rfind("@cp", 0) == 0)
                     tn_take(call(a, "{\"call\":\"pitch_set\",\"hz\":" + k.substr(3) + "}"));
                 else if (k == "@nat1" || k == "@nat0")
                     tn_take(call(a, std::string("{\"call\":\"natural_set\",\"on\":") + (k == "@nat1" ? "1" : "0") + "}"));
@@ -668,7 +908,10 @@ inline void draw_tuning(App &a)
         const bool special = k[0] == '@';
         bool cur, pend;
         if (special) {
-            cur = k.rfind("@cp", 0) == 0 ? std::fabs(pitch - atof(k.c_str() + 3)) < 0.005
+            ChainSpec ccs;
+            const bool isv = k.rfind("@cv", 0) == 0;
+            cur = isv ? chains_parts(T.scope ? (p_own.empty() ? p_plays : p_own) : tuner, &ccs) && chain_variant_of(ccs) == atoi(k.c_str() + 3)
+                : k.rfind("@cp", 0) == 0 ? std::fabs(pitch - atof(k.c_str() + 3)) < 0.005
                 : k == "@every" ? !T.scope : k == "@this" ? T.scope != 0 : k == "@inst" ? p_own.empty()
                 : k == "@rig" ? p_own == "rig" : k == "@nat1" ? natural : !natural;
             pend = false;
@@ -688,10 +931,13 @@ inline void draw_tuning(App &a)
             nm = {t.t->second.substr(0, tb), tb == std::string::npos ? std::string() : t.t->second.substr(tb + 1)};
         } else
             nm = tuner_words(k, t.t->second);
-        text(a, a.font, 14, x + 10, y + (IP ? 6 : 8), cur ? LCD_BG : LCD, fit(a, a.font, 14, nm.first, tw - 20));
-        const auto ls = wrap_max(a, a.font, 14, nm.second, tw - 20, 2);
+        // (a name too long for one line takes two, its line one fewer)
+        const auto ns = wrap_max(a, a.font, 14, nm.first, tw - 20, 2);
+        for (size_t i = 0; i < ns.size(); i++)
+            text(a, a.font, 14, x + 10, y + (IP ? 6 : 8) + i * LH, cur ? LCD_BG : LCD, ns[i]);
+        const auto ls = wrap_max(a, a.font, 14, nm.second, tw - 20, 3 - ns.size());
         for (size_t i = 0; i < ls.size(); i++)
-            text(a, a.font, 14, x + 10, y + (IP ? 9 : 11) + (i + 1) * LH, cur ? LCD_BG : SILK_DIM, ls[i]);
+            text(a, a.font, 14, x + 10, y + (IP ? 9 : 11) + (i + ns.size()) * LH, cur ? LCD_BG : SILK_DIM, ls[i]);
     }
     dl()->PopClipRect();
 
@@ -705,7 +951,7 @@ inline void draw_tuning(App &a)
     const J *kshape = kpart ? pt->get("shape") : T.t.get("shape");
     const std::string kplays = kpart ? p_plays : tuner;
     if (!IP) {
-        static const char *KP[2] = {N_("SHAPE"), N_("YOUR KEY")};
+        static const char *KP[2] = {N_("SHAPE"), N_("CLAVITONE")};
         float kx_ = SX;
         for (int i = 0; i < 2; i++) {
             const float w = text_w(a, a.bold, 14, nui::T(KP[i])) + 36;
@@ -717,11 +963,11 @@ inline void draw_tuning(App &a)
             draw_chains(a, SX, Y0, SW, Y1 - Y0, scoped, kplays, kshape, T.scope != 0);
             return;
         }
-    } else if (PH ? tpage == 1 : page == 1) {
-        draw_chains(a, X0, Y0, X1 - X0, Y1 - Y0, scoped, kplays, kshape, T.scope != 0);
+    } else if (PH ? (tpage == 1 || tpage == 2) : page == 1) {
+        draw_chains(a, X0, Y0, X1 - X0, Y1 - Y0, scoped, kplays, kshape, T.scope != 0, PH ? tpage : 3);
         return;
     }
-    if (PH ? tpage == 2 : (!IP || page == 0)) {
+    if (PH ? tpage == 3 : (!IP || page == 0)) {
     look::tray(a, SX, Y0, SW, SH, 9);
     const float tsx = heading(a, SX + 12, Y0 + 10, nui::T("THE TUNING"), "tn:shape");   // i18n-skip (a help key)
     // (this part's shape where it plays its own -- else the rig's)
@@ -778,7 +1024,7 @@ inline void draw_tuning(App &a)
 
     // THE EASTERN TUNING the Indian voices' parts play
     }
-    if (PH ? tpage != 3 : IP && page != 2)
+    if (PH ? tpage != 4 : IP && page != 2)
         return;
     // (the iPad's Eastern tuning a page across the card)
     const float EX = IP ? X0 : SX, EW = IP ? X1 - X0 : SW, EY = IP ? Y0 : Y0 + SH + 10;

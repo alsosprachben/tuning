@@ -52,8 +52,8 @@ STATES = [
 # (more of a card, by taps in the layout's design units, for the first state only)
 EXTRA = {
     ("laptop", "tuning", "fortepiano"): [("part", [(560, 456)]),       # (THIS PART: the fortepiano's own)
-                                         ("key", [(1284, 366)]), ("keyg", [(1594, 453)])],   # (YOUR KEY, then G on it)
-    ("ipad", "tuning", "fortepiano"): [("part", [(465, 328)]), ("key", [(591, 238)]), ("keyg", [(699, 328)])],
+                                         ("key", [(1290, 366)]), ("keyg", [(1594, 524)])],   # (CLAVITONE, then G on it)
+    ("ipad", "tuning", "fortepiano"): [("part", [(465, 328)]), ("key", [(591, 238)]), ("keyg", [(697, 377)])],
     ("ipad", "synth", "lead"): [("page2", [(617, 235)])],
     ("ipad", "setup", "lead"): [("touch", [(787, 238)])],
     ("ipad", "kits", "kit"): [("key", [(400, 284)])],

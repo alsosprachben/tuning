@@ -2000,28 +2000,28 @@
   "t": "Die Stimmungen, in denen die Parts spielen. Unter Alle Parts tippe eine an, und die Klänge aller Parts werden darin neu gebaut (das Display zeigt BAUT); bereits klingende Noten behalten die alte Stimmung. Manche Instrumente haben eine eigene Stimmung -- Cembalo und Pfeifenorgel die hybride Mitteltönigkeit, das Hammerklavier die Pleyel-Stimmung -- und spielen sie auf dem A des Rigs, solange Eigene Stimmungen an ist. Unter Dieser Part wählst du die eigene Stimmung des gewählten Parts."
  },
  "tuning/terms/0/0": {
-  "en": "Concert pitch, A=440",
-  "t": "Kammerton, A=440"
+  "en": "Clavitone variants",
+  "t": "Clavitone-Varianten"
  },
  "tuning/terms/0/1": {
-  "en": "Modern pitch. gm2 is the default: equal temperament at A=440, and a file can retune it with its own tuning messages.",
-  "t": "Moderne Tonhöhe. gm2 ist die Voreinstellung: gleichstufige Stimmung bei A=440, und eine Datei kann sie mit eigenen Stimmungsmeldungen umstimmen."
+  "en": "Two chains of pure fifths, by name: Baroque, Romantic Meantone, Stretched Helmholtz, and the two for pipes. The CLAVITONE page shows each one's parameters and lets you change them.",
+  "t": "Zwei Ketten reiner Quinten, nach Namen: Barock, Romantische Mitteltönigkeit, Gespreizter Helmholtz und die beiden für Pfeifen. Die Seite CLAVITONE zeigt die Parameter jeder Variante und lässt sie ändern."
  },
  "tuning/terms/1/0": {
-  "en": "Baroque pitch, A=415",
-  "t": "Barocke Tonhöhe, A=415"
+  "en": "Equal",
+  "t": "Gleichstufig"
  },
  "tuning/terms/1/1": {
-  "en": "Half a step lower, with the old temperaments.",
-  "t": "Einen Halbton tiefer, mit den alten Temperaturen."
+  "en": "gm2 is the default: equal temperament, and a file can retune it with its own tuning messages. Equal: equal temperament alone.",
+  "t": "gm2 ist die Voreinstellung: gleichstufig, und eine Datei kann sie mit eigenen Stimmungsmeldungen umstimmen. Gleichstufig: nur die gleichstufige Stimmung."
  },
  "tuning/terms/2/0": {
-  "en": "Pure octaves: pipes",
-  "t": "Reine Oktaven: Pfeifen"
+  "en": "Historical temperaments",
+  "t": "Historische Temperaturen"
  },
  "tuning/terms/2/1": {
-  "en": "Tunings with unstretched octaves, for the pipe organ.",
-  "t": "Stimmungen mit ungespreizten Oktaven, für die Pfeifenorgel."
+  "en": "Werckmeister III, Sankey's Scarlatti tuning, quarter-comma meantone, and pure fifths with the comma in the octaves.",
+  "t": "Werckmeister III, Sankeys Scarlatti-Stimmung, viertelkomma-mitteltönig und reine Quinten mit dem Komma in den Oktaven."
  },
  "tuning/terms/3/0": {
   "en": "Indian, every part",
@@ -3759,54 +3759,6 @@
   "en": "How long the felts on the jacks take to stop a string when the key comes up, every register's: the time to take the first 20 dB. Four real harpsichords measured 19 to 68 ms; a worn or loose felt is slower, and the note rings on after the key.",
   "t": "Wie lange die Filze an den Springern brauchen, um eine Saite zu stoppen, wenn die Taste hochkommt, in jedem Register: die Zeit für die ersten 20 dB. Vier echte Cembali maßen 19 bis 68 ms; ein abgenutzter oder lockerer Filz ist langsamer, und der Ton klingt nach der Taste weiter."
  },
- "tn:key/title": {
-  "en": "Your key",
-  "t": "Deine Tonart"
- },
- "tn:key/intro": {
-  "en": "Two chains of pure fifths on pure octaves, joined by one third, the bridge -- the model behind the hybrid tunings. Choose the key the music centres on, then the bridge. It is for pure octaves: the pipe organ, the harpsichord. Under Every part every part plays it; under This part, the selected part.",
-  "t": "Zwei Ketten reiner Quinten auf reinen Oktaven, verbunden durch eine Terz, die Brücke -- das Modell hinter den Hybrid-Stimmungen. Wähle die Tonart, um die die Musik kreist, dann die Brücke. Sie ist für reine Oktaven: die Pfeifenorgel, das Cembalo. Unter Alle Parts spielen alle Parts sie, unter Dieser Part der gewählte Part."
- },
- "tn:key/terms/0/0": {
-  "en": "The keys",
-  "t": "Die Tonarten"
- },
- "tn:key/terms/0/1": {
-  "en": "The key the music centres on. Its I, IV, V, iii and vi chords stand on pure fifths, and all six of its chords have the bridge as their major third (in a minor chord, the third above its third); only ii's fifth is narrow.",
-  "t": "Die Tonart, um die die Musik kreist. Ihre Akkorde I, IV, V, iii und vi stehen auf reinen Quinten, und alle sechs ihrer Akkorde haben die Brücke als große Terz (im Mollakkord die Terz über seiner Terz); nur die Quinte von ii ist zu eng."
- },
- "tn:key/terms/1/0": {
-  "en": "Under each key",
-  "t": "Unter jeder Tonart"
- },
- "tn:key/terms/1/1": {
-  "en": "Its major third, then its fifth, in cents from pure (5:4 and 3:2). Brightest: pure; lit: within half a syntonic comma.",
-  "t": "Ihre große Terz, dann ihre Quinte, in Cent von rein (5:4 und 3:2). Am hellsten: rein; leuchtend: innerhalb eines halben syntonischen Kommas."
- },
- "tn:key/terms/2/0": {
-  "en": "BRIDGE THIRD",
-  "t": "BRÜCKENTERZ"
- },
- "tn:key/terms/2/1": {
-  "en": "The third that joins the two chains, from Helmholtz's schismatic third up to Even. Pure (5:4): your key's I, IV and V are just, and its ii's fifth is a whole comma narrow. Toward Even, your key gives up purity and the key a tritone away gains the same; at Even the two are alike. Mean is the hybrid mean's tuning. Past Even a bridge would be one below it on the other key, so it stops there.",
-  "t": "Die Terz, die die beiden Ketten verbindet, von Helmholtz' schismatischer Terz bis Gleich. Rein (5:4): I, IV und V deiner Tonart sind rein, und die Quinte ihrer ii ist ein ganzes Komma zu eng. Richtung Gleich gibt deine Tonart Reinheit ab, und die Tonart einen Tritonus entfernt gewinnt ebenso viel; bei Gleich sind beide gleich. Mittel ist die Stimmung des Hybrid-Mittels. Über Gleich hinaus wäre eine Brücke dieselbe wie eine darunter in der anderen Tonart, darum endet sie dort."
- },
- "tn:key/terms/3/0": {
-  "en": "Two keys",
-  "t": "Zwei Tonarten"
- },
- "tn:key/terms/3/1": {
-  "en": "Every such tuning serves two keys a tritone apart: yours, and the one shown under it, whose thirds mirror yours. From Mean to Even both are good: eight good thirds in all.",
-  "t": "Jede solche Stimmung dient zwei Tonarten im Tritonusabstand: deiner und der darunter gezeigten, deren Terzen deine spiegeln. Von Mittel bis Gleich sind beide gut: acht gute Terzen insgesamt."
- },
- "tn:key/terms/4/0": {
-  "en": "The counts",
-  "t": "Die Zählungen"
- },
- "tn:key/terms/4/1": {
-  "en": "However a tuning is made, at most 4 of its 12 thirds can be pure and at most 8 within half a comma (proved for pure octaves with no fifth wider than pure).",
-  "t": "Wie auch immer eine Stimmung gebaut ist: Höchstens 4 ihrer 12 Terzen können rein sein und höchstens 8 innerhalb eines halben Kommas (bewiesen für reine Oktaven ohne Quinte weiter als rein)."
- },
  "tuning/terms/10/0": {
   "en": "A4 for every tuning",
   "t": "A4 für jede Stimmung"
@@ -3814,5 +3766,77 @@
  "tuning/terms/10/1": {
   "en": "Concert pitch: one A for every tuning, the rig's and each part's own, in place of each tuning's own A (a baroque tuning's 415, a modern one's 440). Every patch is built again at it.",
   "t": "Kammerton: ein A für jede Stimmung, die des Rigs und die eigene jedes Parts, statt des eigenen A jeder Stimmung (415 bei einer barocken, 440 bei einer modernen). Jeder Klang wird darauf neu gebaut."
+ },
+ "tn:key/title": {
+  "en": "Clavitone variants",
+  "t": "Clavitone-Varianten"
+ },
+ "tn:key/intro": {
+  "en": "Two chains of pure fifths, joined by one third, the bridge: the model behind every Clavitone tuning. Each variant has a name and its parameters, and you can change any of them: the key, the bridge, the octaves and, on stretched octaves, the route between the chains. Under Every part every part plays it; under This part, the selected part.",
+  "t": "Zwei Ketten reiner Quinten, verbunden durch eine Terz, die Brücke: das Modell hinter jeder Clavitone-Stimmung. Jede Variante hat einen Namen und ihre Parameter, und jeder davon lässt sich ändern: die Tonart, die Brücke, die Oktaven und, auf gespreizten Oktaven, der Weg zwischen den Ketten. Unter Alle Parts spielen alle Parts sie, unter Dieser Part der gewählte Part."
+ },
+ "tn:key/terms/0/0": {
+  "en": "Variants",
+  "t": "Varianten"
+ },
+ "tn:key/terms/0/1": {
+  "en": "Baroque (pure bridge, G, a piano's octaves); Romantic Meantone (mean bridge, E-flat); Stretched Helmholtz (A, its chains joined by octaves alone); and the two for pipes. A changed parameter makes it your own variant.",
+  "t": "Barock (reine Brücke, G, Oktaven eines Klaviers); Romantische Mitteltönigkeit (mittlere Brücke, Es); Gespreizter Helmholtz (A, die Ketten nur durch Oktaven verbunden); und die beiden für Pfeifen. Ein geänderter Parameter macht sie zu deiner eigenen Variante."
+ },
+ "tn:key/terms/1/0": {
+  "en": "The keys",
+  "t": "Die Tonarten"
+ },
+ "tn:key/terms/1/1": {
+  "en": "The key the music centres on. Its I, IV, V, iii and vi chords stand on pure fifths, and all six of its chords have the bridge as their major third; only ii's fifth is narrow.",
+  "t": "Die Tonart, um die die Musik kreist. Ihre Akkorde I, IV, V, iii und vi stehen auf reinen Quinten, und alle sechs ihrer Akkorde haben die Brücke als große Terz; nur die Quinte von ii ist zu eng."
+ },
+ "tn:key/terms/2/0": {
+  "en": "Under each key",
+  "t": "Unter jeder Tonart"
+ },
+ "tn:key/terms/2/1": {
+  "en": "Its major third, then its fifth, in cents from pure (5:4 and 3:2). On pure octaves, the model's, exact; on stretched ones, read from C4 to C5. Brightest: pure; lit: within half a syntonic comma.",
+  "t": "Ihre große Terz, dann ihre Quinte, in Cent von rein (5:4 und 3:2). Auf reinen Oktaven die des Modells, exakt; auf gespreizten gelesen von C4 bis C5. Am hellsten: rein; leuchtend: innerhalb eines halben syntonischen Kommas."
+ },
+ "tn:key/terms/3/0": {
+  "en": "BRIDGE THIRD",
+  "t": "BRÜCKENTERZ"
+ },
+ "tn:key/terms/3/1": {
+  "en": "The third that joins the chains, from Helmholtz's schismatic third up to Even. Pure: your key's I, IV and V are just, its ii's fifth a whole comma narrow. Toward Even your key gives up purity and the key a tritone away gains the same; Mean is the hybrid mean's.",
+  "t": "Die Terz, die die Ketten verbindet, von Helmholtz' schismatischer Terz bis Gleich. Rein: I, IV und V deiner Tonart sind rein, die Quinte ihrer ii ein ganzes Komma zu eng. Richtung Gleich gibt deine Tonart Reinheit ab, und die Tonart einen Tritonus entfernt gewinnt ebenso viel; Mittel ist die des Hybrid-Mittels."
+ },
+ "tn:key/terms/4/0": {
+  "en": "OCTAVES",
+  "t": "OKTAVEN"
+ },
+ "tn:key/terms/4/1": {
+  "en": "Pure, 2:1, for pipes and harpsichords. A piano's: each octave on the lower note's 2nd partial, by the fitted grand. A piano's middle octave repeated by 2:1. Or each instrument's own: every piano part on its own strings' stiffness; the rest pure.",
+  "t": "Rein, 2:1, für Pfeifen und Cembali. Eines Klaviers: jede Oktave auf dem 2. Teilton der unteren Note, nach dem angepassten Flügel. Die mittlere Oktave eines Klaviers, mit 2:1 wiederholt. Oder jedes Instruments eigene: jeder Klavierpart auf der Steifigkeit seiner eigenen Saiten; der Rest rein."
+ },
+ "tn:key/terms/5/0": {
+  "en": "ROUTE",
+  "t": "WEG"
+ },
+ "tn:key/terms/5/1": {
+  "en": "On stretched octaves, how chain two is reached: the bridge then a fifth up and two octaves down; the bridge then an octave down and a fourth; or three octaves and no bridge third. Each sends a different share of the comma into the octaves.",
+  "t": "Auf gespreizten Oktaven, wie Kette zwei erreicht wird: die Brücke, dann eine Quinte auf und zwei Oktaven ab; die Brücke, dann eine Oktave ab und eine Quarte; oder drei Oktaven und keine Brückenterz. Jeder legt einen anderen Teil des Kommas in die Oktaven."
+ },
+ "tn:key/terms/6/0": {
+  "en": "Two keys",
+  "t": "Zwei Tonarten"
+ },
+ "tn:key/terms/6/1": {
+  "en": "Every such tuning serves two keys a tritone apart: yours, and the one shown under it. From Mean to Even both are good: eight good thirds in all.",
+  "t": "Jede solche Stimmung dient zwei Tonarten im Tritonusabstand: deiner und der darunter gezeigten. Von Mittel bis Gleich sind beide gut: acht gute Terzen insgesamt."
+ },
+ "tn:key/terms/7/0": {
+  "en": "The counts",
+  "t": "Die Zählungen"
+ },
+ "tn:key/terms/7/1": {
+  "en": "However a tuning is made, at most 4 of its 12 thirds can be pure and at most 8 within half a comma (proved for pure octaves with no fifth wider than pure).",
+  "t": "Wie auch immer eine Stimmung gebaut ist: Höchstens 4 ihrer 12 Terzen können rein sein und höchstens 8 innerhalb eines halben Kommas (bewiesen für reine Oktaven ohne Quinte weiter als rein)."
  }
 }
