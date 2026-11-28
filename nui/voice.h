@@ -52,7 +52,7 @@ inline std::string voice_words(const std::string &name, double v, double cap)
         snprintf(t, sizeof t, "x%.2g", std::pow(10.0, v - cap));
     else if (name == "felt_left")
         snprintf(t, sizeof t, "%.2f mm", v);
-    else if (name == "strike" || name == "pick")
+    else if (name == "strike" || name == "pick" || name == "pluck")
         snprintf(t, sizeof t, "1/%.1f", 1.0 / std::max(1e-6, v));
     else if (name == "unison")
         snprintf(t, sizeof t, "%.1f c", v);
@@ -64,6 +64,8 @@ inline std::string voice_words(const std::string &name, double v, double cap)
         snprintf(t, sizeof t, "%.2f mm", v * 1.7568);      // (uiapi's RHODES_POLE_MM)
     else if (name == "swing" || name == "strings")
         snprintf(t, sizeof t, "x%.2f", v / std::max(1e-12, cap));
+    else if (name == "damper")
+        snprintf(t, sizeof t, "%.0f ms", 1000.0 * v);
     else if (name == "tone")
         snprintf(t, sizeof t, "%.1f", 10.0 * (1.0 + std::log(std::max(1e-9, v)) / std::log(250.0)));
     else if (name == "tonebar")
@@ -88,6 +90,8 @@ inline const char *voice_label(const std::string &name)
     if (name == "pick") return N_("PICK");
     if (name == "strings") return N_("STRING AGE");
     if (name == "tone") return N_("TONE");
+    if (name == "pluck") return N_("PLUCK");
+    if (name == "damper") return N_("DAMPER");
     return N_("PICKUP");
 }
 inline const char *voice_about(const std::string &name)
@@ -105,6 +109,8 @@ inline const char *voice_about(const std::string &name)
     if (name == "tonebar") return N_("The tone bar's ring in the attack: the bell.");
     if (name == "pick") return N_("Where the pick strikes the string. Near the bridge is bright and thin; toward the neck, round.");
     if (name == "strings") return N_("How fast the strings lose their highs. Fresh strings ring bright; old ones go dull.");
+    if (name == "pluck") return N_("Where the quills pluck the strings. Near the string's end is nasal and bright; further along, round and full.");
+    if (name == "damper") return N_("How long the felts on the jacks take to stop a string after the key comes up.");
     if (name == "tone") return N_("The guitar's tone knob: 10 is full up; turned down, a capacitor darkens the pickup until it only honks."); 
     return N_("The piezo pickup's top.");
 }
@@ -134,7 +140,7 @@ inline void draw_voice(App &a)
     }
     if (!ks || !ks->is(J::ARR) || ks->a.empty()) {
         const float y = PH ? 180 : IP ? 290 : 440;
-        const auto ls = wrap(a, a.font, 21, T("This voice has no physical knobs yet. Pianos, electric pianos and electric guitars and basses have them first; other families follow."), X1 - X0 - 40);
+        const auto ls = wrap(a, a.font, 21, T("This voice has no physical knobs yet. Pianos, electric pianos, electric guitars and basses, and harpsichords have them first; other families follow."), X1 - X0 - 40);
         for (size_t i = 0; i < ls.size(); i++)
             text(a, a.font, 21, X0 + 20, y + i * (a.lh(21) + 4), SILK_DIM, ls[i]);
         return;

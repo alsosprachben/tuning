@@ -2073,9 +2073,13 @@ const NoteClass *nv_variant(const NoteClass *k, int code);
    Clavinet): PICK (where the pick strikes, eg_sp), STRINGS (the string's
    loss rising with frequency: harmonic_decay_db, or a physics bass's
    winding loss sp_wind) -- both ratios; TONE (the tone pot's share of its
-   resistance, tone_turn: a ratio) */
+   resistance, tone_turn: a ratio). THE HARPSICHORDS' (a registered
+   organ with choirs: its ranks strings of their own): PLUCK (every jack's
+   pluck point, strike_point, the host's and every pipe's), DAMPER (the
+   jacks' felts, release_valve_time; the free strings' reg_release) -- both
+   ratios, the ranks' on a copy of the organ (nv_voicing_apply_organ) */
 enum { NV_VK_HAMMER, NV_VK_WEAR, NV_VK_STRIKE, NV_VK_UNISON, NV_VK_LID, NV_VK_BOARD, NV_VK_PICKUP,
-       NV_VK_TINE, NV_VK_GAP, NV_VK_SWING, NV_VK_TONEBAR, NV_VK_REED, NV_VK_PICK, NV_VK_STRINGS, NV_VK_TONE, NV_VK_N };
+       NV_VK_TINE, NV_VK_GAP, NV_VK_SWING, NV_VK_TONEBAR, NV_VK_REED, NV_VK_PICK, NV_VK_STRINGS, NV_VK_TONE, NV_VK_PLUCK, NV_VK_DAMPER, NV_VK_N };
 static inline int nv_voicing_offset(int i)
 {
     return i == NV_VK_HAMMER || i == NV_VK_LID || i == NV_VK_TINE || i == NV_VK_REED;
@@ -2090,6 +2094,13 @@ int nv_voicing_tid(int vid);
 int nv_tuner_id(const char *name);          /* a name's id for as long as the process runs (0: "") */
 const char *nv_tuner_name(int tid);
 const NoteClass *nv_voice_variant(const NoteClass *k, int vid);
+/* a harpsichord's organ, its ranks' pipes moved by knob transforms (t, mask)
+   in place; and the organ o as setting vid has it (o itself where the
+   setting moves none of its pipes) */
+void nv_voicing_apply_organ(struct OrganSpec *o, const double *t, int mask);
+const struct OrganSpec *nv_voice_organ(const struct OrganSpec *o, int vid);
+/* the organ a knob setting's copy o was made from (o itself if none) */
+const struct OrganSpec *nv_voice_organ_base(const struct OrganSpec *o);
 size_t nv_noteclass_size(void);
 void nv_hammer_note(VoiceSnap *s);
 int nv_song_note_bank(void *s, int bsel);

@@ -400,6 +400,14 @@ J voicing_of(nv_host *h, int row)
             lo = cap[i] / 3.0, hi = cap[i] * 6.0, lg = true;
             snprintf(t, sizeof t, "x%.2f", v[i] / std::max(1e-12, cap[i]));
             break;
+        case NV_VK_PLUCK:   // (where the quills pluck: every rank's by the same ratio, the lower 8''s shown)
+            lo = 0.05, hi = 0.2, lg = true;
+            snprintf(t, sizeof t, "1/%.1f", 1.0 / std::max(1e-6, v[i]));
+            break;
+        case NV_VK_DAMPER:  // (the jacks' felts: a fifth of the program's time to five times it)
+            lo = cap[i] / 5.0, hi = cap[i] * 5.0, lg = true;
+            snprintf(t, sizeof t, "%.0f ms", 1000.0 * v[i]);
+            break;
         case NV_VK_TONE:    // (the tone pot: its share in circuit, as a log-taper pot's dial reads, 0 to 10)
             lo = 1.0 / 250.0, hi = 1.0, lg = true;
             snprintf(t, sizeof t, "%.1f", 10.0 * (1.0 + log(std::max(1e-9, v[i])) / log(250.0)));

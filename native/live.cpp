@@ -614,7 +614,10 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
         return K[128 * program + key];
     };
     const NoteClass *kc = kat(note);
-    const OrganSpec *og = kc ? kc->organ : nullptr;
+    // (its knobs' setting: a harpsichord's ranks moved, on its organ's copy)
+    const int vid_ = kit ? 0 : g_tmpl_var >> 20;
+    auto vorg = [&](const OrganSpec *o) { return vid_ > 0 ? nv_voice_organ(o, vid_) : o; };
+    const OrganSpec *og = kc ? vorg(kc->organ) : nullptr;
     // (a drone-wheel program's: built with its drones CORKED, CC18 = 0 --
     // live sounds them as its own held voices, live._raw_template's)
     const NoteClass *pc_ = kat(60);
@@ -654,8 +657,13 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
         nv_song_vars(song, (int)g_var_nls.size(), g_var_nls.data(), g_var_ls.data(), g_var_trim.data(),
                      g_var_gs.data(), g_var_gm2.data());
 
-        nv_song_slot_organs(song, (int)g_slot_organ.size(), g_slot_organ.data());
-        nv_song_slot_orgs(song, (int)g_slot_organ.size(), g_slot_off.data(), g_slot_og.data());
+        std::vector<const OrganSpec *> so_(g_slot_organ), sog_(g_slot_og);
+        for (auto &o : so_)
+            o = vorg(o);
+        for (auto &o : sog_)
+            o = vorg(o);
+        nv_song_slot_organs(song, (int)so_.size(), so_.data());
+        nv_song_slot_orgs(song, (int)so_.size(), g_slot_off.data(), sog_.data());
     }
     nv_midi_song(m, song, trim);
     if (g_tmpl_cabk && (g_tmpl_var >> 20))  // (its knobs' voices: every note to its class's copy)
@@ -690,6 +698,8 @@ static long long template_rows(const NoteClass *const *K, const NoteIn *tmpl, co
         const int sl = g_var_ls[4 * (size_t)g_var_off[ven]];
         if (sl >= 0 && sl + 1 < (int)g_slot_off.size())
             ogs.assign(g_slot_og.begin() + g_slot_off[sl], g_slot_og.begin() + g_slot_off[sl + 1]);
+        for (auto &o : ogs)
+            o = vorg(o);
     }
     if (ogs.empty() && og)
         ogs.push_back(og);
@@ -2910,6 +2920,19 @@ int nv_voicing_knobs(const NoteClass *k, double *v0)
     if (!k)
         return 0;
     const VoiceSnap &s = k->tmpl;
+    if (k->organ && k->organ->n_choir > 0) {
+        // (a registered harpsichord: where its quills pluck, its dampers)
+        int m = 0;
+        if (s.strike_point != 0.0) {
+            m |= 1 << NV_VK_PLUCK;
+            v0[NV_VK_PLUCK] = s.strike_point;
+        }
+        if (k->release_valve_set && k->release_valve_time != 0.0) {
+            m |= 1 << NV_VK_DAMPER;
+            v0[NV_VK_DAMPER] = k->release_valve_time;
+        }
+        return m;
+    }
     if (s.kind == 4 && s.elec && !s.clav) {
         // (an electric guitar or bass: where the pick strikes, the strings' loss)
         // (no PICK on a slap's or pop's fret contact, no STRINGS on a
@@ -2987,6 +3010,17 @@ void nv_voicing_apply(NoteClass *d, const double *t, int mask)
     double v0[NV_VK_N];
     mask &= nv_voicing_knobs(d, v0);
     VoiceSnap &s = d->tmpl;
+    if (d->organ && d->organ->n_choir > 0) {
+        // (a harpsichord's lower 8', the host's string; its other ranks' are
+        // the organ's pipes: nv_voicing_apply_organ, on nv_voice_variant's copy)
+        if (mask >> NV_VK_PLUCK & 1)
+            s.strike_point *= t[NV_VK_PLUCK];
+        if (mask >> NV_VK_DAMPER & 1) {
+            d->release_valve_time *= t[NV_VK_DAMPER];
+            d->reg_release *= t[NV_VK_DAMPER];
+        }
+        return;
+    }
     if (mask >> NV_VK_HAMMER & 1)
         s.hm_logk += t[NV_VK_HAMMER];
     if (mask >> NV_VK_WEAR & 1) {
@@ -3119,6 +3153,48 @@ struct VoicedClass {
 };
 static std::map<std::pair<const NoteClass *, int>, VoicedClass> g_vc_made;
 static std::vector<std::unique_ptr<NoteClass>> g_vc_old;
+static std::map<std::pair<const OrganSpec *, int>, std::unique_ptr<OrganSpec>> g_vo_made;
+static std::map<const OrganSpec *, const OrganSpec *> g_vo_base;   // (a copy -> its organ)
+
+void nv_voicing_apply_organ(OrganSpec *o, const double *t, int mask)
+{
+    // (piano_knobs._rank_class's: each rank's string, where it has the value)
+    for (int i = 0; i < o->n_pipe; i++) {
+        OrganPipe &q = o->pipe[i];
+        if (mask >> NV_VK_PLUCK & 1 && q.tmpl.strike_point != 0.0)
+            q.tmpl.strike_point *= t[NV_VK_PLUCK];
+        if (mask >> NV_VK_DAMPER & 1 && q.release_set && q.release_valve_time != 0.0)
+            q.release_valve_time *= t[NV_VK_DAMPER];
+    }
+}
+
+// (the lock held: the organ o as setting vid has it)
+static const OrganSpec *voice_organ(const OrganSpec *o, int vid)
+{
+    if (!o || o->n_choir <= 0 || vid <= 0 || (size_t)vid >= g_vc_set.size())
+        return o;
+    const int m = g_vc_set[(size_t)vid].mask & (1 << NV_VK_PLUCK | 1 << NV_VK_DAMPER);
+    if (!m)
+        return o;
+    auto &e = g_vo_made[std::make_pair(o, vid)];
+    if (!e) {
+        e.reset(new OrganSpec(*o));
+        nv_voicing_apply_organ(e.get(), g_vc_set[(size_t)vid].t.data(), m);
+        g_vo_base[e.get()] = o;
+    }
+    return e.get();
+}
+const OrganSpec *nv_voice_organ_base(const OrganSpec *o)
+{
+    std::lock_guard<std::mutex> lk(g_vc_mu);
+    auto it = g_vo_base.find(o);
+    return it == g_vo_base.end() ? o : it->second;
+}
+const OrganSpec *nv_voice_organ(const OrganSpec *o, int vid)
+{
+    std::lock_guard<std::mutex> lk(g_vc_mu);
+    return voice_organ(o, vid);
+}
 const NoteClass *nv_voice_variant(const NoteClass *k, int vid)
 {
     if (!k || vid <= 0)
@@ -3134,6 +3210,7 @@ const NoteClass *nv_voice_variant(const NoteClass *k, int vid)
     e.base.reset(new NoteClass(*k));
     e.made.reset(new NoteClass(*k));
     nv_voicing_apply(e.made.get(), g_vc_set[(size_t)vid].t.data(), g_vc_set[(size_t)vid].mask);
+    e.made->organ = voice_organ(k->organ, vid);     // (a harpsichord's other ranks)
     return e.made.get();
 }
 int nv_tcache_var(void *h) { return ((nv::live::Cache *)h)->var; }

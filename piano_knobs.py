@@ -40,13 +40,20 @@ PICK, STRINGS = 12, 13
 # 1 full up; the coil's circuit tonelib._tone_pot_gain), where the class has a
 # coil's resonance and a tone control
 TONE = 14
-N_KNOBS = 15
+# THE HARPSICHORDS' (a registered HarpsiBase: its stops ranks of their own
+# strings): PLUCK where every jack's quill plucks, the instrument's whole
+# character (strike_point, every rank's by the same ratio, so the nasal upper
+# 8' stays nearer the bridge than the lower); DAMPER how long the jacks'
+# felts take to stop a string (release_valve_time: VCSL's four harpsichords
+# 19-68 ms, four regulations) -- every rank's, and the free strings'
+PLUCK, DAMPER = 15, 16
+N_KNOBS = 17
 # (their names in a session -- nv_host::VK_NAMES -- and on the VOICE card:
 # FELT the felt's stiffness, log10 of its K; FELT LEFT the soft felt over a
 # worn hammer's hard layer, mm at the worn keys -- thin, a soft felt bottoms
 # out on it and brightens; thick, a fresh hammer that never does)
 NAMES = ('felt', 'felt_left', 'strike', 'unison', 'lid', 'board', 'pickup',
-         'tine', 'gap', 'swing', 'tonebar', 'reed', 'pick', 'strings', 'tone')
+         'tine', 'gap', 'swing', 'tonebar', 'reed', 'pick', 'strings', 'tone', 'pluck', 'damper')
 # (how a knob's value moves the class: an offset, or a ratio)
 OFFSET = frozenset((HAMMER, LID, TINE, REED))
 
@@ -84,8 +91,23 @@ def _string_loss(cls):
     return 'harmonic_decay_db'
 
 
+def _harpsi(cls):
+    """A registered harpsichord: its stops ranks of their own strings
+    (the engine's organ with choirs)."""
+    import tonelib as T
+    return (isinstance(cls, type) and issubclass(cls, T.HarpsiBase) and bool(getattr(cls, 'registerable', False))
+            and bool(getattr(cls, 'string_choirs', None)))
+
+
 def knobs_of(cls):
     """The knobs cls has and its value of each (live.cpp nv_voicing_knobs)."""
+    if _harpsi(cls):
+        out = {}
+        if cls.strike_point:
+            out[PLUCK] = float(cls.strike_point)
+        if cls.release_valve_time:
+            out[DAMPER] = float(cls.release_valve_time)
+        return out
     if _guitar(cls):
         # (no PICK where a slap or pop drives the string into its frets: the
         # contact's modes are the note's, not the pick's comb; no STRINGS on a
@@ -195,7 +217,34 @@ def _attrs(base, t, mask):
         a[n] = getattr(base, n) * t[STRINGS]
     if mask >> TONE & 1:
         a['tone_turn'] = base.tone_turn * t[TONE]
+    if mask >> PLUCK & 1:
+        a['strike_point'] = base.strike_point * t[PLUCK]
+    if mask >> DAMPER & 1:
+        a['release_valve_time'] = base.release_valve_time * t[DAMPER]
+    if _harpsi(base) and mask & (1 << PLUCK | 1 << DAMPER):
+        # (its other ranks' strings, each its own class: the same moves --
+        # live.cpp nv_voicing_apply_organ's, on the organ's pipes)
+        def rk(c):
+            return _rank_class(c, t, mask) if isinstance(c, type) else c
+        a['stop_ranks'] = [tuple(rk(x) if j >= 3 else x for j, x in enumerate(r)) for r in base.stop_ranks]
+        a['string_choirs'] = tuple(tuple(rk(x) if j >= 2 else x for j, x in enumerate(c)) for c in base.string_choirs)
     return a
+
+
+def _rank_class(c, t, mask):
+    """A harpsichord rank's string class c with the pluck and damper moved."""
+    key = (c, tuple(t), mask & (1 << PLUCK | 1 << DAMPER))
+    got = _MADE.get(key)
+    if got is None:
+        # (its draws the plain rank's: the organ takes its spectrum through
+        # tonelib.rank_spectrum, a subclass named for it, "...Rank")
+        a = {'section_salt_name': getattr(c, 'section_salt_name', None) or c.__name__ + "Rank"}
+        if mask >> PLUCK & 1 and c.strike_point:
+            a['strike_point'] = c.strike_point * t[PLUCK]
+        if mask >> DAMPER & 1 and c.release_valve_time:
+            a['release_valve_time'] = c.release_valve_time * t[DAMPER]
+        got = _MADE[key] = type('%s_voiced%d' % (c.__name__, len(_MADE)), (c,), a)
+    return got
 
 
 def voicing(base, **moves):
@@ -219,7 +268,7 @@ _MADE = {}
 def piano_class(base, t, mask):
     """base with transforms (t, mask) applied: a subclass, made once (its
     section_salt_name kept, so its draws are base's)."""
-    if not mask or not (_family(base) or _ep(base) or _guitar(base)):
+    if not mask or not (_family(base) or _ep(base) or _guitar(base) or _harpsi(base)):
         return base
     key = (base, tuple(t), mask)
     got = _MADE.get(key)

@@ -41,6 +41,7 @@ STATES = [
     ("fortepiano", dict(program=0, variation=40), ["voice", "piano", "tuning"]),
     ("wurli", dict(program=5, variation=0), ["voice"]),
     ("guitar", dict(program=27, variation=0), ["amp", "voice"]),
+    ("harpsichord", dict(program=6, variation=0), ["voice"]),
     ("bass", dict(program=33, variation=0), ["voice"]),
     ("kit", dict(program=0, drums=True), ["drums", "kits", "seq", "piano", "synth", "parts"]),
     ("userkit", dict(program=64, drums=True), ["drums", "kits"]),

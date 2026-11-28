@@ -3668,8 +3668,8 @@
   "t": "Voix"
  },
  "voice/intro": {
-  "en": "The selected part's instrument as the physics it is modelled by: each knob a physical part of it, in its own units. Each starts at the voice's own value. Turn one and the part's sound is built again through it, which takes a second or two; the notes after that have it. Double-tap a knob to put it back. A new program puts every knob back. Pianos, electric pianos and electric guitars and basses have knobs first.",
-  "t": "L'instrument de la partie choisie tel que la physique le modélise : chaque bouton une partie physique de l'instrument, dans ses propres unités. Chacun part de la valeur propre de la voix. En tourner un reconstruit le son de la partie avec lui, ce qui prend une ou deux secondes ; les notes suivantes l'ont. Touchez deux fois un bouton pour le remettre. Un nouveau programme remet tous les boutons. Les pianos, les pianos électriques et les guitares et basses électriques ont des boutons en premier."
+  "en": "The selected part's instrument as the physics it is modelled by: each knob a physical part of it, in its own units. Each starts at the voice's own value. Turn one and the part's sound is built again through it, which takes a second or two; the notes after that have it. Double-tap a knob to put it back. A new program puts every knob back. Pianos, electric pianos, electric guitars and basses, and harpsichords have knobs first.",
+  "t": "L'instrument de la partie choisie tel que la physique le modélise : chaque bouton une partie physique de l'instrument, dans ses propres unités. Chacun part de la valeur propre de la voix. En tourner un reconstruit le son de la partie avec lui, ce qui prend une ou deux secondes ; les notes suivantes l'ont. Touchez deux fois un bouton pour le remettre. Un nouveau programme remet tous les boutons. Les pianos, les pianos électriques, les guitares et basses électriques et les clavecins ont des boutons en premier."
  },
  "voice/terms/0/1": {
   "en": "The hammer felt's stiffness, against the program's own (x1). Harder felt is brighter; softer is darker.",
@@ -3743,12 +3743,20 @@
   "en": "How fast the strings lose their highs, against the program's own (x1): the string's own loss, the part that grows with frequency. Below x1, fresh strings that ring bright; above, old strings going dead. On the basses it is the winding's loss, where grime and wear sit.",
   "t": "La vitesse à laquelle les cordes perdent leurs aigus, par rapport au programme (x1) : la perte propre de la corde, celle qui croît avec la fréquence. Sous x1, des cordes neuves et brillantes ; au-dessus, de vieilles cordes qui s'éteignent. Sur les basses, c'est la perte du filage, là où se logent la crasse et l'usure."
  },
- "voice/terms/15/1": {
-  "en": "Puts every knob back to the voice's own value.",
-  "t": "Remet chaque bouton à la valeur propre de la voix."
- },
  "voice/terms/14/1": {
   "en": "The guitar's tone pot, as its dial reads: 10 full up, the coil as the program has it; turned down, the pot lets the 22 nF capacitor across the pickup, which joins the cable's and lowers the pickup's resonance -- the highs go, and at 0 a honk is left near 0.7 kHz (on a bass a little higher). Worked out from each guitar's coil.",
   "t": "Le potentiomètre de tonalité de la guitare, tel que l'indique son cadran : 10 au maximum, le bobinage tel que le programme l'a ; en le baissant, le potentiomètre place le condensateur de 22 nF aux bornes du micro, qui s'ajoute à celui du câble et abaisse la résonance du micro : les aigus partent, et à 0 il reste un son nasillard vers 0,7 kHz (un peu plus haut sur une basse). Calculé à partir du bobinage de chaque guitare."
+ },
+ "voice/terms/17/1": {
+  "en": "Puts every knob back to the voice's own value.",
+  "t": "Remet chaque bouton à la valeur propre de la voix."
+ },
+ "voice/terms/15/1": {
+  "en": "Where the harpsichord's quills pluck the strings, as a share of the string's length from its end (1/8.7: an 8.7th of the way along), the lower 8''s shown; every register's jacks move by the same ratio, so the 4' and the nasal upper 8' keep their places against it. Near the end is nasal and bright, further along round and full. The partials with a node there are not plucked.",
+  "t": "Où les plectres du clavecin pincent les cordes, en fraction de la longueur de la corde depuis son extrémité (1/8,7 : au 8,7e du chemin), affiché pour le 8' inférieur ; les sautereaux de chaque registre se déplacent dans la même proportion, si bien que le 4' et le 8' supérieur nasal gardent leur place par rapport à lui. Près de l'extrémité, nasillard et brillant ; plus loin, rond et plein. Les partiels ayant un nœud à cet endroit ne sont pas pincés."
+ },
+ "voice/terms/16/1": {
+  "en": "How long the felts on the jacks take to stop a string when the key comes up, every register's: the time to take the first 20 dB. Four real harpsichords measured 19 to 68 ms; a worn or loose felt is slower, and the note rings on after the key.",
+  "t": "Le temps que mettent les feutres des sautereaux à arrêter une corde quand la touche remonte, dans chaque registre : le temps des 20 premiers dB. Quatre vrais clavecins ont mesuré de 19 à 68 ms ; un feutre usé ou lâche est plus lent, et la note continue de sonner après la touche."
  }
 }

@@ -32,7 +32,8 @@ RANGE = {PK.HAMMER: (-1.0, 0.0, 1.0), PK.WEAR: (0.3, 1.0, 2.5), PK.STRIKE: (0.1,
          PK.UNISON: (0.0, 0.5, 2.5), PK.LID: (-6.0, None, 2.5), PK.BOARD: (0.5, 0.8, 1.8),
          PK.PICKUP: (0.6, 1.3, 1.8), PK.TINE: (0.0, 0.3, 1.2), PK.GAP: (0.5, 1.5, 2.5),
          PK.SWING: (0.4, 1.4, 2.2), PK.TONEBAR: (0.2, 2.0, 3.5), PK.REED: (0.0, 0.25, 1.0),
-         PK.PICK: (0.05, None, 0.3), PK.STRINGS: (0.4, 2.0, 5.0), PK.TONE: (0.004, 0.1, 0.5)}
+         PK.PICK: (0.05, None, 0.3), PK.STRINGS: (0.4, 2.0, 5.0), PK.TONE: (0.004, 0.1, 0.5),
+         PK.PLUCK: (0.05, None, 0.2), PK.DAMPER: (0.3, 2.0, 5.0)}
 
 
 def settings(i, v0):
@@ -43,7 +44,7 @@ def settings(i, v0):
             continue
         if i == PK.HAMMER:
             out.append(v0 + x + 0.25)
-        elif i in (PK.STRIKE, PK.LID, PK.TINE, PK.REED, PK.PICK):
+        elif i in (PK.STRIKE, PK.LID, PK.TINE, PK.REED, PK.PICK, PK.PLUCK):
             out.append(x)
         else:
             out.append(v0 * x)
@@ -64,13 +65,15 @@ def main():
     d.nv_noteclass_size.restype = ctypes.c_size_t
     d.nv_harmonic_decay.restype = ctypes.c_double
     d.nv_harmonic_decay.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    d.nv_voicing_apply_organ.restype = None
+    d.nv_voicing_apply_organ.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
     # (the pianos and electric pianos, GM 0-5; the electric guitars and basses, 26-37)
-    voices = [(p, PM.property_class_for_note(p, 60)) for p in list(range(6)) + list(range(26, 38))]
+    voices = [(p, PM.property_class_for_note(p, 60)) for p in list(range(7)) + list(range(26, 38))]
     voices = [(p, c) for p, c in voices if PK.knobs_of(c)]
     # (the variations with classes of their own: Honky-tonk 2 and the like)
     seen = {c for _, c in voices}
     for (p, v), _ in sorted(PM.VARIATIONS.items(), key=lambda kv: kv[0]) if hasattr(PM, 'VARIATIONS') else ():
-        if not (p <= 5 or 26 <= p <= 37) or v >= 4096:
+        if not (p <= 6 or 26 <= p <= 37) or v >= 4096:
             continue
         try:
             c = PM.variation_class(p, v)
@@ -117,6 +120,48 @@ def main():
                 nbm = NC.from_buffer_copy(nb)
                 d.nv_voicing_apply(ctypes.byref(nbm), D7(*t), mask)
                 moved, bright = 0.0, []
+                if PK._harpsi(base):
+                    # (a harpsichord's other ranks: the organ's pipes, moved on a
+                    # copy as nv_voice_variant moves them, against Python's)
+                    OS = type(N.organ(base))
+                    oc = OS.from_buffer_copy(OS.from_address(nb.organ))
+                    d.nv_voicing_apply_organ(ctypes.byref(oc), D7(*t), mask & (1 << PK.PLUCK | 1 << PK.DAMPER))
+                    oa = OS.from_buffer_copy(OS.from_address(na.organ))
+                    # (not compared: the organ's family, the plain one's in the
+                    # engine -- the same instrument's wind and grouping -- and
+                    # each pipe's cached bore_norm, which nv_voice_init makes
+                    # again from the pipe's own values: its notes compared below)
+                    oa.family = oc.family
+                    for j in range(oc.n_pipe):
+                        oa.pipe[j].tmpl.bore_norm = oc.pipe[j].tmpl.bore_norm
+                    for j in range(oc.n_pipe):
+                        for key, vel in notes:
+                            f = 440.0 * 2 ** ((key - 69) / 12.0)
+                            got = []
+                            for o_ in (oc, OS.from_address(na.organ)):
+                                s_, n_ = N.VoiceSnap(), N.VoiceNote()
+                                c_ = N.VoiceInit.from_buffer_copy(o_.pipe[j].init)
+                                tm_ = N.VoiceSnap.from_buffer_copy(o_.pipe[j].tmpl)
+                                d.nv_voice_init(ctypes.byref(c_), ctypes.byref(tm_), f, 0.0, vel / 127.0, 1.0, 0.0,
+                                                None, ctypes.byref(s_), ctypes.byref(n_))
+                                got.append((bytes(s_), bytes(n_)))
+                            asked += 1
+                            if got[0] != got[1]:
+                                bad += 1
+                                print(who, base.__name__, PK.NAMES[i], "%.4g" % val, "rank pipe", j, "key", key,
+                                      "differs")
+                    asked += 1
+                    if bytes(oc) != bytes(oa):
+                        bad += 1
+                        bc_, ba_ = bytes(oc), bytes(oa)
+                        diff = [f for f, _ in OS._fields_
+                                if bc_[getattr(OS, f).offset:getattr(OS, f).offset + getattr(OS, f).size]
+                                != ba_[getattr(OS, f).offset:getattr(OS, f).offset + getattr(OS, f).size]]
+                        print(who, base.__name__, PK.NAMES[i], "%.4g" % val, "the ranks' organ differs:", diff,
+                              [(oc.pipe[j].tmpl.strike_point, oa.pipe[j].tmpl.strike_point) for j in range(oc.n_pipe)])
+                    if i == PK.DAMPER:
+                        line.append("damper %.4g: ranks' release %s s" % (val, ", ".join(
+                            "%.4g" % oc.pipe[j].release_valve_time for j in range(oc.n_pipe))))
                 for key, vel in notes:
                     f = 440.0 * 2 ** ((key - 69) / 12.0)
                     out = []

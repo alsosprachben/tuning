@@ -370,8 +370,8 @@ HELP = {
      'intro': "The selected part's instrument as the physics it is modelled by: each knob a physical part of it, in "
               "its own units. Each starts at the voice's own value. Turn one and the part's sound is built again "
               "through it, which takes a second or two; the notes after that have it. Double-tap a knob to put it "
-              "back. A new program puts every knob back. Pianos, electric pianos and electric guitars and basses have "
-              "knobs first.",
+              "back. A new program puts every knob back. Pianos, electric pianos, electric guitars and basses, and "
+              "harpsichords have knobs first.",
      'terms': [['FELT', "The hammer felt's stiffness, against the program's own (x1). Harder felt is brighter; softer "
                         "is darker."],
                ['FELT LEFT', "How much soft felt is left over a worn hammer's hard layer, in millimetres. Thin, a "
@@ -391,6 +391,8 @@ HELP = {
                ['PICK', "Where the pick strikes the string, as a share of its length from the bridge at the open string (1/5.5: a 5.5th of the way along); a fretted note's moves with its fret. Near the bridge is bright and thin, toward the neck round and full. The partials with a node there are not plucked."],
                ['STRING AGE', "How fast the strings lose their highs, against the program's own (x1): the string's own loss, the part that grows with frequency. Below x1, fresh strings that ring bright; above, old strings going dead. On the basses it is the winding's loss, where grime and wear sit."],
                ['TONE', "The guitar's tone pot, as its dial reads: 10 full up, the coil as the program has it; turned down, the pot lets the 22 nF capacitor across the pickup, which joins the cable's and lowers the pickup's resonance -- the highs go, and at 0 a honk is left near 0.7 kHz (on a bass a little higher). Worked out from each guitar's coil."],
+               ['PLUCK', "Where the harpsichord's quills pluck the strings, as a share of the string's length from its end (1/8.7: an 8.7th of the way along), the lower 8''s shown; every register's jacks move by the same ratio, so the 4' and the nasal upper 8' keep their places against it. Near the end is nasal and bright, further along round and full. The partials with a node there are not plucked."],
+               ['DAMPER', "How long the felts on the jacks take to stop a string when the key comes up, every register's: the time to take the first 20 dB. Four real harpsichords measured 19 to 68 ms; a worn or loose felt is slower, and the note rings on after the key."],
                ['ALL AS THE VOICE', "Puts every knob back to the voice's own value."]]},
     'piano:pedals': {'title': 'Pedals',
      'intro': 'Tap a pedal to press it; tap again to let it up.',

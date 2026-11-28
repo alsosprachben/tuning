@@ -677,7 +677,11 @@
  "STRING AGE": "EDAD DE CUERDAS",
  "Where the pick strikes the string. Near the bridge is bright and thin; toward the neck, round.": "Dónde la púa ataca la cuerda. Cerca del puente, brillante y delgado; hacia el mástil, redondo.",
  "How fast the strings lose their highs. Fresh strings ring bright; old ones go dull.": "Lo rápido que las cuerdas pierden los agudos. Las nuevas suenan brillantes; las viejas, apagadas.",
- "This voice has no physical knobs yet. Pianos, electric pianos and electric guitars and basses have them first; other families follow.": "Esta voz aún no tiene mandos físicos. Los pianos, los pianos eléctricos y las guitarras y bajos eléctricos los tienen primero; las demás familias vendrán después.",
  "TONE": "TONO",
- "The guitar's tone knob: 10 is full up; turned down, a capacitor darkens the pickup until it only honks.": "La perilla de tono de la guitarra: 10 es al máximo; al bajarla, un condensador oscurece la pastilla hasta que solo suena nasal."
+ "The guitar's tone knob: 10 is full up; turned down, a capacitor darkens the pickup until it only honks.": "La perilla de tono de la guitarra: 10 es al máximo; al bajarla, un condensador oscurece la pastilla hasta que solo suena nasal.",
+ "PLUCK": "PUNTO DE PULSACIÓN",
+ "DAMPER": "APAGADOR",
+ "Where the quills pluck the strings. Near the string's end is nasal and bright; further along, round and full.": "Dónde los plectros pulsan las cuerdas. Cerca del extremo de la cuerda, nasal y brillante; más adentro, redondo y lleno.",
+ "How long the felts on the jacks take to stop a string after the key comes up.": "Cuánto tardan los fieltros de los martinetes en parar una cuerda cuando sube la tecla.",
+ "This voice has no physical knobs yet. Pianos, electric pianos, electric guitars and basses, and harpsichords have them first; other families follow.": "Esta voz aún no tiene controles físicos. Los pianos, los pianos eléctricos, las guitarras y bajos eléctricos y los claves los tienen primero; las demás familias vendrán después."
 }

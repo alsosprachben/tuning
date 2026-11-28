@@ -17,6 +17,11 @@ PROGRAM 27 or 33 (an electric guitar, a bass): PICK, STRINGS and TONE; the
 pick at the bridge, brighter; the strings dead, darker; the tone pot all the
 way down, darker.
 
+PROGRAM 6 (the harpsichord): PLUCK and DAMPER; the quills near the string's
+end, brighter -- the lower 8' and, drawn alone, the 4' (another rank's string,
+on the organ's copy; the registration kept through the knob); the dampers
+slow, the release louder 30-130 ms after the key-up.
+
 PROGRAM 4 (the Rhodes) instead: its four knobs; the swing wider and the
 pickup closer, brighter; the tone bar up, its bell heard in the attack (a
 12 ms ring: the first 50 ms changed by more than -30 dB re the note).
@@ -112,26 +117,27 @@ def main(argv):
     bad = 0
     v = call({"call": "voicing", "row": 0})["voicing"]
     names = [k["name"] for k in v["knobs"]]
-    want = {0: ["felt", "felt_left", "strike", "unison", "lid", "board"], 4: ["tine", "gap", "swing", "tonebar"]}.get(
+    want = {0: ["felt", "felt_left", "strike", "unison", "lid", "board"], 4: ["tine", "gap", "swing", "tonebar"],
+            6: ["pluck", "damper"]}.get(
         prog, ["pick", "strings", "tone"])
     ok = names == want and not any(k["own"] for k in v["knobs"])
     ok = ok and all(abs(k["v"] - k["v0"]) < 1e-12 and k["lo"] <= k["v"] <= k["hi"] for k in v["knobs"])
     print("the voice's knobs:", ", ".join("%s %s" % (k["name"], k["text"]) for k in v["knobs"]), "ok" if ok else "WRONG")
     bad += not ok
     kn = {k["name"]: k for k in v["knobs"]}
-    keys = {0: (60, 84), 4: (48, 60, 72)}.get(prog, (40, 52, 64) if prog < 32 else (28, 40))
+    keys = {0: (60, 84), 4: (48, 60, 72), 6: (48, 60, 72)}.get(prog, (40, 52, 64) if prog < 32 else (28, 40))
     base = {key: bright(strike(key)) for key in keys}
     print("plain: brightness %s" % ", ".join("key %d %.0f Hz" % kv for kv in base.items()))
 
-    def case(name, k, val, key, darker, win=0.4, late=False, hi=False):
+    def case(name, k, val, key, darker, win=0.4, late=False, hi=False, fresh=False):
         """... late: the brightness of 0.4 s two seconds into a held note (a
         bass's strings: their loss shows as the note goes on); hi: the
         highs' share (highs) and not the centroid"""
         nonlocal bad
         tail = int(0.4 * sr)
-        x_plain = strike(key, hold=2.4 if late else 0.5) if win != 0.4 or late or hi else None
-        b_plain = (highs(x_plain) if hi else bright(x_plain[-tail:]) if late else bright(x_plain, win) if win != 0.4
-                   else base[key])
+        x_plain = strike(key, hold=2.4 if late else 0.5) if win != 0.4 or late or hi or fresh else None
+        b_plain = (highs(x_plain) if hi else bright(x_plain[-tail:]) if late else bright(x_plain, win)
+                   if win != 0.4 or fresh else base[key])
         call({"call": "voicing_set", "row": 0, "k": k, "v": val})
         v, took, b0 = settle(k)
         own = [x for x in v["knobs"] if x["k"] == k][0]
@@ -158,6 +164,40 @@ def main(argv):
         case("felt harder", 0, kn["felt"]["v0"] + 1.0, 84, False)
         case("lid shut", 4, -9.0, 84, True)
         case("board lower", 5, kn["board"]["v0"] * 0.5, 60, True)
+    elif prog == 6:
+        case("pluck nasal", 15, 0.05, 60, False)
+        # (the 4' alone: another rank's string, the organ's pipe -- the knob
+        # reaching it through the organ's copy)
+        call({"call": "stops_set", "row": 0, "drawn": [0, 0, 1, 0]})
+        render(0.3)
+        settle()
+        case("pluck nasal 4'", 15, 0.06, 60, False, fresh=True)
+        call({"call": "stops_set", "row": 0, "drawn": [1, 0, 0, 0]})
+        render(0.3)
+        settle()
+
+        def tail_db(key):
+            """the release: 30-130 ms after the key-up against the last 50 ms held, dB"""
+            d.nv_host_midi(h, bytes([0x90, key, 100]), 3)
+            x = render(0.5)
+            d.nv_host_midi(h, bytes([0x80, key, 0]), 3)
+            y = render(0.4)
+            render(0.6)
+            a = np.mean(x[-int(0.05 * sr):].astype(np.float64) ** 2)
+            b = np.mean(y[int(0.03 * sr):int(0.13 * sr)].astype(np.float64) ** 2)
+            return 10 * np.log10(max(1e-30, b) / max(1e-30, a))
+        t_plain = tail_db(60)
+        call({"call": "voicing_set", "row": 0, "k": 16, "v": kn["damper"]["v0"] * 4.0})
+        v, took, b0 = settle(16)
+        own = [x for x in v["knobs"] if x["k"] == 16][0]
+        t_slow = tail_db(60)
+        ok = b0 and took is not None and own["own"] and t_slow > t_plain + 3.0
+        print("dampers slow   its own %s at %s; key 60's release %.1f dB re the held note (plain %.1f)  %s" % (
+            own["own"], own["text"], t_slow, t_plain, "ok" if ok else "WRONG"))
+        bad += not ok
+        call({"call": "voicing_forget", "row": 0, "k": -1})
+        render(0.1)
+        settle()
     elif prog != 4:
         g = keys[1]
         case("pick at bridge", 12, 0.06, g, False)

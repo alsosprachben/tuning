@@ -3668,8 +3668,8 @@
   "t": "Voz"
  },
  "voice/intro": {
-  "en": "The selected part's instrument as the physics it is modelled by: each knob a physical part of it, in its own units. Each starts at the voice's own value. Turn one and the part's sound is built again through it, which takes a second or two; the notes after that have it. Double-tap a knob to put it back. A new program puts every knob back. Pianos, electric pianos and electric guitars and basses have knobs first.",
-  "t": "El instrumento de la parte elegida como la física con que está modelado: cada mando una parte física de él, en sus propias unidades. Cada uno empieza en el valor propio de la voz. Al girar uno, el sonido de la parte se construye de nuevo con él, lo que tarda un segundo o dos; las notas siguientes ya lo tienen. Toca dos veces un mando para devolverlo. Un programa nuevo devuelve todos los mandos. Los pianos, los pianos eléctricos y las guitarras y bajos eléctricos tienen mandos primero."
+  "en": "The selected part's instrument as the physics it is modelled by: each knob a physical part of it, in its own units. Each starts at the voice's own value. Turn one and the part's sound is built again through it, which takes a second or two; the notes after that have it. Double-tap a knob to put it back. A new program puts every knob back. Pianos, electric pianos, electric guitars and basses, and harpsichords have knobs first.",
+  "t": "El instrumento de la parte elegida como la física con que está modelado: cada mando una parte física de él, en sus propias unidades. Cada uno empieza en el valor propio de la voz. Al girar uno, el sonido de la parte se construye de nuevo con él, lo que tarda un segundo o dos; las notas siguientes ya lo tienen. Toca dos veces un mando para devolverlo. Un programa nuevo devuelve todos los mandos. Los pianos, los pianos eléctricos, las guitarras y bajos eléctricos y los claves tienen mandos primero."
  },
  "voice/terms/0/1": {
   "en": "The hammer felt's stiffness, against the program's own (x1). Harder felt is brighter; softer is darker.",
@@ -3743,12 +3743,20 @@
   "en": "How fast the strings lose their highs, against the program's own (x1): the string's own loss, the part that grows with frequency. Below x1, fresh strings that ring bright; above, old strings going dead. On the basses it is the winding's loss, where grime and wear sit.",
   "t": "Lo rápido que las cuerdas pierden los agudos, respecto al programa (x1): la pérdida propia de la cuerda, la que crece con la frecuencia. Por debajo de x1, cuerdas nuevas y brillantes; por encima, cuerdas viejas que se apagan. En los bajos es la pérdida del entorchado, donde se acumulan la suciedad y el desgaste."
  },
- "voice/terms/15/1": {
-  "en": "Puts every knob back to the voice's own value.",
-  "t": "Devuelve cada mando al valor propio de la voz."
- },
  "voice/terms/14/1": {
   "en": "The guitar's tone pot, as its dial reads: 10 full up, the coil as the program has it; turned down, the pot lets the 22 nF capacitor across the pickup, which joins the cable's and lowers the pickup's resonance -- the highs go, and at 0 a honk is left near 0.7 kHz (on a bass a little higher). Worked out from each guitar's coil.",
   "t": "El potenciómetro de tono de la guitarra, como lo marca su escala: 10 al máximo, la bobina tal como la tiene el programa; al bajarlo, el potenciómetro pone el condensador de 22 nF sobre la pastilla, que se suma al del cable y baja la resonancia de la pastilla: se van los agudos y en 0 queda un sonido nasal cerca de 0,7 kHz (en un bajo, algo más arriba). Calculado a partir de la bobina de cada guitarra."
+ },
+ "voice/terms/17/1": {
+  "en": "Puts every knob back to the voice's own value.",
+  "t": "Devuelve cada mando al valor propio de la voz."
+ },
+ "voice/terms/15/1": {
+  "en": "Where the harpsichord's quills pluck the strings, as a share of the string's length from its end (1/8.7: an 8.7th of the way along), the lower 8''s shown; every register's jacks move by the same ratio, so the 4' and the nasal upper 8' keep their places against it. Near the end is nasal and bright, further along round and full. The partials with a node there are not plucked.",
+  "t": "Dónde los plectros del clave pulsan las cuerdas, como fracción de la longitud de la cuerda desde su extremo (1/8,7: a un 8,7avo del camino), mostrado para el 8' inferior; los martinetes de cada registro se mueven en la misma proporción, así el 4' y el 8' superior nasal conservan su lugar respecto a él. Cerca del extremo, nasal y brillante; más adentro, redondo y lleno. Los parciales con un nodo ahí no se pulsan."
+ },
+ "voice/terms/16/1": {
+  "en": "How long the felts on the jacks take to stop a string when the key comes up, every register's: the time to take the first 20 dB. Four real harpsichords measured 19 to 68 ms; a worn or loose felt is slower, and the note rings on after the key.",
+  "t": "Cuánto tardan los fieltros de los martinetes en parar una cuerda cuando sube la tecla, en todos los registros: el tiempo de los primeros 20 dB. Cuatro claves reales midieron de 19 a 68 ms; un fieltro gastado o flojo es más lento, y la nota sigue sonando tras la tecla."
  }
 }

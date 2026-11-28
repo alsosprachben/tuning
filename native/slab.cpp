@@ -7538,7 +7538,10 @@ struct Part {
         // patch made anew, the voice the same -- its organ's tables the same)
         // KEEPS ITS REGISTRATION (live's set_patch)
         const OrganSpec *og_new = w.drums ? nullptr : nv_tcache_organ(w.cache, w.program);
-        const bool keep_reg = og_new && og_new == p.organ && w.program == p.program && !p.drums && !w.drums
+        // (...and a knob turned on a harpsichord: its organ a copy of the same, nv_voice_organ's)
+        const bool keep_reg = og_new && p.organ
+                              && (og_new == p.organ || nv_voice_organ_base(og_new) == nv_voice_organ_base(p.organ))
+                              && w.program == p.program && !p.drums && !w.drums
                               && (int)p.drawn.size() == og_new->n_rank;
         std::vector<char> kept = keep_reg ? p.drawn : std::vector<char>();
         const int kept_cpl = p.cpl;
