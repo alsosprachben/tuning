@@ -769,15 +769,85 @@ class ChainsTuner(HybridMeanTuner):
 
 _CHAINS = {}
 
+# THE OCTAVES the chains are built on: pure (2:1, for pipes and harpsichords:
+# ChainsTuner), or a piano's -- every octave on the lower note's 2nd partial
+# by path.py's fitted grand model (its Steinway B fit), the fifths pure 3:2,
+# as HybridMeanNotes builds them (ChainsPianoTuner)
+CHAIN_OCTAVES = ("pure", "piano")
 
-def chains_tuner(spec):
-    """The ChainsTuner class for a bridge spec, one per spec."""
+
+def chains_tuner(spec, octaves="pure", start=0):
+    """The class for chains/<spec>[/<octaves>]: one per spec (pure octaves:
+    moved to a key by in_key, as any table); on a piano's octaves, one per
+    (spec, start) -- built from that start, since a stretched table moved a
+    few keys up is not the same tuning built there."""
     spec = str(spec).strip().lower()
     chain_bridge(spec)
-    if spec not in _CHAINS:
-        _CHAINS[spec] = type("ChainsTuner_%s" % spec.replace(".", "_").replace("-", "m"), (ChainsTuner,),
-                             {"_table": None, "bridge": spec})
-    return _CHAINS[spec]
+    if octaves not in CHAIN_OCTAVES:
+        raise ValueError("bad octaves %r in chains/%s/%s: one of %s" % (octaves, spec, octaves, ", ".join(CHAIN_OCTAVES)))
+    key = (spec, octaves, start if octaves != "pure" else 0)
+    if key not in _CHAINS:
+        nm = spec.replace(".", "_").replace("-", "m")
+        if octaves == "pure":
+            _CHAINS[key] = type("ChainsTuner_%s" % nm, (ChainsTuner,), {"_table": None, "bridge": spec})
+        else:
+            _CHAINS[key] = type("ChainsPianoTuner_%s_%d" % (nm, start), (ChainsPianoTuner,),
+                                {"_table": None, "bridge": spec, "start": start})
+    return _CHAINS[key]
+
+
+class ChainsPianoTuner(PathTuner):
+    """Two chains of pure 3:2 fifths on a piano's stretched octaves, any bridge
+    and start: HybridMeanNotes made general (chains/<bridge>/piano@<start>).
+    Chain one from the start in octave 3, five fifths up; the bridge from its
+    third note up the bridge third; that note a fifth up, then two stretched
+    octaves down, to chain two's first, four fifths up; every other key by
+    stretched octaves out from them. chains/mean/piano@c is hybridmeanpiano."""
+    A = 440
+    bridge = "mean"
+    start = 0
+
+    @classmethod
+    def _build_table(cls):
+        P = _load_path_module()
+        spec, s = cls.bridge, cls.start
+
+        class ChainNotes(P.Notes):
+            def __init__(self):
+                P.Notes.__init__(self)
+                n0 = 48 + s
+                a = self[n0]
+                a.set_frequency(440.0 * 2 ** ((3 + s) / 12.0) / 4)      # (HybridMeanNotes' C3 at s = 0)
+                ch = [a]
+                for _ in range(5):
+                    ch.append(ch[-1].seq_tune(7, 3, 2))
+                b = self[n0 + 18]                                       # the bridge: position 2 up a third
+                b.set_parent(ch[2])
+                b.set_frequency(ch[2].f * _chain_ratio(spec))
+                c = b.seq_tune(7, 3, 2)                                 # up a fifth, down two stretched octaves
+                c = c.seq_tune(-12, 1, 2, True)
+                c = c.seq_tune(-12, 1, 2, True)
+                for _ in range(4):
+                    c = c.seq_tune(7, 3, 2)
+                self.init_octaves()
+
+            init_octaves = P.HybridMeanNotes.init_octaves
+
+        gen = ChainNotes()
+        table = {n: float(note.f) for n, note in enumerate(gen.notes) if getattr(note, "f", None)}
+        ref = _REFERENCE if _REFERENCE is not None else (69, cls.A)
+        if table.get(ref[0]):
+            k = float(ref[1]) / table[ref[0]]
+            table = {n: f * k for n, f in table.items()}
+        return table
+
+
+def _chain_ratio(spec):
+    """the bridge third as a ratio: the mean as HybridMeanNotes writes it (to
+    the bit), the others from their cents"""
+    if spec == "mean":
+        return (80.0 * 81.0) ** 0.5 / 64.0
+    return 2.0 ** (chain_bridge(spec) / 1200.0)
 
 
 class HybridMeanPianoTuner(PathTuner):

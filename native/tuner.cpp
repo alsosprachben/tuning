@@ -94,6 +94,67 @@ static const Gen *gen_of(const char *name)
     return nullptr;
 }
 
+// TWO CHAINS ON A PIANO's OCTAVES (tunelib.ChainsPianoTuner, path.py's
+// HybridMeanNotes made general): Note.rel_tune's arithmetic, operation for
+// operation -- fifths 3:2, octaves on the lower note's 2nd partial by the
+// fitted grand's coefficient (steinway_inharmonicity_coefficient_func)
+static double grand_coeff(double x)
+{
+    const double a = 5.22964e-6, b = 1.21012e-6, c = 8.3666e-10, d = -0.007927, e = 0.429601;
+    return a + b * x + c * x * x + (d / x) + (e / (x * x));
+}
+static double ratio2(double coeff) { return 2.0 * (1.0 + 0.5 * 3.0 * coeff); }    // (inharmonicity_coefficient_ratio(2, c))
+struct ChainGen {
+    double f[150];
+    bool set[150];
+    // Note.rel_tune: child from parent by n/d (along the inharmonicity: an octave)
+    void tune(int child, int parent, int n, int d, bool inh = false)
+    {
+        double base = f[parent] * (double)n / (double)d, v;
+        if (!inh)
+            v = f[parent] * (double)n / (double)d;
+        else if (n >= d)
+            v = base * (ratio2(grand_coeff(f[parent])) / 2.0);
+        else
+            v = base / (ratio2(grand_coeff(base)) / 2.0);
+        f[child] = v;
+        set[child] = true;
+    }
+};
+// the generator's table (keys it tuned), before the reference: chain one from
+// 48 + start, the bridge on its third note by `ratio`
+static Table chain_piano_gen(int s, double ratio)
+{
+    ChainGen g;
+    for (int n = 0; n < 150; n++) {
+        g.f[n] = 0.0;
+        g.set[n] = false;
+    }
+    const int n0 = 48 + s;
+    g.f[n0] = 440.0 * pow(2.0, (3 + s) / 12.0) / 4.0;
+    g.set[n0] = true;
+    for (int k = 0; k < 5; k++)
+        g.tune(n0 + 7 * (k + 1), n0 + 7 * k, 3, 2);
+    g.f[n0 + 18] = g.f[n0 + 14] * ratio;                // (the bridge: position 2 up a third)
+    g.set[n0 + 18] = true;
+    g.tune(n0 + 25, n0 + 18, 3, 2);                     // (a fifth up, two stretched octaves down)
+    g.tune(n0 + 13, n0 + 25, 1, 2, true);
+    g.tune(n0 + 1, n0 + 13, 1, 2, true);
+    for (int k = 0; k < 4; k++)
+        g.tune(n0 + 1 + 7 * (k + 1), n0 + 1 + 7 * k, 3, 2);
+    for (int n = 12; n <= 127; n++)                     // (HybridMeanNotes.init_octaves: up, then down)
+        if (!g.set[n] && n - 12 >= 0 && g.set[n - 12])
+            g.tune(n, n - 12, 2, 1, true);
+    for (int n = 127; n >= 12; n--)
+        if (!g.set[n] && g.set[n + 12])
+            g.tune(n, n + 12, 1, 2, true);
+    Table t;
+    for (int n = 0; n < 150; n++)
+        if (g.set[n] && g.f[n] != 0.0)
+            t[n] = g.f[n];
+    return t;
+}
+
 // tunelib.chain_bridge: chains/<spec>'s bridge in cents -- a name (helm,
 // pure, mid, mean, pyth) or a number from the schismatic third to the
 // Pythagorean; false otherwise
@@ -358,8 +419,34 @@ int nv_tuning_table(const char *name, int ref_note, double ref_hz, double *out, 
     // chains/<bridge> (tunelib.ChainsTuner): hybridmean's chains, any bridge, at 440
     static const PathT CHAINS = {"chains", "", 440.0, 2};
     double Xc = NAN;
-    if (key.compare(0, 7, "chains/") == 0 && !chain_bridge(key.substr(7), &Xc))
-        return -1;
+    if (key.compare(0, 7, "chains/") == 0) {
+        // chains/<bridge>[/<octaves>]: pure (below), or a piano's -- built from @KEY, not moved
+        std::string sp = key.substr(7), oc = "pure";
+        if (const size_t sl = sp.find('/'); sl != std::string::npos) {
+            oc = sp.substr(sl + 1);
+            sp = sp.substr(0, sl);
+        }
+        if (!chain_bridge(sp, &Xc) || (oc != "pure" && oc != "piano"))
+            return -1;
+        if (oc == "piano") {
+            const double ratio = sp == "mean" ? pow(80.0 * 81.0, 0.5) / 64.0 : pow(2.0, Xc / 1200.0);
+            Table t = chain_piano_gen(has_tonic ? tonic : 0, ratio);
+            const double A = has_pitch ? pitch : 440.0;
+            const int rn = ref.on ? ref.note : 69;
+            const double rh = ref.on ? ref.hz : A;
+            auto it = t.find(rn);
+            if (it != t.end() && it->second != 0.0) {
+                const double k = rh / it->second;
+                for (auto &kv : t)
+                    kv.second = kv.second * k;
+            }
+            for (int n = 0; n < 128; n++) {
+                out[n] = path_freq(t, n, A, ref);
+                have[n] = 1;
+            }
+            return 0;
+        }
+    }
     const PathT *found = std::isnan(Xc) ? nullptr : &CHAINS;
     for (const PathT &p : PATH)
         if (!found && key == p.name)

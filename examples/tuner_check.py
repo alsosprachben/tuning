@@ -38,6 +38,10 @@ def main(argv):
     chains = ["chains/%s" % b for b in ("helm", "pure", "mid", "mean", "pyth", "384.36", "386.31", "390", "397.07", "400.5", "407.82")]
     specs += chains + ["%s@%s" % (c, k) for c in chains for k in keys]
     specs += ["chains/pure@bb:415", "chains/mean@g~442", "chains/390:466", "chains/PURE@Bb"]
+    # ...on a piano's octaves (tunelib.ChainsPianoTuner: built from the key)
+    specs += ["chains/%s/piano@%s" % (b, k) for b in ("helm", "pure", "mid", "mean", "pyth", "390.5") for k in keys]
+    specs += ["chains/mean/piano", "chains/pure/piano@bb:415", "chains/mean/piano@eb~442", "chains/pure/pure@g"]
+    specs += ["chains/pure/organ@c", "chains/pure/piano@h"]          # refused
     specs += ["chains/384.3", "chains/407.9", "chains/abc", "chains/", "chains/pure@h"]   # refused
     specs += ["even@d", "pyth:466", "hybrid@h", "nosuch", "hybrid:abc"]          # refused
     specs += ["raga:%s@%s" % (s, k) for s in ragas.SYSTEMS for k in ("c", "c#", "a")]
