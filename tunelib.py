@@ -770,75 +770,159 @@ class ChainsTuner(HybridMeanTuner):
 _CHAINS = {}
 
 # THE OCTAVES the chains are built on: pure (2:1, for pipes and harpsichords:
-# ChainsTuner), or a piano's -- every octave on the lower note's 2nd partial
-# by path.py's fitted grand model (its Steinway B fit), the fifths pure 3:2,
-# as HybridMeanNotes builds them (ChainsPianoTuner)
-CHAIN_OCTAVES = ("pure", "piano")
+# ChainsTuner); a piano's -- every octave on the lower note's 2nd partial by
+# path.py's fitted grand model, the fifths pure 3:2 (ChainsPianoTuner); or
+# the piano-built middle octave repeated by pure 2:1 (as hybridharm is)
+CHAIN_OCTAVES = ("pure", "piano", "middle")
+# THE ROUTE from chain one to chain two, on a piano's octaves (each one of
+# path.py's generators made general -- on pure octaves the routes are one):
+#   fifth    the bridge third, a fifth up, two stretched octaves down (HybridMeanNotes)
+#   fourth   the bridge third, a stretched octave down, a pure fourth down (HybridNotes)
+#   octaves  no bridge third: chain two's top down three stretched octaves to
+#            chain one (StretchedHelmholtzNotes; on pure octaves, the bridge helm)
+CHAIN_ROUTES = ("fifth", "fourth", "octaves")
 
 
-def chains_tuner(spec, octaves="pure", start=0):
-    """The class for chains/<spec>[/<octaves>]: one per spec (pure octaves:
-    moved to a key by in_key, as any table); on a piano's octaves, one per
-    (spec, start) -- built from that start, since a stretched table moved a
-    few keys up is not the same tuning built there."""
+def chains_tuner(spec, octaves="pure", start=0, route="fifth"):
+    """The class for chains/<spec>[/<octaves>[/<route>]]: on pure octaves one
+    per spec (moved to a key by in_key, as any table; the octaves route is
+    the helm bridge); on a piano's, one per (spec, octaves, route, start) --
+    built from that start, since a stretched table moved a few keys up is
+    not the same tuning built there."""
     spec = str(spec).strip().lower()
     chain_bridge(spec)
     if octaves not in CHAIN_OCTAVES:
         raise ValueError("bad octaves %r in chains/%s/%s: one of %s" % (octaves, spec, octaves, ", ".join(CHAIN_OCTAVES)))
-    key = (spec, octaves, start if octaves != "pure" else 0)
+    if route not in CHAIN_ROUTES:
+        raise ValueError("bad route %r in chains/%s/%s/%s: one of %s" % (route, spec, octaves, route, ", ".join(CHAIN_ROUTES)))
+    if octaves == "pure":
+        if route == "octaves":
+            spec = "helm"
+        key = (spec, "pure", "", 0)
+    else:
+        key = (spec, octaves, route, start)
     if key not in _CHAINS:
         nm = spec.replace(".", "_").replace("-", "m")
         if octaves == "pure":
             _CHAINS[key] = type("ChainsTuner_%s" % nm, (ChainsTuner,), {"_table": None, "bridge": spec})
         else:
-            _CHAINS[key] = type("ChainsPianoTuner_%s_%d" % (nm, start), (ChainsPianoTuner,),
-                                {"_table": None, "bridge": spec, "start": start})
+            _CHAINS[key] = type("ChainsPianoTuner_%s_%s_%s_%d" % (nm, octaves, route, start), (ChainsPianoTuner,),
+                                {"_table": None, "bridge": spec, "start": start, "route": route,
+                                 "middle": octaves == "middle"})
     return _CHAINS[key]
 
 
+def _chain_shift(s):
+    """the semitones a route's generator moves for start s: -6..5, so its
+    notes stay in the registers the original tuned them in"""
+    return s if s < 6 else s - 12
+
+
+def _chain_gen(spec, s, route):
+    """the generator's {key: Hz} (before the reference) for a route from start
+    s: path.py's own Notes and rel_tune, its generator's steps moved by
+    _chain_shift"""
+    P = _load_path_module()
+    g = P.Notes()
+    if route == "fifth":                # HybridMeanNotes: chain one from C3 (s = 0)
+        d = _chain_shift(s)
+        a = g[48 + d]
+        a.set_frequency(440.0 * 2 ** ((3 + d) / 12.0) / 4)
+        ch = [a]
+        for _ in range(5):
+            ch.append(ch[-1].seq_tune(7, 3, 2))
+        b = g[48 + d + 18]                                  # the bridge: position 2 up a third
+        b.set_parent(ch[2])
+        b.set_frequency(ch[2].f * _chain_ratio(spec))
+        c = b.seq_tune(7, 3, 2).seq_tune(-12, 1, 2, True).seq_tune(-12, 1, 2, True)
+        for _ in range(4):
+            c = c.seq_tune(7, 3, 2)
+        P.HybridMeanNotes.init_octaves(g)
+    elif route == "octaves":            # StretchedHelmholtzNotes: chain two from C#3 (s = 0)
+        d = _chain_shift(s)
+        cs = g[49 + d]
+        cs.set_frequency(440.0 * 2 ** ((-20 + d) / 12.0))
+        cs.seq_tune(-7, 2, 3)
+        c = cs
+        for _ in range(5):
+            c = c.seq_tune(7, 3, 2)
+        for _ in range(3):
+            c = c.seq_tune(-12, 1, 2, True)
+        for _ in range(5):
+            c = c.seq_tune(7, 3, 2)
+        P.HybridMeanNotes.init_octaves(g)
+    else:                               # HybridNotes: around the bridge's C4 (s = B-flat)
+        d = _chain_shift((s + 2) % 12)
+        C = g[60 + d]
+        C.set_frequency(440.0 * 2 ** ((3 + d) / 12.0) / 2)
+        F = C.seq_tune(-7, 2, 3)
+        F.seq_tune(-7, 2, 3)
+        G = C.seq_tune(7, 3, 2)
+        D = G.seq_tune(7, 3, 2)
+        A = D.seq_tune(7, 3, 2)
+        C.seq_tune(12, 2, 1, True)
+        C.seq_tune(-12, 1, 2, True)
+        F.seq_tune(12, 2, 1, True).seq_tune(12, 2, 1, True)
+        g[60 + d - 14].seq_tune(12, 2, 1, True).seq_tune(12, 2, 1, True)
+        G.seq_tune(-12, 1, 2, True)
+        G.seq_tune(12, 2, 1, True)
+        D.seq_tune(-12, 1, 2, True).seq_tune(-12, 1, 2, True)
+        A.seq_tune(-12, 1, 2, True).seq_tune(-12, 1, 2, True)
+        if spec == "pure":
+            E = C.seq_tune(4, 5, 4)                         # (the bridge as HybridNotes writes it, to the bit)
+        else:
+            E = g[60 + d + 4]
+            E.set_parent(C)
+            E.set_frequency(C.f * _chain_ratio(spec))
+        E3 = E.seq_tune(-12, 1, 2, True)
+        B = E3.seq_tune(-5, 3, 4)
+        Fs = B.seq_tune(7, 3, 2)
+        Cs = Fs.seq_tune(7, 3, 2)
+        Gs = Cs.seq_tune(7, 3, 2)
+        Ds = Gs.seq_tune(7, 3, 2)
+        E.seq_tune(12, 2, 1, True)
+        B.seq_tune(12, 2, 1, True).seq_tune(12, 2, 1, True)
+        Fs.seq_tune(12, 2, 1, True).seq_tune(12, 2, 1, True)
+        Cs.seq_tune(12, 2, 1, True)
+        Cs.seq_tune(-12, 1, 2, True)
+        Gs.seq_tune(12, 2, 1, True)
+        Gs.seq_tune(-12, 1, 2, True)
+        Ds.seq_tune(-12, 1, 2, True).seq_tune(-12, 1, 2, True)
+        # HybridNotes.init_octaves_low / _high: down from B-flat2-A3, up from B-flat4-A5
+        for n in [47, 46] + list(range(48, 58)):
+            g[n + d].seq_tune(-12, 1, 2, True).seq_tune(-12, 1, 2, True)
+        g[57 + d - 24].seq_tune(-12, 1, 2, True)
+        for n in [70, 71] + list(range(72, 82)):
+            g[n + d].seq_tune(12, 2, 1, True).seq_tune(12, 2, 1, True)
+        for n in (70, 71, 72):
+            g[n + d + 24].seq_tune(12, 2, 1, True)
+    return {n: float(note.f) for n, note in enumerate(g.notes) if getattr(note, "f", None)}
+
+
 class ChainsPianoTuner(PathTuner):
-    """Two chains of pure 3:2 fifths on a piano's stretched octaves, any bridge
-    and start: HybridMeanNotes made general (chains/<bridge>/piano@<start>).
-    Chain one from the start in octave 3, five fifths up; the bridge from its
-    third note up the bridge third; that note a fifth up, then two stretched
-    octaves down, to chain two's first, four fifths up; every other key by
-    stretched octaves out from them. chains/mean/piano@c is hybridmeanpiano."""
+    """Two chains of pure 3:2 fifths on a piano's stretched octaves, any
+    bridge, start and route (_chain_gen); middle: its octave from C4
+    repeated by pure 2:1, as HybridHarmonicTuner does. chains/mean/piano@c
+    is hybridmeanpiano; chains/pure/piano/fourth@bb, hybrid440;
+    chains/helm/piano/octaves@c, stretchedhelmholtz; chains/pure/middle/
+    fourth@bb, hybridharm440."""
     A = 440
     bridge = "mean"
     start = 0
+    route = "fifth"
+    middle = False
 
     @classmethod
     def _build_table(cls):
-        P = _load_path_module()
-        spec, s = cls.bridge, cls.start
-
-        class ChainNotes(P.Notes):
-            def __init__(self):
-                P.Notes.__init__(self)
-                n0 = 48 + s
-                a = self[n0]
-                a.set_frequency(440.0 * 2 ** ((3 + s) / 12.0) / 4)      # (HybridMeanNotes' C3 at s = 0)
-                ch = [a]
-                for _ in range(5):
-                    ch.append(ch[-1].seq_tune(7, 3, 2))
-                b = self[n0 + 18]                                       # the bridge: position 2 up a third
-                b.set_parent(ch[2])
-                b.set_frequency(ch[2].f * _chain_ratio(spec))
-                c = b.seq_tune(7, 3, 2)                                 # up a fifth, down two stretched octaves
-                c = c.seq_tune(-12, 1, 2, True)
-                c = c.seq_tune(-12, 1, 2, True)
-                for _ in range(4):
-                    c = c.seq_tune(7, 3, 2)
-                self.init_octaves()
-
-            init_octaves = P.HybridMeanNotes.init_octaves
-
-        gen = ChainNotes()
-        table = {n: float(note.f) for n, note in enumerate(gen.notes) if getattr(note, "f", None)}
+        table = _chain_gen(cls.bridge, cls.start, cls.route)
         ref = _REFERENCE if _REFERENCE is not None else (69, cls.A)
         if table.get(ref[0]):
             k = float(ref[1]) / table[ref[0]]
             table = {n: f * k for n, f in table.items()}
+        if cls.middle and all(60 + i in table for i in range(12)):
+            c4 = table[60]
+            r = [table[60 + i] / c4 for i in range(12)]
+            table = {n: c4 * r[(n - 60) % 12] * 2.0 ** ((n - 60 - (n - 60) % 12) // 12) for n in range(128)}
         return table
 
 

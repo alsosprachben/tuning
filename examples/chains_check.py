@@ -149,8 +149,13 @@ def main():
     cm = N.tuning_table("chains/mean", reference=(69, 415.0))
     expect("hybridmean = chains/mean (worst key, Hz)", max(abs(hm[n] - cm[n]) for n in range(128)), 0.0)
     # on a piano's octaves (no proofs: the construction's) -- the hybrid mean's generator made general
-    hp, cp = N.tuning_table("hybridmeanpiano", reference=(69, 440.0)), N.tuning_table("chains/mean/piano@c", reference=(69, 440.0))
-    expect("hybridmeanpiano = chains/mean/piano@c (worst key, Hz)", max(abs(hp[n] - cp[n]) for n in range(128)), 0.0)
+    # ...each of the old Clavitone tunings an exact variant (its key, bridge, octaves and route), at its own A
+    for old, var in (("hybridmeanpiano", "chains/mean/piano@c"), ("hybrid440", "chains/pure/piano/fourth@bb"),
+                     ("hybrid", "chains/pure/piano/fourth@bb:415"), ("stretchedhelmholtz", "chains/helm/piano/octaves@c"),
+                     ("hybridharm440", "chains/pure/middle/fourth@bb"), ("hybridharm", "chains/pure/middle/fourth@bb:415"),
+                     ("hybridmean", "chains/mean@c:415")):
+        a, b = N.tuning_table(old, reference=None), N.tuning_table(var, reference=None)
+        expect("%s = %s (worst key, Hz)" % (old, var), max(abs(a[n] - b[n]) for n in range(128)), 0.0)
     print("chains: %s" % ("all as proved" if not bad else "%d MISSED" % bad))
     return 1 if bad else 0
 

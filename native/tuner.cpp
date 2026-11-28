@@ -121,33 +121,110 @@ struct ChainGen {
         set[child] = true;
     }
 };
-// the generator's table (keys it tuned), before the reference: chain one from
-// 48 + start, the bridge on its third note by `ratio`
-static Table chain_piano_gen(int s, double ratio)
+// tunelib._chain_shift: a route's generator moved -6..5 semitones for start s
+static int chain_shift(int s) { return s < 6 ? s : s - 12; }
+
+// tunelib._chain_gen: the generator's table (keys it tuned), before the
+// reference, for a route (0 fifth, 1 fourth, 2 octaves) from start s; the
+// bridge by `ratio` (pure_ratio: the fourth route's 5/4 as HybridNotes writes it)
+static Table chain_gen(int route, int s, double ratio, bool pure_ratio)
 {
     ChainGen g;
     for (int n = 0; n < 150; n++) {
         g.f[n] = 0.0;
         g.set[n] = false;
     }
-    const int n0 = 48 + s;
-    g.f[n0] = 440.0 * pow(2.0, (3 + s) / 12.0) / 4.0;
-    g.set[n0] = true;
-    for (int k = 0; k < 5; k++)
-        g.tune(n0 + 7 * (k + 1), n0 + 7 * k, 3, 2);
-    g.f[n0 + 18] = g.f[n0 + 14] * ratio;                // (the bridge: position 2 up a third)
-    g.set[n0 + 18] = true;
-    g.tune(n0 + 25, n0 + 18, 3, 2);                     // (a fifth up, two stretched octaves down)
-    g.tune(n0 + 13, n0 + 25, 1, 2, true);
-    g.tune(n0 + 1, n0 + 13, 1, 2, true);
-    for (int k = 0; k < 4; k++)
-        g.tune(n0 + 1 + 7 * (k + 1), n0 + 1 + 7 * k, 3, 2);
-    for (int n = 12; n <= 127; n++)                     // (HybridMeanNotes.init_octaves: up, then down)
-        if (!g.set[n] && n - 12 >= 0 && g.set[n - 12])
-            g.tune(n, n - 12, 2, 1, true);
-    for (int n = 127; n >= 12; n--)
-        if (!g.set[n] && g.set[n + 12])
-            g.tune(n, n + 12, 1, 2, true);
+    auto at = [&](int n, double f) {
+        g.f[n] = f;
+        g.set[n] = true;
+    };
+    auto fill = [&]() {                                 // (HybridMeanNotes.init_octaves: up, then down)
+        for (int n = 12; n <= 127; n++)
+            if (!g.set[n] && n - 12 >= 0 && g.set[n - 12])
+                g.tune(n, n - 12, 2, 1, true);
+        for (int n = 127; n >= 12; n--)
+            if (!g.set[n] && g.set[n + 12])
+                g.tune(n, n + 12, 1, 2, true);
+    };
+    if (route == 0) {                                   // HybridMeanNotes: chain one from C3
+        const int d = chain_shift(s), n0 = 48 + d;
+        at(n0, 440.0 * pow(2.0, (3 + d) / 12.0) / 4.0);
+        for (int k = 0; k < 5; k++)
+            g.tune(n0 + 7 * (k + 1), n0 + 7 * k, 3, 2);
+        at(n0 + 18, g.f[n0 + 14] * ratio);              // (the bridge: position 2 up a third)
+        g.tune(n0 + 25, n0 + 18, 3, 2);                 // (a fifth up, two stretched octaves down)
+        g.tune(n0 + 13, n0 + 25, 1, 2, true);
+        g.tune(n0 + 1, n0 + 13, 1, 2, true);
+        for (int k = 0; k < 4; k++)
+            g.tune(n0 + 1 + 7 * (k + 1), n0 + 1 + 7 * k, 3, 2);
+        fill();
+    } else if (route == 2) {                            // StretchedHelmholtzNotes: chain two from C#3
+        const int d = chain_shift(s), cs = 49 + d;
+        at(cs, 440.0 * pow(2.0, (-20 + d) / 12.0));
+        g.tune(cs - 7, cs, 2, 3);
+        int c = cs;
+        for (int k = 0; k < 5; k++, c += 7)
+            g.tune(c + 7, c, 3, 2);
+        for (int k = 0; k < 3; k++, c -= 12)
+            g.tune(c - 12, c, 1, 2, true);
+        for (int k = 0; k < 5; k++, c += 7)
+            g.tune(c + 7, c, 3, 2);
+        fill();
+    } else {                                            // HybridNotes: around the bridge's C4
+        const int d = chain_shift((s + 2) % 12), C = 60 + d;
+        at(C, 440.0 * pow(2.0, (3 + d) / 12.0) / 2.0);
+        g.tune(C - 7, C, 2, 3);                         // F3, B-flat2
+        g.tune(C - 14, C - 7, 2, 3);
+        g.tune(C + 7, C, 3, 2);                         // G4, D5, A5
+        g.tune(C + 14, C + 7, 3, 2);
+        g.tune(C + 21, C + 14, 3, 2);
+        g.tune(C + 12, C, 2, 1, true);
+        g.tune(C - 12, C, 1, 2, true);
+        g.tune(C + 5, C - 7, 2, 1, true);               // F4, F5
+        g.tune(C + 17, C + 5, 2, 1, true);
+        g.tune(C - 2, C - 14, 2, 1, true);              // B-flat3, B-flat4
+        g.tune(C + 10, C - 2, 2, 1, true);
+        g.tune(C - 5, C + 7, 1, 2, true);               // G3, G5
+        g.tune(C + 19, C + 7, 2, 1, true);
+        g.tune(C + 2, C + 14, 1, 2, true);              // D4, D3
+        g.tune(C - 10, C + 2, 1, 2, true);
+        g.tune(C + 9, C + 21, 1, 2, true);              // A4, A3
+        g.tune(C - 3, C + 9, 1, 2, true);
+        if (pure_ratio)                                 // the bridge E4
+            g.tune(C + 4, C, 5, 4);
+        else
+            at(C + 4, g.f[C] * ratio);
+        g.tune(C - 8, C + 4, 1, 2, true);               // E3
+        g.tune(C - 13, C - 8, 3, 4);                    // B2, a pure fourth down
+        g.tune(C - 6, C - 13, 3, 2);                    // F#3, C#4, G#4, D#5
+        g.tune(C + 1, C - 6, 3, 2);
+        g.tune(C + 8, C + 1, 3, 2);
+        g.tune(C + 15, C + 8, 3, 2);
+        g.tune(C + 16, C + 4, 2, 1, true);              // E5
+        g.tune(C - 1, C - 13, 2, 1, true);              // B3, B4
+        g.tune(C + 11, C - 1, 2, 1, true);
+        g.tune(C + 6, C - 6, 2, 1, true);               // F#4, F#5
+        g.tune(C + 18, C + 6, 2, 1, true);
+        g.tune(C + 13, C + 1, 2, 1, true);              // C#5, C#3
+        g.tune(C - 11, C + 1, 1, 2, true);
+        g.tune(C + 20, C + 8, 2, 1, true);              // G#5, G#3
+        g.tune(C - 4, C + 8, 1, 2, true);
+        g.tune(C + 3, C + 15, 1, 2, true);              // D#4, D#3
+        g.tune(C - 9, C + 3, 1, 2, true);
+        static const int LOW[12] = {47, 46, 48, 49, 50, 51, 52, 53, 54, 55, 56, 57};    // (init_octaves_low)
+        for (int n : LOW) {
+            g.tune(n + d - 12, n + d, 1, 2, true);
+            g.tune(n + d - 24, n + d - 12, 1, 2, true);
+        }
+        g.tune(57 + d - 36, 57 + d - 24, 1, 2, true);
+        static const int HIGH[12] = {70, 71, 72, 73, 74, 75, 76, 77, 78, 79, 80, 81};    // (init_octaves_high)
+        for (int n : HIGH) {
+            g.tune(n + d + 12, n + d, 2, 1, true);
+            g.tune(n + d + 24, n + d + 12, 2, 1, true);
+        }
+        for (int n : {70, 71, 72})
+            g.tune(n + d + 36, n + d + 24, 2, 1, true);
+    }
     Table t;
     for (int n = 0; n < 150; n++)
         if (g.set[n] && g.f[n] != 0.0)
@@ -420,17 +497,25 @@ int nv_tuning_table(const char *name, int ref_note, double ref_hz, double *out, 
     static const PathT CHAINS = {"chains", "", 440.0, 2};
     double Xc = NAN;
     if (key.compare(0, 7, "chains/") == 0) {
-        // chains/<bridge>[/<octaves>]: pure (below), or a piano's -- built from @KEY, not moved
-        std::string sp = key.substr(7), oc = "pure";
+        // chains/<bridge>[/<octaves>[/<route>]]: pure (below: the octaves route the helm bridge), or a
+        // piano's octaves -- built from @KEY, not moved -- or its middle octave repeated by 2:1
+        std::string sp = key.substr(7), oc = "pure", rt = "fifth";
         if (const size_t sl = sp.find('/'); sl != std::string::npos) {
             oc = sp.substr(sl + 1);
             sp = sp.substr(0, sl);
+            if (const size_t s2 = oc.find('/'); s2 != std::string::npos) {
+                rt = oc.substr(s2 + 1);
+                oc = oc.substr(0, s2);
+            }
         }
-        if (!chain_bridge(sp, &Xc) || (oc != "pure" && oc != "piano"))
+        const int route = rt == "fifth" ? 0 : rt == "fourth" ? 1 : rt == "octaves" ? 2 : -1;
+        if (!chain_bridge(sp, &Xc) || (oc != "pure" && oc != "piano" && oc != "middle") || route < 0)
             return -1;
-        if (oc == "piano") {
+        if (oc == "pure" && route == 2)
+            chain_bridge("helm", &Xc);
+        if (oc != "pure") {
             const double ratio = sp == "mean" ? pow(80.0 * 81.0, 0.5) / 64.0 : pow(2.0, Xc / 1200.0);
-            Table t = chain_piano_gen(has_tonic ? tonic : 0, ratio);
+            Table t = chain_gen(route, has_tonic ? tonic : 0, ratio, sp == "pure");
             const double A = has_pitch ? pitch : 440.0;
             const int rn = ref.on ? ref.note : 69;
             const double rh = ref.on ? ref.hz : A;
@@ -439,6 +524,23 @@ int nv_tuning_table(const char *name, int ref_note, double ref_hz, double *out, 
                 const double k = rh / it->second;
                 for (auto &kv : t)
                     kv.second = kv.second * k;
+            }
+            if (oc == "middle") {                       // (HybridHarmonicTuner's: C4's octave, by pure 2:1)
+                bool all = true;
+                for (int i = 0; i < 12; i++)
+                    all = all && t.count(60 + i);
+                if (all) {
+                    double r[12];
+                    for (int i = 0; i < 12; i++)
+                        r[i] = t[60 + i] / t[60];
+                    const double c4 = t[60];
+                    Table h;
+                    for (int n = 0; n < 128; n++) {
+                        const int dd = n - 60, pc = ((dd % 12) + 12) % 12, k = (dd - pc) / 12;
+                        h[n] = c4 * r[pc] * pow(2.0, (double)k);
+                    }
+                    t.swap(h);
+                }
             }
             for (int n = 0; n < 128; n++) {
                 out[n] = path_freq(t, n, A, ref);

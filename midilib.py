@@ -167,13 +167,15 @@ def set_tuner(name):
         # TWO CHAINS, ANY BRIDGE: chains/<cents|helm|pure|mid|mean|pyth>[/<pure|piano>]
         # (tunelib.ChainsTuner; on a piano's octaves, ChainsPianoTuner, built from @KEY)
         import tunelib as _TL
-        spec, _, octaves = key[len("chains/"):].partition("/")
-        octaves = octaves or "pure"
+        parts = key[len("chains/"):].split("/")
+        if len(parts) > 3:
+            raise ValueError("bad chains tuner %r: chains/<bridge>[/<octaves>[/<route>]]" % name)
+        spec, octaves, route = (parts + ["pure", "fifth"][len(parts) - 1:])[:3]
         if octaves != "pure" and octaves in _TL.CHAIN_OCTAVES:
-            tuner_class = _TL.chains_tuner(spec, octaves, _KEYS[tonic] if tonic is not None else 0)
+            tuner_class = _TL.chains_tuner(spec, octaves, _KEYS[tonic] if tonic is not None else 0, route)
             tonic = None                # (built there: not moved)
         else:
-            tuner_class = _TL.chains_tuner(spec, octaves)
+            tuner_class = _TL.chains_tuner(spec, octaves, 0, route)
     elif key not in tuner_registry:
         raise ValueError("unknown tuner %r; choose from: %s"
                          % (name, ", ".join(sorted(tuner_registry))))

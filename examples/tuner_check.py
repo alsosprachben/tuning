@@ -41,7 +41,10 @@ def main(argv):
     # ...on a piano's octaves (tunelib.ChainsPianoTuner: built from the key)
     specs += ["chains/%s/piano@%s" % (b, k) for b in ("helm", "pure", "mid", "mean", "pyth", "390.5") for k in keys]
     specs += ["chains/mean/piano", "chains/pure/piano@bb:415", "chains/mean/piano@eb~442", "chains/pure/pure@g"]
-    specs += ["chains/pure/organ@c", "chains/pure/piano@h"]          # refused
+    specs += ["chains/%s/%s/%s@%s" % (b, o, r, k) for b in ("pure", "mean", "395.5") for o in ("piano", "middle")
+              for r in ("fifth", "fourth", "octaves") for k in keys]
+    specs += ["chains/pure/pure/octaves@d", "chains/mean/pure/fourth@c", "chains/pure/middle/fourth@bb:415"]
+    specs += ["chains/pure/organ@c", "chains/pure/piano@h", "chains/pure/piano/third@c", "chains/pure/piano/fifth/x"]   # refused
     specs += ["chains/384.3", "chains/407.9", "chains/abc", "chains/", "chains/pure@h"]   # refused
     specs += ["even@d", "pyth:466", "hybrid@h", "nosuch", "hybrid:abc"]          # refused
     specs += ["raga:%s@%s" % (s, k) for s in ragas.SYSTEMS for k in ("c", "c#", "a")]
