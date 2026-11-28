@@ -683,5 +683,19 @@
  "DAMPER": "ダンパー",
  "Where the quills pluck the strings. Near the string's end is nasal and bright; further along, round and full.": "爪が弦をはじく位置。弦の端に近いと鼻にかかって明るく、内側ほど丸く豊か。",
  "How long the felts on the jacks take to stop a string after the key comes up.": "鍵盤が戻ったあと、ジャックのフェルトが弦を止めるまでの時間。",
- "This voice has no physical knobs yet. Pianos, electric pianos, electric guitars and basses, and harpsichords have them first; other families follow.": "この音色にはまだ物理パラメータがありません。ピアノ、エレピ、エレキギターとベース、チェンバロが先に対応し、他のファミリーも続きます。"
+ "This voice has no physical knobs yet. Pianos, electric pianos, electric guitars and basses, and harpsichords have them first; other families follow.": "この音色にはまだ物理パラメータがありません。ピアノ、エレピ、エレキギターとベース、チェンバロが先に対応し、他のファミリーも続きます。",
+ "YOUR KEY": "あなたの調",
+ "BRIDGE THIRD": "橋の3度",
+ "Helmholtz": "ヘルムホルツ",
+ "Pure": "純正",
+ "Mean": "中間",
+ "Two chains in {0}": "{0}の二つの鎖",
+ "pure fifths and octaves, bridge {0}": "純正5度と純正オクターブ、橋 {0}",
+ "two chains of pure fifths, pure octaves": "純正5度の二つの鎖、純正オクターブ",
+ "under each key: its third, then its fifth, cents from pure": "各調の下：長3度、次に5度。純正からのセント",
+ "{0} pure thirds (at most 4); {1} within half a comma (at most 8)": "純正3度 {0}（最大4）、半コンマ以内 {1}（最大8）",
+ "tap a key to play it on this part": "調をタップするとこのパートで鳴ります",
+ "tap a key to play it on every part": "調をタップすると全パートで鳴ります",
+ "Even": "均等",
+ "{0} major: I, IV, V thirds {1}; ii's fifth {2}": "{0}長調：I・IV・Vの3度 {1}、iiの5度 {2}"
 }

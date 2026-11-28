@@ -683,5 +683,19 @@
  "DAMPER": "APAGADOR",
  "Where the quills pluck the strings. Near the string's end is nasal and bright; further along, round and full.": "Dónde los plectros pulsan las cuerdas. Cerca del extremo de la cuerda, nasal y brillante; más adentro, redondo y lleno.",
  "How long the felts on the jacks take to stop a string after the key comes up.": "Cuánto tardan los fieltros de los martinetes en parar una cuerda cuando sube la tecla.",
- "This voice has no physical knobs yet. Pianos, electric pianos, electric guitars and basses, and harpsichords have them first; other families follow.": "Esta voz aún no tiene controles físicos. Los pianos, los pianos eléctricos, las guitarras y bajos eléctricos y los claves los tienen primero; las demás familias vendrán después."
+ "This voice has no physical knobs yet. Pianos, electric pianos, electric guitars and basses, and harpsichords have them first; other families follow.": "Esta voz aún no tiene controles físicos. Los pianos, los pianos eléctricos, las guitarras y bajos eléctricos y los claves los tienen primero; las demás familias vendrán después.",
+ "YOUR KEY": "TU TONALIDAD",
+ "BRIDGE THIRD": "TERCERA PUENTE",
+ "Helmholtz": "Helmholtz",
+ "Pure": "Pura",
+ "Mean": "Media",
+ "Two chains in {0}": "Dos cadenas en {0}",
+ "pure fifths and octaves, bridge {0}": "quintas y octavas puras, puente {0}",
+ "two chains of pure fifths, pure octaves": "dos cadenas de quintas puras, octavas puras",
+ "under each key: its third, then its fifth, cents from pure": "bajo cada tonalidad: su tercera y luego su quinta, en cents respecto de lo puro",
+ "{0} pure thirds (at most 4); {1} within half a comma (at most 8)": "{0} terceras puras (como mucho 4); {1} a menos de media coma (como mucho 8)",
+ "tap a key to play it on this part": "toca una tonalidad para usarla en esta parte",
+ "tap a key to play it on every part": "toca una tonalidad para usarla en todas las partes",
+ "Even": "Igual",
+ "{0} major: I, IV, V thirds {1}; ii's fifth {2}": "{0} mayor: terceras de I, IV, V {1}; quinta de ii {2}"
 }

@@ -683,5 +683,19 @@
  "DAMPER": "ÉTOUFFOIR",
  "Where the quills pluck the strings. Near the string's end is nasal and bright; further along, round and full.": "Où les plectres pincent les cordes. Près de l'extrémité de la corde, nasillard et brillant ; plus loin, rond et plein.",
  "How long the felts on the jacks take to stop a string after the key comes up.": "Le temps que mettent les feutres des sautereaux à arrêter une corde quand la touche remonte.",
- "This voice has no physical knobs yet. Pianos, electric pianos, electric guitars and basses, and harpsichords have them first; other families follow.": "Cette voix n'a pas encore de réglages physiques. Les pianos, les pianos électriques, les guitares et basses électriques et les clavecins les ont d'abord ; les autres familles suivront."
+ "This voice has no physical knobs yet. Pianos, electric pianos, electric guitars and basses, and harpsichords have them first; other families follow.": "Cette voix n'a pas encore de réglages physiques. Les pianos, les pianos électriques, les guitares et basses électriques et les clavecins les ont d'abord ; les autres familles suivront.",
+ "YOUR KEY": "VOTRE TONALITÉ",
+ "BRIDGE THIRD": "TIERCE PONT",
+ "Helmholtz": "Helmholtz",
+ "Pure": "Pure",
+ "Mean": "Moyenne",
+ "Two chains in {0}": "Deux chaînes en {0}",
+ "pure fifths and octaves, bridge {0}": "quintes et octaves pures, pont {0}",
+ "two chains of pure fifths, pure octaves": "deux chaînes de quintes pures, octaves pures",
+ "under each key: its third, then its fifth, cents from pure": "sous chaque tonalité : sa tierce, puis sa quinte, en cents par rapport au pur",
+ "{0} pure thirds (at most 4); {1} within half a comma (at most 8)": "{0} tierces pures (au plus 4) ; {1} à moins d'un demi-comma (au plus 8)",
+ "tap a key to play it on this part": "touchez une tonalité pour la jouer sur cette partie",
+ "tap a key to play it on every part": "touchez une tonalité pour la jouer sur toutes les parties",
+ "Even": "Égal",
+ "{0} major: I, IV, V thirds {1}; ii's fifth {2}": "{0} majeur : tierces de I, IV, V {1} ; quinte de ii {2}"
 }

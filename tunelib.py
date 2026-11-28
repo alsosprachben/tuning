@@ -696,9 +696,13 @@ class HybridMeanTuner(PathTuner):
     A = 415
 
     @classmethod
+    def _bridge(cls):
+        return 1200.0 * math.log(math.sqrt(1.25 * 81.0 / 64.0), 2)
+
+    @classmethod
     def _build_table(cls):
         P = 1200.0 * math.log(1.5, 2)
-        X = 1200.0 * math.log(math.sqrt(1.25 * 81.0 / 64.0), 2)
+        X = cls._bridge()
         c = {}
         for i, n in enumerate((0, 7, 2, 9, 4, 11)):     # C G D A E B, pure
             c[n] = (i * P) % 1200.0
@@ -710,6 +714,70 @@ class HybridMeanTuner(PathTuner):
         base = float(ref[1]) / 2.0 ** ((c[ref[0] % 12] + 1200.0 * (ref[0] // 12)) / 1200.0)
         return {n: base * 2.0 ** ((c[n % 12] + 1200.0 * (n // 12)) / 1200.0)
                 for n in range(128)}
+
+
+# TWO CHAINS, ANY BRIDGE (the Clavitone sequencer's model, tuning-lean
+# HybridMean.lean): hybridmean's two chains of pure fifths on pure octaves,
+# C G D A E B and F# C# G# D# A# F, with the bridge third D-F# a free value X
+# in cents. Thirds on D A E B (2-5) are X exactly; on C G F# C# (0, 1, 6, 7)
+# Pythagorean; on G# D# A# F (8-11) 3*1200 - 4P - X. The two gap fifths,
+# B-F# and F-C, take the comma between them: X + 2400 - 3P and 6000 - 7P - X.
+# No fifth is wider than pure exactly when 6000 - 8P <= X <= 4P - 2400 (the
+# schismatic third to the Pythagorean). The bridge is a mirror (tuning-lean
+# HomeKey.lean, rotate_six): X rotated six fifths is 3*1200 - 4P - X, so a
+# bridge above the midpoint 396.09 is one below it on the key a tritone away.
+# Named bridges:
+CHAIN_BRIDGES = {
+    "helm": lambda P: 6000.0 - 8.0 * P,                                  # schismatic (Helmholtz): 384.36
+    "pure": lambda P: 1200.0 * math.log(1.25, 2),                        # 5:4 (the baroque hybrid's): 386.31
+    "mid": lambda P: (3600.0 - 4.0 * P) / 2.0,                           # the mirror's midpoint: both keys alike, 396.09
+    "mean": lambda P: 1200.0 * math.log(math.sqrt(1.25 * 81.0 / 64.0), 2),   # hybridmean's: 397.07
+    "pyth": lambda P: 1200.0 * math.log(81.0 / 64.0, 2),                 # Pythagorean: 407.82
+}
+
+
+def chain_bridge(spec):
+    """chains/<spec>'s bridge in cents: a CHAIN_BRIDGES name or a number; a
+    ValueError past the range in which no fifth is wider than pure."""
+    P = 1200.0 * math.log(1.5, 2)
+    spec = str(spec).strip().lower()
+    if spec in CHAIN_BRIDGES:
+        return CHAIN_BRIDGES[spec](P)
+    try:
+        X = float(spec)
+    except ValueError:
+        raise ValueError("bad bridge %r: cents, or one of %s" % (spec, ", ".join(CHAIN_BRIDGES)))
+    lo, hi = 6000.0 - 8.0 * P, 4.0 * P - 2400.0
+    if not (lo - 1e-6 <= X <= hi + 1e-6):
+        raise ValueError("bridge %r outside %.2f..%.2f cents (a fifth would be wider than pure)" % (spec, lo, hi))
+    return X
+
+
+class ChainsTuner(HybridMeanTuner):
+    """Two chains of pure fifths on pure octaves, the bridge D-F# any third
+    from the schismatic to the Pythagorean: `chains/pure@bb` (@ moves chain
+    one's start, as every table's @KEY does; the key the chains favour, the
+    one whose I, IV and V thirds are the bridge's, is the start's fourth fifth
+    up: B-flat's G). At concert pitch."""
+    A = 440
+    bridge = "pure"
+
+    @classmethod
+    def _bridge(cls):
+        return chain_bridge(cls.bridge)
+
+
+_CHAINS = {}
+
+
+def chains_tuner(spec):
+    """The ChainsTuner class for a bridge spec, one per spec."""
+    spec = str(spec).strip().lower()
+    chain_bridge(spec)
+    if spec not in _CHAINS:
+        _CHAINS[spec] = type("ChainsTuner_%s" % spec.replace(".", "_").replace("-", "m"), (ChainsTuner,),
+                             {"_table": None, "bridge": spec})
+    return _CHAINS[spec]
 
 
 class HybridMeanPianoTuner(PathTuner):

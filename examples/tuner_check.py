@@ -34,6 +34,11 @@ def main(argv):
     specs += ["%s@%s:%s" % (n, k, p) for n in path for k in ("d", "f#", "bb") for p in ("466", "430")]
     specs += ["%s~%s" % (n, a) for n in names if not n.startswith("raga:") for a in ("440.0", "437.2581", "415")]
     specs += ["pleyel@d~440", "hybridmean:466~440.5", "pleyel~abc"]
+    # two chains, any bridge (tunelib.ChainsTuner): the named bridges, numbers across the range, moved and pitched
+    chains = ["chains/%s" % b for b in ("helm", "pure", "mid", "mean", "pyth", "384.36", "386.31", "390", "397.07", "400.5", "407.82")]
+    specs += chains + ["%s@%s" % (c, k) for c in chains for k in keys]
+    specs += ["chains/pure@bb:415", "chains/mean@g~442", "chains/390:466", "chains/PURE@Bb"]
+    specs += ["chains/384.3", "chains/407.9", "chains/abc", "chains/", "chains/pure@h"]   # refused
     specs += ["even@d", "pyth:466", "hybrid@h", "nosuch", "hybrid:abc"]          # refused
     specs += ["raga:%s@%s" % (s, k) for s in ragas.SYSTEMS for k in ("c", "c#", "a")]
     specs += ["raga:%s/%s@d:%s" % (s, r, hz) for s in ("just5", "et", "bel_todi")

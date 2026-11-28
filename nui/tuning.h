@@ -21,12 +21,121 @@ struct TuningUi {
     int row = -1;                       // (the part THIS PART is about: the engine's answers')
     double east_until = 0;
     float scroll = 0;
+    // (the KEY page: the key and bridge shown -- the playing chains' once the engine has them, else the last asked)
+    int ckey = 0;                       // (the key, 0 C .. 11 B: chain one starts 3 fifths below it)
+    double bridge = 386.3137138648348;  // (the bridge third, cents: 5:4)
+    std::string chains_mine;            // (the chains name this screen set, held a moment)
+    double chains_until = 0;
+    int kpage = 0;                      // (the laptop's right tray: 0 the shape, 1 the key)
 };
 static TuningUi g_tn;
+
+// TWO CHAINS, ANY BRIDGE (tunelib.ChainsTuner): chains/<bridge>@<start>.
+// The key is chain one's fourth note, 3 fifths up from the start (tuning-lean
+// HomeKey.lean, home_key: I, IV, V, iii and vi on pure fifths, all six chords'
+// major thirds the bridge; B-flat's chains: G). Every design serves two keys
+// a tritone apart, the far one with the mirror 3*1200 - 4P - X; and X above
+// the midpoint 396.09 is the same tuning as its mirror on the key a tritone
+// away (rotate_six). So the card's bridge runs from the schismatic third to
+// the midpoint, and the key it names is always the better served
+static const char *const CH_KEY[12] = {"C", "C#", "D", "Eb", "E", "F", "F#", "G", "Ab", "A", "Bb", "B"};
+static const char *const CH_START[12] = {"c", "c#", "d", "eb", "e", "f", "f#", "g", "ab", "a", "bb", "b"};
+inline double ch_P() { return 1200.0 * std::log2(1.5); }
+inline double ch_mirror(double x) { return 3600.0 - 4.0 * ch_P() - x; }
+struct ChainBridge {
+    const char *spec, *name;            // (spec: the engine's name for it; "mean" sent as its mirror's key)
+    double x;
+};
+inline const std::vector<ChainBridge> &chain_bridges()
+{
+    static const double P = ch_P();
+    static const std::vector<ChainBridge> B = {{"helm", N_("Helmholtz"), 6000.0 - 8.0 * P},
+                                               {"pure", N_("Pure"), 1200.0 * std::log2(1.25)},
+                                               {"mean", N_("Mean"), ch_mirror(1200.0 * std::log2(std::sqrt(1.25 * 81.0 / 64.0)))},
+                                               {"mid", N_("Even"), (3600.0 - 4.0 * P) / 2.0}};
+    return B;
+}
+// a chains name taken apart: the bridge (cents, at most the midpoint) and the key the card names; false if not one
+inline bool chains_parts(const std::string &name, double *x, int *key)
+{
+    if (name.rfind("chains/", 0) != 0)
+        return false;
+    std::string b = name.substr(7);
+    b = b.substr(0, b.find_first_of(":~"));
+    int start = 0;
+    if (const size_t at = b.find('@'); at != std::string::npos) {
+        const std::string k = b.substr(at + 1);
+        start = -1;
+        for (int i = 0; i < 12; i++)
+            if (k == CH_START[i])
+                start = i;
+        static const std::map<std::string, int> ALT = {{"db", 1}, {"d#", 3}, {"gb", 6}, {"g#", 8}, {"a#", 10}};
+        if (auto it = ALT.find(k); start < 0 && it != ALT.end())
+            start = it->second;
+        if (start < 0)
+            return false;
+        b = b.substr(0, at);
+    }
+    static const std::map<std::string, double> NAMED = {
+        {"helm", 6000.0 - 8.0 * ch_P()}, {"pure", 1200.0 * std::log2(1.25)}, {"mid", (3600.0 - 4.0 * ch_P()) / 2.0},
+        {"mean", 1200.0 * std::log2(std::sqrt(1.25 * 81.0 / 64.0))}, {"pyth", 1200.0 * std::log2(81.0 / 64.0)}};
+    if (auto it = NAMED.find(b); it != NAMED.end())
+        *x = it->second;
+    else {
+        char *end = nullptr;
+        *x = strtod(b.c_str(), &end);
+        if (b.empty() || *end)
+            return false;
+    }
+    *key = (start + 21) % 12;
+    if (*x > (3600.0 - 4.0 * ch_P()) / 2.0 + 1e-9) {    // (the mirror: the same tuning on the key a tritone away)
+        *x = ch_mirror(*x);
+        *key = (*key + 6) % 12;
+    }
+    return true;
+}
+inline std::string chains_name(double x, int key)
+{
+    for (const auto &cb : chain_bridges())
+        if (std::fabs(x - cb.x) < 0.005)        // (mean: its own bridge, from the key a tritone away -- exact)
+            return std::string("chains/") + cb.spec + "@" + CH_START[(key + 3 + (std::string(cb.spec) == "mean" ? 6 : 0)) % 12];
+    char b[32];
+    snprintf(b, sizeof b, "%.2f", x);
+    return std::string("chains/") + b + "@" + CH_START[(key + 3) % 12];
+}
+// the bridge said: a named one's name, else its cents
+inline std::string chains_bridge_words(double x)
+{
+    for (const auto &cb : chain_bridges())
+        if (std::fabs(x - cb.x) < 0.005)
+            return T(cb.name);
+    char b[32];
+    snprintf(b, sizeof b, "%.2f c", x);
+    return b;
+}
+// THE MODEL (HybridMean.lean): each pitch class's fifth and major third,
+// cents from pure (P, 5:4), for chain one from start. Fifths pure but the
+// two gaps (positions 5 and 11); third i the sum of fifths i..i+3, less two octaves
+inline void chains_model(double x, int start, double third[12], double fifth[12])
+{
+    const double P = 1200.0 * std::log2(1.5), L = 1200.0 * std::log2(1.25);
+    double f[12];
+    for (int k = 0; k < 12; k++)
+        f[k] = k == 5 ? x + 2400.0 - 3.0 * P : k == 11 ? 6000.0 - 7.0 * P - x : P;
+    for (int k = 0; k < 12; k++) {
+        const int pc = (start + 7 * k) % 12;
+        fifth[pc] = f[k] - P;
+        third[pc] = f[k] + f[(k + 1) % 12] + f[(k + 2) % 12] + f[(k + 3) % 12] - 2400.0 - L;
+    }
+}
 
 // A TUNING's NAME AND LINE as a person reads them (about.json's tuners), else the engine's key and words
 inline std::pair<std::string, std::string> tuner_words(const std::string &key, const std::string &engine_words)
 {
+    double cx;
+    int ck;
+    if (chains_parts(key, &cx, &ck))
+        return {TF("Two chains in {0}", {CH_KEY[ck]}), TF("pure fifths and octaves, bridge {0}", {chains_bridge_words(cx)})};
     LibUi &L = g_lib;
     if (const J *ts = L.about.get("tuners"))
         if (const J *e = ts->get(key.c_str()); e && e->is(J::ARR) && e->a.size() >= 2)
@@ -183,6 +292,137 @@ inline std::string east_spec(const East &p)
     return p.system.empty() ? "" : "raga:" + p.system + (p.raga.empty() ? "" : "/" + p.raga) + "@" + p.sa;
 }
 
+// THE KEY PAGE: two chains of pure fifths on pure octaves, chosen by the
+// key and the bridge (tunelib.ChainsTuner). Each key's third and fifth from
+// pure under its chip; the good thirds counted against their proved
+// ceilings (4 pure, 8 within half a comma); the two keys it serves, a tritone apart.
+// cur the tuning the scope plays now (the rig's, or the part's own); a
+// change asks for chains/<bridge>@<start> for the scope at once
+inline void draw_chains(App &a, float X, float Y, float W, float H, const std::string &cur, bool scope)
+{
+    TuningUi &T = g_tn;
+    const bool PH = a.ph, IP = a.tab;
+    look::tray(a, X, Y, W, H, 9);
+    const float hx = heading(a, X + 12, Y + 10, nui::T("YOUR KEY"), "tn:key");   // i18n-skip (a help key)
+    text(a, a.font, 14, hx, Y + 11, LCD, fit(a, a.font, 14, nui::T("two chains of pure fifths, pure octaves"), W - (hx - X) - 12));
+    // (the engine's chains, unless this screen asked for others a moment ago)
+    double cx;
+    int ck;
+    const std::string shown = !T.chains_mine.empty() && ImGui::GetTime() < T.chains_until ? T.chains_mine : cur;
+    const bool playing = chains_parts(shown, &cx, &ck);
+    if (playing && !a.K.active) {
+        T.ckey = ck;
+        T.bridge = cx;
+    }
+    const auto &B = chain_bridges();
+    const float lo = (float)B.front().x, hi = (float)B.back().x;
+    bool ask = false;
+    // the keys, and under each its third and fifth
+    const float kx = X + 12, kw = (W - 24) / 12, kh = PH ? 40 : IP ? 44 : 38, ky = Y + 40;
+    double th[12], fi[12];
+    // (cents from pure: whole cents from 10 up -- five figures would crowd the laptop's columns)
+    auto cents = [](double v) {
+        char b[16];
+        if (std::fabs(v) < 0.05)
+            return std::string("0");
+        snprintf(b, sizeof b, std::fabs(v) < 9.95 ? "%+.1f" : "%+.0f", v);
+        return std::string(b);
+    };
+    chains_model(T.bridge, (T.ckey + 3) % 12, th, fi);
+    const double half = 1200.0 * std::log2(81.0 / 80.0) / 2;
+    for (int i = 0; i < 12; i++) {
+        const std::string id = "tnck" + std::to_string(i);
+        if (button(a, id.c_str(), kx + i * kw + 2, ky, kw - 4, kh, CH_KEY[i], playing && i == T.ckey, true, PH ? 21 : 14)) {
+            T.ckey = i;
+            ask = true;
+        }
+        text_c(a, a.font, 14, kx + i * kw + kw / 2, ky + kh + 6, th[i] <= 1e-6 ? OWN : th[i] <= half + 1e-6 ? LCD : SILK_DIM, cents(th[i]));
+        text_c(a, a.font, 14, kx + i * kw + kw / 2, ky + kh + 8 + a.lh(14), std::fabs(fi[i]) < 1e-6 ? SILK_DIM : LCD, cents(fi[i]));
+    }
+    const float ry = ky + kh + 6;
+    // (the rows' names at the left edge would crowd the C chip's: said in the line below instead)
+    float ty = ry + 2 * a.lh(14) + 10;
+    if (!PH) {                          // (the phone's card is too short for it: its help says it)
+        for (const auto &l : wrap(a, a.font, 14, nui::T("under each key: its third, then its fifth, cents from pure"), W - 24)) {
+            text(a, a.font, 14, kx, ty, SILK_DIM, l);
+            ty += a.lh(14) + 3;
+        }
+        ty += 7;
+    }
+    // the bridge: a knob, its named stops under it
+    // (its column as wide as its label or its widest value: they hang under it)
+    float kcw = 0;
+    for (const auto &cb : B)
+        kcw = std::max(kcw, text_w(a, a.font, 14, nui::T(cb.name)));
+    kcw = std::max({PH ? 76.0f : IP ? 100.0f : 84.0f, text_w(a, a.bold, 14, nui::T("BRIDGE THIRD")), kcw, text_w(a, a.font, 14, "407.82 c")}) + 12;
+    const float ksz = PH ? 76 : IP ? 100 : 84, kcx = X + W - 12 - kcw / 2, kcy = ty + ksz / 2;
+    float v01 = (float)((T.bridge - lo) / (hi - lo));
+    std::vector<float> dets;
+    for (const auto &cb : B)
+        dets.push_back((float)((cb.x - lo) / (hi - lo)));
+    const int f = knob(a, "tnbridge", kcx, kcy, ksz, v01, nui::T("BRIDGE THIRD"), chains_bridge_words(lo + v01 * (hi - lo)), false, dets, 0, false);
+    if (f & (K_CHANGED | K_RESET)) {
+        double xb = std::round((lo + v01 * (double)(hi - lo)) * 100.0) / 100.0;
+        for (const auto &cb : B)
+            if (std::fabs(xb - cb.x) < 0.006)
+                xb = cb.x;
+        T.bridge = std::max(B.front().x, std::min(B.back().x, xb));
+    }
+    if ((f & (K_ENDED | K_RESET)) || ((f & K_CHANGED) && !(f & K_ACTIVE)))
+        ask = true;
+    // the counts, and the two keys served
+    const float lw = kcx - kcw / 2 - 12 - kx;
+    int n0 = 0, n8 = 0;
+    for (int i = 0; i < 12; i++) {
+        n0 += th[i] <= 1e-6;
+        n8 += th[i] <= half + 1e-6;
+    }
+    // the two keys served (home_key, far_key): the near key's I, IV and V thirds the bridge, its ii's
+    // fifth the near gap; the far key's (a tritone up) the mirror and the other gap. Lit while good
+    const int far = (T.ckey + 6) % 12;
+    const double P = ch_P(), L = 1200.0 * std::log2(1.25);
+    const double near3 = T.bridge - L, far3 = ch_mirror(T.bridge) - L;
+    const double near_ii = T.bridge + 2400.0 - 4.0 * P, far_ii = 6000.0 - 8.0 * P - T.bridge;
+    std::vector<std::pair<std::string, ImU32>> lines = {
+        {TF("{0} pure thirds (at most 4); {1} within half a comma (at most 8)", {std::to_string(n0), std::to_string(n8)}), LCD},
+        {TF("{0} major: I, IV, V thirds {1}; ii's fifth {2}", {CH_KEY[T.ckey], cents(near3), cents(near_ii)}), near3 <= half + 1e-6 ? LCD : SILK_DIM},
+        {TF("{0} major: I, IV, V thirds {1}; ii's fifth {2}", {CH_KEY[far], cents(far3), cents(far_ii)}), far3 <= half + 1e-6 ? LCD : SILK_DIM}};
+    if (!playing && PH)                 // (the phone's: in the third line's place -- its card is short)
+        lines.pop_back();
+    if (!playing)
+        lines.push_back({scope ? nui::T("tap a key to play it on this part") : nui::T("tap a key to play it on every part"), OWN});
+    for (const auto &l : lines)
+        for (const auto &w : wrap(a, a.font, 14, l.first, lw)) {
+            text(a, a.font, 14, kx, ty, l.second, w);
+            ty += a.lh(14) + 3;
+        }
+    // the named bridges, as buttons too (a knob's detents are found by feel)
+    // (four across, or two by two where a language's name would not fit)
+    float nw = 0;
+    for (const auto &cb : B)
+        nw = std::max(nw, text_w(a, a.bold, PH ? 21 : 14, nui::T(cb.name)));
+    const int cols = nw + 16 <= (lw - 3 * 6) / 4 ? 4 : 2;
+    const float by = ty + 6, bh = PH ? 40 : IP ? 44 : 36, bw = (lw - (cols - 1) * 6) / cols;
+    for (size_t i = 0; i < B.size(); i++) {
+        const std::string id = "tncb" + std::to_string(i);
+        if (button(a, id.c_str(), kx + (i % cols) * (bw + 6), by + (i / cols) * (bh + 6), bw, bh, nui::T(B[i].name), std::fabs(T.bridge - B[i].x) < 0.006, true, PH ? 21 : 14)) {
+            T.bridge = B[i].x;
+            ask = true;
+        }
+    }
+    if (ask) {
+        const std::string nm = chains_name(T.bridge, T.ckey);
+        T.chains_mine = nm;
+        T.chains_until = ImGui::GetTime() + 2.0;
+        if (scope)
+            tn_take(call(a, "{\"call\":\"part_tuner_set\",\"row\":" + std::to_string(a.row) + ",\"name\":\"" + nm + "\"}"));
+        else {
+            T.pending = nm;
+            tn_take(call(a, "{\"call\":\"tuner_set\",\"name\":\"" + nm + "\"}"));
+        }
+    }
+}
+
 inline void draw_tuning(App &a)
 {
     TuningUi &T = g_tn;
@@ -192,30 +432,26 @@ inline void draw_tuning(App &a)
                            std::to_string(a.row) + "}"));
     }
     // (the iPad's: its card from y 210 to card_y1 + 6, two pages -- the tuners and their shape; the Eastern tuning)
-    const bool IP = a.tab, PH = a.ph;   // (the phone's: its card from 106, three pages -- the tuners, their shape, the Eastern)
+    const bool IP = a.tab, PH = a.ph;   // (the phone's: its card from 106, four pages -- the tuners, your key, their shape, the Eastern)
     static int page = 0, tpage = 0;
     const float X0 = PH ? 14 : IP ? 20 : 34, X1 = IP ? (PH ? 818 : 1113) : 1886, Y0 = PH ? 160 : IP ? 266 : 394, Y1 = card_y1(a),
                 HY = PH ? 120 : IP ? 224 : 356;
     const float LH = a.lh(14) + (IP ? 3 : 4);
     const float TX = heading(a, X0, HY, nui::T("TUNING"), "tuning");   // (nui::T: the card's T is its state)
     if (PH) {
-        static const char *PN[3] = {N_("TUNERS"), N_("SHAPE"), N_("EASTERN")};
-        float px_ = TX + 6;
-        for (int pg = 0; pg < 3; pg++) {
-            const float w = text_w(a, a.font, 21, nui::T(PN[pg])) + 28;
-            const std::string id = "tnppage" + std::to_string(pg);
-            if (button(a, id.c_str(), px_, 112, w, 40, nui::T(PN[pg]), tpage == pg, true, 21))
-                tpage = pg;
-            px_ += w + 4;
-        }
+        const int h = phone_pages(a, "tnppage", TX, {nui::T("TUNERS"), nui::T("YOUR KEY"), nui::T("SHAPE"), nui::T("EASTERN")}, tpage);
+        if (h >= 0)
+            tpage = h;
     } else
         text(a, a.font, 14, TX, HY + 1, OWN, T.scope ? nui::T("this part") : nui::T("every part"));
-    if (IP && !PH)
-        for (int pg = 0; pg < 2; pg++) {
+    if (IP && !PH) {
+        static const char *PN[3] = {N_("TUNERS"), N_("YOUR KEY"), N_("EASTERN")};
+        for (int pg = 0; pg < 3; pg++) {
             const std::string id = "tnpage" + std::to_string(pg);
-            if (button(a, id.c_str(), page_kx(a, 2, pg, 300), 216, page_kw(a, 2), 44, pg ? nui::T("EASTERN") : nui::T("TUNERS"), page == pg, true, 21))
+            if (button(a, id.c_str(), page_kx(a, 3, pg, 300), 216, page_kw(a, 3), 44, nui::T(PN[pg]), page == pg, true, 21))
                 page = pg;
         }
+    }
     if (!T.t.is(J::OBJ) || !T.lists)
         return;
     const std::string tuner = str(&T.t, "tuner"), now = str(&T.t, "now");
@@ -230,7 +466,7 @@ inline void draw_tuning(App &a)
     const std::string info = T.scope ? TF("this part plays {0}", {tuner_words(p_plays.empty() ? now : p_plays, "").first})
                            : building ? TF("building the patches in {0}\xe2\x80\xa6", {tuner_words(tuner, "").first})
                                       : TF("playing {0}", {tuner_words(now, "").first});
-    const std::string info_ = fit(a, a.font, 14, info, IP ? 300 : 900);
+    const std::string info_ = fit(a, a.font, 14, info, IP ? 300 : 540);
     text(a, a.font, 14, X1 - text_w(a, a.font, 14, info_), PH ? 147 : HY + 1, building ? OWN : SILK_DIM, info_);
     if (building)
         a.animate = true;
@@ -363,7 +599,26 @@ inline void draw_tuning(App &a)
     // THE SHAPE: an octave in cents from equal temperament; each octave's stretch across the keyboard
     }
     const float SX = PH ? X0 : X0 + LW + 12, SW = X1 - SX, SH = IP ? Y1 - Y0 : 330;
-    if (PH ? tpage == 1 : (!IP || page == 0)) {
+    // YOUR KEY: the phone's and the iPad's a page; the laptop's the right column, by its two keys in the heading row
+    const std::string scoped = T.scope ? p_own : tuner;
+    if (!IP) {
+        static const char *KP[2] = {N_("SHAPE"), N_("YOUR KEY")};
+        float kx_ = SX;
+        for (int i = 0; i < 2; i++) {
+            const float w = text_w(a, a.bold, 14, nui::T(KP[i])) + 36;
+            if (button(a, (std::string("tnkpage") + std::to_string(i)).c_str(), kx_, HY - 6, w, 32, nui::T(KP[i]), T.kpage == i))
+                T.kpage = i;
+            kx_ += w + 6;
+        }
+        if (T.kpage == 1) {
+            draw_chains(a, SX, Y0, SW, Y1 - Y0, scoped, T.scope != 0);
+            return;
+        }
+    } else if (PH ? tpage == 1 : page == 1) {
+        draw_chains(a, X0, Y0, X1 - X0, Y1 - Y0, scoped, T.scope != 0);
+        return;
+    }
+    if (PH ? tpage == 2 : (!IP || page == 0)) {
     look::tray(a, SX, Y0, SW, SH, 9);
     const float tsx = heading(a, SX + 12, Y0 + 10, nui::T("THE TUNING"), "tn:shape");   // i18n-skip (a help key)
     // (this part's shape where it plays its own -- else the rig's)
@@ -420,7 +675,7 @@ inline void draw_tuning(App &a)
 
     // THE EASTERN TUNING the Indian voices' parts play
     }
-    if (PH ? tpage != 2 : IP && page == 0)
+    if (PH ? tpage != 3 : IP && page != 2)
         return;
     // (the iPad's Eastern tuning a page across the card)
     const float EX = IP ? X0 : SX, EW = IP ? X1 - X0 : SW, EY = IP ? Y0 : Y0 + SH + 10;

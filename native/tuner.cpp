@@ -94,14 +94,41 @@ static const Gen *gen_of(const char *name)
     return nullptr;
 }
 
-// PathTuner._build_table at A (NAN: none)
-static Table path_table(const PathT &p, double A, const Ref &ref)
+// tunelib.chain_bridge: chains/<spec>'s bridge in cents -- a name (helm,
+// pure, mid, mean, pyth) or a number from the schismatic third to the
+// Pythagorean; false otherwise
+static bool chain_bridge(const std::string &spec, double *X)
+{
+    double P = 1200.0 * (log(1.5) / log(2.0));
+    if (spec == "helm")
+        *X = 6000.0 - 8.0 * P;
+    else if (spec == "mid")
+        *X = (3600.0 - 4.0 * P) / 2.0;
+    else if (spec == "pure")
+        *X = 1200.0 * (log(1.25) / log(2.0));
+    else if (spec == "mean")
+        *X = 1200.0 * (log(sqrt(1.25 * 81.0 / 64.0)) / log(2.0));
+    else if (spec == "pyth")
+        *X = 1200.0 * (log(81.0 / 64.0) / log(2.0));
+    else {
+        if (!pyfloat(spec, X))
+            return false;
+        double lo = 6000.0 - 8.0 * P, hi = 4.0 * P - 2400.0;
+        if (!(lo - 1e-6 <= *X && *X <= hi + 1e-6))
+            return false;
+    }
+    return true;
+}
+
+// PathTuner._build_table at A (NAN: none); X the bridge of the two chains
+// (kind 2: NAN hybridmean's mean third, else ChainsTuner's)
+static Table path_table(const PathT &p, double A, const Ref &ref, double Xc = NAN)
 {
     Table t;
     if (p.kind == 2) {
-        // HybridMeanTuner: two chains of pure fifths, bridged D-F# by the mean third
+        // HybridMeanTuner: two chains of pure fifths, bridged D-F# by the mean third (ChainsTuner: by X)
         double P = 1200.0 * (log(1.5) / log(2.0));
-        double X = 1200.0 * (log(sqrt(1.25 * 81.0 / 64.0)) / log(2.0));
+        double X = std::isnan(Xc) ? 1200.0 * (log(sqrt(1.25 * 81.0 / 64.0)) / log(2.0)) : Xc;
         double c[12];
         static const int CH1[6] = {0, 7, 2, 9, 4, 11};
         for (int i = 0; i < 6; i++)
@@ -328,28 +355,37 @@ int nv_tuning_table(const char *name, int ref_note, double ref_hz, double *out, 
             }
         return 0;
     }
+    // chains/<bridge> (tunelib.ChainsTuner): hybridmean's chains, any bridge, at 440
+    static const PathT CHAINS = {"chains", "", 440.0, 2};
+    double Xc = NAN;
+    if (key.compare(0, 7, "chains/") == 0 && !chain_bridge(key.substr(7), &Xc))
+        return -1;
+    const PathT *found = std::isnan(Xc) ? nullptr : &CHAINS;
     for (const PathT &p : PATH)
-        if (key == p.name) {
-            double A = has_pitch ? pitch : p.A;     // at_pitch: the class's A
-            Table t = path_table(p, A, ref);
-            if (has_tonic && tonic != 0) {
-                // in_key: every key moved up, A4 kept where the base put it
-                Table moved;
-                for (auto &kv : t)
-                    moved[kv.first + tonic] = kv.second;
-                if (t.count(69) && moved.count(69)) {
-                    double s = t[69] / moved[69];
-                    for (auto &kv : moved)
-                        kv.second = kv.second * s;
-                }
-                t.swap(moved);
+        if (!found && key == p.name)
+            found = &p;
+    if (found) {
+        const PathT &p = *found;
+        double A = has_pitch ? pitch : p.A;     // at_pitch: the class's A
+        Table t = path_table(p, A, ref, Xc);
+        if (has_tonic && tonic != 0) {
+            // in_key: every key moved up, A4 kept where the base put it
+            Table moved;
+            for (auto &kv : t)
+                moved[kv.first + tonic] = kv.second;
+            if (t.count(69) && moved.count(69)) {
+                double s = t[69] / moved[69];
+                for (auto &kv : moved)
+                    kv.second = kv.second * s;
             }
-            for (int n = 0; n < 128; n++) {
-                out[n] = path_freq(t, n, A, ref);
-                have[n] = 1;
-            }
-            return 0;
+            t.swap(moved);
         }
+        for (int n = 0; n < 128; n++) {
+            out[n] = path_freq(t, n, A, ref);
+            have[n] = 1;
+        }
+        return 0;
+    }
     return -1;
 }
 

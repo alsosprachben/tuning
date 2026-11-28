@@ -163,10 +163,15 @@ def set_tuner(name):
         if tonic not in _KEYS:
             raise ValueError("unknown key %r in %r; one of %s"
                              % (tonic, name, ", ".join(sorted(_KEYS))))
-    if key not in tuner_registry:
+    if key.startswith("chains/"):
+        # TWO CHAINS, ANY BRIDGE: chains/<cents|helm|pure|mean|pyth> (tunelib.ChainsTuner)
+        import tunelib as _TL
+        tuner_class = _TL.chains_tuner(key[len("chains/"):])
+    elif key not in tuner_registry:
         raise ValueError("unknown tuner %r; choose from: %s"
                          % (name, ", ".join(sorted(tuner_registry))))
-    tuner_class = tuner_registry[key]
+    else:
+        tuner_class = tuner_registry[key]
     if pitch is not None:
         tuner_class = at_pitch(tuner_class, pitch)
     if tonic is not None:

@@ -3758,5 +3758,53 @@
  "voice/terms/16/1": {
   "en": "How long the felts on the jacks take to stop a string when the key comes up, every register's: the time to take the first 20 dB. Four real harpsichords measured 19 to 68 ms; a worn or loose felt is slower, and the note rings on after the key.",
   "t": "鍵盤が戻ったとき、ジャックのフェルトが弦を止めるまでの時間（全レジスター）。最初の20 dBまでの時間です。実際のチェンバロ4台で19〜68 msでした。すり減ったり緩んだフェルトは遅く、鍵盤を離したあとも音が残ります。"
+ },
+ "tn:key/title": {
+  "en": "Your key",
+  "t": "あなたの調"
+ },
+ "tn:key/intro": {
+  "en": "Two chains of pure fifths on pure octaves, joined by one third, the bridge -- the model behind the hybrid tunings. Choose the key the music centres on, then the bridge. It is for pure octaves: the pipe organ, the harpsichord. Under Every part every part plays it; under This part, the selected part.",
+  "t": "純正オクターブ上の純正5度の二つの鎖を、一つの3度（橋）でつないだもの。ハイブリッド調律の元になっているモデルです。音楽の中心となる調を選び、次に橋を選びます。純正オクターブ向け：パイプオルガン、チェンバロ。全パートでは全パートが、このパートでは選んだパートがこれで鳴ります。"
+ },
+ "tn:key/terms/0/0": {
+  "en": "The keys",
+  "t": "調"
+ },
+ "tn:key/terms/0/1": {
+  "en": "The key the music centres on. Its I, IV, V, iii and vi chords stand on pure fifths, and all six of its chords have the bridge as their major third (in a minor chord, the third above its third); only ii's fifth is narrow.",
+  "t": "音楽の中心となる調。そのI・IV・V・iii・viの和音は純正5度の上にあり、六つの和音すべての長3度が橋の3度です（短和音では、その3度の上の3度）。狭いのはiiの5度だけです。"
+ },
+ "tn:key/terms/1/0": {
+  "en": "Under each key",
+  "t": "各調の下"
+ },
+ "tn:key/terms/1/1": {
+  "en": "Its major third, then its fifth, in cents from pure (5:4 and 3:2). Brightest: pure; lit: within half a syntonic comma.",
+  "t": "その長3度、次に5度。純正（5:4と3:2）からのセント。最も明るい：純正、点灯：シントニック・コンマの半分以内。"
+ },
+ "tn:key/terms/2/0": {
+  "en": "BRIDGE THIRD",
+  "t": "橋の3度"
+ },
+ "tn:key/terms/2/1": {
+  "en": "The third that joins the two chains, from Helmholtz's schismatic third up to Even. Pure (5:4): your key's I, IV and V are just, and its ii's fifth is a whole comma narrow. Toward Even, your key gives up purity and the key a tritone away gains the same; at Even the two are alike. Mean is the hybrid mean's tuning. Past Even a bridge would be one below it on the other key, so it stops there.",
+  "t": "二つの鎖をつなぐ3度。ヘルムホルツのスキスマ的3度から均等まで。純正（5:4）：あなたの調のI・IV・Vは純正で、そのiiの5度はコンマ一つぶん狭くなります。均等に近づくほど、あなたの調は純正さを手放し、三全音離れた調が同じだけ得ます。均等では両者が等しくなります。中間はハイブリッド・ミーンの調律です。均等を超えた橋は、もう一方の調での均等以下の橋と同じ調律になるので、そこで止まります。"
+ },
+ "tn:key/terms/3/0": {
+  "en": "Two keys",
+  "t": "二つの調"
+ },
+ "tn:key/terms/3/1": {
+  "en": "Every such tuning serves two keys a tritone apart: yours, and the one shown under it, whose thirds mirror yours. From Mean to Even both are good: eight good thirds in all.",
+  "t": "このような調律はどれも、三全音離れた二つの調に合います。あなたの調と、その下に示す調で、3度は鏡像の関係です。中間から均等までは両方がよく、良い3度は合計八つです。"
+ },
+ "tn:key/terms/4/0": {
+  "en": "The counts",
+  "t": "数"
+ },
+ "tn:key/terms/4/1": {
+  "en": "However a tuning is made, at most 4 of its 12 thirds can be pure and at most 8 within half a comma (proved for pure octaves with no fifth wider than pure).",
+  "t": "どう作った調律でも、12の3度のうち純正にできるのは最大4、半コンマ以内は最大8（純正オクターブで、純正より広い5度がない場合に証明済み）。"
  }
 }
