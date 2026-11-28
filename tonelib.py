@@ -14059,6 +14059,8 @@ class NylonGuitarProperties(FormantBody, PluckedStringProperties):
     model can follow: an unconstrained 32-bin body fitted straight to the
     recording still leaves 6.27 dB.
     """
+    # (frets fix the semitones: equal temperament -- Ben, 2026-11-27)
+    natural_tuner = "even"
     # THE NOTE-OFF IS A RELEASE, NOT A CUT (examples/gm_release.py): GM
     # consensus, no recording holding a released note -- the median of three
     # sets' releases, 0.72 s (1.60, 0.72, 0.60), to our smoothstep's -40 dB at the same
@@ -14141,6 +14143,8 @@ class ElectricGuitarProperties(PluckedStringProperties):
     That is also why it can be amplified to the point of feedback, which this
     does not model.
     """
+    # (frets fix the semitones: equal temperament -- Ben, 2026-11-27)
+    natural_tuner = "even"
     # ITS PICKUP SWITCH, the part's to set (the AMP card): the Stratocaster's: its 5-way switch (patch_map.PICKUP_FAMILIES)
     pickup_family = 'strat'
     # THE SPECTRUM, since 2026-11-23 FROM PHYSICS (IDMT-SMT-Guitar's
@@ -14552,6 +14556,7 @@ class FretlessBassProperties(ElectricBassProperties):
     instrument and why the reach is a long one: a bass neck is long, and
     players use it.
     """
+    natural_tuner = None            # (no frets: the rig's tuner)
     initial_gain = 0.159977   # held at its level before the IDMT fit (egtr_fit.py), with
     # amp_reference moving with it -- the drive as voiced (turns x coils x the family's base)
     amp_reference = 0.2624992665055191
@@ -25790,6 +25795,8 @@ class BanjoProperties(MembraneBodyProperties):
 
     ASSERTED, NOT MEASURED. Neither collection has one.
     """
+    # (frets fix the semitones: equal temperament -- Ben, 2026-11-27)
+    natural_tuner = "even"
     # THE NOTE-OFF IS A DAMPING HAND, NOT A RING-OUT. examples/gm_release.py's
     # sets split (FluidR3/MuseScore 10 s, GeneralUser 0.75) and their median
     # rang on past the note-off; Ben's ear took the short set's ~0.8 s, to
@@ -25871,6 +25878,7 @@ class RababProperties(BanjoProperties):
     strings ring under every note, holding each harmonic level -- so the
     decay and the stop are as Ben voiced them.
     """
+    natural_tuner = None            # (no frets: the rig's tuner)
     # ITS COLOUR (rabab_fit.py --fit, RABAB_REF=ermlick: his notes' harmonics by
     # third octave, 3.0 dB rms over 16 bands): the fundamental strong, a dip
     # at 0.8-1 kHz, the top falling from 1.6 kHz.
@@ -25918,6 +25926,7 @@ class GopichantProperties(BanjoProperties):
     rest plain. In the song the squeeze is held ~0.2 s, then let go: within
     30 cents by 0.30 s (quartiles 0.16-0.35).
     """
+    natural_tuner = None            # (one string, no frets: the rig's tuner)
     # THE SQUEEZE: ~230 cents under ~50 ms into a medium stroke (velocity 90,
     # stroke ~0.67), an exponential in pitch -- the stroke scales it (the
     # square root, as before)
@@ -32478,6 +32487,7 @@ class HawaiianGuitarProperties(Plectrum, JazzGuitarProperties):
     IT SUSTAINS: a solid body, no frets to damp -- the strings' losses
     (examples/lapsteel_physics.py) ring E2's fundamental at under 2 dB/s and
     shed a plain string's upper harmonics fast."""
+    natural_tuner = None            # (a slide on the strings, no frets: the rig's tuner)
     # ITS PICKUP SWITCH, the part's to set (the AMP card): a lap steel's own: no switch
     pickup_family = None
     # NO TRANSIENT BOOST: thumb and finger picks, but the tone circuit below
