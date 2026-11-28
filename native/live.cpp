@@ -2910,6 +2910,22 @@ int nv_voicing_knobs(const NoteClass *k, double *v0)
     if (!k)
         return 0;
     const VoiceSnap &s = k->tmpl;
+    if (s.kind == 4 && s.elec && !s.clav) {
+        // (an electric guitar or bass: where the pick strikes, the strings' loss)
+        // (no PICK on a slap's or pop's fret contact, no STRINGS on a
+        // feedback loop: piano_knobs.knobs_of's reasons)
+        int m = 0;
+        if (!s.fc_tab) {
+            m |= 1 << NV_VK_PICK;
+            v0[NV_VK_PICK] = s.eg_sp;
+        }
+        const double x = s.sp_decay ? s.sp_wind : s.harmonic_decay_db;
+        if (x > 0.0 && !s.fb_set) {
+            m |= 1 << NV_VK_STRINGS;
+            v0[NV_VK_STRINGS] = x;
+        }
+        return m;
+    }
     if (s.kind == 5 && (s.ep_kind == 1 || s.ep_kind == 2)) {
         // (an electric piano: its pickup's voicing and the hammer's swing)
         int m = 0;
@@ -2997,6 +3013,22 @@ void nv_voicing_apply(NoteClass *d, const double *t, int mask)
         s.board_high_hz *= t[NV_VK_BOARD];
     if (mask >> NV_VK_PICKUP & 1)
         s.bridge_corner_hz *= t[NV_VK_PICKUP];
+    if (s.kind == 4 && s.elec) {
+        // (an electric guitar's: the pick at the open string, the template
+        // note's as its fret has it; the loss its decay law reads)
+        if (mask >> NV_VK_PICK & 1) {
+            s.eg_sp *= t[NV_VK_PICK];
+            s.pk_sp *= t[NV_VK_PICK];
+            s.strike_point *= t[NV_VK_PICK];
+        }
+        if (mask >> NV_VK_STRINGS & 1) {
+            if (s.sp_decay)
+                s.sp_wind *= t[NV_VK_STRINGS];
+            else
+                s.harmonic_decay_db *= t[NV_VK_STRINGS];
+        }
+        return;
+    }
     if (s.kind == 5) {
         // (an electric piano's: its pickup's parameters and the swing; each
         // note's layers nv_voice_init's from them)

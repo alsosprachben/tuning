@@ -650,7 +650,6 @@
  "The piezo pickup's top.": "ピエゾピックアップの上限。",
  "BUILDING THE NEW SOUND...": "新しい音を作成中...",
  "ALL AS THE VOICE": "すべて音色のまま",
- "This voice has no physical knobs yet. Pianos and electric pianos have them first; other families follow.": "この音色にはまだ物理ノブがありません。まずピアノとエレクトリックピアノに付き、他のファミリーが続きます。",
  "TINE OFFSET": "トーン位置",
  "REED OFFSET": "リード位置",
  "PICKUP GAP": "ピックアップ間隔",
@@ -673,5 +672,10 @@
  "{0}, while natural tunings are on": "{0}（楽器固有の調律がオンのとき）",
  "each instrument in its own tuning": "各楽器を固有の調律で",
  "every voice in the rig's tuning": "全ボイスをリグの調律で",
- "this part plays {0}": "このパートは{0}"
+ "this part plays {0}": "このパートは{0}",
+ "PICK": "ピッキング位置",
+ "STRING AGE": "弦の古さ",
+ "Where the pick strikes the string. Near the bridge is bright and thin; toward the neck, round.": "ピックが弦を弾く位置。ブリッジ寄りは明るく細く、ネック寄りは丸い音。",
+ "How fast the strings lose their highs. Fresh strings ring bright; old ones go dull.": "弦が高音を失う速さ。新しい弦は明るく響き、古い弦はこもる。",
+ "This voice has no physical knobs yet. Pianos, electric pianos and electric guitars and basses have them first; other families follow.": "この音色にはまだ物理ノブがありません。まずピアノ、エレクトリックピアノ、エレキギターとベースに付き、他のファミリーが続きます。"
 }

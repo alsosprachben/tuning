@@ -2065,9 +2065,13 @@ const NoteClass *nv_variant(const NoteClass *k, int code);
    (the Rhodes tine's rest off the pole's centre, in its half-widths), GAP
    (the tine to the pickup, ditto), SWING (the hammer's swing at velocity
    127, ditto), TONEBAR (its bell's level), REED (the Wurlitzer reed's rest
-   off the plate's plane, in slot widths) -- TINE and REED offsets */
+   off the plate's plane, in slot widths) -- TINE and REED offsets.
+   THE ELECTRIC GUITARS' AND BASSES' (elec on a kind 4 voice, not a
+   Clavinet): PICK (where the pick strikes, eg_sp), STRINGS (the string's
+   loss rising with frequency: harmonic_decay_db, or a physics bass's
+   winding loss sp_wind) -- both ratios */
 enum { NV_VK_HAMMER, NV_VK_WEAR, NV_VK_STRIKE, NV_VK_UNISON, NV_VK_LID, NV_VK_BOARD, NV_VK_PICKUP,
-       NV_VK_TINE, NV_VK_GAP, NV_VK_SWING, NV_VK_TONEBAR, NV_VK_REED, NV_VK_N };
+       NV_VK_TINE, NV_VK_GAP, NV_VK_SWING, NV_VK_TONEBAR, NV_VK_REED, NV_VK_PICK, NV_VK_STRINGS, NV_VK_N };
 static inline int nv_voicing_offset(int i)
 {
     return i == NV_VK_HAMMER || i == NV_VK_LID || i == NV_VK_TINE || i == NV_VK_REED;

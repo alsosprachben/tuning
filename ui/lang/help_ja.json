@@ -3668,8 +3668,8 @@
   "t": "音色"
  },
  "voice/intro": {
-  "en": "The selected part's instrument as the physics it is modelled by: each knob a physical part of it, in its own units. Each starts at the voice's own value. Turn one and the part's sound is built again through it, which takes a second or two; the notes after that have it. Double-tap a knob to put it back. A new program puts every knob back. Pianos and electric pianos have knobs first.",
-  "t": "選んだパートの楽器を、そのモデルの物理として表示します。各ノブは楽器の物理的な一部で、それぞれの単位で示します。どれも音色本来の値から始まります。ノブを回すとパートの音がそれで作り直され、1〜2秒かかります。その後の音から反映されます。ノブをダブルタップで元に戻します。新しいプログラムではすべてのノブが戻ります。まずピアノとエレクトリックピアノにノブがあります。"
+  "en": "The selected part's instrument as the physics it is modelled by: each knob a physical part of it, in its own units. Each starts at the voice's own value. Turn one and the part's sound is built again through it, which takes a second or two; the notes after that have it. Double-tap a knob to put it back. A new program puts every knob back. Pianos, electric pianos and electric guitars and basses have knobs first.",
+  "t": "選んだパートの楽器を、そのモデルの物理として表示します。各ノブは楽器の物理的な一部で、それぞれの単位で示します。どれも音色本来の値から始まります。ノブを回すとパートの音がそれで作り直され、1〜2秒かかります。その後の音から反映されます。ノブをダブルタップで元に戻します。新しいプログラムではすべてのノブが戻ります。まずピアノ、エレクトリックピアノ、エレキギターとベースにノブが付きます。"
  },
  "voice/terms/0/1": {
   "en": "The hammer felt's stiffness, against the program's own (x1). Harder felt is brighter; softer is darker.",
@@ -3698,10 +3698,6 @@
  "voice/terms/6/1": {
   "en": "The electric grand's piezo pickup: the top of its range. Lower is darker.",
   "t": "エレクトリック・グランドのピエゾピックアップの上限。低いほど暗い。"
- },
- "voice/terms/12/1": {
-  "en": "Puts every knob back to the voice's own value.",
-  "t": "すべてのノブを音色本来の値に戻します。"
  },
  "voice/terms/7/1": {
   "en": "Where the Rhodes tine rests against its pickup, as a share of the pickup's half-width (0% centred). Centred, the tone is thin and bell-like; off centre, it is warm and barks when played hard. A technician's main voicing adjustment.",
@@ -3738,5 +3734,17 @@
  "tuning/terms/9/1": {
   "en": "The Pleyel: the French aural tuning of the 1840s (Cordier's reconstruction), worked out on that piano's strings.",
   "t": "プレイエル：1840年代フランスの聴覚調律（コルディエの復元）を、そのピアノの弦で計算したもの。"
+ },
+ "voice/terms/14/1": {
+  "en": "Puts every knob back to the voice's own value.",
+  "t": "すべてのノブを音色本来の値に戻します。"
+ },
+ "voice/terms/12/1": {
+  "en": "Where the pick strikes the string, as a share of its length from the bridge at the open string (1/5.5: a 5.5th of the way along); a fretted note's moves with its fret. Near the bridge is bright and thin, toward the neck round and full. The partials with a node there are not plucked.",
+  "t": "ピックが弦を弾く位置。開放弦でのブリッジからの弦長の割合（1/5.5：5.5分の1の位置）。押さえた音ではフレットとともに動きます。ブリッジ寄りは明るく細く、ネック寄りは丸く豊か。そこに節をもつ倍音は弾かれません。"
+ },
+ "voice/terms/13/1": {
+  "en": "How fast the strings lose their highs, against the program's own (x1): the string's own loss, the part that grows with frequency. Below x1, fresh strings that ring bright; above, old strings going dead. On the basses it is the winding's loss, where grime and wear sit.",
+  "t": "弦が高音を失う速さ。プログラム本来の値（x1）に対する比率で、周波数とともに増える弦自身の損失です。x1未満は明るく響く新しい弦、x1より上は死んでいく古い弦。ベースでは汚れと摩耗がたまる巻線の損失です。"
  }
 }

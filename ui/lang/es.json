@@ -650,7 +650,6 @@
  "The piezo pickup's top.": "El límite agudo de la pastilla piezoeléctrica.",
  "BUILDING THE NEW SOUND...": "CONSTRUYENDO EL NUEVO SONIDO...",
  "ALL AS THE VOICE": "TODO COMO LA VOZ",
- "This voice has no physical knobs yet. Pianos and electric pianos have them first; other families follow.": "Esta voz aún no tiene mandos físicos. Los pianos y los pianos eléctricos los tienen primero; las demás familias vendrán después.",
  "TINE OFFSET": "DESPLAZ. TINE",
  "REED OFFSET": "DESPLAZ. LENGÜETA",
  "PICKUP GAP": "DISTANCIA PASTILLA",
@@ -673,5 +672,10 @@
  "{0}, while natural tunings are on": "{0}, mientras las afinaciones propias estén activas",
  "each instrument in its own tuning": "cada instrumento en su propia afinación",
  "every voice in the rig's tuning": "cada voz en la afinación del equipo",
- "this part plays {0}": "esta parte toca {0}"
+ "this part plays {0}": "esta parte toca {0}",
+ "PICK": "PÚA",
+ "STRING AGE": "EDAD DE CUERDAS",
+ "Where the pick strikes the string. Near the bridge is bright and thin; toward the neck, round.": "Dónde la púa ataca la cuerda. Cerca del puente, brillante y delgado; hacia el mástil, redondo.",
+ "How fast the strings lose their highs. Fresh strings ring bright; old ones go dull.": "Lo rápido que las cuerdas pierden los agudos. Las nuevas suenan brillantes; las viejas, apagadas.",
+ "This voice has no physical knobs yet. Pianos, electric pianos and electric guitars and basses have them first; other families follow.": "Esta voz aún no tiene mandos físicos. Los pianos, los pianos eléctricos y las guitarras y bajos eléctricos los tienen primero; las demás familias vendrán después."
 }

@@ -3668,8 +3668,8 @@
   "t": "Stimme"
  },
  "voice/intro": {
-  "en": "The selected part's instrument as the physics it is modelled by: each knob a physical part of it, in its own units. Each starts at the voice's own value. Turn one and the part's sound is built again through it, which takes a second or two; the notes after that have it. Double-tap a knob to put it back. A new program puts every knob back. Pianos and electric pianos have knobs first.",
-  "t": "Das Instrument des gewählten Parts als die Physik, nach der es modelliert ist: jeder Regler ein physikalischer Teil davon, in seinen eigenen Einheiten. Jeder beginnt beim eigenen Wert der Stimme. Drehst du einen, wird der Klang des Parts damit neu gebaut, was ein, zwei Sekunden dauert; die Töne danach haben ihn. Doppeltippen setzt einen Regler zurück. Ein neues Programm setzt alle Regler zurück. Klaviere und E-Pianos haben zuerst Regler."
+  "en": "The selected part's instrument as the physics it is modelled by: each knob a physical part of it, in its own units. Each starts at the voice's own value. Turn one and the part's sound is built again through it, which takes a second or two; the notes after that have it. Double-tap a knob to put it back. A new program puts every knob back. Pianos, electric pianos and electric guitars and basses have knobs first.",
+  "t": "Das Instrument des gewählten Parts als die Physik, nach der es modelliert ist: jeder Regler ein physikalischer Teil davon, in seinen eigenen Einheiten. Jeder beginnt beim eigenen Wert der Stimme. Drehst du einen, wird der Klang des Parts damit neu gebaut, was ein, zwei Sekunden dauert; die Töne danach haben ihn. Doppeltippen setzt einen Regler zurück. Ein neues Programm setzt alle Regler zurück. Klaviere, E-Pianos sowie E-Gitarren und E-Bässe haben zuerst Regler."
  },
  "voice/terms/0/1": {
   "en": "The hammer felt's stiffness, against the program's own (x1). Harder felt is brighter; softer is darker.",
@@ -3698,10 +3698,6 @@
  "voice/terms/6/1": {
   "en": "The electric grand's piezo pickup: the top of its range. Lower is darker.",
   "t": "Der Piezo-Tonabnehmer des E-Flügels: die Obergrenze seines Bereichs. Tiefer ist dunkler."
- },
- "voice/terms/12/1": {
-  "en": "Puts every knob back to the voice's own value.",
-  "t": "Setzt jeden Regler auf den eigenen Wert der Stimme zurück."
  },
  "voice/terms/7/1": {
   "en": "Where the Rhodes tine rests against its pickup, as a share of the pickup's half-width (0% centred). Centred, the tone is thin and bell-like; off centre, it is warm and barks when played hard. A technician's main voicing adjustment.",
@@ -3738,5 +3734,17 @@
  "tuning/terms/9/1": {
   "en": "The Pleyel: the French aural tuning of the 1840s (Cordier's reconstruction), worked out on that piano's strings.",
   "t": "Pleyel: die französische Gehörstimmung der 1840er Jahre (nach Cordiers Rekonstruktion), auf den Saiten dieses Klaviers berechnet."
+ },
+ "voice/terms/14/1": {
+  "en": "Puts every knob back to the voice's own value.",
+  "t": "Setzt jeden Regler auf den eigenen Wert der Stimme zurück."
+ },
+ "voice/terms/12/1": {
+  "en": "Where the pick strikes the string, as a share of its length from the bridge at the open string (1/5.5: a 5.5th of the way along); a fretted note's moves with its fret. Near the bridge is bright and thin, toward the neck round and full. The partials with a node there are not plucked.",
+  "t": "Wo das Plektrum die Saite anschlägt, als Anteil ihrer Länge vom Steg aus an der leeren Saite (1/5,5: ein 5,5tel des Wegs); bei einem gegriffenen Ton wandert er mit dem Bund. Nah am Steg hell und dünn, zum Hals hin rund und voll. Die Teiltöne mit einem Knoten dort werden nicht angezupft."
+ },
+ "voice/terms/13/1": {
+  "en": "How fast the strings lose their highs, against the program's own (x1): the string's own loss, the part that grows with frequency. Below x1, fresh strings that ring bright; above, old strings going dead. On the basses it is the winding's loss, where grime and wear sit.",
+  "t": "Wie schnell die Saiten ihre Höhen verlieren, gegenüber dem Programm (x1): der eigene Verlust der Saite, der mit der Frequenz wächst. Unter x1 neue, hell klingende Saiten; darüber alte, die stumpf werden. Bei den Bässen ist es der Verlust der Umspinnung, wo Schmutz und Abnutzung sitzen."
  }
 }

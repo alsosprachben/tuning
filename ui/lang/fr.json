@@ -650,7 +650,6 @@
  "The piezo pickup's top.": "Le haut de gamme du micro piézo.",
  "BUILDING THE NEW SOUND...": "CONSTRUCTION DU NOUVEAU SON...",
  "ALL AS THE VOICE": "TOUT COMME LA VOIX",
- "This voice has no physical knobs yet. Pianos and electric pianos have them first; other families follow.": "Cette voix n'a pas encore de boutons physiques. Les pianos et les pianos électriques les ont d'abord ; les autres familles suivront.",
  "TINE OFFSET": "DÉCALAGE TINE",
  "REED OFFSET": "DÉCALAGE LAME",
  "PICKUP GAP": "ÉCART MICRO",
@@ -673,5 +672,10 @@
  "{0}, while natural tunings are on": "{0}, tant que les accords propres sont actifs",
  "each instrument in its own tuning": "chaque instrument dans son propre accord",
  "every voice in the rig's tuning": "chaque voix dans l'accord du rig",
- "this part plays {0}": "cette partie joue {0}"
+ "this part plays {0}": "cette partie joue {0}",
+ "PICK": "MÉDIATOR",
+ "STRING AGE": "ÂGE DES CORDES",
+ "Where the pick strikes the string. Near the bridge is bright and thin; toward the neck, round.": "Où le médiator attaque la corde. Près du chevalet, brillant et fin ; vers le manche, rond.",
+ "How fast the strings lose their highs. Fresh strings ring bright; old ones go dull.": "La vitesse à laquelle les cordes perdent leurs aigus. Neuves, elles sonnent brillantes ; vieilles, ternes.",
+ "This voice has no physical knobs yet. Pianos, electric pianos and electric guitars and basses have them first; other families follow.": "Cette voix n'a pas encore de boutons physiques. Les pianos, les pianos électriques et les guitares et basses électriques les ont d'abord ; les autres familles suivront."
 }

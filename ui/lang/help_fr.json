@@ -3668,8 +3668,8 @@
   "t": "Voix"
  },
  "voice/intro": {
-  "en": "The selected part's instrument as the physics it is modelled by: each knob a physical part of it, in its own units. Each starts at the voice's own value. Turn one and the part's sound is built again through it, which takes a second or two; the notes after that have it. Double-tap a knob to put it back. A new program puts every knob back. Pianos and electric pianos have knobs first.",
-  "t": "L'instrument de la partie choisie tel que la physique le modélise : chaque bouton une partie physique de l'instrument, dans ses propres unités. Chacun part de la valeur propre de la voix. En tourner un reconstruit le son de la partie avec lui, ce qui prend une ou deux secondes ; les notes suivantes l'ont. Touchez deux fois un bouton pour le remettre. Un nouveau programme remet tous les boutons. Les pianos et les pianos électriques ont des boutons en premier."
+  "en": "The selected part's instrument as the physics it is modelled by: each knob a physical part of it, in its own units. Each starts at the voice's own value. Turn one and the part's sound is built again through it, which takes a second or two; the notes after that have it. Double-tap a knob to put it back. A new program puts every knob back. Pianos, electric pianos and electric guitars and basses have knobs first.",
+  "t": "L'instrument de la partie choisie tel que la physique le modélise : chaque bouton une partie physique de l'instrument, dans ses propres unités. Chacun part de la valeur propre de la voix. En tourner un reconstruit le son de la partie avec lui, ce qui prend une ou deux secondes ; les notes suivantes l'ont. Touchez deux fois un bouton pour le remettre. Un nouveau programme remet tous les boutons. Les pianos, les pianos électriques et les guitares et basses électriques ont des boutons en premier."
  },
  "voice/terms/0/1": {
   "en": "The hammer felt's stiffness, against the program's own (x1). Harder felt is brighter; softer is darker.",
@@ -3698,10 +3698,6 @@
  "voice/terms/6/1": {
   "en": "The electric grand's piezo pickup: the top of its range. Lower is darker.",
   "t": "Le micro piézo du piano à queue électrique : le haut de sa plage. Plus bas, plus sombre."
- },
- "voice/terms/12/1": {
-  "en": "Puts every knob back to the voice's own value.",
-  "t": "Remet chaque bouton à la valeur propre de la voix."
  },
  "voice/terms/7/1": {
   "en": "Where the Rhodes tine rests against its pickup, as a share of the pickup's half-width (0% centred). Centred, the tone is thin and bell-like; off centre, it is warm and barks when played hard. A technician's main voicing adjustment.",
@@ -3738,5 +3734,17 @@
  "tuning/terms/9/1": {
   "en": "The Pleyel: the French aural tuning of the 1840s (Cordier's reconstruction), worked out on that piano's strings.",
   "t": "Pleyel : l'accord à l'oreille français des années 1840 (reconstitution de Cordier), calculé sur les cordes de ce piano."
+ },
+ "voice/terms/14/1": {
+  "en": "Puts every knob back to the voice's own value.",
+  "t": "Remet chaque bouton à la valeur propre de la voix."
+ },
+ "voice/terms/12/1": {
+  "en": "Where the pick strikes the string, as a share of its length from the bridge at the open string (1/5.5: a 5.5th of the way along); a fretted note's moves with its fret. Near the bridge is bright and thin, toward the neck round and full. The partials with a node there are not plucked.",
+  "t": "Où le médiator attaque la corde, en fraction de sa longueur depuis le chevalet sur la corde à vide (1/5,5 : au 5,5e du chemin) ; pour une note frettée, il suit la frette. Près du chevalet, brillant et fin ; vers le manche, rond et plein. Les partiels ayant un nœud à cet endroit ne sont pas pincés."
+ },
+ "voice/terms/13/1": {
+  "en": "How fast the strings lose their highs, against the program's own (x1): the string's own loss, the part that grows with frequency. Below x1, fresh strings that ring bright; above, old strings going dead. On the basses it is the winding's loss, where grime and wear sit.",
+  "t": "La vitesse à laquelle les cordes perdent leurs aigus, par rapport au programme (x1) : la perte propre de la corde, celle qui croît avec la fréquence. Sous x1, des cordes neuves et brillantes ; au-dessus, de vieilles cordes qui s'éteignent. Sur les basses, c'est la perte du filage, là où se logent la crasse et l'usure."
  }
 }

@@ -650,7 +650,6 @@
  "The piezo pickup's top.": "Die Obergrenze des Piezo-Tonabnehmers.",
  "BUILDING THE NEW SOUND...": "NEUER KLANG WIRD GEBAUT...",
  "ALL AS THE VOICE": "ALLE WIE DIE STIMME",
- "This voice has no physical knobs yet. Pianos and electric pianos have them first; other families follow.": "Diese Stimme hat noch keine physikalischen Regler. Klaviere und E-Pianos bekommen sie zuerst; andere Familien folgen.",
  "TINE OFFSET": "TINE-VERSATZ",
  "REED OFFSET": "ZUNGEN-VERSATZ",
  "PICKUP GAP": "PICKUP-ABSTAND",
@@ -673,5 +672,10 @@
  "{0}, while natural tunings are on": "{0}, solange eigene Stimmungen an sind",
  "each instrument in its own tuning": "jedes Instrument in seiner eigenen Stimmung",
  "every voice in the rig's tuning": "jede Stimme in der Stimmung des Rigs",
- "this part plays {0}": "dieser Part spielt {0}"
+ "this part plays {0}": "dieser Part spielt {0}",
+ "PICK": "ANSCHLAGSPUNKT",
+ "STRING AGE": "SAITENALTER",
+ "Where the pick strikes the string. Near the bridge is bright and thin; toward the neck, round.": "Wo das Plektrum die Saite anschlägt. Nah am Steg hell und dünn, zum Hals hin rund.",
+ "How fast the strings lose their highs. Fresh strings ring bright; old ones go dull.": "Wie schnell die Saiten ihre Höhen verlieren. Neue Saiten klingen hell, alte werden stumpf.",
+ "This voice has no physical knobs yet. Pianos, electric pianos and electric guitars and basses have them first; other families follow.": "Diese Stimme hat noch keine physikalischen Regler. Klaviere, E-Pianos sowie E-Gitarren und E-Bässe bekommen sie zuerst; andere Familien folgen."
 }

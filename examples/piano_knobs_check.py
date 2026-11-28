@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Do the pianos' knobs move the native voice as the Python reference does?
+"""Do the pianos' (and electric guitars') knobs move the native voice as the
+Python reference does?
 
     python3 examples/piano_knobs_check.py
 
@@ -30,7 +31,8 @@ import piano_knobs as PK    # noqa: E402
 RANGE = {PK.HAMMER: (-1.0, 0.0, 1.0), PK.WEAR: (0.3, 1.0, 2.5), PK.STRIKE: (0.1, None, 0.18),
          PK.UNISON: (0.0, 0.5, 2.5), PK.LID: (-6.0, None, 2.5), PK.BOARD: (0.5, 0.8, 1.8),
          PK.PICKUP: (0.6, 1.3, 1.8), PK.TINE: (0.0, 0.3, 1.2), PK.GAP: (0.5, 1.5, 2.5),
-         PK.SWING: (0.4, 1.4, 2.2), PK.TONEBAR: (0.2, 2.0, 3.5), PK.REED: (0.0, 0.25, 1.0)}
+         PK.SWING: (0.4, 1.4, 2.2), PK.TONEBAR: (0.2, 2.0, 3.5), PK.REED: (0.0, 0.25, 1.0),
+         PK.PICK: (0.05, None, 0.3), PK.STRINGS: (0.4, 2.0, 5.0)}
 
 
 def settings(i, v0):
@@ -41,7 +43,7 @@ def settings(i, v0):
             continue
         if i == PK.HAMMER:
             out.append(v0 + x + 0.25)
-        elif i in (PK.STRIKE, PK.LID, PK.TINE, PK.REED):
+        elif i in (PK.STRIKE, PK.LID, PK.TINE, PK.REED, PK.PICK):
             out.append(x)
         else:
             out.append(v0 * x)
@@ -60,11 +62,15 @@ def main():
     d.nv_voicing_apply.restype = None
     d.nv_voicing_apply.argtypes = [ctypes.c_void_p, ctypes.c_void_p, ctypes.c_int]
     d.nv_noteclass_size.restype = ctypes.c_size_t
-    voices = [(p, PM.property_class_for_note(p, 60)) for p in range(6)]
+    d.nv_harmonic_decay.restype = ctypes.c_double
+    d.nv_harmonic_decay.argtypes = [ctypes.c_void_p, ctypes.c_int]
+    # (the pianos and electric pianos, GM 0-5; the electric guitars and basses, 26-37)
+    voices = [(p, PM.property_class_for_note(p, 60)) for p in list(range(6)) + list(range(26, 38))]
+    voices = [(p, c) for p, c in voices if PK.knobs_of(c)]
     # (the variations with classes of their own: Honky-tonk 2 and the like)
     seen = {c for _, c in voices}
     for (p, v), _ in sorted(PM.VARIATIONS.items(), key=lambda kv: kv[0]) if hasattr(PM, 'VARIATIONS') else ():
-        if p > 5 or v >= 4096:
+        if not (p <= 5 or 26 <= p <= 37) or v >= 4096:
             continue
         try:
             c = PM.variation_class(p, v)
@@ -134,7 +140,12 @@ def main():
                         e = sum(x * x for x in v)
                         return sum((h + 1) * x * x for h, x in enumerate(v)) / e if e > 0 else 0.0
                     ca, cb = cent(out[0][2]), cent(out[2][2])
-                    if cb > 0:
+                    if i == PK.STRINGS:     # (the strings' loss: harmonic 8's decay rate against the plain's)
+                        sa, sb = (N.VoiceSnap.from_buffer_copy(out[j][0]) for j in (0, 2))
+                        ra, rb = d.nv_harmonic_decay(ctypes.byref(sa), 8), d.nv_harmonic_decay(ctypes.byref(sb), 8)
+                        if rb > 0:
+                            bright.append(100.0 * (ra / rb - 1.0))
+                    elif cb > 0:
                         bright.append(100.0 * (ca / cb - 1.0))
                     if i == PK.UNISON:      # (the spread is the strings' draws, not the volumes)
                         sa = N.VoiceSnap.from_buffer_copy(out[0][0])
@@ -142,7 +153,8 @@ def main():
                 if i == PK.UNISON:
                     line.append("%s %.3g: strings up to %.2f c apart" % (PK.NAMES[i], val, moved))
                 else:
-                    line.append("%s %.4g: brightness %+.0f%%" % (PK.NAMES[i], val, sum(bright) / max(1, len(bright))))
+                    line.append("%s %.4g: %s %+.0f%%" % (PK.NAMES[i], val, "h8 decay" if i == PK.STRINGS else "brightness",
+                                                      sum(bright) / max(1, len(bright))))
         print(who, base.__name__, "|", "; ".join(line))
     print("%d notes compared, %d failed" % (asked, bad))
     return bad

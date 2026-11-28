@@ -392,6 +392,14 @@ J voicing_of(nv_host *h, int row)
             lo = cap[i] * 0.1, hi = cap[i] * 4.0, lg = true;
             snprintf(t, sizeof t, "%+.1f dB", 20.0 * log10(std::max(1e-9, v[i] / std::max(1e-9, cap[i]))));
             break;
+        case NV_VK_PICK:    // (where the pick strikes the open string, a share of it: at the bridge to over the neck)
+            lo = 0.04, hi = 0.36, lg = true;
+            snprintf(t, sizeof t, "1/%.1f", 1.0 / std::max(1e-6, v[i]));
+            break;
+        case NV_VK_STRINGS: // (the strings' loss: fresh, a third of the program's, to dead, six times it)
+            lo = cap[i] / 3.0, hi = cap[i] * 6.0, lg = true;
+            snprintf(t, sizeof t, "x%.2f", v[i] / std::max(1e-12, cap[i]));
+            break;
         default:            // (the soundboard's top, the piezo's corner, Hz: an octave either way)
             lo = cap[i] * 0.5, hi = cap[i] * 2.0, lg = true;
             snprintf(t, sizeof t, "%.1f kHz", v[i] / 1000.0);

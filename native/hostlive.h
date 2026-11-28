@@ -1637,7 +1637,7 @@ struct nv_host {
     void voicing_apply(size_t row, const std::array<double, NV_VK_N> &vk, int vmask);
     // (the knobs' names in a session: piano_knobs.NAMES)
     static constexpr const char *VK_NAMES[NV_VK_N] = {"felt", "felt_left", "strike", "unison", "lid", "board", "pickup",
-                                                            "tine", "gap", "swing", "tonebar", "reed"};
+                                                            "tine", "gap", "swing", "tonebar", "reed", "pick", "strings"};
     // (variation key v of program p through knob values vk, vmask: the setting's
     //  id against its key-60 class -- 0 none, -1 no more ids)
     int voicing_vid(int p, int v, const std::array<double, NV_VK_N> &vk, int vmask, const std::string &own = "") const;

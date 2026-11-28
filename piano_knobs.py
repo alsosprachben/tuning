@@ -1,4 +1,5 @@
-"""THE PIANOS' KNOBS: the physical controls a player turns on a piano voice
+"""THE PIANOS' KNOBS (and the electric guitars' and basses' since: PICK,
+STRINGS): the physical controls a player turns on a piano voice
 (the GrandPianoProperties family -- the grand, the upright, the honky-tonk,
 the electric grand), each a few of the class's own attributes, in the
 player's terms and units: the felt's stiffness, the felt left over a worn
@@ -27,13 +28,21 @@ HAMMER, WEAR, STRIKE, UNISON, LID, BOARD, PICKUP = range(7)
 # the hammer's swing (pickup_deflection), TONEBAR its bell (tonebar_gains),
 # REED the Wurlitzer reed's rest off the plate's plane (pickup_offset, slot widths)
 TINE, GAP, SWING, TONEBAR, REED = range(7, 12)
-N_KNOBS = 12
+# THE ELECTRIC GUITARS' AND BASSES' (ElectricGuitarProperties, played natively:
+# native.electric_voice, not a Clavinet): PICK where the pick strikes the
+# string (strike_point, a share of the string from the bridge, at the open
+# string -- a fret moves it as it moves the note's), STRINGS the string's own
+# loss, the part that grows with frequency: fresh strings ring bright, old
+# ones go dead (harmonic_decay_db; a bass whose decay is its string's physics,
+# the winding's visco-elastic loss, winding_loss -- where grime and wear sit)
+PICK, STRINGS = 12, 13
+N_KNOBS = 14
 # (their names in a session -- nv_host::VK_NAMES -- and on the VOICE card:
 # FELT the felt's stiffness, log10 of its K; FELT LEFT the soft felt over a
 # worn hammer's hard layer, mm at the worn keys -- thin, a soft felt bottoms
 # out on it and brightens; thick, a fresh hammer that never does)
 NAMES = ('felt', 'felt_left', 'strike', 'unison', 'lid', 'board', 'pickup',
-         'tine', 'gap', 'swing', 'tonebar', 'reed')
+         'tine', 'gap', 'swing', 'tonebar', 'reed', 'pick', 'strings')
 # (how a knob's value moves the class: an offset, or a ratio)
 OFFSET = frozenset((HAMMER, LID, TINE, REED))
 
@@ -58,8 +67,34 @@ def _ep(cls):
     return N.ep_kind(cls) if N.ep_voice(cls) else 0
 
 
+def _guitar(cls):
+    """An electric guitar or bass as the engine plays it (not a Clavinet)."""
+    import native as N
+    return bool(N.electric_voice(cls)) and not N.clav_voice(cls)
+
+
+def _string_loss(cls):
+    """STRINGS' attribute: the winding's loss where the decay is the string's physics."""
+    if getattr(cls, 'string_physics', False) and getattr(cls, 'decay_physics', False):
+        return 'winding_loss'
+    return 'harmonic_decay_db'
+
+
 def knobs_of(cls):
     """The knobs cls has and its value of each (live.cpp nv_voicing_knobs)."""
+    if _guitar(cls):
+        # (no PICK where a slap or pop drives the string into its frets: the
+        # contact's modes are the note's, not the pick's comb; no STRINGS on a
+        # feedback voice, whose loop picks its partial by the strings' loss,
+        # a table the export made: Feedback._fb_table)
+        import native as N
+        out = {}
+        if not getattr(cls, 'fret_contact', None):
+            out[PICK] = float(cls.strike_point)
+        x = float(getattr(cls, _string_loss(cls)))
+        if x > 0.0 and not N.feedback_voice(cls):
+            out[STRINGS] = x
+        return out
     ep = _ep(cls)
     if ep:
         out = {}
@@ -147,6 +182,11 @@ def _attrs(base, t, mask):
         a['pickup_deflection'] = base.pickup_deflection * t[SWING]
     if mask >> TONEBAR & 1:
         a['tonebar_gains'] = tuple(g * t[TONEBAR] for g in base.tonebar_gains)
+    if mask >> PICK & 1:
+        a['strike_point'] = base.strike_point * t[PICK]
+    if mask >> STRINGS & 1:
+        n = _string_loss(base)
+        a[n] = getattr(base, n) * t[STRINGS]
     return a
 
 
@@ -171,7 +211,7 @@ _MADE = {}
 def piano_class(base, t, mask):
     """base with transforms (t, mask) applied: a subclass, made once (its
     section_salt_name kept, so its draws are base's)."""
-    if not mask or not (_family(base) or _ep(base)):
+    if not mask or not (_family(base) or _ep(base) or _guitar(base)):
         return base
     key = (base, tuple(t), mask)
     got = _MADE.get(key)
