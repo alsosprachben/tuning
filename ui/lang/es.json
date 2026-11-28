@@ -697,5 +697,17 @@
  "tap a key to play it on this part": "toca una tonalidad para usarla en esta parte",
  "tap a key to play it on every part": "toca una tonalidad para usarla en todas las partes",
  "Even": "Igual",
- "{0} major: I, IV, V thirds {1}; ii's fifth {2}": "{0} mayor: terceras de I, IV, V {1}; quinta de ii {2}"
+ "{0} major: I, IV, V thirds {1}; ii's fifth {2}": "{0} mayor: terceras de I, IV, V {1}; quinta de ii {2}",
+ "{0} is not two chains of pure fifths": "{0} no son dos cadenas de quintas puras",
+ "{0} pure thirds; {1} within half a comma": "{0} terceras puras; {1} a menos de media coma",
+ "{0}: stretched octaves, read from C4 to C5": "{0}: octavas estiradas, leídas de C4 a C5",
+ "A4 for every tuning": "A4 para toda afinación",
+ "Each tuning's own": "El de cada afinación",
+ "baroque chamber pitch": "diapasón barroco de cámara",
+ "the classical era's": "el de la época clásica",
+ "the French diapason normal, 1859": "el diapasón normal francés, 1859",
+ "the modern standard": "el estándar moderno",
+ "many orchestras today": "muchas orquestas hoy",
+ "Chorton: the North German organs": "Chorton: los órganos del norte de Alemania",
+ "each tuning's own A: 415 baroque, 440 modern": "el La de cada afinación: 415 barroco, 440 moderno"
 }

@@ -846,6 +846,7 @@ int nv_host::open(int argc, char **argv)
         return ptab[p].data();
     };
     tuner_now = tname.empty() ? "gm2" : tname;      // (the export's: live's gm2, unless --tuner)
+    tuner_built = tuner_now;
     tl_ = tname;
     for (char &ch_ : tl_)
         ch_ = (char)tolower((unsigned char)ch_);
@@ -2306,8 +2307,10 @@ int nv_host::open(int argc, char **argv)
                        const std::function<void(size_t, int, bool, int, void *)> &give) -> bool {
         double F[128];
         int have[128];
-        if (name == tuner_now || nv_tuning_table(name.c_str(), -1, 0.0, F, have))
+        const std::string eff = with_pitch(name);  // (at the concert pitch, when one is set)
+        if (eff == tuner_built || nv_tuning_table(eff.c_str(), -1, 0.0, F, have))
             return false;
+        tuner_built = eff;
         for (int n = 0; n < 128; n++)
             E.freq[n] = have[n] ? F[n] : 0.0;
         tname = name;
@@ -3017,10 +3020,11 @@ void nv_host::start()
                 std::unique_lock<std::mutex> lk(bmu);
                 bcv.wait_for(lk, std::chrono::milliseconds(100),
                              [&] { return !breq.empty() || !room_req.empty() || !tuner_req.empty() || east_req_set || nat_req >= 0
-                                          || !add_req.empty() || !dreq.empty() || fill_req || prebuild_req || g_stop
+                                          || pitch_req >= 0 || !add_req.empty() || !dreq.empty() || fill_req || prebuild_req || g_stop
                                           || !miss_req.empty() || !fills.empty(); });
                 rq.swap(breq);
-                builder_busy = !rq.empty() || !room_req.empty() || !tuner_req.empty() || east_req_set || nat_req >= 0 || !add_req.empty()
+                builder_busy = !rq.empty() || !room_req.empty() || !tuner_req.empty() || east_req_set || nat_req >= 0 || pitch_req >= 0
+                               || !add_req.empty()
                                || prebuild_req || fill_req;
             }
             {                                           // A HELD NOTE's TEMPLATE (A5's on demand), first
@@ -3144,6 +3148,34 @@ void nv_host::start()
                     }))
                     note(std::string("natural tunings ") + (nr ? "on" : "off") + ": " + std::to_string(nb_)
                          + " patch(es) built in "
+                         + std::to_string((int)std::chrono::duration<double, std::milli>(
+                                              std::chrono::steady_clock::now() - t0).count()) + " ms");
+            }
+            double pr = -1;                             // CONCERT PITCH, after natural tunings: the rig's
+            {                                           // tuner made again at it (the parts' follow its A)
+                std::lock_guard<std::mutex> lk(bmu);
+                std::swap(pr, pitch_req);
+            }
+            if (pr >= 0 && pr != pitch_on) {
+                pitch_on = pr;
+                if (pitch_on > 0)                       // (the gm2 store's built-in tables at it too)
+                    nv_part_mts_ref(part, 69, pitch_on);
+                else
+                    nv_part_mts_ref(part, -1, 0.0);
+                auto t0 = std::chrono::steady_clock::now();
+                int nb_ = 0;
+                std::string now_;
+                {
+                    std::lock_guard<std::mutex> lk(bmu);
+                    now_ = tuner_now;
+                }
+                if (tuner_switch(now_, [&](size_t i_, int p_, bool d_, int v_, void *c_) {
+                        std::lock_guard<std::mutex> lk(bmu);
+                        bdone.push_back(std::make_pair(Req{i_, p_, d_, v_}, c_));
+                        nb_++;
+                    }))
+                    note("concert pitch " + (pitch_on > 0 ? std::to_string(pitch_on) + " Hz" : std::string("each tuning's own")) + ": "
+                         + std::to_string(nb_) + " patch(es) built in "
                          + std::to_string((int)std::chrono::duration<double, std::milli>(
                                               std::chrono::steady_clock::now() - t0).count()) + " ms");
             }
@@ -4155,6 +4187,28 @@ std::string nv_host::part_tuning_of(size_t row, std::string *own, std::string *n
     return tuning_of ? tuning_of(p, dr, v) : std::string();
 }
 
+void nv_host::set_pitch(double hz)
+{
+    {
+        std::lock_guard<std::mutex> lk(bmu);
+        pitch_req = hz > 0 ? hz : 0;
+        pitch_asked = pitch_req;
+    }
+    bcv.notify_one();
+}
+
+// a tuner's name at the concert pitch (name~A): not a raga's (its pitch is
+// its Sa's) nor one that names its own A already (a part's own, name~A)
+std::string nv_host::with_pitch(const std::string &name) const
+{
+    if (pitch_on <= 0 || name.find('~') != std::string::npos || name.compare(0, 5, "raga:") == 0
+        || name.compare(0, 5, "RAGA:") == 0)
+        return name;
+    char b[40];
+    snprintf(b, sizeof b, "~%.17g", pitch_on);
+    return name + b;
+}
+
 void nv_host::set_natural(bool on)
 {
     {
@@ -4753,7 +4807,7 @@ int nv_host::building()
     std::lock_guard<std::mutex> lk(bmu);
     return n + (int)breq.size() + (int)bdone.size() + (room_req.empty() ? 0 : 1) + (tuner_req.empty() ? 0 : 1)
            + (prebuild_req ? 1 : 0) + (fill_req ? 1 : 0) + (int)miss_req.size() + (int)fill_n.load()
-           + (east_req_set ? 1 : 0) + (nat_req >= 0 ? 1 : 0) + (int)add_req.size() + (int)add_done.size();
+           + (east_req_set ? 1 : 0) + (nat_req >= 0 ? 1 : 0) + (pitch_req >= 0 ? 1 : 0) + (int)add_req.size() + (int)add_done.size();
 }
 
 // ---- THE C API (host.h): over nv_host, as nvlive drives it ----

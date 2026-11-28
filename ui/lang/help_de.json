@@ -3806,5 +3806,13 @@
  "tn:key/terms/4/1": {
   "en": "However a tuning is made, at most 4 of its 12 thirds can be pure and at most 8 within half a comma (proved for pure octaves with no fifth wider than pure).",
   "t": "Wie auch immer eine Stimmung gebaut ist: Höchstens 4 ihrer 12 Terzen können rein sein und höchstens 8 innerhalb eines halben Kommas (bewiesen für reine Oktaven ohne Quinte weiter als rein)."
+ },
+ "tuning/terms/10/0": {
+  "en": "A4 for every tuning",
+  "t": "A4 für jede Stimmung"
+ },
+ "tuning/terms/10/1": {
+  "en": "Concert pitch: one A for every tuning, the rig's and each part's own, in place of each tuning's own A (a baroque tuning's 415, a modern one's 440). Every patch is built again at it.",
+  "t": "Kammerton: ein A für jede Stimmung, die des Rigs und die eigene jedes Parts, statt des eigenen A jeder Stimmung (415 bei einer barocken, 440 bei einer modernen). Jeder Klang wird darauf neu gebaut."
  }
 }

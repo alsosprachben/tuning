@@ -244,6 +244,8 @@ void nv_host_set_eastern(nv_host *h, const char *spec);
    natural tunings on (1) or off -- every voice in the rig's tuner */
 int nv_host_part_tuning(nv_host *h, int row, char *own, int ocap, char *out, int cap);
 void nv_host_set_part_tuner(nv_host *h, int row, const char *own);
+double nv_host_pitch(nv_host *h);                     // concert pitch: A4 for every tuning, 0 each its own
+void nv_host_set_pitch(nv_host *h, double hz);
 int nv_host_natural(nv_host *h);
 int nv_host_part_natural(nv_host *h, int row, char *out, int cap);    /* its voice's natural tuner ("" none) */
 void nv_host_set_natural(nv_host *h, int on);

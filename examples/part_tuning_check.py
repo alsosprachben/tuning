@@ -189,6 +189,32 @@ def main(argv):
     meas["rig"] = {k: pitch(k, RIG[k]) for k in (69, 96)}
     for key in (69, 96):
         compare("fortepiano natural vs rig's", key, "pleyel", "", 1.5)
+    # CONCERT PITCH (pitch_set): A4 = 442 for every tuning -- the rig's (gm2),
+    # and a part's natural one (the fortepiano's pleyel, at the rig's A)
+    call({"call": "pitch_set", "hz": 442})
+    render(0.2)
+    settle("")
+    t = call({"call": "tuning", "row": 0})["tuning"]
+    fa, la = pitch(69, 442.0)
+    ok = abs(t.get("pitch", 0) - 442) < 1e-9 and abs(cents(fa, 442.0)) < 0.5 and la > -80
+    print("concert pitch 442, the rig's gm2: A4 %.3f Hz  %s" % (fa, "ok" if ok else "WRONG"))
+    bad += not ok
+    notes += 1
+    call({"call": "part_tuner_set", "row": 0, "name": ""})
+    settle("pleyel")
+    fa, la = pitch(69, 442.0)
+    ok = abs(cents(fa, 442.0)) < 1.0 and la > -80
+    print("concert pitch 442, the fortepiano's pleyel: A4 %.3f Hz  %s" % (fa, "ok" if ok else "WRONG"))
+    bad += not ok
+    notes += 1
+    call({"call": "pitch_set", "hz": 0})
+    render(0.2)
+    settle("pleyel")
+    fa, la = pitch(69, 440.0)
+    ok = abs(cents(fa, 440.0)) < 1.0 and call({"call": "tuning", "row": 0})["tuning"].get("pitch") == 0
+    print("each tuning's own A again: A4 %.3f Hz  %s" % (fa, "ok" if ok else "WRONG"))
+    bad += not ok
+    notes += 1
     # A PRESET keeps a part's own tuning and natural tunings off (saved by
     # name: own_tuner, natural_tunings), and brings them back
     d.nv_host_preset_save.argtypes = d.nv_host_preset_load.argtypes = [vp, cp, cp, ci]
@@ -200,19 +226,21 @@ def main(argv):
     call({"call": "part_tuner_set", "row": 0, "name": "hybridharm"})
     settle("hybridharm")
     call({"call": "natural_set", "on": 0})
+    call({"call": "pitch_set", "hz": 430})
     settle()
     if d.nv_host_preset_save(h, b"part tuning check", msg, 256):
         print("preset not saved: %s" % msg.value.decode())
     call({"call": "part_tuner_set", "row": 0, "name": ""})
     call({"call": "natural_set", "on": 1})
+    call({"call": "pitch_set", "hz": 0})
     settle("pleyel")
     d.nv_host_preset_load(h, b"part tuning check", msg, 256)
     render(0.5)
     p = settle("hybridharm")
     t = call({"call": "tuning", "row": 0})["tuning"]
-    ok = p.get("own") == "hybridharm" and p.get("plays") == "hybridharm" and t.get("natural") is False
-    print("a preset: its own %r, plays %r, natural tunings %s  %s" % (p.get("own"), p.get("plays"), t.get("natural"),
-                                                                       "ok" if ok else "WRONG"))
+    ok = p.get("own") == "hybridharm" and p.get("plays") == "hybridharm" and t.get("natural") is False and t.get("pitch") == 430
+    print("a preset: its own %r, plays %r, natural tunings %s, concert pitch %r  %s"
+          % (p.get("own"), p.get("plays"), t.get("natural"), t.get("pitch"), "ok" if ok else "WRONG"))
     bad += not ok
     print("%d notes heard, %d wrong" % (notes, bad))
     sys.stdout.flush()

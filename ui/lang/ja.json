@@ -697,5 +697,17 @@
  "tap a key to play it on this part": "調をタップするとこのパートで鳴ります",
  "tap a key to play it on every part": "調をタップすると全パートで鳴ります",
  "Even": "均等",
- "{0} major: I, IV, V thirds {1}; ii's fifth {2}": "{0}長調：I・IV・Vの3度 {1}、iiの5度 {2}"
+ "{0} major: I, IV, V thirds {1}; ii's fifth {2}": "{0}長調：I・IV・Vの3度 {1}、iiの5度 {2}",
+ "{0} is not two chains of pure fifths": "{0}は純正5度の二つの鎖ではありません",
+ "{0} pure thirds; {1} within half a comma": "純正3度 {0}、半コンマ以内 {1}",
+ "{0}: stretched octaves, read from C4 to C5": "{0}：伸ばしたオクターブ、C4〜C5で読み取り",
+ "A4 for every tuning": "全調律のA4",
+ "Each tuning's own": "各調律のまま",
+ "baroque chamber pitch": "バロックの室内ピッチ",
+ "the classical era's": "古典派の時代のピッチ",
+ "the French diapason normal, 1859": "フランスのディアパゾン・ノルマル（1859年）",
+ "the modern standard": "現代の標準",
+ "many orchestras today": "今日の多くのオーケストラ",
+ "Chorton: the North German organs": "コーアトーン：北ドイツのオルガン",
+ "each tuning's own A: 415 baroque, 440 modern": "各調律のA：バロック415、現代440"
 }

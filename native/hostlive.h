@@ -1572,6 +1572,16 @@ struct nv_host {
     int nat_req = -1;                                 // (under bmu: -1 none asked)
     bool nat_asked = true;                            // (the panel's, for the session)
     void set_natural(bool on);
+    // CONCERT PITCH (the TUNING card's): A4 for every tuning, the rig's and
+    // the parts' own (they follow the rig's A), in place of each tuning's
+    // own -- 0 each its own. Applied on the builder as a tuner's switch is:
+    // the rig's table made at name~A (with_pitch), every patch built again
+    double pitch_req = -1;                            // (under bmu: -1 none asked)
+    double pitch_asked = 0;                           // (the panel's, for the session)
+    double pitch_on = 0;                              // (the builder's: the tables at it)
+    std::string tuner_built;                          // (the builder's: the name the rig's table was made from)
+    void set_pitch(double hz);
+    std::string with_pitch(const std::string &name) const;
     void set_part_tuner(size_t row, const std::string &own);
     std::string part_tuning_of(size_t row, std::string *own = nullptr, std::string *nat = nullptr);
     // THE SCENE (live.scene_from): each channel's captured controls as they

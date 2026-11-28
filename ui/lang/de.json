@@ -697,5 +697,17 @@
  "tap a key to play it on this part": "Tonart antippen: spielt sie auf diesem Part",
  "tap a key to play it on every part": "Tonart antippen: spielt sie auf allen Parts",
  "Even": "Gleich",
- "{0} major: I, IV, V thirds {1}; ii's fifth {2}": "{0}-Dur: Terzen von I, IV, V {1}; Quinte von ii {2}"
+ "{0} major: I, IV, V thirds {1}; ii's fifth {2}": "{0}-Dur: Terzen von I, IV, V {1}; Quinte von ii {2}",
+ "{0} is not two chains of pure fifths": "{0} sind keine zwei Ketten reiner Quinten",
+ "{0} pure thirds; {1} within half a comma": "{0} reine Terzen; {1} innerhalb eines halben Kommas",
+ "{0}: stretched octaves, read from C4 to C5": "{0}: gespreizte Oktaven, gelesen von C4 bis C5",
+ "A4 for every tuning": "A4 für jede Stimmung",
+ "Each tuning's own": "Die jeder Stimmung",
+ "baroque chamber pitch": "barocker Kammerton",
+ "the classical era's": "der Klassik",
+ "the French diapason normal, 1859": "der französische Diapason normal, 1859",
+ "the modern standard": "der moderne Standard",
+ "many orchestras today": "viele Orchester heute",
+ "Chorton: the North German organs": "Chorton: die norddeutschen Orgeln",
+ "each tuning's own A: 415 baroque, 440 modern": "A der Stimmung: 415 barock, 440 modern"
 }

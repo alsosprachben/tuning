@@ -519,6 +519,18 @@ void nv_host::apply_setup(const sess::J &setup, bool at_start)
             if (want != cur)
                 set_natural(want);
         }
+        // ...CONCERT PITCH (absent: each tuning's own A)
+        {
+            const sess::J *cp = setup.get("concert_pitch");
+            const double want = cp && cp->is(sess::J::NUM) && cp->d() > 0 ? cp->d() : 0.0;
+            double cur;
+            {
+                std::lock_guard<std::mutex> lk(bmu);
+                cur = pitch_req >= 0 ? pitch_req : pitch_asked;
+            }
+            if (want != cur)
+                set_pitch(want);
+        }
         // ...THE TUNER (the first part's, live's per part; nvlive's one)
         const sess::J *ps = setup.get("parts");
         const sess::J *tn = ps && ps->is(sess::J::ARR) && !ps->a.empty() ? ps->a[0].get("tuner") : nullptr;
@@ -898,6 +910,10 @@ sess::J nv_host::session_state(const std::vector<std::array<int, 7>> &routes)
             j.o["natural_tunings"] = sess::boolean(false);
         else
             j.o.erase("natural_tunings");
+        if (pitch_asked > 0)                    // (concert pitch: saved only when set)
+            j.o["concert_pitch"] = sess::real(pitch_asked);
+        else
+            j.o.erase("concert_pitch");
     }
     {                                           // the on-screen controls (live's screen_controls, as dicts)
         sess::J cs = sess::arr();
@@ -1786,6 +1802,15 @@ int nv_host_natural(nv_host *h)
 }
 
 void nv_host_set_natural(nv_host *h, int on) { h->set_natural(on != 0); }
+
+// CONCERT PITCH: A4 for every tuning (0: each its own)
+double nv_host_pitch(nv_host *h)
+{
+    std::lock_guard<std::mutex> lk(h->bmu);
+    return h->pitch_req >= 0 ? h->pitch_req : h->pitch_asked;
+}
+
+void nv_host_set_pitch(nv_host *h, double hz) { h->set_pitch(hz); }
 
 }  // extern "C"
 

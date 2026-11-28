@@ -82,6 +82,19 @@ J num(double v)
     return j;
 }
 
+// (a number to the last bit: a tuning's cents, which are tested for exact intervals)
+static J num_exact(double v)
+{
+    if (!std::isfinite(v))
+        return J();
+    char b[40];
+    snprintf(b, sizeof b, "%.17g", v);
+    J j;
+    j.t = J::NUM;
+    j.num = b;
+    return j;
+}
+
 long arg_i(const J &q, const char *k, long d)
 {
     const J *v = q.get(k);
@@ -828,6 +841,15 @@ J tuning_shape(const std::string &name)
             c.a.push_back(have[n] && hz[n] > 0.0 ? num(std::round(1200.0 * std::log2(hz[n] / et) * 10.0) / 10.0) : sess::null());
         }
         o.o["cents"] = c;
+        // (the octave C4-C5 at full precision, cents above C4, and C3-C4's size: the YOUR KEY page's
+        //  thirds and fifths, and its test for two chains of pure fifths on pure octaves)
+        if (have[48] && have[60] && have[72] && hz[48] > 0.0 && hz[60] > 0.0) {
+            J f = sess::arr();
+            for (int n = 60; n <= 72; n++)
+                f.a.push_back(have[n] && hz[n] > 0.0 ? num_exact(1200.0 * std::log2(hz[n] / hz[60])) : sess::null());
+            o.o["fine"] = f;
+            o.o["low"] = num_exact(1200.0 * std::log2(hz[60] / hz[48]));
+        }
     }
     made[name] = o;
     return o;
@@ -865,7 +887,15 @@ J tuning_of(nv_host *h, bool lists, int row = -1)
     }
     o.o["tuner"] = sess::str(asked);
     o.o["now"] = sess::str(now);
-    o.o["shape"] = tuning_shape(asked);
+    // (its shape as it sounds: at the concert pitch, when one is set -- nv_host::with_pitch's rule)
+    const double cp = nv_host_pitch(h);
+    o.o["pitch"] = num(cp);
+    std::string al = asked;
+    for (char &ch : al)
+        ch = (char)tolower((unsigned char)ch);
+    char cps[40];
+    snprintf(cps, sizeof cps, "~%.17g", cp);
+    o.o["shape"] = tuning_shape(cp > 0 && al.find('~') == std::string::npos && al.compare(0, 5, "raga:") != 0 ? asked + cps : asked);
     char e[256] = {};
     nv_host_eastern(h, e, sizeof e);
     o.o["eastern"] = sess::str(e);
@@ -1143,7 +1173,7 @@ J build_of(nv_host *h)
     {
         std::lock_guard<std::mutex> lk(h->bmu);
         n += (int)h->breq.size() + (int)h->bdone.size() + (h->room_req.empty() ? 0 : 1) + (h->tuner_req.empty() ? 0 : 1)
-             + (h->east_req_set ? 1 : 0) + (int)h->add_req.size() + (int)h->add_done.size();
+             + (h->east_req_set ? 1 : 0) + (h->pitch_req >= 0 ? 1 : 0) + (int)h->add_req.size() + (int)h->add_done.size();
     }
     b.o["n"] = sess::integer(n);
     if (n > 0 && h->progress(&done, &total, &name, &est, &over)) {
@@ -1934,6 +1964,11 @@ extern "C" char *nv_ui_call(nv_host *h, nv_ui_watch *w, const char *req)
             w->tuning_sent.clear();
         }
         r.o["tuning"] = tuning_of(h, false, row);
+    } else if (call == "pitch_set") {          // hz: concert pitch, A4 for every tuning (0: each its own)
+        nv_host_set_pitch(h, arg_d(q, "hz", 0.0));
+        if (w)
+            w->tuning_sent.clear();
+        r.o["tuning"] = tuning_of(h, false, w ? w->tuning_row : -1);
     } else if (call == "natural_set") {        // on: natural tunings (every voice its own) or all in the rig's
         nv_host_set_natural(h, arg_i(q, "on", 1));
         if (w)

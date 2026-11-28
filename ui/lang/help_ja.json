@@ -3806,5 +3806,13 @@
  "tn:key/terms/4/1": {
   "en": "However a tuning is made, at most 4 of its 12 thirds can be pure and at most 8 within half a comma (proved for pure octaves with no fifth wider than pure).",
   "t": "どう作った調律でも、12の3度のうち純正にできるのは最大4、半コンマ以内は最大8（純正オクターブで、純正より広い5度がない場合に証明済み）。"
+ },
+ "tuning/terms/10/0": {
+  "en": "A4 for every tuning",
+  "t": "全調律のA4"
+ },
+ "tuning/terms/10/1": {
+  "en": "Concert pitch: one A for every tuning, the rig's and each part's own, in place of each tuning's own A (a baroque tuning's 415, a modern one's 440). Every patch is built again at it.",
+  "t": "コンサートピッチ：リグの調律にも各パート固有の調律にも、各調律自身のA（バロックは415、現代は440）の代わりに一つのAを使います。すべての音色がそのAで作り直されます。"
  }
 }
