@@ -3735,10 +3735,6 @@
   "en": "The Pleyel: the French aural tuning of the 1840s (Cordier's reconstruction), worked out on that piano's strings.",
   "t": "Pleyel : l'accord à l'oreille français des années 1840 (reconstitution de Cordier), calculé sur les cordes de ce piano."
  },
- "voice/terms/14/1": {
-  "en": "Puts every knob back to the voice's own value.",
-  "t": "Remet chaque bouton à la valeur propre de la voix."
- },
  "voice/terms/12/1": {
   "en": "Where the pick strikes the string, as a share of its length from the bridge at the open string (1/5.5: a 5.5th of the way along); a fretted note's moves with its fret. Near the bridge is bright and thin, toward the neck round and full. The partials with a node there are not plucked.",
   "t": "Où le médiator attaque la corde, en fraction de sa longueur depuis le chevalet sur la corde à vide (1/5,5 : au 5,5e du chemin) ; pour une note frettée, il suit la frette. Près du chevalet, brillant et fin ; vers le manche, rond et plein. Les partiels ayant un nœud à cet endroit ne sont pas pincés."
@@ -3746,5 +3742,13 @@
  "voice/terms/13/1": {
   "en": "How fast the strings lose their highs, against the program's own (x1): the string's own loss, the part that grows with frequency. Below x1, fresh strings that ring bright; above, old strings going dead. On the basses it is the winding's loss, where grime and wear sit.",
   "t": "La vitesse à laquelle les cordes perdent leurs aigus, par rapport au programme (x1) : la perte propre de la corde, celle qui croît avec la fréquence. Sous x1, des cordes neuves et brillantes ; au-dessus, de vieilles cordes qui s'éteignent. Sur les basses, c'est la perte du filage, là où se logent la crasse et l'usure."
+ },
+ "voice/terms/15/1": {
+  "en": "Puts every knob back to the voice's own value.",
+  "t": "Remet chaque bouton à la valeur propre de la voix."
+ },
+ "voice/terms/14/1": {
+  "en": "The guitar's tone pot, as its dial reads: 10 full up, the coil as the program has it; turned down, the pot lets the 22 nF capacitor across the pickup, which joins the cable's and lowers the pickup's resonance -- the highs go, and at 0 a honk is left near 0.7 kHz (on a bass a little higher). Worked out from each guitar's coil.",
+  "t": "Le potentiomètre de tonalité de la guitare, tel que l'indique son cadran : 10 au maximum, le bobinage tel que le programme l'a ; en le baissant, le potentiomètre place le condensateur de 22 nF aux bornes du micro, qui s'ajoute à celui du câble et abaisse la résonance du micro : les aigus partent, et à 0 il reste un son nasillard vers 0,7 kHz (un peu plus haut sur une basse). Calculé à partir du bobinage de chaque guitare."
  }
 }

@@ -32,7 +32,7 @@ RANGE = {PK.HAMMER: (-1.0, 0.0, 1.0), PK.WEAR: (0.3, 1.0, 2.5), PK.STRIKE: (0.1,
          PK.UNISON: (0.0, 0.5, 2.5), PK.LID: (-6.0, None, 2.5), PK.BOARD: (0.5, 0.8, 1.8),
          PK.PICKUP: (0.6, 1.3, 1.8), PK.TINE: (0.0, 0.3, 1.2), PK.GAP: (0.5, 1.5, 2.5),
          PK.SWING: (0.4, 1.4, 2.2), PK.TONEBAR: (0.2, 2.0, 3.5), PK.REED: (0.0, 0.25, 1.0),
-         PK.PICK: (0.05, None, 0.3), PK.STRINGS: (0.4, 2.0, 5.0)}
+         PK.PICK: (0.05, None, 0.3), PK.STRINGS: (0.4, 2.0, 5.0), PK.TONE: (0.004, 0.1, 0.5)}
 
 
 def settings(i, v0):

@@ -13,8 +13,9 @@ Brightness is the spectrum's centroid over a note's first 0.4 s.
 
     python3 examples/voicing_live_check.py EXPORT.nvx [PROGRAM]
 
-PROGRAM 27 or 33 (an electric guitar, a bass): PICK and STRINGS; the pick
-at the bridge, brighter; the strings dead, darker.
+PROGRAM 27 or 33 (an electric guitar, a bass): PICK, STRINGS and TONE; the
+pick at the bridge, brighter; the strings dead, darker; the tone pot all the
+way down, darker.
 
 PROGRAM 4 (the Rhodes) instead: its four knobs; the swing wider and the
 pickup closer, brighter; the tone bar up, its bell heard in the attack (a
@@ -83,6 +84,15 @@ def main(argv):
         f = np.fft.rfftfreq(len(x), 1.0 / sr)
         return float((s * f).sum() / max(1e-30, s.sum()))
 
+    def highs(x, win=0.4):
+        """the share of the note's power above 1.5 kHz, in thousandths (a tone
+        pot turned down: its capacitor's resonance can lift the mids a bass
+        lives in, so the centroid alone can rise while the highs go)"""
+        x = x[:int(win * sr)] * np.hanning(int(win * sr))
+        s = np.abs(np.fft.rfft(x)) ** 2
+        f = np.fft.rfftfreq(len(x), 1.0 / sr)
+        return float(1000.0 * s[f > 1500.0].sum() / max(1e-30, s.sum()))
+
     def settle(k=None):
         """until the patch is in: (its knobs then, the seconds it took, whether
         it was seen building) -- k: the knob just set, its own once posted"""
@@ -103,7 +113,7 @@ def main(argv):
     v = call({"call": "voicing", "row": 0})["voicing"]
     names = [k["name"] for k in v["knobs"]]
     want = {0: ["felt", "felt_left", "strike", "unison", "lid", "board"], 4: ["tine", "gap", "swing", "tonebar"]}.get(
-        prog, ["pick", "strings"])
+        prog, ["pick", "strings", "tone"])
     ok = names == want and not any(k["own"] for k in v["knobs"])
     ok = ok and all(abs(k["v"] - k["v0"]) < 1e-12 and k["lo"] <= k["v"] <= k["hi"] for k in v["knobs"])
     print("the voice's knobs:", ", ".join("%s %s" % (k["name"], k["text"]) for k in v["knobs"]), "ok" if ok else "WRONG")
@@ -113,26 +123,29 @@ def main(argv):
     base = {key: bright(strike(key)) for key in keys}
     print("plain: brightness %s" % ", ".join("key %d %.0f Hz" % kv for kv in base.items()))
 
-    def case(name, k, val, key, darker, win=0.4, late=False):
+    def case(name, k, val, key, darker, win=0.4, late=False, hi=False):
         """... late: the brightness of 0.4 s two seconds into a held note (a
-        bass's strings: their loss shows as the note goes on)"""
+        bass's strings: their loss shows as the note goes on); hi: the
+        highs' share (highs) and not the centroid"""
         nonlocal bad
         tail = int(0.4 * sr)
-        x_plain = strike(key, hold=2.4 if late else 0.5) if win != 0.4 or late else None
-        b_plain = bright(x_plain[-tail:]) if late else bright(x_plain, win) if win != 0.4 else base[key]
+        x_plain = strike(key, hold=2.4 if late else 0.5) if win != 0.4 or late or hi else None
+        b_plain = (highs(x_plain) if hi else bright(x_plain[-tail:]) if late else bright(x_plain, win) if win != 0.4
+                   else base[key])
         call({"call": "voicing_set", "row": 0, "k": k, "v": val})
         v, took, b0 = settle(k)
         own = [x for x in v["knobs"] if x["k"] == k][0]
         x = strike(key, hold=2.4 if late else 0.5)
-        b = bright(x[-tail:]) if late else bright(x, win)
+        b = highs(x) if hi else bright(x[-tail:]) if late else bright(x, win)
         moved = b < 0.98 * b_plain if darker else b > 1.02 * b_plain
         if win != 0.4:          # (a brief part of the attack: how much the note changed there, re the note)
             n = int(win * sr)
             dd = 10 * np.log10(np.sum((x[:n] - x_plain[:n]) ** 2) / max(1e-30, np.sum(x_plain[:n] ** 2)))
             moved = dd > -30.0
         ok = b0 and took is not None and own["own"] and abs(own["v"] - val) < 1e-9 and moved
-        print("%-14s building %s, rebuilt in %s s, its own %s at %s; key %d brightness %.0f Hz (plain %.0f)  %s" % (
-            name, b0, "%.1f" % took if took is not None else "never", own["own"], own["text"], key, b, b_plain,
+        print("%-14s building %s, rebuilt in %s s, its own %s at %s; key %d %s %.3g %s (plain %.3g)  %s" % (
+            name, b0, "%.1f" % took if took is not None else "never", own["own"], own["text"], key,
+            "highs" if hi else "brightness", b, "/1000" if hi else "Hz", b_plain,
             "ok" if ok else "WRONG"))
         if win != 0.4:
             print("               (the first %.0f ms changed by %.1f dB re the note)" % (win * 1000, dd))
@@ -149,6 +162,7 @@ def main(argv):
         g = keys[1]
         case("pick at bridge", 12, 0.06, g, False)
         case("strings dead", 13, kn["strings"]["v0"] * 5.0, g, True, late=True)
+        case("tone down", 14, 0.004, g, True, hi=True)
     else:
         case("swing wider", 9, kn["swing"]["v0"] * 1.8, 60, False)
         case("pickup closer", 8, kn["gap"]["v0"] * 0.5, 48, False)

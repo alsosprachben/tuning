@@ -64,6 +64,8 @@ inline std::string voice_words(const std::string &name, double v, double cap)
         snprintf(t, sizeof t, "%.2f mm", v * 1.7568);      // (uiapi's RHODES_POLE_MM)
     else if (name == "swing" || name == "strings")
         snprintf(t, sizeof t, "x%.2f", v / std::max(1e-12, cap));
+    else if (name == "tone")
+        snprintf(t, sizeof t, "%.1f", 10.0 * (1.0 + std::log(std::max(1e-9, v)) / std::log(250.0)));
     else if (name == "tonebar")
         snprintf(t, sizeof t, "%+.1f dB", 20.0 * std::log10(std::max(1e-9, v / std::max(1e-9, cap))));
     else
@@ -85,6 +87,7 @@ inline const char *voice_label(const std::string &name)
     if (name == "tonebar") return N_("TONE BAR");
     if (name == "pick") return N_("PICK");
     if (name == "strings") return N_("STRING AGE");
+    if (name == "tone") return N_("TONE");
     return N_("PICKUP");
 }
 inline const char *voice_about(const std::string &name)
@@ -101,7 +104,8 @@ inline const char *voice_about(const std::string &name)
     if (name == "swing") return N_("How far the hammer throws the tine or reed. Wider barks and buzzes.");
     if (name == "tonebar") return N_("The tone bar's ring in the attack: the bell.");
     if (name == "pick") return N_("Where the pick strikes the string. Near the bridge is bright and thin; toward the neck, round.");
-    if (name == "strings") return N_("How fast the strings lose their highs. Fresh strings ring bright; old ones go dull."); 
+    if (name == "strings") return N_("How fast the strings lose their highs. Fresh strings ring bright; old ones go dull.");
+    if (name == "tone") return N_("The guitar's tone knob: 10 is full up; turned down, a capacitor darkens the pickup until it only honks."); 
     return N_("The piezo pickup's top.");
 }
 

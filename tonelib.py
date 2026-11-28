@@ -1388,6 +1388,22 @@ class SynthProperties:
     # the two. 0 = no resonance (a pickup that is only its combs).
     pickup_resonance_hz = 0.0
     pickup_q = 1.0
+    # ...AND THE TONE CONTROL (the VOICE card's TONE): a pot of tone_pot_ohms
+    # in series with a capacitor of tone_cap_f, across the coil's load, the pot
+    # turned to tone_turn of its resistance (1 = full up, which is the coil's
+    # load as resonance and Q above already have it: the pot to ground through
+    # a capacitor that is a short up there). Turned down, the capacitor joins
+    # the cable's and the resonance falls -- with 22 nF on a Stratocaster coil
+    # to ~0.7 kHz, held up by the winding's resistance: the "woman tone". The
+    # coil from its resonance: the cable and coil capacitance pickup_load_f
+    # (strat_coil.py's 3 m DI, 410 pF) gives L, the winding's resistance goes
+    # as the Stratocaster's 5.8 k at 2.4 H by sqrt(L) (turns), and the rest of
+    # Q's damping is the parallel load (_tone_pot_gain). 0 ohms = no tone
+    # control: a class whose resonance is already the tone down (the lap steel).
+    tone_pot_ohms = 250e3
+    tone_cap_f = 22e-9
+    pickup_load_f = 410e-12
+    tone_turn = 1.0
     # A TOUCHED STRING'S OTHER MODES (harmonic_touch > 1). The pick strikes the
     # whole string; the modes with no node under the finger sound for a moment
     # before it kills them, at their own frequencies -- k/n of the note, not
@@ -3098,6 +3114,9 @@ class SynthProperties:
             f = (self.frequency_x * (2.0 ** self.octave_position) * harmonic
                  / (self.harmonic_touch or 1))
             g *= _two_pole(f / self.pickup_resonance_hz, self.pickup_q)
+            if self.tone_turn != 1.0 and self.tone_pot_ohms:
+                g *= _tone_pot_gain(f, self.pickup_resonance_hz, self.pickup_q, self.pickup_load_f,
+                                    self.tone_pot_ohms, self.tone_turn, self.tone_cap_f)
         if self.lowpass_hz:
             # A DARK STRING: flatwounds stopped on wood, and a tone knob down --
             # a low-pass at a fixed frequency whatever the note (lowpass_hz,
@@ -27008,6 +27027,32 @@ def sound_control_meaning(cls, name):
             'vib_delay': 'vibrato delay'}[name]
 
 
+def _tone_pot_gain(f, f0, q, cl, r0, turn, ct):
+    """A TONE POT turned to TURN of its R0 (in series with CT, across the coil's
+    load) against it full up, at frequency f: |H(turn)| / |H(1)|. The coil (L,
+    its winding Rs in series) from its loaded resonance f0 and Q on the load
+    capacitance cl (pickup_resonance_hz's notes); H = 1 / (1 + (Rs + jwL) Y),
+    Y the load's admittance: cl, the damping's conductance, the pot and cap.
+    (native voice.c tone_pot_gain: the same operations in the same order)"""
+    w0 = 2.0 * _pi * f0
+    L = 1.0 / (w0 * w0 * cl)
+    rs = 5800.0 * _sqrt(L / 2.4)
+    g = (1.0 / (q * w0) - rs * cl) / L - 1.0 / r0
+    if g < 0.0:
+        g = 0.0
+    w = 2.0 * _pi * f
+
+    def mag2(rt):
+        x = w * ct * rt
+        den = 1.0 + x * x
+        a = g + w * w * ct * ct * rt / den
+        b = w * cl + w * ct / den
+        re = 1.0 + rs * a - w * L * b
+        im = rs * b + w * L * a
+        return re * re + im * im
+    return _sqrt(mag2(r0) / mag2(r0 * turn))
+
+
 def _two_pole(x, q):
     """|H| of a two-pole low-pass at x = f/fc, with quality q."""
     import numpy as np
@@ -32509,6 +32554,7 @@ class HawaiianGuitarProperties(Plectrum, JazzGuitarProperties):
     # Q = sqrt(L/C)/R = 0.56
     pickup_resonance_hz = 505.0
     pickup_q = 0.56
+    tone_pot_ohms = 0.0               # (its circuit above is the tone control, down: no TONE knob)
     # (not the jazz box's DI low-pass: the lap steel's dark is its own circuit)
     lowpass_hz = None
     # ITS OTHER OPEN STRINGS ANSWER through the bridge, where their harmonics

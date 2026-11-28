@@ -677,5 +677,7 @@
  "STRING AGE": "SAITENALTER",
  "Where the pick strikes the string. Near the bridge is bright and thin; toward the neck, round.": "Wo das Plektrum die Saite anschlägt. Nah am Steg hell und dünn, zum Hals hin rund.",
  "How fast the strings lose their highs. Fresh strings ring bright; old ones go dull.": "Wie schnell die Saiten ihre Höhen verlieren. Neue Saiten klingen hell, alte werden stumpf.",
- "This voice has no physical knobs yet. Pianos, electric pianos and electric guitars and basses have them first; other families follow.": "Diese Stimme hat noch keine physikalischen Regler. Klaviere, E-Pianos sowie E-Gitarren und E-Bässe bekommen sie zuerst; andere Familien folgen."
+ "This voice has no physical knobs yet. Pianos, electric pianos and electric guitars and basses have them first; other families follow.": "Diese Stimme hat noch keine physikalischen Regler. Klaviere, E-Pianos sowie E-Gitarren und E-Bässe bekommen sie zuerst; andere Familien folgen.",
+ "TONE": "TON",
+ "The guitar's tone knob: 10 is full up; turned down, a capacitor darkens the pickup until it only honks.": "Der Tonregler der Gitarre: 10 ist ganz auf; zugedreht dunkelt ein Kondensator den Tonabnehmer ab, bis er nur noch näselt."
 }

@@ -243,12 +243,15 @@ typedef struct {
        A TOUCHED HARMONIC's (GuitarHarmonicsProperties): the touches a
        player chooses among (n_touch of touches; 0: the class's touch0), the
        note's touch, and the killed modes' leak (leak_set: touch_leak_db not
-       None) at leak_db, dying leak_dbs */
+       None) at leak_db, dying leak_dbs; THE TONE CONTROL (tone_pot_ohms
+       tone_r0, 0 none; turned to tone_turn; its capacitor tone_c; the coil's
+       load capacitance pk_cload: tonelib._tone_pot_gain) */
     int elec, n_pk, pk_vel, n_os;
     double eg_sp, eg_depth, pk_q0[4], pk_sign[4], pk_turns, pk_width, pk_res_hz, pk_qf, lp_hz, lp_order, os_hz[8],
         fret_max, pk_sp, pk_q[4];
     int n_touch, touches[4], touch0, touch, leak_set;
     double leak_db, leak_dbs;
+    double tone_r0, tone_turn, tone_c, pk_cload;
     /* A BASS STRING FROM ITS PHYSICS (ElectricBassProperties, string_physics):
        each partial's decay from the string's own losses, the bearings' and
        the mounting (sp_decay), and B from its core (sp_B) -- the set (sp_scale,
@@ -2069,9 +2072,10 @@ const NoteClass *nv_variant(const NoteClass *k, int code);
    THE ELECTRIC GUITARS' AND BASSES' (elec on a kind 4 voice, not a
    Clavinet): PICK (where the pick strikes, eg_sp), STRINGS (the string's
    loss rising with frequency: harmonic_decay_db, or a physics bass's
-   winding loss sp_wind) -- both ratios */
+   winding loss sp_wind) -- both ratios; TONE (the tone pot's share of its
+   resistance, tone_turn: a ratio) */
 enum { NV_VK_HAMMER, NV_VK_WEAR, NV_VK_STRIKE, NV_VK_UNISON, NV_VK_LID, NV_VK_BOARD, NV_VK_PICKUP,
-       NV_VK_TINE, NV_VK_GAP, NV_VK_SWING, NV_VK_TONEBAR, NV_VK_REED, NV_VK_PICK, NV_VK_STRINGS, NV_VK_N };
+       NV_VK_TINE, NV_VK_GAP, NV_VK_SWING, NV_VK_TONEBAR, NV_VK_REED, NV_VK_PICK, NV_VK_STRINGS, NV_VK_TONE, NV_VK_N };
 static inline int nv_voicing_offset(int i)
 {
     return i == NV_VK_HAMMER || i == NV_VK_LID || i == NV_VK_TINE || i == NV_VK_REED;

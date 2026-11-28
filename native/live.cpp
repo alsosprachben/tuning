@@ -2924,6 +2924,10 @@ int nv_voicing_knobs(const NoteClass *k, double *v0)
             m |= 1 << NV_VK_STRINGS;
             v0[NV_VK_STRINGS] = x;
         }
+        if (s.pk_res_hz != 0.0 && s.tone_r0 != 0.0) {
+            m |= 1 << NV_VK_TONE;
+            v0[NV_VK_TONE] = s.tone_turn;
+        }
         return m;
     }
     if (s.kind == 5 && (s.ep_kind == 1 || s.ep_kind == 2)) {
@@ -3027,6 +3031,8 @@ void nv_voicing_apply(NoteClass *d, const double *t, int mask)
             else
                 s.harmonic_decay_db *= t[NV_VK_STRINGS];
         }
+        if (mask >> NV_VK_TONE & 1)
+            s.tone_turn *= t[NV_VK_TONE];
         return;
     }
     if (s.kind == 5) {

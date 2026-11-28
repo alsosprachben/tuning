@@ -390,6 +390,7 @@ HELP = {
                ['TONE BAR', "The Rhodes tone bar's ring in the attack, the bell, in dB against the program's own."],
                ['PICK', "Where the pick strikes the string, as a share of its length from the bridge at the open string (1/5.5: a 5.5th of the way along); a fretted note's moves with its fret. Near the bridge is bright and thin, toward the neck round and full. The partials with a node there are not plucked."],
                ['STRING AGE', "How fast the strings lose their highs, against the program's own (x1): the string's own loss, the part that grows with frequency. Below x1, fresh strings that ring bright; above, old strings going dead. On the basses it is the winding's loss, where grime and wear sit."],
+               ['TONE', "The guitar's tone pot, as its dial reads: 10 full up, the coil as the program has it; turned down, the pot lets the 22 nF capacitor across the pickup, which joins the cable's and lowers the pickup's resonance -- the highs go, and at 0 a honk is left near 0.7 kHz (on a bass a little higher). Worked out from each guitar's coil."],
                ['ALL AS THE VOICE', "Puts every knob back to the voice's own value."]]},
     'piano:pedals': {'title': 'Pedals',
      'intro': 'Tap a pedal to press it; tap again to let it up.',

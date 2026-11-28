@@ -36,13 +36,17 @@ TINE, GAP, SWING, TONEBAR, REED = range(7, 12)
 # ones go dead (harmonic_decay_db; a bass whose decay is its string's physics,
 # the winding's visco-elastic loss, winding_loss -- where grime and wear sit)
 PICK, STRINGS = 12, 13
-N_KNOBS = 14
+# ...and TONE, the tone pot: the share of its resistance in circuit (tone_turn,
+# 1 full up; the coil's circuit tonelib._tone_pot_gain), where the class has a
+# coil's resonance and a tone control
+TONE = 14
+N_KNOBS = 15
 # (their names in a session -- nv_host::VK_NAMES -- and on the VOICE card:
 # FELT the felt's stiffness, log10 of its K; FELT LEFT the soft felt over a
 # worn hammer's hard layer, mm at the worn keys -- thin, a soft felt bottoms
 # out on it and brightens; thick, a fresh hammer that never does)
 NAMES = ('felt', 'felt_left', 'strike', 'unison', 'lid', 'board', 'pickup',
-         'tine', 'gap', 'swing', 'tonebar', 'reed', 'pick', 'strings')
+         'tine', 'gap', 'swing', 'tonebar', 'reed', 'pick', 'strings', 'tone')
 # (how a knob's value moves the class: an offset, or a ratio)
 OFFSET = frozenset((HAMMER, LID, TINE, REED))
 
@@ -94,6 +98,8 @@ def knobs_of(cls):
         x = float(getattr(cls, _string_loss(cls)))
         if x > 0.0 and not N.feedback_voice(cls):
             out[STRINGS] = x
+        if cls.pickup_resonance_hz and cls.tone_pot_ohms:
+            out[TONE] = float(cls.tone_turn)
         return out
     ep = _ep(cls)
     if ep:
@@ -187,6 +193,8 @@ def _attrs(base, t, mask):
     if mask >> STRINGS & 1:
         n = _string_loss(base)
         a[n] = getattr(base, n) * t[STRINGS]
+    if mask >> TONE & 1:
+        a['tone_turn'] = base.tone_turn * t[TONE]
     return a
 
 

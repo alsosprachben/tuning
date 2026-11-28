@@ -253,6 +253,30 @@ static double lp_div(const VoiceSnap *v, int sm)
     return pow(1.0 + pow(f / v->lp_hz, 2.0 * v->lp_order), 0.5);
 }
 
+/* A TONE POT turned to TURN of its R0 against it full up, at f (tonelib
+   _tone_pot_gain: the same operations in the same order) */
+static double tone_pot_mag2(double w, double L, double rs, double g, double cl, double ct, double rt)
+{
+    double x = w * ct * rt;
+    double den = 1.0 + x * x;
+    double a = g + w * w * ct * ct * rt / den;
+    double b = w * cl + w * ct / den;
+    double re = 1.0 + rs * a - w * L * b;
+    double im = rs * b + w * L * a;
+    return re * re + im * im;
+}
+static double tone_pot_gain(double f, double f0, double q, double cl, double r0, double turn, double ct)
+{
+    double w0 = 2.0 * PI * f0;
+    double L = 1.0 / (w0 * w0 * cl);
+    double rs = 5800.0 * sqrt(L / 2.4);
+    double g = (1.0 / (q * w0) - rs * cl) / L - 1.0 / r0;
+    if (g < 0.0)
+        g = 0.0;
+    double w = 2.0 * PI * f;
+    return sqrt(tone_pot_mag2(w, L, rs, g, cl, ct, r0) / tone_pot_mag2(w, L, rs, g, cl, ct, r0 * turn));
+}
+
 static double eg_pickup_gain(const VoiceSnap *v, int h)
 {
     double t[4];
@@ -272,6 +296,8 @@ static double eg_pickup_gain(const VoiceSnap *v, int h)
     if (v->pk_res_hz != 0.0) {                  /* _two_pole, the coil's load */
         double x = f / v->pk_res_hz;
         g *= 1.0 / sqrt(pow(1.0 - x * x, 2.0) + pow(x / v->pk_qf, 2.0));
+        if (v->tone_turn != 1.0 && v->tone_r0 != 0.0)
+            g *= tone_pot_gain(f, v->pk_res_hz, v->pk_qf, v->pk_cload, v->tone_r0, v->tone_turn, v->tone_c);
     }
     if (v->lp_hz != 0.0)
         g /= pow(1.0 + pow(f / v->lp_hz, 2.0 * v->lp_order), 0.5);

@@ -113,7 +113,7 @@ class VoiceSnap(ctypes.Structure):
                 ('pk_q0', C * 4), ('pk_sign', C * 4), ('pk_turns', C), ('pk_width', C), ('pk_res_hz', C),
                 ('pk_qf', C), ('lp_hz', C), ('lp_order', C), ('os_hz', C * 8), ('fret_max', C), ('pk_sp', C),
                 ('pk_q', C * 4), ('n_touch', I), ('touches', I * 4), ('touch0', I), ('touch', I), ('leak_set', I),
-                ('leak_db', C), ('leak_dbs', C),
+                ('leak_db', C), ('leak_dbs', C), ('tone_r0', C), ('tone_turn', C), ('tone_c', C), ('pk_cload', C),
                 ('sp_decay', I), ('sp_B', I), ('sp_scale', C), ('sp_gauge', C * 8), ('sp_core', C * 8), ('sp_mass', C),
                 ('sp_wind', C), ('sp_qte', C), ('sp_g', C), ('sp_fall', C), ('sp_fexp', C), ('sp_joint', C), ('sp_body', C),
                 ('sp_mount', C), ('fc_tab', I), ('n_fc', I), ('fc_amp', C * 64), ('fc_share', C * 64),
@@ -2494,6 +2494,8 @@ def snapshot(props):
             s.pk_turns, s.pk_width, s.pk_vel = float(c.pickup_turns), float(c.pickup_width or 0.0), int(bool(c.pickup_velocity))
             s.pk_res_hz, s.pk_qf = float(c.pickup_resonance_hz or 0.0), float(getattr(c, 'pickup_q', 0.0) or 0.0)
             s.lp_hz, s.lp_order = float(c.lowpass_hz or 0.0), float(c.lowpass_order)
+            s.tone_r0, s.tone_turn = float(c.tone_pot_ohms or 0.0), float(c.tone_turn)
+            s.tone_c, s.pk_cload = float(c.tone_cap_f), float(c.pickup_load_f)
             _osh = getattr(c, 'open_strings_hz', None) or ()
             s.n_os = len(_osh)
             s.os_hz[:s.n_os] = [float(o) for o in _osh]

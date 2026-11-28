@@ -677,5 +677,7 @@
  "STRING AGE": "弦の古さ",
  "Where the pick strikes the string. Near the bridge is bright and thin; toward the neck, round.": "ピックが弦を弾く位置。ブリッジ寄りは明るく細く、ネック寄りは丸い音。",
  "How fast the strings lose their highs. Fresh strings ring bright; old ones go dull.": "弦が高音を失う速さ。新しい弦は明るく響き、古い弦はこもる。",
- "This voice has no physical knobs yet. Pianos, electric pianos and electric guitars and basses have them first; other families follow.": "この音色にはまだ物理ノブがありません。まずピアノ、エレクトリックピアノ、エレキギターとベースに付き、他のファミリーが続きます。"
+ "This voice has no physical knobs yet. Pianos, electric pianos and electric guitars and basses have them first; other families follow.": "この音色にはまだ物理ノブがありません。まずピアノ、エレクトリックピアノ、エレキギターとベースに付き、他のファミリーが続きます。",
+ "TONE": "トーン",
+ "The guitar's tone knob: 10 is full up; turned down, a capacitor darkens the pickup until it only honks.": "ギターのトーンノブ：10が全開。絞るとコンデンサーがピックアップの音をこもらせ、最後は鼻にかかった音だけになります。"
 }

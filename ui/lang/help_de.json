@@ -3735,10 +3735,6 @@
   "en": "The Pleyel: the French aural tuning of the 1840s (Cordier's reconstruction), worked out on that piano's strings.",
   "t": "Pleyel: die französische Gehörstimmung der 1840er Jahre (nach Cordiers Rekonstruktion), auf den Saiten dieses Klaviers berechnet."
  },
- "voice/terms/14/1": {
-  "en": "Puts every knob back to the voice's own value.",
-  "t": "Setzt jeden Regler auf den eigenen Wert der Stimme zurück."
- },
  "voice/terms/12/1": {
   "en": "Where the pick strikes the string, as a share of its length from the bridge at the open string (1/5.5: a 5.5th of the way along); a fretted note's moves with its fret. Near the bridge is bright and thin, toward the neck round and full. The partials with a node there are not plucked.",
   "t": "Wo das Plektrum die Saite anschlägt, als Anteil ihrer Länge vom Steg aus an der leeren Saite (1/5,5: ein 5,5tel des Wegs); bei einem gegriffenen Ton wandert er mit dem Bund. Nah am Steg hell und dünn, zum Hals hin rund und voll. Die Teiltöne mit einem Knoten dort werden nicht angezupft."
@@ -3746,5 +3742,13 @@
  "voice/terms/13/1": {
   "en": "How fast the strings lose their highs, against the program's own (x1): the string's own loss, the part that grows with frequency. Below x1, fresh strings that ring bright; above, old strings going dead. On the basses it is the winding's loss, where grime and wear sit.",
   "t": "Wie schnell die Saiten ihre Höhen verlieren, gegenüber dem Programm (x1): der eigene Verlust der Saite, der mit der Frequenz wächst. Unter x1 neue, hell klingende Saiten; darüber alte, die stumpf werden. Bei den Bässen ist es der Verlust der Umspinnung, wo Schmutz und Abnutzung sitzen."
+ },
+ "voice/terms/15/1": {
+  "en": "Puts every knob back to the voice's own value.",
+  "t": "Setzt jeden Regler auf den eigenen Wert der Stimme zurück."
+ },
+ "voice/terms/14/1": {
+  "en": "The guitar's tone pot, as its dial reads: 10 full up, the coil as the program has it; turned down, the pot lets the 22 nF capacitor across the pickup, which joins the cable's and lowers the pickup's resonance -- the highs go, and at 0 a honk is left near 0.7 kHz (on a bass a little higher). Worked out from each guitar's coil.",
+  "t": "Das Tonpoti der Gitarre, wie seine Skala es zeigt: 10 ganz auf, die Spule so, wie das Programm sie hat; zugedreht schaltet das Poti den 22-nF-Kondensator über den Tonabnehmer, der sich zur Kabelkapazität addiert und die Resonanz des Tonabnehmers senkt -- die Höhen verschwinden, und bei 0 bleibt ein Näseln um 0,7 kHz (beim Bass etwas höher). Aus der Spule jeder Gitarre berechnet."
  }
 }
